@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+devops/configuration.env eol=lf
+devops/configuration-custom.env eol=lf
+devops/entrypoint.sh eol=lf
+gradlew eol=lf

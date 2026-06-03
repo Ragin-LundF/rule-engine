@@ -1,0 +1,28 @@
+# IDEs
+.idea/*
+*.iws
+*.iml
+*.ipr
+!.idea/inspectionProfiles
+!.idea/inspectionProfiles/*
+!.idea/detekt.xml
+!.run/
+.vscode/*
+
+# Build targets
+.gradle/*
+**/build/*
+**/target/*
+**/.openapi-generator*
+
+# Java
+**/src/generated/*
+
+# Other
+logs/*
+devops/data/*
+/labelling-rest-client-java/src/generated
+/etc/k6/summary.html
+
+burp-report.html
+issues.json

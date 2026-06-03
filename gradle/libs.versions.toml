@@ -1,0 +1,4 @@
+[versions]
+
+[libraries]
+kotlin-test = "org.jetbrains.kotlin:kotlin-test"
