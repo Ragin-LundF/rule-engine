@@ -18,6 +18,12 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -485,7 +491,54 @@ actual fun RuleEditor() {
                     BasicTextField(
                         value = ruleValue,
                         onValueChange = { ruleValue = it },
-                        modifier = Modifier.fillMaxSize().padding(14.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(14.dp)
+                            .onKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                when (event.key) {
+                                    // ── Enter: preserve current-line indentation ──────────
+                                    Key.Enter -> {
+                                        val text     = ruleValue.text
+                                        val selStart = ruleValue.selection.start
+                                        val selEnd   = ruleValue.selection.end
+                                        val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                        val indent    = text.substring(lineStart, selStart)
+                                            .takeWhile { it == ' ' || it == '\t' }
+                                        val newText = text.substring(0, selStart) + "\n" + indent +
+                                                      text.substring(selEnd)
+                                        val newPos  = selStart + 1 + indent.length
+                                        ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
+                                        true
+                                    }
+                                    // ── Tab: insert 4 spaces / Shift+Tab: remove indent ───
+                                    Key.Tab -> {
+                                        val text     = ruleValue.text
+                                        val selStart = ruleValue.selection.start
+                                        val selEnd   = ruleValue.selection.end
+                                        if (event.isShiftPressed) {
+                                            // Remove up to 4 leading spaces on the current line
+                                            val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                            val spaces = text.substring(lineStart).takeWhile { it == ' ' }
+                                                .length.coerceAtMost(4)
+                                            if (spaces > 0) {
+                                                val newText = text.substring(0, lineStart) +
+                                                              text.substring(lineStart + spaces)
+                                                val newPos  = (selStart - spaces).coerceAtLeast(lineStart)
+                                                ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
+                                            }
+                                        } else {
+                                            val spaces  = "    " // 4 spaces
+                                            val newText = text.substring(0, selStart) + spaces +
+                                                          text.substring(selEnd)
+                                            val newPos  = selStart + spaces.length
+                                            ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
+                                        }
+                                        true
+                                    }
+                                    else -> false
+                                }
+                            },
                         textStyle = TextStyle(
                             fontFamily = FontFamily.Monospace,
                             fontSize   = 13.sp,
