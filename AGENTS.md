@@ -1,5 +1,9 @@
+# Architecture
+- `ruleengine-core` - Rule execution library with a DSL for defining rules and executing them.
+- `ruleengine-ui` - UI for desktop and web applications to manage and validate rules.
+
 # Code-Style Guidelines
-- Use named arguments when possible.
+- Use always named arguments when possible
 - Use `runCatching` instead of try/catch if possible
 - Functions should only be implemented as block code, not as expression bodies.
 - Functions should have a single responsibility and be small in size.
@@ -9,4 +13,4 @@
 - The tests should cover all code paths and edge cases.
 - Use meaningful comments to explain complex logic or non-obvious decisions.
 - Keep class and function names consistent with their purpose and functionality.
-- Follow the Kotlin style guide for consistent formatting and naming conventions.
+- Follow the Kotlin style guide for consistent formatting and naming conventions for everything which is not defined here.
