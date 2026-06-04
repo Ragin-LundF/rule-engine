@@ -27,6 +27,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -146,6 +147,9 @@ private fun isContextuallyImmediate(context: DslCursorContext): Boolean {
 // ── Status kind ───────────────────────────────────────────────────────────────
 enum class StatusKind { IDLE, SUCCESS, ERROR }
 
+// ── Right-panel view mode ─────────────────────────────────────────────────────
+enum class ViewMode { CODE, DIAGRAM }
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 @Composable
@@ -217,6 +221,57 @@ private fun Modifier.drawTopLine(w: Dp, color: Color): Modifier = this.drawWithC
     drawLine(color, Offset(0f, 0f), Offset(size.width, 0f), w.toPx())
 }
 
+// ── View-mode toggle (Code | Diagram) ─────────────────────────────────────────
+
+@Composable
+private fun ViewModeToggle(
+    current  : ViewMode,
+    onChange : (ViewMode) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
+    ) {
+        ViewModeTab(label = "Code",    icon = "{ }",   selected = current == ViewMode.CODE,    onClick = { onChange(ViewMode.CODE) })
+        Box(Modifier.width(1.dp).height(28.dp).background(BorderColor))
+        ViewModeTab(label = "Diagram", icon = "⬡",     selected = current == ViewMode.DIAGRAM, onClick = { onChange(ViewMode.DIAGRAM) })
+    }
+}
+
+@Composable
+private fun ViewModeTab(
+    label    : String,
+    icon     : String,
+    selected : Boolean,
+    onClick  : () -> Unit,
+) {
+    val bg    = if (selected) BgElevated else Color.Transparent
+    val color = if (selected) PrimaryBlue else TextSecondary
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            text  = icon,
+            style = TextStyle(fontSize = 11.sp, color = color),
+        )
+        Text(
+            text  = label,
+            style = TextStyle(
+                fontSize   = 11.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color      = color,
+            ),
+        )
+    }
+}
+
 // ── Main composable ───────────────────────────────────────────────────────────
 
 @Composable
@@ -255,6 +310,12 @@ actual fun RuleEditor() {
     var autoCompleteWordStart by remember { mutableStateOf(0) }
     var dslContext            by remember { mutableStateOf(DslCursorContext(section = DslSection.TOP_LEVEL)) }
     var splitFraction         by remember { mutableStateOf(0.33f) }
+    var viewMode              by remember { mutableStateOf(ViewMode.CODE) }
+
+    // ── Parsed rules for live diagram view ────────────────────────────────────
+    val diagramRules = remember(ruleValue.text) {
+        runCatching { Parser(ruleValue.text).parseRules() }.getOrElse { emptyList() }
+    }
 
     fun setStatus(msg: String, kind: StatusKind) { status = msg; statusKind = kind }
 
@@ -858,10 +919,18 @@ actual fun RuleEditor() {
                         .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
                         .padding(14.dp),
                 ) {
-                    // Header + action buttons
+                    // ── Header: title + view-mode toggle + action buttons ─────
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Rule Editor", style = MaterialTheme.typography.h6, color = TextPrimary)
+                        Spacer(Modifier.width(14.dp))
+                        // ── Code / Diagram tab strip ──────────────────────────
+                        ViewModeToggle(
+                            current  = viewMode,
+                            onChange = { viewMode = it },
+                        )
                         Spacer(Modifier.weight(1f))
+                        // Action buttons — only shown in Code mode
+                        if (viewMode == ViewMode.CODE) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             AppButton("Load Rule") {
                                 scope.launch {
@@ -916,11 +985,24 @@ actual fun RuleEditor() {
                                 }
                             }
                         }
+                        } // end if CODE
                     }
 
                     PanelDivider()
 
-                    // ── Code Editor ───────────────────────────────────────────
+                    // ── Code Editor or Diagram view ───────────────────────────
+                    if (viewMode == ViewMode.DIAGRAM) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
+                        ) {
+                            RuleDiagramView(rules = diagramRules)
+                        }
+                    } else {
+
                     val lineNumberWidthDp = 48.dp
                     val editorPaddingDp   = 14.dp
                     val lineCount = remember(ruleValue.text) {
@@ -1119,6 +1201,7 @@ actual fun RuleEditor() {
                             )
                         }
                     }
+                    } // end CODE view
 
                     Spacer(Modifier.height(10.dp))
 
