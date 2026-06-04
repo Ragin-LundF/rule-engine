@@ -16,7 +16,7 @@ import kotlin.system.exitProcess
 object ValidatorCli {
     @JvmStatic
     fun main(args: Array<String>) {
-        val exit = runCli(args)
+        val exit = runCli(args = args)
         exitProcess(status = exit)
     }
 
@@ -30,13 +30,13 @@ object ValidatorCli {
             val schemaPath = argsMap["--schema"]
             val rulesPath = argsMap["--rules"]
             if (schemaPath == null || rulesPath == null) {
-                exitCode = usage(out)
+                exitCode = usage(out = out)
                 return@runCatching
             }
 
             val format = argsMap["--format"]?.lowercase()
 
-            val schema = FieldSchemaLoader.load(Path.of(schemaPath))
+            val schema = FieldSchemaLoader.load(path = Path.of(schemaPath))
 
             val rulesDir = Path.of(rulesPath)
             if (!Files.exists(rulesDir) || !Files.isDirectory(rulesDir)) {
@@ -69,7 +69,7 @@ object ValidatorCli {
                 if (!validation.isValid) {
                     out.append("Validation failed: ${validation.diagnostics}\n")
                     exitCode = 1
-                    return@runCatching Unit
+                    return@runCatching
                 }
                 out.append("Validation OK\n")
             }

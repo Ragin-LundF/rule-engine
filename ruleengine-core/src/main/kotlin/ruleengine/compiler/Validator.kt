@@ -1,5 +1,6 @@
 package ruleengine.compiler
 
+import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -21,26 +22,6 @@ import ruleengine.dsl.ast.StringLiteral
 data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
 
 object Validator {
-    @Suppress("CyclomaticComplexMethod")
-    private fun normalizeOperator(op: String): String {
-        return when (op.lowercase()) {
-            "==", "equals" -> "equals"
-            "=", "eq" -> "equals"
-            ">=", "gte" -> "gte"
-            ">", "gt" -> "gt"
-            "<=", "lte" -> "lte"
-            "<", "lt" -> "lt"
-            "contains" -> "contains"
-            "startswith" -> "startsWith"
-            "endswith" -> "endsWith"
-            "in" -> "in"
-            "containsany" -> "containsAny"
-            "containsall" -> "containsAll"
-            "regex", "matches", "regexp" -> "regex"
-            "between" -> "between"
-            else -> op
-        }
-    }
 
     fun validate(asts: List<RuleAst>, schema: FieldSchema, actions: ActionSchema? = null): ValidationResult {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
@@ -108,7 +89,7 @@ object Validator {
             return
         }
 
-        val op = normalizeOperator(op = cond.operator)
+        val op = OperatorUtils.normalizeOperator(op = cond.operator)
         if (def.operators.isNotEmpty() && def.operators.none { it.value.equals(other = op, ignoreCase = true) }) {
             val allowed = def.operators.map { it.value }
             val suggestion = suggestClosest(input = op, candidates = allowed)

@@ -7,9 +7,9 @@ object NormalizerRegistry {
         "trim" to Normalizer { it.trim() },
         "lowercase" to Normalizer { it.lowercase() },
         "uppercase" to Normalizer { it.uppercase() },
-        "collapse_whitespace" to Normalizer { s -> s.replace(Regex("\\s+"), " ") },
-        "remove_punctuation" to Normalizer { s -> s.replace(Regex("[\\p{Punct}]"), "") },
-        "german_umlaut_fold" to Normalizer { s -> germanUmlautFold(s) }
+        "collapse_whitespace" to Normalizer { s -> s.replace(Regex(pattern = "\\s+"), " ") },
+        "remove_punctuation" to Normalizer { s -> s.replace(Regex(pattern = "[\\p{Punct}]"), "") },
+        "german_umlaut_fold" to Normalizer { s -> germanUmlautFold(input = s) }
     )
 
     val default = this
