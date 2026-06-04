@@ -12,6 +12,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.schema.FieldSchemaLoader
@@ -22,11 +25,15 @@ import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldType
+import ruleengine.manifest.ManifestLoader
+import ruleengine.manifest.ProjectManifest
+import java.nio.file.Path
+import java.nio.file.Files
 
 @Composable
 actual fun RuleEditor() {
     var schemaText by remember { mutableStateOf("") }
-    var ruleText by remember { mutableStateOf("") }
+    var ruleValue by remember { mutableStateOf(TextFieldValue("")) }
     var status by remember { mutableStateOf("") }
     var diagnosticsText by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
@@ -34,6 +41,11 @@ actual fun RuleEditor() {
     var parsedSchema by remember { mutableStateOf<FieldSchema?>(null) }
     var actionSchemaText by remember { mutableStateOf("") }
     var parsedActionSchema by remember { mutableStateOf<ActionSchema?>(null) }
+    var manifestText by remember { mutableStateOf("") }
+    var manifestBaseDir by remember { mutableStateOf<String?>(null) }
+    var parsedManifest by remember { mutableStateOf<ProjectManifest?>(null) }
+    var selectedManifestEntryId by remember { mutableStateOf<String?>(null) }
+    var diagnosticsList by remember { mutableStateOf<List<ValidationDiagnostic>>(emptyList()) }
 
     Column(modifier = Modifier.padding(12.dp).fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -59,6 +71,18 @@ actual fun RuleEditor() {
                             }
                         }) { Text("Load Schema") }
                         Button(onClick = { schemaText = ""; parsedSchema = null; status = "Cleared schema" }) { Text("Clear") }
+
+                        Button(onClick = {
+                            scope.launch {
+                                val manifest = pickManifestFile()
+                                if (manifest != null) {
+                                    manifestText = manifest.first
+                                    manifestBaseDir = manifest.second
+                                    parsedManifest = try { ManifestLoader.loadFromString(manifestText) } catch (_: Exception) { null }
+                                    status = "Loaded manifest"
+                                } else status = "Manifest load canceled"
+                            }
+                        }) { Text("Load Manifest") }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -87,10 +111,50 @@ actual fun RuleEditor() {
                     parsedSchema?.let { s ->
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(s.fields.entries.toList()) { (fid, def) ->
-                                FieldItem(fid, def) { insertText -> ruleText = ruleText + insertText }
+                                FieldItem(fid, def) { insertText ->
+                                    // insert at current caret position
+                                    val pos = ruleValue.selection.start
+                                    val newText = ruleValue.text.substring(0, pos) + insertText + ruleValue.text.substring(pos)
+                                    val newPos = pos + insertText.length
+                                    ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
+                                }
                             }
                         }
                     } ?: Text("No schema parsed", style = MaterialTheme.typography.body2)
+
+                    parsedManifest?.let { manifest ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Manifest entries", style = MaterialTheme.typography.subtitle1)
+                        Divider()
+                        LazyColumn(modifier = Modifier.fillMaxHeight(0.25f)) {
+                            items(manifest.entries) { entry ->
+                                    Row(modifier = Modifier.fillMaxWidth().clickable {
+                                    selectedManifestEntryId = entry.id
+                                    manifestBaseDir?.let { base ->
+                                        entry.schema?.let { sp ->
+                                            try {
+                                                val p = Path.of(base, sp)
+                                                val content = Files.readString(p)
+                                                schemaText = content
+                                                parsedSchema = try { FieldSchemaLoader.loadFromString(content, p.fileName.toString()) } catch (_: Exception) { null }
+                                            } catch (_: Exception) { }
+                                        }
+                                        entry.actions?.let { ap ->
+                                            try {
+                                                val p = Path.of(base, ap)
+                                                val content = Files.readString(p)
+                                                actionSchemaText = content
+                                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(content) } catch (_: Exception) { null }
+                                            } catch (_: Exception) { }
+                                        }
+                                        }
+                                }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(entry.id, modifier = Modifier.weight(1f))
+                                    Text(entry.rules.size.toString() + " rules", style = MaterialTheme.typography.caption)
+                                }
+                            }
+                        }
+                    }
 
                     parsedActionSchema?.let { aschema ->
                         Spacer(modifier = Modifier.height(8.dp))
@@ -98,13 +162,16 @@ actual fun RuleEditor() {
                         LazyColumn(modifier = Modifier.fillMaxHeight(0.25f)) {
                             items(aschema.actions.entries.toList()) { (name, def) ->
                                 Row(modifier = Modifier.fillMaxWidth().clickable {
-                                    // insert action template: name + placeholder literal
                                     val placeholder = when (def.argTypes.firstOrNull()) {
                                         ruleengine.core.domain.ActionArgType.INTEGER -> " 0"
                                         ruleengine.core.domain.ActionArgType.DECIMAL -> " 0"
                                         else -> " \"arg\""
                                     }
-                                    ruleText = ruleText + "${name} ${placeholder}"
+                                    val insertText = "${name} ${placeholder}"
+                                    val pos = ruleValue.selection.start
+                                    val newText = ruleValue.text.substring(0, pos) + insertText + ruleValue.text.substring(pos)
+                                    val newPos = pos + insertText.length
+                                    ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
                                 }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(name, modifier = Modifier.weight(1f))
                                     Text(def.argTypes.joinToString(", ") { it.name.lowercase() }, style = MaterialTheme.typography.caption)
@@ -120,26 +187,26 @@ actual fun RuleEditor() {
                 Column(modifier = Modifier.padding(8.dp)) {
                     Text("Rule Editor", style = MaterialTheme.typography.h6)
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = ruleText, onValueChange = { ruleText = it }, modifier = Modifier.fillMaxWidth().height(220.dp), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace))
+                    OutlinedTextField(value = ruleValue, onValueChange = { ruleValue = it }, modifier = Modifier.fillMaxWidth().height(220.dp), textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             scope.launch {
                                 val content = pickRuleFile()
-                                if (content != null) { ruleText = content; status = "Loaded rule" } else status = "Rule load canceled"
+                                if (content != null) { ruleValue = TextFieldValue(content); status = "Loaded rule" } else status = "Rule load canceled"
                             }
                         }) { Text("Load Rule") }
 
                         Button(onClick = {
-                            if (ruleText.isNotBlank()) {
-                                saveRuleToFile("rule.rule", ruleText)
+                            if (ruleValue.text.isNotBlank()) {
+                                saveRuleToFile("rule.rule", ruleValue.text)
                                 status = "Saved rule to filesystem (if supported)"
                             } else status = "No rule to save"
                         }) { Text("Save Rule") }
 
                         Button(onClick = {
-                            if (ruleText.isNotBlank()) {
-                                copyToClipboard(ruleText)
+                            if (ruleValue.text.isNotBlank()) {
+                                copyToClipboard(ruleValue.text)
                                 status = "Copied rule to clipboard"
                             } else status = "No rule to copy"
                         }) { Text("Copy Rule") }
@@ -149,15 +216,17 @@ actual fun RuleEditor() {
                             scope.launch {
                                 try {
                                     if (parsedSchema == null) { status = "No schema loaded"; return@launch }
-                                    if (ruleText.isBlank()) { status = "No rule to validate"; return@launch }
+                                    if (ruleValue.text.isBlank()) { status = "No rule to validate"; return@launch }
 
-                                    val asts = Parser(ruleText).parseRules()
+                                    val asts = Parser(ruleValue.text).parseRules()
                                     val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
                                     if (result.isValid) {
                                         status = "Validation OK"
                                         diagnosticsText = "OK"
+                                        diagnosticsList = emptyList()
                                     } else {
                                         status = "Validation failed"
+                                        diagnosticsList = result.diagnostics
                                         diagnosticsText = result.diagnostics.joinToString("\n") { d -> "[${d.severity}] ${d.message}${d.suggestion?.let { " (suggest: $it)" } ?: "" }" }
                                     }
                                 } catch (e: Exception) {
@@ -172,7 +241,33 @@ actual fun RuleEditor() {
                     Text("Status: $status")
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("Diagnostics", style = MaterialTheme.typography.subtitle1)
-                    OutlinedTextField(value = diagnosticsText, onValueChange = {}, modifier = Modifier.fillMaxWidth().height(140.dp), readOnly = true)
+                    if (diagnosticsList.isEmpty()) {
+                        OutlinedTextField(value = diagnosticsText, onValueChange = {}, modifier = Modifier.fillMaxWidth().height(140.dp), readOnly = true)
+                    } else {
+                        LazyColumn(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+                            items(diagnosticsList) { d ->
+                                Row(modifier = Modifier.fillMaxWidth().clickable {
+                                    // try to move caret to the diagnostic position if available
+                                    try {
+                                        val line = d.line ?: -1
+                                        val col = d.column ?: -1
+                                        if (line > 0) {
+                                            // compute offset
+                                            val lines = ruleValue.text.lines()
+                                            var offset = 0
+                                            for (i in 0 until minOf(line - 1, lines.size - 1)) offset += lines[i].length + 1
+                                            if (col > 0) offset += (col - 1)
+                                            val pos = offset.coerceIn(0, ruleValue.text.length)
+                                            ruleValue = TextFieldValue(ruleValue.text, selection = TextRange(pos))
+                                        }
+                                    } catch (_: Exception) { }
+                                }.padding(6.dp)) {
+                                    Text(text = "[${d.severity}] ${d.message}", modifier = Modifier.weight(1f))
+                                    d.suggestion?.let { Text(text = it, style = MaterialTheme.typography.caption) }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

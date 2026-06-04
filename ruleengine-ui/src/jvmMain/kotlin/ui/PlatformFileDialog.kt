@@ -32,6 +32,20 @@ actual suspend fun pickRuleFile(): String? {
     return null
 }
 
+actual suspend fun pickManifestFile(): Pair<String, String>? {
+    val chooser = JFileChooser()
+    chooser.dialogTitle = "Select manifest YAML file"
+    chooser.fileFilter = FileNameExtensionFilter("YAML files", "yaml", "yml")
+    val res = chooser.showOpenDialog(null)
+    if (res == JFileChooser.APPROVE_OPTION) {
+        val f = chooser.selectedFile.toPath()
+        val content = Files.readString(f)
+        val base = f.parent?.toString() ?: "."
+        return Pair(content, base)
+    }
+    return null
+}
+
 actual fun saveRuleToFile(filename: String, content: String) {
     // show save dialog
     val chooser = JFileChooser()

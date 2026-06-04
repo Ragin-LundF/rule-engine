@@ -16,6 +16,11 @@ actual suspend fun pickRuleFile(): String? {
     return res
 }
 
+actual suspend fun pickManifestFile(): Pair<String, String>? {
+    val res = window.prompt("Paste manifest YAML content here (or cancel)")
+    return if (res != null) Pair(res, ".") else null
+}
+
 actual fun saveRuleToFile(filename: String, content: String) {
     // create blob and download
     val blob = js("new Blob([content], { type: 'text/plain' })")

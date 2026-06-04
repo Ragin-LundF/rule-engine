@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import androidx.compose.runtime.rememberCoroutineScope
 expect suspend fun pickSchemaFile(): String?
 expect suspend fun pickRuleFile(): String?
+expect suspend fun pickManifestFile(): Pair<String, String>?
 expect fun saveRuleToFile(filename: String, content: String)
 expect fun copyToClipboard(text: String)
 

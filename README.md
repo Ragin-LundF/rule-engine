@@ -43,6 +43,28 @@ Run the test suite:
 ./gradlew test
 ```
 
+How to (project files / manifest)
+
+The project can be described with a small manifest YAML that references field schema, actions schema and rule files. Place a `manifest.yaml` (or similarly named file) next to the referenced resources. The loader in `ruleengine.manifest.ManifestLoader` expects paths in the manifest to be relative to the manifest file location.
+
+Example `manifest.yaml`:
+
+```yaml
+name: my-rule-project
+entries:
+  - id: sample
+	schema: sample-schema.yaml    # relative path to a field schema YAML
+	actions: actions.yaml         # relative path to an actions schema YAML
+	rules:
+	  - rules/rent.rule           # one or more rule files (relative paths)
+```
+
+Notes:
+- `schema` should point to a YAML file containing the field definitions used by the rules.
+- `actions` should point to a YAML file defining available actions and their argument types.
+- `rules` is a list of rule file paths (typically `.rule` DSL files). Paths are resolved relative to the manifest file location.
+- The test suite includes an example manifest at `ruleengine-core/src/test/resources/manifest.yaml` that references the sample schema, actions and the `rules/rent.rule` sample rule.
+
 Project structure notes
 
 - ruleengine.dsl — lexer/parser for the DSL

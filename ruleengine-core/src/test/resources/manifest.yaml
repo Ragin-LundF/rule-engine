@@ -1,0 +1,9 @@
+name: sample-project
+
+entries:
+  - id: sample
+    schema: sample-schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/rent.rule
+
