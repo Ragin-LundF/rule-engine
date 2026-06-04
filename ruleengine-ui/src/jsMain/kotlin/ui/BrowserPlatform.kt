@@ -21,8 +21,8 @@ actual suspend fun pickManifestFile(): Pair<String, String>? {
     return if (res != null) Pair(res, ".") else null
 }
 
-actual fun saveRuleToFile(filename: String, content: String) {
-    // create blob and download
+/** Triggers a browser file download for [content] with the given [filename]. */
+private fun downloadFile(filename: String, content: String) {
     val blob = js("new Blob([content], { type: 'text/plain' })")
     val url = js("URL.createObjectURL(blob)") as String
     val a = window.document.createElement("a") as HTMLAnchorElement
@@ -35,6 +35,12 @@ actual fun saveRuleToFile(filename: String, content: String) {
     val jsURL = js("URL")
     jsURL.revokeObjectURL(url)
 }
+
+actual fun saveRuleToFile(filename: String, content: String) = downloadFile(filename, content)
+
+actual fun saveSchemaToFile(filename: String, content: String) = downloadFile(filename, content)
+
+actual fun saveActionsToFile(filename: String, content: String) = downloadFile(filename, content)
 
 actual fun copyToClipboard(text: String) {
     try {

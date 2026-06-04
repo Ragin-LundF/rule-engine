@@ -62,6 +62,16 @@ actual fun saveRuleToFile(filename: String, content: String) {
     file.writeText(content)
 }
 
+actual fun saveSchemaToFile(filename: String, content: String) {
+    val file = nativeSave("Save Schema YAML", filename) ?: return
+    file.writeText(content)
+}
+
+actual fun saveActionsToFile(filename: String, content: String) {
+    val file = nativeSave("Save Actions YAML", filename) ?: return
+    file.writeText(content)
+}
+
 actual fun copyToClipboard(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

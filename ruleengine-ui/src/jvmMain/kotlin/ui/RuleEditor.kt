@@ -327,6 +327,12 @@ actual fun RuleEditor() {
                                     }
                                 }
                             }
+                            AppButton("Save") {
+                                if (schemaText.isNotBlank()) {
+                                    saveSchemaToFile("schema.yaml", schemaText)
+                                    setStatus("Schema saved", StatusKind.SUCCESS)
+                                } else setStatus("Nothing to save", StatusKind.IDLE)
+                            }
                             AppButton("Clear", danger = true) { schemaText = ""; parsedSchema = null; setStatus("Schema cleared", StatusKind.IDLE) }
                         }
                         PanelDivider()
@@ -357,6 +363,12 @@ actual fun RuleEditor() {
                                         setStatus("Actions loaded", StatusKind.SUCCESS)
                                     }
                                 }
+                            }
+                            AppButton("Save") {
+                                if (actionSchemaText.isNotBlank()) {
+                                    saveActionsToFile("actions.yaml", actionSchemaText)
+                                    setStatus("Actions saved", StatusKind.SUCCESS)
+                                } else setStatus("Nothing to save", StatusKind.IDLE)
                             }
                             AppButton("Clear", danger = true) { actionSchemaText = ""; parsedActionSchema = null; setStatus("Actions cleared", StatusKind.IDLE) }
                         }
@@ -649,7 +661,9 @@ actual fun RuleEditor() {
                                                 true
                                             }
                                             // ── Enter: preserve indentation ───────────────────
-                                            event.key == Key.Enter && !showAutoComplete -> {
+                                            // Always runs (also dismisses autocomplete if open)
+                                            event.key == Key.Enter -> {
+                                                if (showAutoComplete) showAutoComplete = false
                                                 val text     = ruleValue.text
                                                 val selStart = ruleValue.selection.start
                                                 val selEnd   = ruleValue.selection.end
