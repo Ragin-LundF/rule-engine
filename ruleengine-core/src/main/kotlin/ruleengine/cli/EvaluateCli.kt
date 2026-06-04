@@ -21,11 +21,10 @@ import kotlin.system.exitProcess
 object EvaluateCli {
     @JvmStatic
     fun main(args: Array<String>) {
-        val exit = runCli(args)
+        val exit = runCli(args = args)
         exitProcess(status = exit)
     }
 
-    @Suppress("CyclomaticComplexMethod", "LongMethod", "ReturnCount")
     fun runCli(args: Array<String>, out: Appendable = System.out): Int {
         return runCatching {
             // simple args parser that supports flags (no value) and key value pairs
