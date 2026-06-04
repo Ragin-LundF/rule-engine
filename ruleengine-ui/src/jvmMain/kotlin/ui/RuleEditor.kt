@@ -43,6 +43,7 @@ import ruleengine.core.domain.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
+import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestLoader
 import ruleengine.manifest.ProjectManifest
 import ruleengine.schema.ActionSchemaLoader
@@ -56,6 +57,52 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
+
+// ── Example content templates ─────────────────────────────────────────────────
+
+private val FIELD_SCHEMA_EXAMPLE = """
+schema: my-schema
+
+fields:
+  fieldName:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - contains
+      - startsWith
+  amount:
+    type: integer
+    operators:
+      - equals
+      - greaterThan
+      - lessThan
+""".trimIndent()
+
+private val ACTION_SCHEMA_EXAMPLE = """
+actions:
+  label:
+    argTypes: [string]
+  category:
+    argTypes: [string]
+  flag:
+    argTypes: [string]
+  score:
+    argTypes: [integer]
+""".trimIndent()
+
+private val MANIFEST_EXAMPLE = """
+name: my-project
+
+entries:
+  - id: sample
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/rule.rule
+""".trimIndent()
 
 /**
  * Returns true when [trimmedLine] opens a DSL block that warrants an extra indent level
@@ -96,7 +143,6 @@ private fun isContextuallyImmediate(context: DslCursorContext): Boolean {
     return expectsOperator || expectsAction
 }
 
-// ── Smart indentation helpers ─────────────────────────────────────────────────
 // ── Status kind ───────────────────────────────────────────────────────────────
 enum class StatusKind { IDLE, SUCCESS, ERROR }
 
@@ -193,10 +239,16 @@ actual fun RuleEditor() {
     var diagnosticsList       by remember { mutableStateOf<List<ValidationDiagnostic>>(emptyList()) }
     var diagnosticsText       by remember { mutableStateOf("") }
 
+    // ── Editor expand/collapse state ──────────────────────────────────────────
+    var schemaExpanded        by remember { mutableStateOf(false) }
+    var actionsExpanded       by remember { mutableStateOf(false) }
+    var showManifestYaml      by remember { mutableStateOf(false) }
+
     // ── Editor UX state ───────────────────────────────────────────────────────
     val editorScrollState     = rememberScrollState()
     var textLayoutResult      by remember { mutableStateOf<TextLayoutResult?>(null) }
     var cursorRect            by remember { mutableStateOf(Rect.Zero) }
+
     var showAutoComplete      by remember { mutableStateOf(false) }
     var autoCompleteIndex     by remember { mutableStateOf(0) }
     var autoCompleteWord      by remember { mutableStateOf("") }
@@ -206,14 +258,83 @@ actual fun RuleEditor() {
 
     fun setStatus(msg: String, kind: StatusKind) { status = msg; statusKind = kind }
 
-    // ── Syntax-highlighted display value ──────────────────────────────────────
-    val highlightedValue = remember(ruleValue, parsedSchema, parsedActionSchema, diagnosticsList) {
-        TextFieldValue(
-            annotatedString = annotateRule(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList),
-            selection       = ruleValue.selection,
-            composition     = ruleValue.composition,
+    // ── Helper to load a manifest entry ──────────────────────────────────────
+    fun loadManifestEntry(entry: ManifestEntry) {
+        selectedManifestEntry = entry.id
+        val base = manifestBaseDir ?: return
+        var loadedRules = 0
+
+        // Load schema if referenced
+        entry.schema?.let { sp ->
+            runCatching {
+                val p = Path.of(base, sp)
+                val c = Files.readString(p)
+                schemaText = c
+                schemaFieldValue = TextFieldValue(c)
+                parsedSchema = runCatching { FieldSchemaLoader.loadFromString(c, p.fileName.toString()) }.getOrNull()
+            }
+        }
+        // Load actions if referenced
+        entry.actions?.let { ap ->
+            runCatching {
+                val p = Path.of(base, ap)
+                val c = Files.readString(p)
+                actionSchemaText = c
+                actionFieldValue = TextFieldValue(c)
+                parsedActionSchema = runCatching { ActionSchemaLoader.loadFromString(c) }.getOrNull()
+            }
+        }
+        // Load and concatenate all rule files
+        if (entry.rules.isNotEmpty()) {
+            val combined = buildString {
+                entry.rules.forEachIndexed { idx, rp ->
+                    runCatching {
+                        val p = Path.of(base, rp)
+                        val c = Files.readString(p)
+                        if (idx > 0) append("\n\n")
+                        append("# --- ${p.fileName} ---\n")
+                        append(c)
+                        loadedRules++
+                    }
+                }
+            }
+            if (combined.isNotBlank()) ruleValue = TextFieldValue(combined)
+        }
+        setStatus(
+            "Loaded '${entry.id}'" +
+            (if (entry.schema != null) ", schema" else "") +
+            (if (entry.actions != null) ", actions" else "") +
+            (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
+            StatusKind.SUCCESS,
         )
     }
+
+    // ── Auto-load first manifest entry when manifest is newly set ─────────────
+    LaunchedEffect(parsedManifest) {
+        val manifest = parsedManifest ?: run {
+            selectedManifestEntry = null
+            return@LaunchedEffect
+        }
+        val first = manifest.entries.firstOrNull() ?: return@LaunchedEffect
+        // Only auto-load when no entry is already selected (prevents unwanted override
+        // when the same manifest is re-parsed after a text edit).
+        if (selectedManifestEntry == null) {
+            loadManifestEntry(first)
+        }
+    }
+
+    // ── Syntax-highlighted display value ──────────────────────────────────────
+    // Annotation is cached by text+schema only. The final TextFieldValue is
+    // NOT wrapped in remember so its selection always reflects the current cursor
+    // position — this fixes arrow-key navigation (stale-selection bug).
+    val annotatedRule = remember(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList) {
+        annotateRule(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList)
+    }
+    val highlightedValue = TextFieldValue(
+        annotatedString = annotatedRule,
+        selection       = ruleValue.selection,
+        composition     = ruleValue.composition,
+    )
 
     // ── Context-aware autocomplete suggestions ────────────────────────────────
     val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema) {
@@ -243,7 +364,6 @@ actual fun RuleEditor() {
         val ctx = analyzeDslContext(text = ruleValue.text, cursorPos = cursor, schema = parsedSchema)
         dslContext = ctx
 
-        // Show completions when a word prefix is typed OR when context implies an immediate token.
         val lastChar = if (cursor > 0) ruleValue.text.getOrNull(cursor - 1) else null
         val afterSpace = lastChar == ' ' || lastChar == '\n'
         showAutoComplete = word.isNotEmpty() || (afterSpace && isContextuallyImmediate(ctx))
@@ -257,7 +377,7 @@ actual fun RuleEditor() {
             return@LaunchedEffect
         }
         delay(700)
-        try {
+        runCatching {
             if (parsedSchema == null) return@LaunchedEffect
             val asts   = Parser(ruleValue.text).parseRules()
             val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
@@ -267,7 +387,7 @@ actual fun RuleEditor() {
                 if (result.isValid) "✓ Validation passed" else "✗ ${result.diagnostics.size} issue(s)",
                 if (result.isValid) StatusKind.SUCCESS else StatusKind.ERROR,
             )
-        } catch (_: Exception) { /* show parse errors via manual Validate button */ }
+        }
     }
 
     // ── Accept an autocomplete suggestion ─────────────────────────────────────
@@ -301,22 +421,15 @@ actual fun RuleEditor() {
                     scope.launch {
                         val m = pickManifestFile()
                         if (m != null) {
-                            manifestText = m.first
+                            manifestText    = m.first
                             manifestBaseDir = m.second
-                            parsedManifest = try { ManifestLoader.loadFromString(manifestText) } catch (_: Exception) { null }
+                            // Reset selection so auto-load of first entry triggers.
+                            selectedManifestEntry = null
+                            parsedManifest = runCatching { ManifestLoader.loadFromString(manifestText) }.getOrNull()
                             setStatus("Manifest loaded", StatusKind.SUCCESS)
-                        } else setStatus("Manifest load cancelled", StatusKind.IDLE)
-                    }
-                }
-                AppButton("Load Schema") {
-                    scope.launch {
-                        val c = pickSchemaFile()
-                        if (c != null) {
-                            schemaText = c
-                            schemaFieldValue = TextFieldValue(c)
-                            parsedSchema = try { FieldSchemaLoader.loadFromString(c, "ui-schema") } catch (_: Exception) { null }
-                            setStatus("Schema loaded — ${parsedSchema?.fields?.size ?: 0} fields", StatusKind.SUCCESS)
-                        } else setStatus("Schema load cancelled", StatusKind.IDLE)
+                        } else {
+                            setStatus("Manifest load cancelled", StatusKind.IDLE)
+                        }
                     }
                 }
             }
@@ -326,154 +439,392 @@ actual fun RuleEditor() {
         BoxWithConstraints(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(12.dp),
         ) {
-            val leftWidthDp    = maxWidth * splitFraction
+            val leftWidthDp = maxWidth * splitFraction
 
             Row(modifier = Modifier.fillMaxSize()) {
 
-            // ── Left panel ────────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .width(leftWidthDp)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(BgSurface)
-                    .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
-                    .padding(14.dp),
-            ) {
-                // Panel title (fixed, not scrolling)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Schema", style = MaterialTheme.typography.h6, color = TextPrimary)
-                    Spacer(Modifier.weight(1f))
-                    parsedSchema?.let { Chip("${it.fields.size} fields", AccentGreen.copy(0.15f), AccentGreen) }
-                }
-                PanelDivider()
-
-                // All sections in a single LazyColumn so every section gets space
-                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-
-                    // ── Field Schema YAML ─────────────────────────────────────
-                    item {
-                        SectionHeader("Field Schema YAML")
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(140.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Bg)
-                                .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
-                                .padding(8.dp),
-                        ) {
-                            YamlEditor(
-                                value = schemaFieldValue,
-                                onValueChange = { newVal ->
-                                    schemaFieldValue = newVal
-                                    schemaText = newVal.text
-                                    parsedSchema = runCatching {
-                                        FieldSchemaLoader.loadFromString(newVal.text, "ui-schema")
-                                    }.getOrNull()
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                                editorType = YamlEditorType.FIELD_SCHEMA,
-                                annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.FIELD_SCHEMA) },
-                                buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.FIELD_SCHEMA) },
-                                placeholder = "# Paste field schema YAML here…",
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            AppButton("Load") {
-                                scope.launch {
-                                    val c = pickSchemaFile()
-                                    if (c != null) {
-                                        schemaText   = c
-                                        schemaFieldValue = TextFieldValue(c)
-                                        parsedSchema = runCatching { FieldSchemaLoader.loadFromString(c, "ui-schema") }.getOrNull()
-                                        setStatus("Schema loaded", StatusKind.SUCCESS)
-                                    }
-                                }
-                            }
-                            AppButton("Save") {
-                                if (schemaText.isNotBlank()) {
-                                    saveSchemaToFile("schema.yaml", schemaText)
-                                    setStatus("Schema saved", StatusKind.SUCCESS)
-                                } else setStatus("Nothing to save", StatusKind.IDLE)
-                            }
-                            AppButton("Clear", danger = true) {
-                                schemaText = ""; schemaFieldValue = TextFieldValue(""); parsedSchema = null
-                                setStatus("Schema cleared", StatusKind.IDLE)
-                            }
-                        }
-                        PanelDivider()
+                // ── Left panel ────────────────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .width(leftWidthDp)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                        .padding(14.dp),
+                ) {
+                    // Panel title
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Schema", style = MaterialTheme.typography.h6, color = TextPrimary)
+                        Spacer(Modifier.weight(1f))
+                        parsedSchema?.let { Chip("${it.fields.size} fields", AccentGreen.copy(0.15f), AccentGreen) }
                     }
+                    PanelDivider()
 
-                    // ── Action Schema YAML ────────────────────────────────────
-                    item {
-                        SectionHeader("Action Schema YAML")
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(110.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Bg)
-                                .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
-                                .padding(8.dp),
-                        ) {
-                            YamlEditor(
-                                value = actionFieldValue,
-                                onValueChange = { newVal ->
-                                    actionFieldValue   = newVal
-                                    actionSchemaText   = newVal.text
-                                    parsedActionSchema = runCatching {
-                                        ActionSchemaLoader.loadFromString(newVal.text)
-                                    }.getOrNull()
-                                },
-                                modifier = Modifier.fillMaxSize(),
-                                editorType = YamlEditorType.ACTION_SCHEMA,
-                                annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.ACTION_SCHEMA) },
-                                buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.ACTION_SCHEMA) },
-                                placeholder = "# Paste action schema YAML here…",
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            AppButton("Load") {
-                                scope.launch {
-                                    val c = pickSchemaFile()
-                                    if (c != null) {
-                                        actionSchemaText   = c
-                                        actionFieldValue   = TextFieldValue(c)
-                                        parsedActionSchema = runCatching { ActionSchemaLoader.loadFromString(c) }.getOrNull()
-                                        setStatus("Actions loaded", StatusKind.SUCCESS)
-                                    }
-                                }
-                            }
-                            AppButton("Save") {
-                                if (actionSchemaText.isNotBlank()) {
-                                    saveActionsToFile("actions.yaml", actionSchemaText)
-                                    setStatus("Actions saved", StatusKind.SUCCESS)
-                                } else setStatus("Nothing to save", StatusKind.IDLE)
-                            }
-                            AppButton("Clear", danger = true) {
-                                actionSchemaText = ""; actionFieldValue = TextFieldValue(""); parsedActionSchema = null
-                                setStatus("Actions cleared", StatusKind.IDLE)
-                            }
-                        }
-                        PanelDivider()
-                    }
+                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
 
-                    // ── Fields list ───────────────────────────────────────────
-                    item { SectionHeader("Fields") }
-
-                    if (parsedSchema != null) {
-                        items(parsedSchema!!.fields.entries.toList()) { (fid, def) ->
-                            FieldItem(fid, def) { ins ->
-                                val pos     = ruleValue.selection.start
-                                val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
-                                ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
-                            }
-                        }
-                    } else {
+                        // ── Field Schema YAML ─────────────────────────────────
                         item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            ) {
+                                SectionHeader("Field Schema YAML")
+                                Spacer(Modifier.weight(1f))
+                                // Expand / collapse toggle
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(BgHover)
+                                        .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                                        .clickable { schemaExpanded = !schemaExpanded }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = if (schemaExpanded) "▲ Collapse" else "▼ Expand",
+                                        style = MaterialTheme.typography.caption,
+                                        color = TextSecondary,
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(if (schemaExpanded) 320.dp else 140.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Bg)
+                                    .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                    .padding(8.dp),
+                            ) {
+                                YamlEditor(
+                                    value = schemaFieldValue,
+                                    onValueChange = { newVal ->
+                                        schemaFieldValue = newVal
+                                        schemaText = newVal.text
+                                        parsedSchema = runCatching {
+                                            FieldSchemaLoader.loadFromString(newVal.text, "ui-schema")
+                                        }.getOrNull()
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    editorType = YamlEditorType.FIELD_SCHEMA,
+                                    annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.FIELD_SCHEMA) },
+                                    buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.FIELD_SCHEMA) },
+                                    placeholder = "# Click here — completions appear automatically\n# or press Example to start from a template",
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                AppButton("Example") {
+                                    schemaText = FIELD_SCHEMA_EXAMPLE
+                                    schemaFieldValue = TextFieldValue(FIELD_SCHEMA_EXAMPLE)
+                                    parsedSchema = runCatching {
+                                        FieldSchemaLoader.loadFromString(FIELD_SCHEMA_EXAMPLE, "example")
+                                    }.getOrNull()
+                                    setStatus("Example schema loaded", StatusKind.SUCCESS)
+                                }
+                                AppButton("Load") {
+                                    scope.launch {
+                                        val c = pickSchemaFile()
+                                        if (c != null) {
+                                            schemaText = c
+                                            schemaFieldValue = TextFieldValue(c)
+                                            parsedSchema = runCatching { FieldSchemaLoader.loadFromString(c, "ui-schema") }.getOrNull()
+                                            setStatus("Schema loaded", StatusKind.SUCCESS)
+                                        }
+                                    }
+                                }
+                                AppButton("Save") {
+                                    if (schemaText.isNotBlank()) {
+                                        saveSchemaToFile("schema.yaml", schemaText)
+                                        setStatus("Schema saved", StatusKind.SUCCESS)
+                                    } else {
+                                        setStatus("Nothing to save", StatusKind.IDLE)
+                                    }
+                                }
+                                AppButton("Clear", danger = true) {
+                                    schemaText = ""
+                                    schemaFieldValue = TextFieldValue("")
+                                    parsedSchema = null
+                                    setStatus("Schema cleared", StatusKind.IDLE)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // ── Fields list (directly under field schema) ──────────
+                        if (parsedSchema != null) {
+                            item { SectionHeader("Fields") }
+                            items(parsedSchema!!.fields.entries.toList()) { (fid, def) ->
+                                FieldItem(id = fid, def = def) { ins ->
+                                    val pos     = ruleValue.selection.start
+                                    val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
+                                    ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
+                                }
+                            }
+                        } else {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Bg)
+                                        .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
+                                        .padding(12.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "Load or paste a field schema to see fields",
+                                        style = MaterialTheme.typography.body2,
+                                        color = TextMuted,
+                                    )
+                                }
+                            }
+                        }
+
+                        item { PanelDivider() }
+
+                        // ── Action Schema YAML ────────────────────────────────
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            ) {
+                                SectionHeader("Action Schema YAML")
+                                Spacer(Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(BgHover)
+                                        .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                                        .clickable { actionsExpanded = !actionsExpanded }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = if (actionsExpanded) "▲ Collapse" else "▼ Expand",
+                                        style = MaterialTheme.typography.caption,
+                                        color = TextSecondary,
+                                    )
+                                }
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(if (actionsExpanded) 280.dp else 110.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Bg)
+                                    .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                    .padding(8.dp),
+                            ) {
+                                YamlEditor(
+                                    value = actionFieldValue,
+                                    onValueChange = { newVal ->
+                                        actionFieldValue   = newVal
+                                        actionSchemaText   = newVal.text
+                                        parsedActionSchema = runCatching {
+                                            ActionSchemaLoader.loadFromString(newVal.text)
+                                        }.getOrNull()
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    editorType = YamlEditorType.ACTION_SCHEMA,
+                                    annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.ACTION_SCHEMA) },
+                                    buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.ACTION_SCHEMA) },
+                                    placeholder = "# Click here — completions appear automatically\n# or press Example to start from a template",
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                AppButton("Example") {
+                                    actionSchemaText = ACTION_SCHEMA_EXAMPLE
+                                    actionFieldValue = TextFieldValue(ACTION_SCHEMA_EXAMPLE)
+                                    parsedActionSchema = runCatching {
+                                        ActionSchemaLoader.loadFromString(ACTION_SCHEMA_EXAMPLE)
+                                    }.getOrNull()
+                                    setStatus("Example action schema loaded", StatusKind.SUCCESS)
+                                }
+                                AppButton("Load") {
+                                    scope.launch {
+                                        val c = pickSchemaFile()
+                                        if (c != null) {
+                                            actionSchemaText   = c
+                                            actionFieldValue   = TextFieldValue(c)
+                                            parsedActionSchema = runCatching { ActionSchemaLoader.loadFromString(c) }.getOrNull()
+                                            setStatus("Actions loaded", StatusKind.SUCCESS)
+                                        }
+                                    }
+                                }
+                                AppButton("Save") {
+                                    if (actionSchemaText.isNotBlank()) {
+                                        saveActionsToFile("actions.yaml", actionSchemaText)
+                                        setStatus("Actions saved", StatusKind.SUCCESS)
+                                    } else {
+                                        setStatus("Nothing to save", StatusKind.IDLE)
+                                    }
+                                }
+                                AppButton("Clear", danger = true) {
+                                    actionSchemaText = ""
+                                    actionFieldValue = TextFieldValue("")
+                                    parsedActionSchema = null
+                                    setStatus("Actions cleared", StatusKind.IDLE)
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        // ── Available Actions (directly under action schema) ────
+                        parsedActionSchema?.let { aschema ->
+                            item { SectionHeader("Available Actions") }
+                            items(aschema.actions.entries.toList()) { (name, def) ->
+                                ActionItem(name = name, def = def) { ins ->
+                                    val pos     = ruleValue.selection.start
+                                    val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
+                                    ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
+                                }
+                            }
+                        }
+
+                        item { PanelDivider() }
+
+                        // ── Manifest section ──────────────────────────────────
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(bottom = 4.dp),
+                            ) {
+                                SectionHeader("Manifest")
+                                parsedManifest?.let {
+                                    Spacer(Modifier.width(8.dp))
+                                    Chip("${it.entries.size} entries", AccentPurple.copy(0.12f), AccentPurple)
+                                }
+                                Spacer(Modifier.weight(1f))
+                                // Toggle between YAML editor and entries list
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(3.dp))
+                                        .background(BgHover)
+                                        .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                                        .clickable { showManifestYaml = !showManifestYaml }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                ) {
+                                    Text(
+                                        text = if (showManifestYaml) "▲ Entries" else "✎ Edit YAML",
+                                        style = MaterialTheme.typography.caption,
+                                        color = TextSecondary,
+                                    )
+                                }
+                            }
+
+                            // ── Manifest YAML editor ──────────────────────────
+                            if (showManifestYaml) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(200.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(Bg)
+                                        .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                        .padding(8.dp),
+                                ) {
+                                    // Plain YAML editor for manifest (no schema-specific completions needed)
+                                    val annotatedManifest = remember(manifestText) { annotateYaml(manifestText, YamlEditorType.FIELD_SCHEMA) }
+                                    var manifestFieldValue by remember { mutableStateOf(TextFieldValue(manifestText)) }
+                                    // Sync externally-set manifestText into the local field value
+                                    LaunchedEffect(manifestText) {
+                                        if (manifestFieldValue.text != manifestText) {
+                                            manifestFieldValue = TextFieldValue(manifestText)
+                                        }
+                                    }
+                                    BasicTextField(
+                                        value = TextFieldValue(
+                                            annotatedString = annotatedManifest,
+                                            selection = manifestFieldValue.selection,
+                                            composition = manifestFieldValue.composition,
+                                        ),
+                                        onValueChange = { newVal ->
+                                            manifestFieldValue = TextFieldValue(
+                                                text = newVal.text,
+                                                selection = newVal.selection,
+                                                composition = newVal.composition,
+                                            )
+                                            manifestText = newVal.text
+                                            // Reset entry selection so first-entry auto-load
+                                            // triggers again on the new manifest content.
+                                            selectedManifestEntry = null
+                                            parsedManifest = runCatching {
+                                                ManifestLoader.loadFromString(newVal.text)
+                                            }.getOrNull()
+                                        },
+                                        modifier = Modifier.fillMaxSize(),
+                                        textStyle = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 11.sp,
+                                            color = TextPrimary,
+                                            lineHeight = 17.sp,
+                                        ),
+                                        cursorBrush = SolidColor(PrimaryBlue),
+                                    )
+                                    if (manifestText.isEmpty()) {
+                                        Text(
+                                            "# Paste or type manifest YAML here",
+                                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextMuted),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    AppButton("Example") {
+                                        manifestText   = MANIFEST_EXAMPLE
+                                        parsedManifest = runCatching { ManifestLoader.loadFromString(MANIFEST_EXAMPLE) }.getOrNull()
+                                        setStatus("Example manifest loaded", StatusKind.SUCCESS)
+                                    }
+                                    AppButton("Save") {
+                                        if (manifestText.isNotBlank()) {
+                                            saveManifestToFile("manifest.yaml", manifestText)
+                                            setStatus("Manifest saved", StatusKind.SUCCESS)
+                                        } else {
+                                            setStatus("Nothing to save", StatusKind.IDLE)
+                                        }
+                                    }
+                                    AppButton("Clear", danger = true) {
+                                        manifestText   = ""
+                                        parsedManifest = null
+                                        selectedManifestEntry = null
+                                        setStatus("Manifest cleared", StatusKind.IDLE)
+                                    }
+                                }
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+
+                        // ── Manifest entries list ─────────────────────────────
+                        parsedManifest?.let { manifest ->
+                            items(manifest.entries) { entry ->
+                                val sel = selectedManifestEntry == entry.id
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(if (sel) BgElevated else Color.Transparent)
+                                        .clickable { loadManifestEntry(entry) }
+                                        .padding(horizontal = 8.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Box(Modifier.size(6.dp).background(if (sel) PrimaryBlue else Color.Transparent, CircleShape))
+                                    Spacer(Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = entry.id,
+                                            style = MaterialTheme.typography.body1,
+                                            color = if (sel) TextPrimary else TextSecondary,
+                                        )
+                                        if (entry.rules.isNotEmpty()) {
+                                            Text("${entry.rules.size} rule file(s)", style = MaterialTheme.typography.caption)
+                                        }
+                                    }
+                                    Chip("${entry.rules.size} rules")
+                                }
+                            }
+                        } ?: item {
+                            // No manifest — show a helpful prompt
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -483,454 +834,385 @@ actual fun RuleEditor() {
                                     .padding(12.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("Load a schema to see fields", style = MaterialTheme.typography.body2)
+                                Text(
+                                    text = "Use \"Load Manifest\" above or open\n\"Edit YAML\" to create one.",
+                                    style = MaterialTheme.typography.body2,
+                                    color = TextMuted,
+                                )
                             }
                         }
-                    }
 
-                    // ── Available Actions ─────────────────────────────────────
-                    parsedActionSchema?.let { aschema ->
-                        item { PanelDivider(); SectionHeader("Available Actions") }
-                        items(aschema.actions.entries.toList()) { (name, def) ->
-                            ActionItem(name = name, def = def) { ins ->
-                                val pos     = ruleValue.selection.start
-                                val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
-                                ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
-                            }
-                        }
-                    }
-
-                    // ── Manifest Entries ──────────────────────────────────────
-                    parsedManifest?.let { manifest ->
-                        item { PanelDivider(); SectionHeader("Manifest Entries") }
-                        items(manifest.entries) { entry ->
-                            val sel = selectedManifestEntry == entry.id
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(if (sel) BgElevated else Color.Transparent)
-                                    .clickable {
-                                        selectedManifestEntry = entry.id
-                                        val base = manifestBaseDir ?: return@clickable
-                                        var loadedRules = 0
-
-                                        // Load schema
-                                        entry.schema?.let { sp ->
-                                            runCatching {
-                                                val p = Path.of(base, sp)
-                                                val c = Files.readString(p)
-                                                schemaText   = c
-                                                schemaFieldValue = TextFieldValue(c)
-                                                parsedSchema = try { FieldSchemaLoader.loadFromString(c, p.fileName.toString()) } catch (_: Exception) { null }
-                                            }
-                                        }
-                                        // Load actions
-                                        entry.actions?.let { ap ->
-                                            runCatching {
-                                                val p = Path.of(base, ap)
-                                                val c = Files.readString(p)
-                                                actionSchemaText   = c
-                                                actionFieldValue   = TextFieldValue(c)
-                                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
-                                            }
-                                        }
-                                        // Load and concatenate all rule files
-                                        if (entry.rules.isNotEmpty()) {
-                                            val combined = buildString {
-                                                entry.rules.forEachIndexed { idx, rp ->
-                                                    runCatching {
-                                                        val p = Path.of(base, rp)
-                                                        val c = Files.readString(p)
-                                                        if (idx > 0) append("\n\n")
-                                                        append("# --- ${p.fileName} ---\n")
-                                                        append(c)
-                                                        loadedRules++
-                                                    }
-                                                }
-                                            }
-                                            if (combined.isNotBlank()) {
-                                                ruleValue = TextFieldValue(combined)
-                                            }
-                                        }
-                                        setStatus(
-                                            "Loaded entry '${entry.id}'" +
-                                            (if (entry.schema != null) ", schema" else "") +
-                                            (if (entry.actions != null) ", actions" else "") +
-                                            (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
-                                            StatusKind.SUCCESS,
-                                        )
-                                    }
-                                    .padding(horizontal = 8.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Box(Modifier.size(6.dp).background(if (sel) PrimaryBlue else Color.Transparent, CircleShape))
-                                Spacer(Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(entry.id, style = MaterialTheme.typography.body1, color = if (sel) TextPrimary else TextSecondary)
-                                    if (entry.rules.isNotEmpty()) {
-                                        Text("${entry.rules.size} rule file(s)", style = MaterialTheme.typography.caption)
-                                    }
-                                }
-                                Chip("${entry.rules.size} rules")
-                            }
-                        }
-                    }
-
-                    // bottom padding
-                    item { Spacer(Modifier.height(8.dp)) }
-                }
-            }
-
-            // ── Right panel ───────────────────────────────────────────────────
-            Column(
-                modifier = Modifier
-                    .weight(0.67f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(BgSurface)
-                    .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
-                    .padding(14.dp),
-            ) {
-                // Header + action buttons
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Rule Editor", style = MaterialTheme.typography.h6, color = TextPrimary)
-                    Spacer(Modifier.weight(1f))
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        AppButton("Load Rule") {
-                            scope.launch {
-                                val c = pickRuleFile()
-                                if (c != null) { ruleValue = TextFieldValue(c); setStatus("Rule loaded", StatusKind.SUCCESS) }
-                                else setStatus("Load cancelled", StatusKind.IDLE)
-                            }
-                        }
-                        AppButton("Save Rule") {
-                            if (ruleValue.text.isNotBlank()) { saveRuleToFile("rule.rule", ruleValue.text); setStatus("Rule saved", StatusKind.SUCCESS) }
-                            else setStatus("Nothing to save", StatusKind.IDLE)
-                        }
-                        AppButton("Copy Rule") {
-                            if (ruleValue.text.isNotBlank()) { copyToClipboard(ruleValue.text); setStatus("Rule copied to clipboard", StatusKind.SUCCESS) }
-                            else setStatus("Nothing to copy", StatusKind.IDLE)
-                        }
-                        AppButton("Validate", primary = true) {
-                            scope.launch {
-                                try {
-                                    if (parsedSchema == null) { setStatus("No schema loaded", StatusKind.ERROR); return@launch }
-                                    if (ruleValue.text.isBlank()) { setStatus("Rule is empty", StatusKind.IDLE); return@launch }
-                                    val asts   = Parser(ruleValue.text).parseRules()
-                                    val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
-                                    if (result.isValid) {
-                                        setStatus("✓ Validation passed", StatusKind.SUCCESS)
-                                        diagnosticsText = "No issues found"
-                                        diagnosticsList = emptyList()
-                                    } else {
-                                        setStatus("✗ ${result.diagnostics.size} issue(s) found", StatusKind.ERROR)
-                                        diagnosticsList = result.diagnostics
-                                        diagnosticsText = result.diagnostics.joinToString("\n") { d ->
-                                            "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    setStatus("Parse error: ${e.message}", StatusKind.ERROR)
-                                    diagnosticsText = e.toString()
-                                    diagnosticsList = emptyList()
-                                }
-                            }
-                        }
+                        item { Spacer(Modifier.height(8.dp)) }
                     }
                 }
 
-                PanelDivider()
+                Spacer(Modifier.width(12.dp))
 
-                // ── Code Editor ───────────────────────────────────────────────
-                val lineNumberWidthDp = 48.dp
-                val editorPaddingDp   = 14.dp
-                val lineCount = remember(ruleValue.text) {
-                    ruleValue.text.lines().size.coerceAtLeast(1)
-                }
-
-                Box(
+                // ── Right panel ───────────────────────────────────────────────
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Bg)
-                        .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
+                        .weight(0.67f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(BgSurface)
+                        .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
+                        .padding(14.dp),
                 ) {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        // ── Line-number gutter ─────────────────────────────────
-                        Box(
-                            modifier = Modifier
-                                .width(lineNumberWidthDp)
-                                .fillMaxHeight()
-                                .background(BgSurface)
-                                .drawTopLine(0.dp, BorderColor), // visual baseline
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(top = editorPaddingDp, end = 8.dp, start = 4.dp)
-                                    .offset { IntOffset(0, -editorScrollState.value) },
-                                horizontalAlignment = Alignment.End,
-                            ) {
-                                repeat(lineCount) { i ->
-                                    Text(
-                                        text  = "${i + 1}",
-                                        style = TextStyle(
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize   = 13.sp,
-                                            lineHeight = 20.sp,
-                                            color      = if (i + 1 == ruleValue.text.take(
-                                                ruleValue.selection.start.coerceIn(0, ruleValue.text.length)
-                                            ).count { it == '\n' } + 1) PrimaryBlue.copy(alpha = 0.7f) else TextMuted,
-                                        ),
-                                    )
+                    // Header + action buttons
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Rule Editor", style = MaterialTheme.typography.h6, color = TextPrimary)
+                        Spacer(Modifier.weight(1f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            AppButton("Load Rule") {
+                                scope.launch {
+                                    val c = pickRuleFile()
+                                    if (c != null) {
+                                        ruleValue = TextFieldValue(c)
+                                        setStatus("Rule loaded", StatusKind.SUCCESS)
+                                    } else {
+                                        setStatus("Load cancelled", StatusKind.IDLE)
+                                    }
+                                }
+                            }
+                            AppButton("Save Rule") {
+                                if (ruleValue.text.isNotBlank()) {
+                                    saveRuleToFile("rule.rule", ruleValue.text)
+                                    setStatus("Rule saved", StatusKind.SUCCESS)
+                                } else {
+                                    setStatus("Nothing to save", StatusKind.IDLE)
+                                }
+                            }
+                            AppButton("Copy Rule") {
+                                if (ruleValue.text.isNotBlank()) {
+                                    copyToClipboard(ruleValue.text)
+                                    setStatus("Rule copied to clipboard", StatusKind.SUCCESS)
+                                } else {
+                                    setStatus("Nothing to copy", StatusKind.IDLE)
+                                }
+                            }
+                            AppButton("Validate", primary = true) {
+                                scope.launch {
+                                    runCatching {
+                                        if (parsedSchema == null) { setStatus("No schema loaded", StatusKind.ERROR); return@launch }
+                                        if (ruleValue.text.isBlank()) { setStatus("Rule is empty", StatusKind.IDLE); return@launch }
+                                        val asts   = Parser(ruleValue.text).parseRules()
+                                        val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
+                                        if (result.isValid) {
+                                            setStatus("✓ Validation passed", StatusKind.SUCCESS)
+                                            diagnosticsText = "No issues found"
+                                            diagnosticsList = emptyList()
+                                        } else {
+                                            setStatus("✗ ${result.diagnostics.size} issue(s) found", StatusKind.ERROR)
+                                            diagnosticsList = result.diagnostics
+                                            diagnosticsText = result.diagnostics.joinToString("\n") { d ->
+                                                "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
+                                            }
+                                        }
+                                    }.onFailure { e ->
+                                        setStatus("Parse error: ${e.message}", StatusKind.ERROR)
+                                        diagnosticsText = e.toString()
+                                        diagnosticsList = emptyList()
+                                    }
                                 }
                             }
                         }
-                        // Gutter separator
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(BorderColor))
-
-                        // ── Scrollable text area ───────────────────────────────
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .verticalScroll(editorScrollState),
-                        ) {
-                            BasicTextField(
-                                value    = highlightedValue,
-                                onValueChange = { newVal ->
-                                    val isNewChar = newVal.text.length == ruleValue.text.length + 1
-                                    val cursorPos = newVal.selection.start
-                                    // Auto-dedent `}` when typed on an otherwise-whitespace line.
-                                    if (isNewChar && cursorPos > 0 &&
-                                        newVal.text.getOrNull(cursorPos - 1) == '}') {
-                                        val (dedentedText, removed) = autoClosingBraceDedent(
-                                            text = newVal.text, bracePos = cursorPos - 1,
-                                        )
-                                        ruleValue = TextFieldValue(
-                                            text = dedentedText,
-                                            selection = TextRange((cursorPos - removed).coerceAtLeast(0)),
-                                            composition = newVal.composition,
-                                        )
-                                    } else {
-                                        ruleValue = TextFieldValue(newVal.text, newVal.selection, newVal.composition)
-                                    }
-                                },
-                                onTextLayout = { result ->
-                                    textLayoutResult = result
-                                    val cursor = ruleValue.selection.start
-                                        .coerceIn(0, ruleValue.text.length.coerceAtLeast(0))
-                                    runCatching { cursorRect = result.getCursorRect(cursor) }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .defaultMinSize(minHeight = 200.dp)
-                                    .padding(editorPaddingDp)
-                                    .onPreviewKeyEvent { event ->
-                                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                        when {
-                                            // ── Autocomplete navigation ───────────────────────
-                                            event.key == Key.Escape && showAutoComplete -> {
-                                                showAutoComplete = false; true
-                                            }
-                                            event.key == Key.DirectionDown && showAutoComplete -> {
-                                                autoCompleteIndex = (autoCompleteIndex + 1)
-                                                    .coerceAtMost(filteredSuggestions.size - 1)
-                                                true
-                                            }
-                                            event.key == Key.DirectionUp && showAutoComplete -> {
-                                                autoCompleteIndex = (autoCompleteIndex - 1).coerceAtLeast(0)
-                                                true
-                                            }
-                                            event.key == Key.Tab && showAutoComplete && filteredSuggestions.isNotEmpty() -> {
-                                                acceptSuggestion(filteredSuggestions[autoCompleteIndex])
-                                                true
-                                            }
-                                            // ── Enter: smart DSL indentation ──────────────────────
-                                            // Always runs (also dismisses autocomplete if open)
-                                            event.key == Key.Enter -> {
-                                                if (showAutoComplete) showAutoComplete = false
-                                                val text     = ruleValue.text
-                                                val selStart = ruleValue.selection.start
-                                                val selEnd   = ruleValue.selection.end
-                                                val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
-                                                val currentLine = text.substring(lineStart, selStart)
-                                                val indent    = currentLine.takeWhile { it == ' ' || it == '\t' }
-                                                // Add one extra indent level after block-opening lines.
-                                                val extra = if (dslLineOpensBlock(currentLine.trim())) "    " else ""
-                                                val newText = text.substring(0, selStart) + "\n" + indent + extra +
-                                                              text.substring(selEnd)
-                                                ruleValue = TextFieldValue(newText,
-                                                    selection = TextRange(selStart + 1 + indent.length + extra.length))
-                                                true
-                                            }
-                                            // ── Tab: indent / dedent ──────────────────────────
-                                            event.key == Key.Tab -> {
-                                                val text     = ruleValue.text
-                                                val selStart = ruleValue.selection.start
-                                                val selEnd   = ruleValue.selection.end
-                                                if (event.isShiftPressed) {
-                                                    val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
-                                                    val spaces = text.substring(lineStart)
-                                                        .takeWhile { it == ' ' }.length.coerceAtMost(4)
-                                                    if (spaces > 0) {
-                                                        val newText = text.substring(0, lineStart) +
-                                                                      text.substring(lineStart + spaces)
-                                                        ruleValue = TextFieldValue(newText,
-                                                            selection = TextRange((selStart - spaces).coerceAtLeast(lineStart)))
-                                                    }
-                                                } else {
-                                                    val newText = text.substring(0, selStart) + "    " +
-                                                                  text.substring(selEnd)
-                                                    ruleValue = TextFieldValue(newText,
-                                                        selection = TextRange(selStart + 4))
-                                                }
-                                                true
-                                            }
-                                            else -> false
-                                        }
-                                    },
-                                textStyle = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize   = 13.sp,
-                                    color      = TextPrimary,
-                                    lineHeight = 20.sp,
-                                ),
-                                cursorBrush = SolidColor(PrimaryBlue),
-                            )
-                        }
                     }
 
-                    // ── Placeholder (when editor is empty) ─────────────────────
-                    if (ruleValue.text.isEmpty()) {
-                        Text(
-                            text = "# Write your rules here…\nrule \"example\" {\n    when field > value\n    then action \"result\"\n}",
-                            modifier = Modifier.padding(
-                                start = lineNumberWidthDp + 1.dp + editorPaddingDp,
-                                top   = editorPaddingDp,
-                            ),
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize   = 13.sp,
-                                color      = TextMuted,
-                                lineHeight = 20.sp,
-                            ),
-                        )
+                    PanelDivider()
+
+                    // ── Code Editor ───────────────────────────────────────────
+                    val lineNumberWidthDp = 48.dp
+                    val editorPaddingDp   = 14.dp
+                    val lineCount = remember(ruleValue.text) {
+                        ruleValue.text.lines().size.coerceAtLeast(1)
                     }
 
-                    // ── Autocomplete popup overlay ─────────────────────────────
-                    if (showAutoComplete && filteredSuggestions.isNotEmpty()) {
-                        val density = LocalDensity.current
-                        val xPos = with(density) {
-                            lineNumberWidthDp + 1.dp + editorPaddingDp + cursorRect.left.toDp()
-                        }
-                        val yPos = with(density) {
-                            editorPaddingDp + (cursorRect.bottom - editorScrollState.value).toDp()
-                        }
-                        AutoCompleteDropdown(
-                            modifier       = Modifier.offset(x = xPos, y = yPos),
-                            suggestions    = filteredSuggestions,
-                            selectedIndex  = autoCompleteIndex,
-                            onSelect       = { acceptSuggestion(it) },
-                            onDismiss      = { showAutoComplete = false },
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // ── Diagnostics ───────────────────────────────────────────────
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Diagnostics", style = MaterialTheme.typography.h6, color = TextPrimary)
-                    Spacer(Modifier.weight(1f))
-                    if (diagnosticsList.isNotEmpty()) {
-                        val errors   = diagnosticsList.count { it.severity == Severity.ERROR }
-                        val warnings = diagnosticsList.count { it.severity == Severity.WARNING }
-                        if (errors   > 0) Chip("$errors error${if (errors > 1)   "s" else ""}", AccentRed.copy(0.15f),    AccentRed)
-                        if (warnings > 0) Chip("$warnings warning${if (warnings > 1) "s" else ""}", AccentOrange.copy(0.15f), AccentOrange)
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-
-                if (diagnosticsList.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(130.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Bg)
-                            .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
-                            .padding(14.dp),
-                    ) {
-                        Text(
-                            text  = diagnosticsText.ifBlank { "No diagnostics — press Validate to check your rule." },
-                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp,
-                                color = if (diagnosticsText.isBlank()) TextMuted else AccentGreen),
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
+                            .weight(1f)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Bg)
                             .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
                     ) {
-                        items(diagnosticsList) { d ->
-                            val rowBg    = when (d.severity) {
-                                Severity.ERROR   -> AccentRed.copy(alpha = 0.07f)
-                                Severity.WARNING -> AccentOrange.copy(alpha = 0.07f)
-                                else             -> Color.Transparent
-                            }
-                            val dotColor = when (d.severity) {
-                                Severity.ERROR   -> AccentRed
-                                Severity.WARNING -> AccentOrange
-                                else             -> PrimaryBlue
-                            }
-                            val lineLabel = d.line?.let { "L${it}${d.column?.let { c -> ":$c" } ?: ""}" }
-
-                            Row(
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            // ── Line-number gutter ─────────────────────────────────
+                            Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(rowBg)
-                                    .clickable {
-                                        try {
-                                            val line = d.line ?: -1
-                                            val col  = d.column ?: -1
-                                            if (line > 0) {
-                                                val lines  = ruleValue.text.lines()
-                                                var offset = 0
-                                                for (i in 0 until minOf(line - 1, lines.size - 1)) offset += lines[i].length + 1
-                                                if (col > 0) offset += (col - 1)
-                                                ruleValue = TextFieldValue(ruleValue.text, selection = TextRange(offset.coerceIn(0, ruleValue.text.length)))
-                                            }
-                                        } catch (_: Exception) { }
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    .width(lineNumberWidthDp)
+                                    .fillMaxHeight()
+                                    .background(BgSurface)
+                                    .drawTopLine(0.dp, BorderColor),
                             ) {
-                                Box(Modifier.size(7.dp).background(dotColor, CircleShape))
-                                Text(
-                                    text     = d.message,
-                                    style    = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = TextPrimary),
-                                    modifier = Modifier.weight(1f),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                                lineLabel?.let { Chip(it) }
-                                d.suggestion?.let {
-                                    Text("→ $it", style = MaterialTheme.typography.caption, color = AccentGreen,
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Column(
+                                    modifier = Modifier
+                                        .padding(top = editorPaddingDp, end = 8.dp, start = 4.dp)
+                                        .offset { IntOffset(0, -editorScrollState.value) },
+                                    horizontalAlignment = Alignment.End,
+                                ) {
+                                    val currentLine = remember(ruleValue.text, ruleValue.selection.start) {
+                                        ruleValue.text.take(
+                                            ruleValue.selection.start.coerceIn(0, ruleValue.text.length)
+                                        ).count { it == '\n' } + 1
+                                    }
+                                    repeat(lineCount) { i ->
+                                        Text(
+                                            text = "${i + 1}",
+                                            style = TextStyle(
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize   = 13.sp,
+                                                lineHeight = 20.sp,
+                                                color      = if (i + 1 == currentLine) PrimaryBlue.copy(alpha = 0.7f) else TextMuted,
+                                            ),
+                                        )
+                                    }
                                 }
                             }
-                            Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
+                            // Gutter separator
+                            Box(Modifier.width(1.dp).fillMaxHeight().background(BorderColor))
+
+                            // ── Scrollable text area ───────────────────────────────
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .verticalScroll(editorScrollState),
+                            ) {
+                                BasicTextField(
+                                    value    = highlightedValue,
+                                    onValueChange = { newVal ->
+                                        val isNewChar = newVal.text.length == ruleValue.text.length + 1
+                                        val cursorPos = newVal.selection.start
+                                        // Auto-dedent `}` when typed on an otherwise-whitespace line.
+                                        if (isNewChar && cursorPos > 0 &&
+                                            newVal.text.getOrNull(cursorPos - 1) == '}') {
+                                            val (dedentedText, removed) = autoClosingBraceDedent(
+                                                text = newVal.text, bracePos = cursorPos - 1,
+                                            )
+                                            ruleValue = TextFieldValue(
+                                                text = dedentedText,
+                                                selection = TextRange((cursorPos - removed).coerceAtLeast(0)),
+                                                composition = newVal.composition,
+                                            )
+                                        } else {
+                                            ruleValue = TextFieldValue(newVal.text, newVal.selection, newVal.composition)
+                                        }
+                                    },
+                                    onTextLayout = { result ->
+                                        textLayoutResult = result
+                                        val cursor = ruleValue.selection.start
+                                            .coerceIn(0, ruleValue.text.length.coerceAtLeast(0))
+                                        runCatching { cursorRect = result.getCursorRect(cursor) }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .defaultMinSize(minHeight = 200.dp)
+                                        .padding(editorPaddingDp)
+                                        .onPreviewKeyEvent { event ->
+                                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                            when {
+                                                // ── Autocomplete navigation ───────────────────────
+                                                // Only consume direction keys when suggestions are available.
+                                                event.key == Key.Escape && showAutoComplete -> {
+                                                    showAutoComplete = false; true
+                                                }
+                                                event.key == Key.DirectionDown && showAutoComplete && filteredSuggestions.isNotEmpty() -> {
+                                                    autoCompleteIndex = (autoCompleteIndex + 1)
+                                                        .coerceAtMost(filteredSuggestions.size - 1)
+                                                    true
+                                                }
+                                                event.key == Key.DirectionUp && showAutoComplete && filteredSuggestions.isNotEmpty() -> {
+                                                    autoCompleteIndex = (autoCompleteIndex - 1).coerceAtLeast(0)
+                                                    true
+                                                }
+                                                event.key == Key.Tab && showAutoComplete && filteredSuggestions.isNotEmpty() -> {
+                                                    acceptSuggestion(filteredSuggestions[autoCompleteIndex])
+                                                    true
+                                                }
+
+                                                // ── Enter: smart DSL indentation ──────────────────────
+                                                event.key == Key.Enter -> {
+                                                    if (showAutoComplete) showAutoComplete = false
+                                                    val text     = ruleValue.text
+                                                    val selStart = ruleValue.selection.start
+                                                    val selEnd   = ruleValue.selection.end
+                                                    val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                                    val currentLine = text.substring(lineStart, selStart)
+                                                    val indent    = currentLine.takeWhile { it == ' ' || it == '\t' }
+                                                    // Add one extra indent level after block-opening lines.
+                                                    val extra = if (dslLineOpensBlock(currentLine.trim())) "    " else ""
+                                                    val newText = text.substring(0, selStart) + "\n" + indent + extra +
+                                                                  text.substring(selEnd)
+                                                    ruleValue = TextFieldValue(newText,
+                                                        selection = TextRange(selStart + 1 + indent.length + extra.length))
+                                                    true
+                                                }
+                                                // ── Tab: indent / dedent ──────────────────────────
+                                                event.key == Key.Tab -> {
+                                                    val text     = ruleValue.text
+                                                    val selStart = ruleValue.selection.start
+                                                    val selEnd   = ruleValue.selection.end
+                                                    if (event.isShiftPressed) {
+                                                        val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                                        val spaces = text.substring(lineStart)
+                                                            .takeWhile { it == ' ' }.length.coerceAtMost(4)
+                                                        if (spaces > 0) {
+                                                            val newText = text.substring(0, lineStart) +
+                                                                          text.substring(lineStart + spaces)
+                                                            ruleValue = TextFieldValue(newText,
+                                                                selection = TextRange((selStart - spaces).coerceAtLeast(lineStart)))
+                                                        }
+                                                    } else {
+                                                        val newText = text.substring(0, selStart) + "    " +
+                                                                      text.substring(selEnd)
+                                                        ruleValue = TextFieldValue(newText,
+                                                            selection = TextRange(selStart + 4))
+                                                    }
+                                                    true
+                                                }
+                                                else -> false
+                                            }
+                                        },
+                                    textStyle = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize   = 13.sp,
+                                        color      = TextPrimary,
+                                        lineHeight = 20.sp,
+                                    ),
+                                    cursorBrush = SolidColor(PrimaryBlue),
+                                )
+                            }
+                        }
+
+                        // ── Placeholder (when editor is empty) ─────────────────────
+                        if (ruleValue.text.isEmpty()) {
+                            Text(
+                                text = "# Write your rules here…\nrule \"example\" {\n    when field > value\n    then action \"result\"\n}",
+                                modifier = Modifier.padding(
+                                    start = lineNumberWidthDp + 1.dp + editorPaddingDp,
+                                    top   = editorPaddingDp,
+                                ),
+                                style = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize   = 13.sp,
+                                    color      = TextMuted,
+                                    lineHeight = 20.sp,
+                                ),
+                            )
+                        }
+
+                        // ── Autocomplete popup overlay ─────────────────────────────
+                        if (showAutoComplete && filteredSuggestions.isNotEmpty()) {
+                            val density = LocalDensity.current
+                            val xPos = with(density) {
+                                lineNumberWidthDp + 1.dp + editorPaddingDp + cursorRect.left.toDp()
+                            }
+                            val yPos = with(density) {
+                                editorPaddingDp + (cursorRect.bottom - editorScrollState.value).toDp()
+                            }
+                            AutoCompleteDropdown(
+                                modifier       = Modifier.offset(x = xPos, y = yPos),
+                                suggestions    = filteredSuggestions,
+                                selectedIndex  = autoCompleteIndex,
+                                onSelect       = { acceptSuggestion(it) },
+                                onDismiss      = { showAutoComplete = false },
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // ── Diagnostics ───────────────────────────────────────────
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Diagnostics", style = MaterialTheme.typography.h6, color = TextPrimary)
+                        Spacer(Modifier.weight(1f))
+                        if (diagnosticsList.isNotEmpty()) {
+                            val errors   = diagnosticsList.count { it.severity == Severity.ERROR }
+                            val warnings = diagnosticsList.count { it.severity == Severity.WARNING }
+                            if (errors   > 0) Chip("$errors error${if (errors > 1)   "s" else ""}", AccentRed.copy(0.15f),    AccentRed)
+                            if (warnings > 0) Chip("$warnings warning${if (warnings > 1) "s" else ""}", AccentOrange.copy(0.15f), AccentOrange)
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+
+                    if (diagnosticsList.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Bg)
+                                .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
+                                .padding(14.dp),
+                        ) {
+                            Text(
+                                text  = diagnosticsText.ifBlank { "No diagnostics — press Validate to check your rule." },
+                                style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 12.sp,
+                                    color = if (diagnosticsText.isBlank()) TextMuted else AccentGreen),
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Bg)
+                                .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
+                        ) {
+                            items(diagnosticsList) { d ->
+                                val rowBg    = when (d.severity) {
+                                    Severity.ERROR   -> AccentRed.copy(alpha = 0.07f)
+                                    Severity.WARNING -> AccentOrange.copy(alpha = 0.07f)
+                                    else             -> Color.Transparent
+                                }
+                                val dotColor = when (d.severity) {
+                                    Severity.ERROR   -> AccentRed
+                                    Severity.WARNING -> AccentOrange
+                                    else             -> PrimaryBlue
+                                }
+                                val lineLabel = d.line?.let { "L${it}${d.column?.let { c -> ":$c" } ?: ""}" }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(rowBg)
+                                        .clickable {
+                                            runCatching {
+                                                val line = d.line ?: -1
+                                                val col  = d.column ?: -1
+                                                if (line > 0) {
+                                                    val lines  = ruleValue.text.lines()
+                                                    var offset = 0
+                                                    for (i in 0 until minOf(line - 1, lines.size - 1)) offset += lines[i].length + 1
+                                                    if (col > 0) offset += (col - 1)
+                                                    ruleValue = TextFieldValue(ruleValue.text, selection = TextRange(offset.coerceIn(0, ruleValue.text.length)))
+                                                }
+                                            }
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Box(Modifier.size(7.dp).background(dotColor, CircleShape))
+                                    Text(
+                                        text     = d.message,
+                                        style    = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = TextPrimary),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    lineLabel?.let { Chip(it) }
+                                    d.suggestion?.let {
+                                        Text("→ $it", style = MaterialTheme.typography.caption, color = AccentGreen,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                                Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
+                            }
                         }
                     }
                 }
-            }
             }  // Row
         }  // BoxWithConstraints
 
@@ -1093,6 +1375,8 @@ fun ActionItem(name: String, def: ruleengine.core.domain.ActionDefinition, onIns
         Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
     }
 }
+
+
 
 
 

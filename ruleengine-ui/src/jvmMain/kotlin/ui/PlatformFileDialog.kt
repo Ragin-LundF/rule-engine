@@ -72,6 +72,11 @@ actual fun saveActionsToFile(filename: String, content: String) {
     file.writeText(content)
 }
 
+actual fun saveManifestToFile(filename: String, content: String) {
+    val file = nativeSave("Save Manifest YAML", filename) ?: return
+    file.writeText(content)
+}
+
 actual fun copyToClipboard(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }

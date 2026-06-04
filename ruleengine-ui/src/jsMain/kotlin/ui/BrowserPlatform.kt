@@ -42,6 +42,8 @@ actual fun saveSchemaToFile(filename: String, content: String) = downloadFile(fi
 
 actual fun saveActionsToFile(filename: String, content: String) = downloadFile(filename, content)
 
+actual fun saveManifestToFile(filename: String, content: String) = downloadFile(filename, content)
+
 actual fun copyToClipboard(text: String) {
     try {
         val nav = js("navigator")
