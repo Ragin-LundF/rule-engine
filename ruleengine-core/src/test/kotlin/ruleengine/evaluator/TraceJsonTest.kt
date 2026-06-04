@@ -3,8 +3,8 @@ package ruleengine.evaluator
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.assertNotNull
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import ruleengine.jackson.JacksonUtil
+import tools.jackson.databind.JsonNode
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
@@ -51,15 +51,22 @@ class TraceJsonTest {
         val result = engine.evaluate(prepared = prepared, includeTrace = true)
 
         assertNotNull(result.trace)
-        val mapper = ObjectMapper().registerKotlinModule()
+        val mapper = JacksonUtil.jsonMapper
         val json = mapper.writeValueAsString(result.trace)
         val node = mapper.readTree(json)
 
         // matchedRules should contain the rule id
-        val matched = node.get("matchedRules")
+        val matched: JsonNode = node.get("matchedRules")
         assertNotNull(matched)
         assertTrue(matched.isArray())
-        val found = matched.elements().asSequence().any { it.asText() == "rent-payment" }
+        var found = false
+        for (i in 0 until matched.size()) {
+            val el = matched.get(i)
+            if (el.asText() == "rent-payment") {
+                found = true
+                break
+            }
+        }
         assertTrue(found)
 
         // root should exist and have children (AND node has children)

@@ -3,8 +3,7 @@ package ruleengine.cli
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import ruleengine.jackson.JacksonUtil
 
 class EvaluateCliTest {
     @Test
@@ -12,7 +11,7 @@ class EvaluateCliTest {
         val out = StringBuilder()
         val exit = EvaluateCli.runCli(arrayOf("--schema", "src/test/resources/sample-schema.yaml", "--rules", "src/test/resources/rules", "--input-file", "src/test/resources/sample-input.json", "--trace", "--format", "json"), out)
         assertEquals(0, exit)
-        val mapper = ObjectMapper().registerKotlinModule()
+        val mapper = JacksonUtil.jsonMapper
         val node = mapper.readTree(out.toString())
         assertNotNull(node.get("matches"))
         assertNotNull(node.get("decisionTree"))

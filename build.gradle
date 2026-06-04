@@ -1,5 +1,5 @@
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    alias(libs.plugins.kotlin.jvm)
 }
 
 group = 'io.finapi'
@@ -11,9 +11,7 @@ repositories {
 
 dependencies {
     // use version catalog aliases from gradle/libs.versions.toml
-    testImplementation libs.kotlinTest
-    implementation libs.jacksonModuleKotlin
-    implementation libs.jacksonDataformatYaml
+    testImplementation libs.kotlin.test
 }
 
 kotlin {

@@ -1,8 +1,5 @@
 package ruleengine.cli
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
-import com.fasterxml.jackson.module.kotlin.readValue
 import ruleengine.schema.FieldSchemaLoader
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
@@ -11,6 +8,7 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
+import ruleengine.jackson.JacksonUtil
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -64,8 +62,10 @@ object EvaluateCli {
             val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
             val engine = RuleEngine(compiledRules = compiled, schema = schema)
 
-            val mapper = ObjectMapper().registerKotlinModule()
-            val inputMap: Map<String, Any?> = mapper.readValue(Files.readString(Path.of(inputFile)))
+            val mapper = JacksonUtil.jsonMapper
+            val inputJson = Files.readString(Path.of(inputFile))
+            @Suppress("UNCHECKED_CAST")
+            val inputMap: Map<String, Any?> = mapper.readValue(inputJson, Map::class.java) as Map<String, Any?>
 
             val ctx = RuleContext.of(*inputMap.entries.map { it.key to it.value }.toTypedArray())
             val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)

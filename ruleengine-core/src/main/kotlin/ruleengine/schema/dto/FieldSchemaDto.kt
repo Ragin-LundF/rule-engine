@@ -1,15 +1,14 @@
 package ruleengine.schema.dto
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties
-
-@JsonIgnoreProperties(ignoreUnknown = true)
+// We intentionally avoid using Jackson-specific annotations here because the global
+// ObjectMapper is configured to ignore unknown properties. Keeping these DTOs
+// plain makes them compatible across Jackson versions.
 data class RawFieldSchema(
     val schema: String? = null,
     val normalizers: Map<String, List<String>>? = null,
     val fields: Map<String, RawFieldDefinition> = emptyMap()
 )
 
-@JsonIgnoreProperties(ignoreUnknown = true)
 data class RawFieldDefinition(
     val type: String? = null,
     val normalizers: List<String>? = null,

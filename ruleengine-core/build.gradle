@@ -1,5 +1,5 @@
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    alias(libs.plugins.kotlin.jvm)
 }
 
 group = 'io.finapi.ruleengine'
@@ -10,9 +10,8 @@ repositories {
 }
 
 dependencies {
-    implementation libs.jacksonModuleKotlin
-    implementation libs.jacksonDataformatYaml
-    testImplementation libs.kotlinTest
+    implementation libs.bundles.jackson
+    testImplementation libs.kotlin.test
 }
 
 kotlin {

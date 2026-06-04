@@ -1,8 +1,6 @@
 package ruleengine.evaluator.trace
 
-import ruleengine.core.domain.FieldId
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import ruleengine.jackson.JacksonUtil
 
 enum class NodeType { CONDITION, AND, OR, NOT, RULE }
 
@@ -95,7 +93,6 @@ class NoopTraceCollector : TraceCollector {
 }
 
 fun DecisionTree.toJson(): String {
-    val mapper = ObjectMapper().registerKotlinModule()
-    return mapper.writeValueAsString(this)
+    return JacksonUtil.jsonMapper.writeValueAsString(this)
 }
 

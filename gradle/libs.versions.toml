@@ -1,13 +1,33 @@
 [versions]
 kotlin = "2.3.21"
 # Jackson 3 series - prefer the latest compatible 3.x release. You can update this to a newer patch version if available.
-jackson = "3.1.3"
+jackson2 = "2.21"
+jackson3 = "3.1.3"
 
 [libraries]
 # Kotlin test libraries
-kotlinTest = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-kotlinTestJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
+kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 
-# Jackson 3 libraries (use version.ref = "jackson")
-jacksonModuleKotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
-jacksonDataformatYaml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
+# --- Jackson
+jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson2" }
+jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson3" }
+jackson-jaxb = { module = "tools.jackson.module:jackson-module-jaxb-annotations", version.ref = "jackson3" }
+jackson-module-kotlin = { module = "tools.jackson.module:jackson-module-kotlin", version.ref = "jackson3" }
+jackson-module-blackbird = { module = "tools.jackson.module:jackson-module-blackbird", version.ref = "jackson3" }
+jackson-dataformmat-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson3" }
+
+[bundles]
+jackson = [
+    "jackson-annotations",
+    "jackson-databind",
+    "jackson-dataformmat-yaml",
+    "jackson-jaxb",
+    "jackson-module-blackbird",
+    "jackson-module-kotlin",
+]
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+jetbrains-compose = { id = "org.jetbrains.compose", version = "1.11.1" }
+jetbrains-compose-kotlin-plugin = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
