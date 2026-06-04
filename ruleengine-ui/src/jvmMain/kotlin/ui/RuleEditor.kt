@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -55,6 +56,10 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
 
 // ── Status kind ───────────────────────────────────────────────────────────────
 enum class StatusKind { IDLE, SUCCESS, ERROR }
@@ -168,6 +173,7 @@ actual fun RuleEditor() {
     var autoCompleteIndex     by remember { mutableStateOf(0) }
     var autoCompleteWord      by remember { mutableStateOf("") }
     var autoCompleteWordStart by remember { mutableStateOf(0) }
+    var splitFraction         by remember { mutableStateOf(0.33f) }
 
     fun setStatus(msg: String, kind: StatusKind) { status = msg; statusKind = kind }
 
@@ -275,15 +281,20 @@ actual fun RuleEditor() {
         }
 
         // ── Main layout ───────────────────────────────────────────────────────
-        Row(
+        BoxWithConstraints(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            val density        = LocalDensity.current
+            val totalPx        = with(density) { maxWidth.toPx() }
+            val dividerWidthDp = 8.dp
+            val leftWidthDp    = maxWidth * splitFraction
+
+            Row(modifier = Modifier.fillMaxSize()) {
 
             // ── Left panel ────────────────────────────────────────────────────
             Column(
                 modifier = Modifier
-                    .weight(0.33f)
+                    .width(leftWidthDp)
                     .fillMaxHeight()
                     .clip(RoundedCornerShape(8.dp))
                     .background(BgSurface)
@@ -406,26 +417,10 @@ actual fun RuleEditor() {
                     parsedActionSchema?.let { aschema ->
                         item { PanelDivider(); SectionHeader("Available Actions") }
                         items(aschema.actions.entries.toList()) { (name, def) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        val ph = when (def.argTypes.firstOrNull()) {
-                                            ruleengine.core.domain.ActionArgType.INTEGER -> " 0"
-                                            ruleengine.core.domain.ActionArgType.DECIMAL -> " 0"
-                                            else -> " \"arg\""
-                                        }
-                                        val ins = "$name$ph"
-                                        val pos = ruleValue.selection.start
-                                        val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
-                                        ruleValue = TextFieldValue(newText, selection = TextRange(pos + ins.length))
-                                    }
-                                    .padding(horizontal = 6.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.body1, color = AccentPurple)
-                                Text(def.argTypes.joinToString(", ") { it.name.lowercase() }, style = MaterialTheme.typography.caption)
+                            ActionItem(name = name, def = def) { ins ->
+                                val pos     = ruleValue.selection.start
+                                val newText = ruleValue.text.substring(0, pos) + ins + ruleValue.text.substring(pos)
+                                ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
                             }
                         }
                     }
@@ -842,7 +837,8 @@ actual fun RuleEditor() {
                     }
                 }
             }
-        }
+            }  // Row
+        }  // BoxWithConstraints
 
         // ── Status Bar ────────────────────────────────────────────────────────
         Surface(color = BgSurface, elevation = 0.dp) {
@@ -874,15 +870,39 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
     val tc = fieldTypeColor(def.type)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(id.value, style = MaterialTheme.typography.body1, color = TextPrimary,
-                modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                id.value,
+                style    = MaterialTheme.typography.body1,
+                color    = TextPrimary,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Quick "insert field name at cursor" button
             Box(
-                modifier = Modifier.clip(RoundedCornerShape(3.dp)).background(tc.copy(0.15f)).padding(horizontal = 6.dp, vertical = 2.dp)
-            ) { Text(def.type.name.lowercase(), style = MaterialTheme.typography.caption, color = tc) }
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(BgHover)
+                    .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                    .clickable { onInsert(id.value) }
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            ) {
+                Text("⤵", style = MaterialTheme.typography.caption, color = TextMuted)
+            }
+            Spacer(Modifier.width(4.dp))
+            // Type badge
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(tc.copy(0.15f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(def.type.name.lowercase(), style = MaterialTheme.typography.caption, color = tc)
+            }
         }
         if (def.operators.isNotEmpty()) {
             Spacer(Modifier.height(3.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 def.operators.forEach { op ->
                     val opText = op.value
                     Box(
@@ -892,16 +912,86 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
                             .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
                             .clickable {
                                 val ph = when (def.type) {
-                                    FieldType.TEXT, FieldType.STRING_SET -> " \"value\""
-                                    FieldType.INTEGER, FieldType.DECIMAL -> " 0"
-                                    FieldType.BOOLEAN -> " true"
-                                    else -> " \"value\""
+                                    FieldType.TEXT       -> " \"value\""
+                                    FieldType.STRING_SET -> " [\"a\", \"b\"]"
+                                    FieldType.INTEGER    -> " 0"
+                                    FieldType.DECIMAL    -> " 0.0"
+                                    FieldType.BOOLEAN    -> " true"
+                                    FieldType.DATE       -> " \"2024-01-01\""
                                 }
                                 onInsert("${id.value} $opText$ph")
                             }
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                     ) {
                         Text(opText, style = MaterialTheme.typography.caption, color = TextSecondary)
+                    }
+                }
+            }
+        }
+        Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+// ── ActionItem ────────────────────────────────────────────────────────────────
+@Composable
+fun ActionItem(name: String, def: ruleengine.core.domain.ActionDefinition, onInsert: (String) -> Unit) {
+    val argColor: (ActionArgType) -> Color = { t ->
+        when (t) {
+            ActionArgType.STRING  -> ColorString
+            ActionArgType.INTEGER -> ColorNumber
+            ActionArgType.DECIMAL -> ColorNumber
+        }
+    }
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                name,
+                modifier = Modifier.weight(1f),
+                style    = MaterialTheme.typography.body1,
+                color    = ColorAction,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            // Quick insert button
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(BgHover)
+                    .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                    .clickable {
+                        val args = def.argTypes.joinToString(" ") { t ->
+                            when (t) {
+                                ActionArgType.INTEGER -> "0"
+                                ActionArgType.DECIMAL -> "0.0"
+                                ActionArgType.STRING  -> "\"value\""
+                            }
+                        }
+                        onInsert(if (args.isNotEmpty()) "$name $args" else name)
+                    }
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            ) {
+                Text("⤵", style = MaterialTheme.typography.caption, color = TextMuted)
+            }
+        }
+        if (def.argTypes.isNotEmpty()) {
+            Spacer(Modifier.height(3.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                def.argTypes.forEachIndexed { idx, argType ->
+                    val ac = argColor(argType)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(ac.copy(alpha = 0.15f))
+                            .padding(horizontal = 5.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            "arg${idx + 1}: ${argType.name.lowercase()}",
+                            style = MaterialTheme.typography.caption,
+                            color = ac,
+                        )
                     }
                 }
             }
