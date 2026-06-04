@@ -53,42 +53,21 @@ class Lexer(private val input: String) {
                 break
             }
 
+            // handle single-character tokens via map to reduce branching
+            val singleCharTokens = mapOf(
+                '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
+                '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
+                '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
+                ',' to TokenType.COMMA
+            )
+
+            if (singleCharTokens.containsKey(c)) {
+                tokens += makeToken(type = singleCharTokens.getValue(c), text = c.toString())
+                advance()
+                continue
+            }
+
             when (c) {
-                '{' -> {
-                    tokens += makeToken(type = TokenType.LBRACE, text = "{")
-                    advance()
-                }
-
-                '}' -> {
-                    tokens += makeToken(type = TokenType.RBRACE, text = "}")
-                    advance()
-                }
-
-                '(' -> {
-                    tokens += makeToken(type = TokenType.LPAREN, text = "(")
-                    advance()
-                }
-
-                ')' -> {
-                    tokens += makeToken(type = TokenType.RPAREN, text = ")")
-                    advance()
-                }
-
-                '[' -> {
-                    tokens += makeToken(type = TokenType.LBRACKET, text = "[")
-                    advance()
-                }
-
-                ']' -> {
-                    tokens += makeToken(type = TokenType.RBRACKET, text = "]")
-                    advance()
-                }
-
-                ',' -> {
-                    tokens += makeToken(type = TokenType.COMMA, text = ",")
-                    advance()
-                }
-
                 '"' -> tokens += readString()
                 '>', '<', '=', '!' -> tokens += readOperator()
                 '#' -> {
