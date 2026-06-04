@@ -2,14 +2,6 @@ package ruleengine.dsl.lexer
 
 import ruleengine.dsl.diagnostics.ParseException
 
-data class Token(val type: TokenType, val text: String, val line: Int, val col: Int)
-
-enum class TokenType {
-    IDENT, STRING, NUMBER,
-    LBRACE, RBRACE, LPAREN, RPAREN, LBRACKET, RBRACKET, COMMA,
-    EOF
-}
-
 class Lexer(private val input: String) {
     private var pos = 0
     private var line = 1
@@ -63,7 +55,7 @@ class Lexer(private val input: String) {
             )
 
             if (singleCharTokens.containsKey(c)) {
-                tokens += makeToken(type = singleCharTokens.getValue(c), text = c.toString())
+                tokens += makeToken(type = singleCharTokens.getValue(key = c), text = c.toString())
                 advance()
                 continue
             }
@@ -80,10 +72,10 @@ class Lexer(private val input: String) {
                 }
 
                 else -> {
-                    if (c.isLetter() || c == '_') {
-                        tokens += readIdentOrKeyword()
+                    tokens += if (c.isLetter() || c == '_') {
+                        readIdentOrKeyword()
                     } else if (c.isDigit() || c == '-') {
-                        tokens += readNumber()
+                        readNumber()
                     } else {
                         throw ParseException(line = line, column = col, messageText = "Unexpected character: '$c'")
                     }
