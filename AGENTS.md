@@ -1,5 +1,6 @@
 # Code-Style Guidelines
 - Use named arguments when possible.
+- Use `runCatching` instead of try/catch if possible
 - Functions should only be implemented as block code, not as expression bodies.
 - Functions should have a single responsibility and be small in size.
 - Use descriptive variable and function names.
