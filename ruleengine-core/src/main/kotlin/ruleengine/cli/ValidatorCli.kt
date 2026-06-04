@@ -26,7 +26,11 @@ object ValidatorCli {
             while (i < args.size) {
                 val k = args[i]
                 val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
-                    args[i + 1]; } else null
+                    args[i + 1]
+                } else {
+                    null
+                }
+
                 kv[k] = v
                 i += if (v != null) 2 else 1
             }

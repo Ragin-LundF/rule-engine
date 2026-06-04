@@ -13,6 +13,8 @@ interface RuleContext {
 }
 
 private class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
-    override fun get(field: FieldId): Any? = map[field.value]
+    override fun get(field: FieldId): Any? {
+        return map[field.value]
+    }
 }
 

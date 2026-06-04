@@ -1,9 +1,13 @@
 package ruleengine.compiler
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import ruleengine.core.domain.*
+import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
@@ -215,8 +219,10 @@ class FullOperatorCoverageTest {
         return RuleEngine(compiledRules = compiled, schema = schema)
     }
 
-    private fun ctx(vararg pairs: Pair<String, Any?>): PreparedRuleContext =
-        PreparedRuleContext.prepare(RuleContext.of(*pairs), schema)
+    private fun ctx(vararg pairs: Pair<String, Any?>): PreparedRuleContext {
+        val prepared = PreparedRuleContext.prepare(RuleContext.of(*pairs), schema)
+        return prepared
+    }
 
     // ─── Individual operator assertions ────────────────────────────────────
 

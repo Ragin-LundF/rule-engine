@@ -3,7 +3,12 @@ package ruleengine.compiler
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import ruleengine.core.domain.*
+import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
@@ -43,8 +48,10 @@ class RegexOperatorTest {
         return RuleEngine(compiledRules = compiled, schema = schema)
     }
 
-    private fun ctx(iban: String = "", purpose: String = "") =
-        PreparedRuleContext.prepare(RuleContext.of("iban" to iban, "purpose" to purpose), schema)
+    private fun ctx(iban: String = "", purpose: String = ""): PreparedRuleContext {
+        val prepared = PreparedRuleContext.prepare(RuleContext.of("iban" to iban, "purpose" to purpose), schema)
+        return prepared
+    }
 
     // ── Basic regex matching ──────────────────────────────────────────────
 

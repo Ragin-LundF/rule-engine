@@ -21,22 +21,24 @@ import ruleengine.dsl.ast.StringLiteral
 data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
 
 object Validator {
-    private fun normalizeOperator(op: String): String = when (op.lowercase()) {
-        "==", "equals" -> "equals"
-        "=", "eq" -> "equals"
-        ">=", "gte" -> "gte"
-        ">", "gt" -> "gt"
-        "<=", "lte" -> "lte"
-        "<", "lt" -> "lt"
-        "contains" -> "contains"
-        "startswith" -> "startsWith"
-        "endswith" -> "endsWith"
-        "in" -> "in"
-        "containsany" -> "containsAny"
-        "containsall" -> "containsAll"
-        "regex", "matches", "regexp" -> "regex"
-        "between" -> "between"
-        else -> op
+    private fun normalizeOperator(op: String): String {
+        return when (op.lowercase()) {
+            "==", "equals" -> "equals"
+            "=", "eq" -> "equals"
+            ">=", "gte" -> "gte"
+            ">", "gt" -> "gt"
+            "<=", "lte" -> "lte"
+            "<", "lt" -> "lt"
+            "contains" -> "contains"
+            "startswith" -> "startsWith"
+            "endswith" -> "endsWith"
+            "in" -> "in"
+            "containsany" -> "containsAny"
+            "containsall" -> "containsAll"
+            "regex", "matches", "regexp" -> "regex"
+            "between" -> "between"
+            else -> op
+        }
     }
 
     fun validate(asts: List<RuleAst>, schema: FieldSchema, actions: ActionSchema? = null): ValidationResult {
@@ -219,7 +221,8 @@ object Validator {
         for (c in candidates) {
             val d = levenshtein(input.lowercase(), c.lowercase())
             if (d < bestDist) {
-                bestDist = d; best = c
+                bestDist = d
+                best = c
             }
         }
         return if (bestDist <= maxDistance) best else null

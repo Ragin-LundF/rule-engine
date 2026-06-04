@@ -14,7 +14,9 @@ data class PreparedDecimal(val value: BigDecimal) : PreparedValue
 data class PreparedStringSet(val original: Set<String>, val normalized: Set<String>) : PreparedValue
 
 class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
-    fun get(field: FieldId): PreparedValue? = values[field]
+    fun get(field: FieldId): PreparedValue? {
+        return values[field]
+    }
 
     companion object {
         fun prepare(

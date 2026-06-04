@@ -10,10 +10,7 @@ import ruleengine.core.errors.SchemaLoadException
 import ruleengine.jackson.JacksonUtil
 import tools.jackson.dataformat.yaml.YAMLFactory
 import tools.jackson.core.StreamReadFeature
-import tools.jackson.databind.ObjectMapper
-import tools.jackson.databind.DeserializationFeature
-import tools.jackson.module.kotlin.KotlinModule
-import tools.jackson.module.blackbird.BlackbirdModule
+// ...existing imports...
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
 import java.nio.file.Files
@@ -24,20 +21,22 @@ object FieldSchemaLoader {
 
     @Throws(SchemaLoadException::class)
     fun load(path: Path): FieldSchema {
-        if (!Files.exists(path)) throw SchemaLoadException(path = path, details = "file does not exist")
-        try {
-            val raw: RawFieldSchema = Files.newInputStream(path).use { ins ->
+        if (!Files.exists(path)) {
+            throw SchemaLoadException(path = path, details = "file does not exist")
+        }
+
+        return runCatching {
+            Files.newInputStream(path).use { ins ->
                 val bytes = ins.readAllBytes()
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
                 yf.createParser(java.io.ByteArrayInputStream(bytes)).use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
             }
+        }.map { raw ->
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
-            return FieldSchema(name = raw.schema ?: path.fileName.toString(), fields = fields)
-        } catch (ex: SchemaLoadException) {
-            throw ex
-        } catch (ex: Exception) {
+            FieldSchema(name = raw.schema ?: path.fileName.toString(), fields = fields)
+        }.getOrElse { ex ->
             throw SchemaLoadException(path = path, details = ex.message ?: "unknown error")
         }
     }
@@ -46,8 +45,8 @@ object FieldSchemaLoader {
      * raw schema doesn't include a schema name. */
     @Throws(SchemaLoadException::class)
     fun loadFromReader(reader: java.io.Reader, nameHint: String? = null): FieldSchema {
-        try {
-            val content = reader.use { it.readText() }
+        val content = reader.use { it.readText() }
+        return runCatching {
             val raw: RawFieldSchema = run {
                 val bytes = content.toByteArray(Charsets.UTF_8)
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
@@ -56,15 +55,15 @@ object FieldSchemaLoader {
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
-            return FieldSchema(name = raw.schema ?: nameHint ?: "schema", fields = fields)
-        } catch (ex: SchemaLoadException) {
-            throw ex
-        } catch (ex: Exception) {
+            FieldSchema(name = raw.schema ?: nameHint ?: "schema", fields = fields)
+        }.getOrElse { ex ->
             throw SchemaLoadException(path = Path.of(nameHint ?: "schema"), details = ex.message ?: "unknown error")
         }
     }
 
-    fun loadFromString(content: String, nameHint: String? = null): FieldSchema = loadFromReader(java.io.StringReader(content), nameHint)
+    fun loadFromString(content: String, nameHint: String? = null): FieldSchema {
+        return loadFromReader(java.io.StringReader(content), nameHint)
+    }
 
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {
         val type = raw.type?.let { parseFieldType(it) }

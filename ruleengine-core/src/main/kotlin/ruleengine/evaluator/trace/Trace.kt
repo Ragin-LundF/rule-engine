@@ -79,23 +79,27 @@ class RecordingTraceCollector : TraceCollector {
         return rootRef?.toDecisionNode()
     }
 
-    private fun MutableNode.toDecisionNode(): DecisionNode = DecisionNode(
-        id = id,
-        type = type,
-        field = field,
-        operator = operator,
-        expected = expected,
-        result = result ?: false,
-        evaluationTimeMs = elapsedMs,
-        ruleId = ruleId,
-        children = children.map { it.toDecisionNode() }
-    )
+    private fun MutableNode.toDecisionNode(): DecisionNode {
+        return DecisionNode(
+            id = id,
+            type = type,
+            field = field,
+            operator = operator,
+            expected = expected,
+            result = result ?: false,
+            evaluationTimeMs = elapsedMs,
+            ruleId = ruleId,
+            children = children.map { it.toDecisionNode() }
+        )
+    }
 }
 
 class NoopTraceCollector : TraceCollector {
     override fun enter(meta: NodeMeta) {}
     override fun exit(result: Boolean) {}
-    override fun root(): DecisionNode? = null
+    override fun root(): DecisionNode? {
+        return null
+    }
 }
 
 fun DecisionTree.toJson(): String {

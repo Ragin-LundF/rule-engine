@@ -36,22 +36,24 @@ import ruleengine.evaluator.compiled.TextStartsWithExpression
 
 object Compiler {
 
-    private fun normalizeOperator(op: String): String = when (op.lowercase()) {
-        "==", "equals" -> "equals"
-        "=", "eq" -> "equals"
-        ">=", "gte" -> "gte"
-        ">", "gt" -> "gt"
-        "<=", "lte" -> "lte"
-        "<", "lt" -> "lt"
-        "contains" -> "contains"
-        "startswith" -> "startsWith"
-        "endswith" -> "endsWith"
-        "in" -> "in"
-        "containsany" -> "containsAny"
-        "containsall" -> "containsAll"
-        "regex", "matches", "regexp" -> "regex"
-        "between" -> "between"
-        else -> op
+    private fun normalizeOperator(op: String): String {
+        return when (op.lowercase()) {
+            "==", "equals" -> "equals"
+            "=", "eq" -> "equals"
+            ">=", "gte" -> "gte"
+            ">", "gt" -> "gt"
+            "<=", "lte" -> "lte"
+            "<", "lt" -> "lt"
+            "contains" -> "contains"
+            "startswith" -> "startsWith"
+            "endswith" -> "endsWith"
+            "in" -> "in"
+            "containsany" -> "containsAny"
+            "containsall" -> "containsAll"
+            "regex", "matches", "regexp" -> "regex"
+            "between" -> "between"
+            else -> op
+        }
     }
 
     fun compileRules(
@@ -95,9 +97,11 @@ object Compiler {
         }
     }
 
-    private fun astIdOrNull(expr: Any): String? = when (expr) {
-        is RuleAst -> expr.id
-        else -> null
+    private fun astIdOrNull(expr: Any): String? {
+        return when (expr) {
+            is RuleAst -> expr.id
+            else -> null
+        }
     }
 
     private fun compileCondition(
@@ -397,7 +401,9 @@ object Compiler {
         return v
     }
 
-    private fun ruleIdOrNull(cond: ConditionAst): String? = null
+    private fun ruleIdOrNull(cond: ConditionAst): String? {
+        return null
+    }
 
 }
 
