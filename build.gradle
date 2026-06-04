@@ -10,9 +10,10 @@ repositories {
 }
 
 dependencies {
-    testImplementation("org.jetbrains.kotlin:kotlin-test:2.3.21")
-    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.15.2")
-    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.15.2")
+    // use version catalog aliases from gradle/libs.versions.toml
+    testImplementation libs.kotlinTest
+    implementation libs.jacksonModuleKotlin
+    implementation libs.jacksonDataformatYaml
 }
 
 kotlin {
