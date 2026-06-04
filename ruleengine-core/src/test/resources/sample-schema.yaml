@@ -18,3 +18,15 @@ fields:
       - gt
       - gte
 
+  country:
+    type: text
+    operators:
+      - equals
+      - starts_with
+
+  tags:
+    type: string_set
+    operators:
+      - containsAny
+      - containsAll
+
