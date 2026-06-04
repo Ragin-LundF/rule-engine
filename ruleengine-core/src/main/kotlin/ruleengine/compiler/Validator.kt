@@ -24,6 +24,8 @@ object Validator {
         "in" -> "in"
         "containsany" -> "containsAny"
         "containsall" -> "containsAll"
+        "regex", "matches", "regexp" -> "regex"
+        "between" -> "between"
         else -> op
     }
 
@@ -71,10 +73,35 @@ object Validator {
 
         // type check literal
         when (def.type) {
-            FieldType.TEXT -> if (cond.value !is StringLiteral && !(op == "in" && cond.value is ListLiteral)) diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects text literal")
-            FieldType.DECIMAL -> if (cond.value !is NumberLiteral) diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects numeric literal")
-            FieldType.INTEGER -> if (cond.value !is NumberLiteral) diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects integer literal")
-            FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral) diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects list or string literal")
+            FieldType.TEXT -> when (op) {
+                "in" -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'in' expects list or string literal")
+                "regex" -> {
+                    if (cond.value !is StringLiteral)
+                        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'regex' expects string literal pattern")
+                    else {
+                        try { Regex((cond.value as StringLiteral).value) }
+                        catch (ex: Exception) { diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Invalid regex pattern for field '${cond.field}': ${ex.message}") }
+                    }
+                }
+                "between" -> diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field")
+                else -> if (cond.value !is StringLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects text literal")
+            }
+            FieldType.DECIMAL -> when (op) {
+                "between" -> if (cond.value !is BetweenLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'between' expects two numeric bounds")
+                else -> if (cond.value !is NumberLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects numeric literal")
+            }
+            FieldType.INTEGER -> when (op) {
+                "between" -> if (cond.value !is BetweenLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'between' expects two integer bounds")
+                else -> if (cond.value !is NumberLiteral)
+                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects integer literal")
+            }
+            FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
+                diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects list or string literal")
             else -> {}
         }
     }

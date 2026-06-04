@@ -103,14 +103,32 @@ class Parser(private val input: String) {
             expect(TokenType.RPAREN)
             return e
         }
-        // condition: IDENT OP LITERAL
+        // condition: IDENT OP LITERAL [ignoreCase]
         if (c.type != TokenType.IDENT) throw ParseException(line = c.line, column = c.col, messageText = "Expected field identifier in condition")
         val field = c.text; advance()
         val opTok = current()
         if (opTok.type != TokenType.IDENT) throw ParseException(line = opTok.line, column = opTok.col, messageText = "Expected operator")
         val op = opTok.text; advance()
-        val value = parseLiteral()
-        return ConditionAst(field = field, operator = op, value = value)
+
+        // `between` consumes two number literals rather than one
+        val value: LiteralAst = if (op.lowercase() == "between") {
+            val lowTok = current()
+            if (lowTok.type != TokenType.NUMBER) throw ParseException(line = lowTok.line, column = lowTok.col, messageText = "Expected lower bound number literal for 'between'")
+            advance()
+            val highTok = current()
+            if (highTok.type != TokenType.NUMBER) throw ParseException(line = highTok.line, column = highTok.col, messageText = "Expected upper bound number literal for 'between'")
+            advance()
+            BetweenLiteral(low = lowTok.text, high = highTok.text)
+        } else {
+            parseLiteral()
+        }
+
+        // Optional trailing `ignoreCase` modifier (only meaningful for text operators)
+        val ignoreCase = if (current().type == TokenType.IDENT && current().text == "ignoreCase") {
+            advance(); true
+        } else false
+
+        return ConditionAst(field = field, operator = op, value = value, ignoreCase = ignoreCase)
     }
 
     private fun parseLiteral(): LiteralAst {
