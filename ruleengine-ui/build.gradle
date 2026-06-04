@@ -1,0 +1,33 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    id 'org.jetbrains.compose' version '1.6.0'
+}
+
+group = 'io.finapi.ruleengine'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+    google()
+    maven { url = uri('https://maven.pkg.jetbrains.space/public/p/compose/dev') }
+}
+
+dependencies {
+    implementation(project(":ruleengine-core"))
+    implementation(compose.desktop.currentOs)
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+compose.desktop {
+    application {
+        mainClass = 'ui.DesktopMainKt'
+    }
+}
+
+
+
+
+

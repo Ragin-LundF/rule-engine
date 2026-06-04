@@ -1,0 +1,25 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+}
+
+group = 'io.finapi.ruleengine'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation libs.jacksonModuleKotlin
+    implementation libs.jacksonDataformatYaml
+    testImplementation libs.kotlinTest
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+}
+
