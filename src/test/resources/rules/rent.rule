@@ -1,0 +1,9 @@
+rule "rent-payment" {
+  when
+    purpose contains "miete"
+    and amount >= 500
+
+  then
+    label "rent"
+}
+

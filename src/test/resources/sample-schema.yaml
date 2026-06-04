@@ -1,0 +1,20 @@
+schema: transaction-v1
+
+fields:
+  purpose:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+      - german_umlaut_fold
+    operators:
+      - equals
+      - contains
+
+  amount:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+
