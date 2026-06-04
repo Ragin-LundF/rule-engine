@@ -48,6 +48,13 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 
 // ── Status kind ───────────────────────────────────────────────────────────────
 enum class StatusKind { IDLE, SUCCESS, ERROR }
@@ -153,7 +160,79 @@ actual fun RuleEditor() {
     var diagnosticsList       by remember { mutableStateOf<List<ValidationDiagnostic>>(emptyList()) }
     var diagnosticsText       by remember { mutableStateOf("") }
 
+    // ── Editor UX state ───────────────────────────────────────────────────────
+    val editorScrollState     = rememberScrollState()
+    var textLayoutResult      by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var cursorRect            by remember { mutableStateOf(Rect.Zero) }
+    var showAutoComplete      by remember { mutableStateOf(false) }
+    var autoCompleteIndex     by remember { mutableStateOf(0) }
+    var autoCompleteWord      by remember { mutableStateOf("") }
+    var autoCompleteWordStart by remember { mutableStateOf(0) }
+
     fun setStatus(msg: String, kind: StatusKind) { status = msg; statusKind = kind }
+
+    // ── Syntax-highlighted display value ──────────────────────────────────────
+    val highlightedValue = remember(ruleValue, parsedSchema, parsedActionSchema, diagnosticsList) {
+        TextFieldValue(
+            annotatedString = annotateRule(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList),
+            selection       = ruleValue.selection,
+            composition     = ruleValue.composition,
+        )
+    }
+
+    // ── Autocomplete suggestions ───────────────────────────────────────────────
+    val allCompletions = remember(parsedSchema, parsedActionSchema) {
+        buildAllCompletions(parsedSchema, parsedActionSchema)
+    }
+    val filteredSuggestions = remember(autoCompleteWord, allCompletions) {
+        if (autoCompleteWord.isEmpty()) emptyList()
+        else allCompletions
+            .filter { it.label.startsWith(autoCompleteWord, ignoreCase = true) && it.label != autoCompleteWord }
+            .sortedWith(compareBy({ it.kind.ordinal }, { it.label }))
+            .take(8)
+    }
+
+    // ── Track word under cursor for autocomplete ───────────────────────────────
+    LaunchedEffect(ruleValue.text, ruleValue.selection.start) {
+        val cursor = ruleValue.selection.start
+        val (wordStart, word) = extractCurrentWord(ruleValue.text, cursor)
+        autoCompleteWordStart = wordStart
+        autoCompleteWord      = word
+        autoCompleteIndex     = 0
+        showAutoComplete      = word.isNotEmpty()
+    }
+
+    // ── Debounced auto-validation ──────────────────────────────────────────────
+    LaunchedEffect(ruleValue.text) {
+        if (ruleValue.text.isBlank()) {
+            diagnosticsList = emptyList()
+            diagnosticsText = ""
+            return@LaunchedEffect
+        }
+        delay(700)
+        try {
+            if (parsedSchema == null) return@LaunchedEffect
+            val asts   = Parser(ruleValue.text).parseRules()
+            val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
+            diagnosticsList = result.diagnostics
+            diagnosticsText = if (result.isValid) "No issues found" else ""
+            setStatus(
+                if (result.isValid) "✓ Validation passed" else "✗ ${result.diagnostics.size} issue(s)",
+                if (result.isValid) StatusKind.SUCCESS else StatusKind.ERROR,
+            )
+        } catch (_: Exception) { /* show parse errors via manual Validate button */ }
+    }
+
+    // ── Accept an autocomplete suggestion ─────────────────────────────────────
+    fun acceptSuggestion(item: CompletionItem) {
+        val cursor  = ruleValue.selection.start
+        val newText = ruleValue.text.substring(0, autoCompleteWordStart) +
+                      item.insertText +
+                      ruleValue.text.substring(cursor)
+        val newPos  = autoCompleteWordStart + item.insertText.length
+        ruleValue        = TextFieldValue(newText, selection = TextRange(newPos))
+        showAutoComplete = false
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(Bg)) {
 
@@ -480,6 +559,12 @@ actual fun RuleEditor() {
                 PanelDivider()
 
                 // ── Code Editor ───────────────────────────────────────────────
+                val lineNumberWidthDp = 48.dp
+                val editorPaddingDp   = 14.dp
+                val lineCount = remember(ruleValue.text) {
+                    ruleValue.text.lines().size.coerceAtLeast(1)
+                }
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -488,75 +573,164 @@ actual fun RuleEditor() {
                         .background(Bg)
                         .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
                 ) {
-                    BasicTextField(
-                        value = ruleValue,
-                        onValueChange = { ruleValue = it },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(14.dp)
-                            .onPreviewKeyEvent { event ->
-                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                                when (event.key) {
-                                    // ── Enter: preserve current-line indentation ──────────
-                                    Key.Enter -> {
-                                        val text     = ruleValue.text
-                                        val selStart = ruleValue.selection.start
-                                        val selEnd   = ruleValue.selection.end
-                                        val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
-                                        val indent    = text.substring(lineStart, selStart)
-                                            .takeWhile { it == ' ' || it == '\t' }
-                                        val newText = text.substring(0, selStart) + "\n" + indent +
-                                                      text.substring(selEnd)
-                                        val newPos  = selStart + 1 + indent.length
-                                        ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
-                                        true
-                                    }
-                                    // ── Tab: insert 4 spaces / Shift+Tab: remove indent ───
-                                    Key.Tab -> {
-                                        val text     = ruleValue.text
-                                        val selStart = ruleValue.selection.start
-                                        val selEnd   = ruleValue.selection.end
-                                        if (event.isShiftPressed) {
-                                            // Remove up to 4 leading spaces on the current line
-                                            val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
-                                            val spaces = text.substring(lineStart).takeWhile { it == ' ' }
-                                                .length.coerceAtMost(4)
-                                            if (spaces > 0) {
-                                                val newText = text.substring(0, lineStart) +
-                                                              text.substring(lineStart + spaces)
-                                                val newPos  = (selStart - spaces).coerceAtLeast(lineStart)
-                                                ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
-                                            }
-                                        } else {
-                                            val spaces  = "    " // 4 spaces
-                                            val newText = text.substring(0, selStart) + spaces +
-                                                          text.substring(selEnd)
-                                            val newPos  = selStart + spaces.length
-                                            ruleValue = TextFieldValue(newText, selection = TextRange(newPos))
-                                        }
-                                        true
-                                    }
-                                    else -> false
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        // ── Line-number gutter ─────────────────────────────────
+                        Box(
+                            modifier = Modifier
+                                .width(lineNumberWidthDp)
+                                .fillMaxHeight()
+                                .background(BgSurface)
+                                .drawTopLine(0.dp, BorderColor), // visual baseline
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(top = editorPaddingDp, end = 8.dp, start = 4.dp)
+                                    .offset { IntOffset(0, -editorScrollState.value) },
+                                horizontalAlignment = Alignment.End,
+                            ) {
+                                repeat(lineCount) { i ->
+                                    Text(
+                                        text  = "${i + 1}",
+                                        style = TextStyle(
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize   = 13.sp,
+                                            lineHeight = 20.sp,
+                                            color      = if (i + 1 == ruleValue.text.take(
+                                                ruleValue.selection.start.coerceIn(0, ruleValue.text.length)
+                                            ).count { it == '\n' } + 1) PrimaryBlue.copy(alpha = 0.7f) else TextMuted,
+                                        ),
+                                    )
                                 }
-                            },
-                        textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize   = 13.sp,
-                            color      = TextPrimary,
-                            lineHeight  = 20.sp,
-                        ),
-                        cursorBrush = SolidColor(PrimaryBlue),
-                    )
+                            }
+                        }
+                        // Gutter separator
+                        Box(Modifier.width(1.dp).fillMaxHeight().background(BorderColor))
+
+                        // ── Scrollable text area ───────────────────────────────
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .verticalScroll(editorScrollState),
+                        ) {
+                            BasicTextField(
+                                value    = highlightedValue,
+                                onValueChange = { newVal ->
+                                    ruleValue = TextFieldValue(newVal.text, newVal.selection, newVal.composition)
+                                },
+                                onTextLayout = { result ->
+                                    textLayoutResult = result
+                                    val cursor = ruleValue.selection.start
+                                        .coerceIn(0, ruleValue.text.length.coerceAtLeast(0))
+                                    runCatching { cursorRect = result.getCursorRect(cursor) }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 200.dp)
+                                    .padding(editorPaddingDp)
+                                    .onPreviewKeyEvent { event ->
+                                        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                        when {
+                                            // ── Autocomplete navigation ───────────────────────
+                                            event.key == Key.Escape && showAutoComplete -> {
+                                                showAutoComplete = false; true
+                                            }
+                                            event.key == Key.DirectionDown && showAutoComplete -> {
+                                                autoCompleteIndex = (autoCompleteIndex + 1)
+                                                    .coerceAtMost(filteredSuggestions.size - 1)
+                                                true
+                                            }
+                                            event.key == Key.DirectionUp && showAutoComplete -> {
+                                                autoCompleteIndex = (autoCompleteIndex - 1).coerceAtLeast(0)
+                                                true
+                                            }
+                                            event.key == Key.Tab && showAutoComplete && filteredSuggestions.isNotEmpty() -> {
+                                                acceptSuggestion(filteredSuggestions[autoCompleteIndex])
+                                                true
+                                            }
+                                            // ── Enter: preserve indentation ───────────────────
+                                            event.key == Key.Enter && !showAutoComplete -> {
+                                                val text     = ruleValue.text
+                                                val selStart = ruleValue.selection.start
+                                                val selEnd   = ruleValue.selection.end
+                                                val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                                val indent    = text.substring(lineStart, selStart)
+                                                    .takeWhile { it == ' ' || it == '\t' }
+                                                val newText = text.substring(0, selStart) + "\n" + indent +
+                                                              text.substring(selEnd)
+                                                ruleValue = TextFieldValue(newText,
+                                                    selection = TextRange(selStart + 1 + indent.length))
+                                                true
+                                            }
+                                            // ── Tab: indent / dedent ──────────────────────────
+                                            event.key == Key.Tab -> {
+                                                val text     = ruleValue.text
+                                                val selStart = ruleValue.selection.start
+                                                val selEnd   = ruleValue.selection.end
+                                                if (event.isShiftPressed) {
+                                                    val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
+                                                    val spaces = text.substring(lineStart)
+                                                        .takeWhile { it == ' ' }.length.coerceAtMost(4)
+                                                    if (spaces > 0) {
+                                                        val newText = text.substring(0, lineStart) +
+                                                                      text.substring(lineStart + spaces)
+                                                        ruleValue = TextFieldValue(newText,
+                                                            selection = TextRange((selStart - spaces).coerceAtLeast(lineStart)))
+                                                    }
+                                                } else {
+                                                    val newText = text.substring(0, selStart) + "    " +
+                                                                  text.substring(selEnd)
+                                                    ruleValue = TextFieldValue(newText,
+                                                        selection = TextRange(selStart + 4))
+                                                }
+                                                true
+                                            }
+                                            else -> false
+                                        }
+                                    },
+                                textStyle = TextStyle(
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize   = 13.sp,
+                                    color      = TextPrimary,
+                                    lineHeight = 20.sp,
+                                ),
+                                cursorBrush = SolidColor(PrimaryBlue),
+                            )
+                        }
+                    }
+
+                    // ── Placeholder (when editor is empty) ─────────────────────
                     if (ruleValue.text.isEmpty()) {
                         Text(
                             text = "# Write your rules here…\nrule \"example\" {\n    when field > value\n    then action \"result\"\n}",
-                            modifier = Modifier.padding(14.dp),
+                            modifier = Modifier.padding(
+                                start = lineNumberWidthDp + 1.dp + editorPaddingDp,
+                                top   = editorPaddingDp,
+                            ),
                             style = TextStyle(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize   = 13.sp,
                                 color      = TextMuted,
-                                lineHeight  = 20.sp,
+                                lineHeight = 20.sp,
                             ),
+                        )
+                    }
+
+                    // ── Autocomplete popup overlay ─────────────────────────────
+                    if (showAutoComplete && filteredSuggestions.isNotEmpty()) {
+                        val density = LocalDensity.current
+                        val xPos = with(density) {
+                            lineNumberWidthDp + 1.dp + editorPaddingDp + cursorRect.left.toDp()
+                        }
+                        val yPos = with(density) {
+                            editorPaddingDp + (cursorRect.bottom - editorScrollState.value).toDp()
+                        }
+                        AutoCompleteDropdown(
+                            modifier       = Modifier.offset(x = xPos, y = yPos),
+                            suggestions    = filteredSuggestions,
+                            selectedIndex  = autoCompleteIndex,
+                            onSelect       = { acceptSuggestion(it) },
+                            onDismiss      = { showAutoComplete = false },
                         )
                     }
                 }
