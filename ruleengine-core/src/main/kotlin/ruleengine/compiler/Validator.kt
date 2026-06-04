@@ -21,6 +21,7 @@ import ruleengine.dsl.ast.StringLiteral
 data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
 
 object Validator {
+    @Suppress("CyclomaticComplexMethod")
     private fun normalizeOperator(op: String): String {
         return when (op.lowercase()) {
             "==", "equals" -> "equals"
@@ -53,8 +54,10 @@ object Validator {
                 )
             }
 
-            validateExpression(rule.condition, schema, diagnostics)
-            if (actions != null) validateActions(rule.actions, actions, diagnostics)
+            validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
+            if (actions != null) {
+                validateActions(actions = rule.actions, schema = actions, diagnostics = diagnostics)
+            }
         }
 
         return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
@@ -66,22 +69,37 @@ object Validator {
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         when (expr) {
-            is AndAst -> expr.children.forEach { validateExpression(it, schema, diagnostics) }
-            is OrAst -> expr.children.forEach { validateExpression(it, schema, diagnostics) }
-            is NotAst -> validateExpression(expr.child, schema, diagnostics)
-            is ConditionAst -> validateCondition(expr, schema, diagnostics)
+            is AndAst -> expr.children.forEach {
+                validateExpression(
+                    expr = it,
+                    schema = schema,
+                    diagnostics = diagnostics
+                )
+            }
+
+            is OrAst -> expr.children.forEach {
+                validateExpression(
+                    expr = it,
+                    schema = schema,
+                    diagnostics = diagnostics
+                )
+            }
+
+            is NotAst -> validateExpression(expr = expr.child, schema = schema, diagnostics = diagnostics)
+            is ConditionAst -> validateCondition(cond = expr, schema = schema, diagnostics = diagnostics)
         }
     }
 
+    @Suppress("CyclomaticComplexMethod", "LongMethod")
     private fun validateCondition(
         cond: ConditionAst,
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
-        val fieldId = FieldId(cond.field)
+        val fieldId = FieldId(value = cond.field)
         val def = schema.fields[fieldId]
         if (def == null) {
-            val suggestion = suggestClosest(cond.field, schema.fields.keys.map { it.value })
+            val suggestion = suggestClosest(input = cond.field, candidates = schema.fields.keys.map { it.value })
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Unknown field '${cond.field}' in condition",
@@ -90,10 +108,10 @@ object Validator {
             return
         }
 
-        val op = normalizeOperator(cond.operator)
-        if (def.operators.isNotEmpty() && def.operators.none { it.value.equals(op, ignoreCase = true) }) {
+        val op = normalizeOperator(op = cond.operator)
+        if (def.operators.isNotEmpty() && def.operators.none { it.value.equals(other = op, ignoreCase = true) }) {
             val allowed = def.operators.map { it.value }
-            val suggestion = suggestClosest(op, allowed)
+            val suggestion = suggestClosest(input = op, candidates = allowed)
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed",
@@ -118,7 +136,7 @@ object Validator {
                         )
                     else {
                         runCatching {
-                            Regex((cond.value as StringLiteral).value)
+                            Regex(pattern = cond.value.value)
                         }.onFailure {
                             diagnostics += ValidationDiagnostic(
                                 severity = Severity.ERROR,
@@ -178,6 +196,7 @@ object Validator {
         }
     }
 
+    @Suppress("LoopWithTooManyJumpStatements")
     private fun validateActions(
         actions: List<ActionAst>,
         schema: ActionSchema,
@@ -197,7 +216,7 @@ object Validator {
                 continue
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
-                val lit = a.arguments.getOrNull(idx)
+                val lit = a.arguments.getOrNull(index = idx)
                 val ok = when (expectedType) {
                     ruleengine.core.domain.ActionArgType.STRING -> lit is StringLiteral
                     ruleengine.core.domain.ActionArgType.INTEGER -> lit is NumberLiteral
@@ -205,7 +224,7 @@ object Validator {
                 }
                 if (!ok) diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Action '${a.name}' argument ${idx} expects ${expectedType}"
+                    message = "Action '${a.name}' argument $idx expects $expectedType"
                 )
             }
         }
@@ -215,7 +234,7 @@ object Validator {
         var best: String? = null
         var bestDist = Int.MAX_VALUE
         for (c in candidates) {
-            val d = levenshtein(input.lowercase(), c.lowercase())
+            val d = levenshtein(a = input.lowercase(), b = c.lowercase())
             if (d < bestDist) {
                 bestDist = d
                 best = c

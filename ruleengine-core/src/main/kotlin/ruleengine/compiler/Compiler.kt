@@ -1,10 +1,17 @@
 package ruleengine.compiler
 
+import ruleengine.compiler.operators.DecimalOperator
+import ruleengine.compiler.operators.IntegerOperator
 import ruleengine.compiler.operators.TextComparisonOperators
 import ruleengine.compiler.operators.TextInOperator
 import ruleengine.compiler.operators.TextRegexOperator
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType.DECIMAL
+import ruleengine.core.domain.FieldType.INTEGER
+import ruleengine.core.domain.FieldType.STRING_SET
+import ruleengine.core.domain.FieldType.TEXT
+import ruleengine.core.domain.RuleAction
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.AndAst
@@ -24,8 +31,10 @@ import ruleengine.evaluator.compiled.OrExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
 import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
 
+@Suppress("TooManyFunctions")
 object Compiler {
 
+    @Suppress("CyclomaticComplexMethod")
     private fun normalizeOperator(op: String): String {
         return when (op.lowercase()) {
             "==", "equals" -> "equals"
@@ -51,7 +60,7 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
     ): List<CompiledRule> {
-        return asts.map { compileRule(it, schema, normalizerRegistry) }
+        return asts.map { compileRule(ast = it, schema = schema, normalizerRegistry = normalizerRegistry) }
     }
 
     fun compileRule(
@@ -59,9 +68,9 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
     ): CompiledRule {
-        val expr = compileExpression(ast.condition, schema, normalizerRegistry)
-        val actions = ast.actions.map {
-            ruleengine.core.domain.RuleAction(name = it.name, arguments = it.arguments.map { lit ->
+        val expr = compileExpression(expr = ast.condition, schema = schema, normalizerRegistry = normalizerRegistry)
+        val actions = ast.actions.map { action ->
+            RuleAction(name = action.name, arguments = action.arguments.map { lit ->
                 when (lit) {
                     is StringLiteral -> lit.value
                     is NumberLiteral -> lit.value
@@ -79,14 +88,35 @@ object Compiler {
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
         return when (expr) {
-            is AndAst -> AndExpression(expr.children.map { compileExpression(it, schema, normalizerRegistry) })
-            is OrAst -> OrExpression(expr.children.map { compileExpression(it, schema, normalizerRegistry) })
-            is NotAst -> NotExpression(compileExpression(expr.child, schema, normalizerRegistry))
-            is ConditionAst -> compileCondition(expr, schema, normalizerRegistry)
-            else -> throw CompilationException(astIdOrNull(expr), "Unknown expression type: ${expr.javaClass}")
+            is AndAst -> AndExpression(children = expr.children.map {
+                compileExpression(
+                    expr = it,
+                    schema = schema,
+                    normalizerRegistry = normalizerRegistry
+                )
+            })
+
+            is OrAst -> OrExpression(children = expr.children.map {
+                compileExpression(
+                    expr = it,
+                    schema = schema,
+                    normalizerRegistry = normalizerRegistry
+                )
+            })
+
+            is NotAst -> NotExpression(
+                child = compileExpression(
+                    expr = expr.child,
+                    schema = schema,
+                    normalizerRegistry = normalizerRegistry
+                )
+            )
+
+            is ConditionAst -> compileCondition(cond = expr, schema = schema, normalizerRegistry = normalizerRegistry)
         }
     }
 
+    @Suppress("UnusedPrivateMember")
     private fun astIdOrNull(expr: Any): String? {
         return when (expr) {
             is RuleAst -> expr.id
@@ -99,16 +129,16 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
-        val fieldId = FieldId(cond.field)
-        val def = schema.fields[fieldId]
-        if (def == null) {
-            throw CompilationException(ruleIdOrNull(cond), "Unknown field '${cond.field}'")
-        }
+        val fieldId = FieldId(value = cond.field)
+        val def = schema.fields[fieldId] ?: throw CompilationException(
+            ruleId = ruleIdOrNull(cond),
+            details = "Unknown field '${cond.field}'"
+        )
 
-        val op = normalizeOperator(cond.operator)
+        val op = normalizeOperator(op = cond.operator)
 
         return when (def.type) {
-            ruleengine.core.domain.FieldType.TEXT -> compileTextCondition(
+            TEXT -> compileTextCondition(
                 cond = cond,
                 fieldId = fieldId,
                 def = def,
@@ -116,19 +146,19 @@ object Compiler {
                 normalizerRegistry = normalizerRegistry
             )
 
-            ruleengine.core.domain.FieldType.DECIMAL -> compileDecimalCondition(
+            DECIMAL -> compileDecimalCondition(
                 cond = cond,
                 fieldId = fieldId,
                 op = op
             )
 
-            ruleengine.core.domain.FieldType.INTEGER -> compileIntegerCondition(
+            INTEGER -> compileIntegerCondition(
                 cond = cond,
                 fieldId = fieldId,
                 op = op
             )
 
-            ruleengine.core.domain.FieldType.STRING_SET -> compileStringSetCondition(
+            STRING_SET -> compileStringSetCondition(
                 cond = cond,
                 fieldId = fieldId,
                 def = def,
@@ -150,7 +180,7 @@ object Compiler {
         op: String,
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
-        val ruleId = ruleIdOrNull(cond)
+        val ruleId = ruleIdOrNull(cond = cond)
 
         return when (op) {
             "regex" -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
@@ -173,14 +203,21 @@ object Compiler {
         }
     }
 
+    @Suppress("UnusedParameter")
     private fun compileDecimalCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
-        return ruleengine.compiler.operators.DecimalOperator.compile(ruleIdOrNull(cond), cond, fieldId)
+        return DecimalOperator.compile(
+            ruleId = ruleIdOrNull(cond = cond),
+            cond = cond,
+            fieldId = fieldId
+        )
     }
 
+    @Suppress("UnusedParameter")
     private fun compileIntegerCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
-        return ruleengine.compiler.operators.IntegerOperator.compile(ruleIdOrNull(cond), cond, fieldId)
+        return IntegerOperator.compile(ruleId = ruleIdOrNull(cond = cond), cond = cond, fieldId = fieldId)
     }
 
+    @Suppress("ThrowsCount")
     private fun compileStringSetCondition(
         cond: ConditionAst,
         fieldId: FieldId,
@@ -196,7 +233,14 @@ object Compiler {
                         "Expected string items in list"
                     )
                 }.toSet()
-                val normalized = set.map { s -> applyNormalizers(s, def.normalizers, normalizerRegistry) }.toSet()
+                val normalized = set.map { s ->
+                    applyNormalizers(
+                        value = s,
+                        normalizers = def.normalizers,
+                        registry = normalizerRegistry
+                    )
+                }.toSet()
+
                 when (op) {
                     "containsAny" -> StringSetContainsAnyExpression(
                         field = fieldId,
@@ -211,14 +255,18 @@ object Compiler {
                     )
 
                     else -> throw CompilationException(
-                        ruleIdOrNull(cond),
+                        ruleIdOrNull(cond = cond),
                         "Unsupported operator '$op' for string set field"
                     )
                 }
             }
 
             is StringLiteral -> {
-                val normalized = applyNormalizers(v.value, def.normalizers, normalizerRegistry)
+                val normalized = applyNormalizers(
+                    value = v.value,
+                    normalizers = def.normalizers,
+                    registry = normalizerRegistry
+                )
                 StringSetContainsAnyExpression(
                     field = fieldId,
                     expectedNormalized = setOf(normalized),
@@ -227,7 +275,7 @@ object Compiler {
             }
 
             else -> throw CompilationException(
-                ruleIdOrNull(cond),
+                ruleIdOrNull(cond = cond),
                 "Expected list or string for string set field '${cond.field}'"
             )
         }
@@ -239,13 +287,15 @@ object Compiler {
         registry: NormalizerRegistry
     ): String {
         var v = value
-        for (n in normalizers) v = registry.get(n).normalize(v)
+        for (n in normalizers) {
+            v = registry.get(n).normalize(value = v)
+        }
         return v
     }
 
+    @Suppress("FunctionOnlyReturningConstant", "UnusedParameter")
     private fun ruleIdOrNull(cond: ConditionAst): String? {
         return null
     }
-
 }
 

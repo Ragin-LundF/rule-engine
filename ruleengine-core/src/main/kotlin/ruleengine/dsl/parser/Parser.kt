@@ -17,6 +17,7 @@ import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
 
+@Suppress("TooManyFunctions")
 class Parser(private val input: String) {
     private val tokens: List<Token> = Lexer(input = input).tokenize()
     private var pos = 0
@@ -54,6 +55,7 @@ class Parser(private val input: String) {
         return rules
     }
 
+    @Suppress("ThrowsCount")
     fun parseRule(): RuleAst {
         val first = current()
         if (first.type != TokenType.IDENT || first.text != "rule") {
@@ -128,14 +130,14 @@ class Parser(private val input: String) {
     }
 
     private fun parseOr(): ExpressionAst {
-        var left = parseAnd()
+        val left = parseAnd()
         val parts = mutableListOf(left)
         while (current().type == TokenType.IDENT && current().text == "or") {
             advance()
             parts += parseAnd()
         }
 
-        return if (parts.size == 1) left else OrAst(parts)
+        return if (parts.size == 1) left else OrAst(children = parts)
     }
 
     private fun parseAnd(): ExpressionAst {
@@ -146,7 +148,7 @@ class Parser(private val input: String) {
             parts += parseUnary()
         }
 
-        return if (parts.size == 1) left else AndAst(parts)
+        return if (parts.size == 1) left else AndAst(children = parts)
     }
 
     private fun parseUnary(): ExpressionAst {
@@ -154,12 +156,13 @@ class Parser(private val input: String) {
         if (token.type == TokenType.IDENT && token.text == "not") {
             advance()
             val inner = parseUnary()
-            return NotAst(inner)
+            return NotAst(child = inner)
         }
 
         return parsePrimary()
     }
 
+    @Suppress("ThrowsCount", "LongMethod")
     private fun parsePrimary(): ExpressionAst {
         val c = current()
         if (c.type == TokenType.LPAREN) {
@@ -238,12 +241,12 @@ class Parser(private val input: String) {
         val result: LiteralAst = when (token.type) {
             TokenType.STRING -> {
                 advance()
-                StringLiteral(token.text)
+                StringLiteral(value = token.text)
             }
 
             TokenType.NUMBER -> {
                 advance()
-                NumberLiteral(token.text)
+                NumberLiteral(value = token.text)
             }
 
             TokenType.LBRACKET -> {
@@ -257,7 +260,7 @@ class Parser(private val input: String) {
                 }
 
                 expect(type = TokenType.RBRACKET)
-                ListLiteral(items)
+                ListLiteral(items = items)
             }
 
             else -> {

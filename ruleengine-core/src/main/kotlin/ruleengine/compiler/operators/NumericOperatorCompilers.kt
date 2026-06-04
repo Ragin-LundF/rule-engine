@@ -15,35 +15,36 @@ import ruleengine.evaluator.compiled.IntegerComparisonOperator
 import java.math.BigDecimal
 
 object DecimalOperator {
+    @Suppress("ThrowsCount")
     fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId): CompiledExpression {
         if (cond.operator.lowercase() == "between") {
             val between = cond.value as? BetweenLiteral ?: throw CompilationException(
-                ruleId,
-                "Operator 'between' expects two numeric bounds for field '${cond.field}'"
+                ruleId = ruleId,
+                details = "Operator 'between' expects two numeric bounds for field '${cond.field}'"
             )
             val low = runCatching { BigDecimal(between.low) }.getOrElse { ex ->
                 throw CompilationException(
-                    ruleId,
-                    "Invalid lower bound: ${between.low}"
+                    ruleId = ruleId,
+                    details = "Invalid lower bound: ${between.low}"
                 )
             }
             val high = runCatching { BigDecimal(between.high) }.getOrElse { ex ->
                 throw CompilationException(
-                    ruleId,
-                    "Invalid upper bound: ${between.high}"
+                    ruleId = ruleId,
+                    details = "Invalid upper bound: ${between.high}"
                 )
             }
             return DecimalBetweenExpression(field = fieldId, low = low, high = high)
         }
 
         val literal = cond.value as? NumberLiteral ?: throw CompilationException(
-            ruleId,
-            "Expected numeric literal for decimal field '${cond.field}'"
+            ruleId = ruleId,
+            details = "Expected numeric literal for decimal field '${cond.field}'"
         )
         val expected = runCatching { BigDecimal(literal.value) }.getOrElse { ex ->
             throw CompilationException(
-                ruleId,
-                "Invalid decimal literal: ${literal.value}"
+                ruleId = ruleId,
+                details = "Invalid decimal literal: ${literal.value}"
             )
         }
 
@@ -68,41 +69,45 @@ object DecimalOperator {
                 op = ComparisonOperator.LTE
             )
 
-            else -> throw CompilationException(ruleId, "Unsupported operator '${cond.operator}' for decimal field")
+            else -> throw CompilationException(
+                ruleId = ruleId,
+                details = "Unsupported operator '${cond.operator}' for decimal field"
+            )
         }
     }
 }
 
 object IntegerOperator {
+    @Suppress("LongMethod", "ThrowsCount")
     fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId): CompiledExpression {
         if (cond.operator.lowercase() == "between") {
             val between = cond.value as? BetweenLiteral ?: throw CompilationException(
-                ruleId,
-                "Operator 'between' expects two integer bounds for field '${cond.field}'"
+                ruleId = ruleId,
+                details = "Operator 'between' expects two integer bounds for field '${cond.field}'"
             )
             val low = runCatching { between.low.toLong() }.getOrElse { ex ->
                 throw CompilationException(
-                    ruleId,
-                    "Invalid lower bound: ${between.low}"
+                    ruleId = ruleId,
+                    details = "Invalid lower bound: ${between.low}"
                 )
             }
             val high = runCatching { between.high.toLong() }.getOrElse { ex ->
                 throw CompilationException(
-                    ruleId,
-                    "Invalid upper bound: ${between.high}"
+                    ruleId = ruleId,
+                    details = "Invalid upper bound: ${between.high}"
                 )
             }
             return IntegerBetweenExpression(field = fieldId, low = low, high = high)
         }
 
         val literal = cond.value as? NumberLiteral ?: throw CompilationException(
-            ruleId,
-            "Expected numeric literal for integer field '${cond.field}'"
+            ruleId = ruleId,
+            details = "Expected numeric literal for integer field '${cond.field}'"
         )
         val expected = runCatching { literal.value.toLong() }.getOrElse { ex ->
             throw CompilationException(
-                ruleId,
-                "Invalid integer literal: ${literal.value}"
+                ruleId = ruleId,
+                details = "Invalid integer literal: ${literal.value}"
             )
         }
 
@@ -137,7 +142,10 @@ object IntegerOperator {
                 op = IntegerComparisonOperator.LTE
             )
 
-            else -> throw CompilationException(ruleId, "Unsupported operator '${cond.operator}' for integer field")
+            else -> throw CompilationException(
+                ruleId = ruleId,
+                details = "Unsupported operator '${cond.operator}' for integer field"
+            )
         }
     }
 }

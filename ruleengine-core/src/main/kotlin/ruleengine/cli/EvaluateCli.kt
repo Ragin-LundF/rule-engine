@@ -11,6 +11,7 @@ import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.system.exitProcess
 
 /**
  * CLI to evaluate a single input JSON against a schema + rules directory.
@@ -21,17 +22,18 @@ object EvaluateCli {
     @JvmStatic
     fun main(args: Array<String>) {
         val exit = runCli(args)
-        kotlin.system.exitProcess(exit)
+        exitProcess(status = exit)
     }
 
+    @Suppress("CyclomaticComplexMethod", "LongMethod", "ReturnCount")
     fun runCli(args: Array<String>, out: Appendable = System.out): Int {
-        try {
+        return runCatching {
             // simple args parser that supports flags (no value) and key value pairs
             val kv = mutableMapOf<String, String?>()
             var i = 0
             while (i < args.size) {
                 val k = args[i]
-                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
+                val v = if (i + 1 < args.size && !args[i + 1].startsWith(prefix = "--")) {
                     args[i + 1]
                 } else {
                     null
@@ -41,9 +43,9 @@ object EvaluateCli {
                 i += if (v != null) 2 else 1
             }
 
-            val schemaPath = kv["--schema"] ?: return usage(out)
-            val rulesPath = kv["--rules"] ?: return usage(out)
-            val inputFile = kv["--input-file"] ?: return usage(out)
+            val schemaPath = kv["--schema"] ?: return usage(out = out)
+            val rulesPath = kv["--rules"] ?: return usage(out = out)
+            val inputFile = kv["--input-file"] ?: return usage(out = out)
             val trace = kv.containsKey("--trace")
             val format = kv["--format"]?.lowercase()
 
@@ -58,7 +60,7 @@ object EvaluateCli {
             val ruleFiles = Files.walk(rulesDir).filter {
                 Files.isRegularFile(it) && it.toString().endsWith(".rule")
             }.toList()
-            val asts = ruleFiles.flatMap { f -> Parser(Files.readString(f)).parseRules() }
+            val asts = ruleFiles.flatMap { f -> Parser(input = Files.readString(f)).parseRules() }
 
             val validation = Validator.validate(asts = asts, schema = schema)
             if (!validation.isValid) {
@@ -75,7 +77,7 @@ object EvaluateCli {
             @Suppress("UNCHECKED_CAST")
             val inputMap: Map<String, Any?> = mapper.readValue(inputJson, Map::class.java) as Map<String, Any?>
 
-            val ctx = RuleContext.of(*inputMap.entries.map {
+            val ctx = RuleContext.of(entries = inputMap.entries.map {
                 it.key to it.value
             }.toTypedArray())
             val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
@@ -92,15 +94,20 @@ object EvaluateCli {
                 outMap["decisionTree"] = result.trace
             }
 
-            if (format == "pretty-json") out.append(
-                mapper.writerWithDefaultPrettyPrinter().writeValueAsString(outMap)
-            ) else out.append(mapper.writeValueAsString(outMap))
+            if (format == "pretty-json") {
+                out.append(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(outMap))
+            } else {
+                out.append(mapper.writeValueAsString(outMap))
+            }
             out.append("\n")
-            return 0
-        } catch (ex: Exception) {
-            out.append("Error: ${ex.message}\n")
-            return 3
-        }
+            0
+        }.fold(
+            onSuccess = { it },
+            onFailure = {
+                out.append("Error: ${it.message}\n")
+                3
+            }
+        )
     }
 
     private fun usage(out: Appendable): Int {

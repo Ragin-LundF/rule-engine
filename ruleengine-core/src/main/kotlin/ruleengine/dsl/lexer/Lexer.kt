@@ -43,7 +43,7 @@ class Lexer(private val input: String) {
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
+    @Suppress("CyclomaticComplexMethod", "LoopWithTooManyJumpStatements")
     fun tokenize(): List<Token> {
         val tokens = mutableListOf<Token>()
         while (true) {
@@ -132,6 +132,7 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.STRING, text = sb.toString(), line = startLine, col = startCol)
     }
 
+    @Suppress("LoopWithTooManyJumpStatements")
     private fun readIdentOrKeyword(): Token {
         val startLine = line
         val startCol = col
@@ -165,6 +166,7 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
     }
 
+    @Suppress("LoopWithTooManyJumpStatements")
     private fun readNumber(): Token {
         val startLine = line
         val startCol = col
