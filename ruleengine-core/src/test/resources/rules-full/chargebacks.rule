@@ -1,0 +1,57 @@
+# chargebacks.rule
+#
+# Demonstrates:
+#   - parenthesised OR groups (brackets)
+#   - contains with ignoreCase modifier
+#   - not operator
+#   - between operator on decimal amounts
+#
+# Schema: full-schema.yaml
+
+# ── Chargeback / reversal detection ─────────────────────────────────────────
+
+rule "chargeback-small" {
+  when
+    (purpose contains "rueckuberweisung" ignoreCase
+    or purpose contains "nicht gedeckt" ignoreCase
+    or purpose contains "stornierung" ignoreCase)
+    and amount < 0
+
+  then
+    label "chargeback"
+    flag "review"
+}
+
+rule "chargeback-high-value" {
+  when
+    (purpose contains "rueckuberweisung" ignoreCase
+    or purpose contains "nicht gedeckt" ignoreCase)
+    and amount < -500
+
+  then
+    label "chargeback"
+    alert "high-value-chargeback"
+}
+
+# Micro-transactions are often test or fee transactions
+rule "micro-transaction" {
+  when
+    amount between -5 5
+    and not purpose contains "gebuehr" ignoreCase
+
+  then
+    label "micro"
+    flag "low-value"
+}
+
+# Batch payment window: between 100 and 5000 inclusive
+rule "batch-payment" {
+  when
+    amount between 100 5000
+    and purpose startsWith "Sammel" ignoreCase
+
+  then
+    label "batch"
+    category "bulk-transfer"
+}
+

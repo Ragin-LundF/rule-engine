@@ -1,0 +1,15 @@
+name: full-operator-demo
+
+# This manifest wires together the full schema with all demo rule files.
+# Each rule file demonstrates a specific operator category.
+
+entries:
+  - id: full
+    schema: full-schema.yaml
+    actions: full-actions.yaml
+    rules:
+      - rules-full/chargebacks.rule
+      - rules-full/fraud-detection.rule
+      - rules-full/sepa-classification.rule
+
+

@@ -1,0 +1,11 @@
+{
+  "purpose": "Gehaltseingang Februar 2025",
+  "purposeNorm": "gehaltseingang februar 2025",
+  "amount": "3200",
+  "sepaCode": "SALA",
+  "iban": "DE89370400440532013000",
+  "counterparty": "Musterfirma GmbH",
+  "count": "1",
+  "tags": ["verified", "premium"]
+}
+

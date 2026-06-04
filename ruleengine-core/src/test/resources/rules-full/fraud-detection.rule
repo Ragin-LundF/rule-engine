@@ -1,0 +1,113 @@
+# fraud-detection.rule
+#
+# Demonstrates:
+#   - regex operator (case-sensitive and with ignoreCase)
+#   - between operator on integer count field
+#   - equals (case-sensitive and ignoreCase)
+#   - startsWith / endsWith
+#   - gt / lt / gte / lte
+#   - not operator
+#   - nested bracket groups
+#
+# Schema: full-schema.yaml
+
+# ── IBAN format validation (regex) ──────────────────────────────────────────
+
+# Detect IBANs that are NOT from DE / AT / CH (DACH region)
+rule "non-dach-iban" {
+  when
+    not iban regex "^(DE|AT|CH)"
+
+  then
+    flag "foreign-iban"
+    alert "non-dach-counterparty"
+}
+
+# Detect IBANs that look like test/synthetic IBANs (all-zero account number)
+rule "synthetic-iban" {
+  when
+    iban regex "^[A-Z]{2}[0-9]{2}0{10,}"
+
+  then
+    flag "synthetic"
+    alert "possible-test-transaction"
+}
+
+# Match purpose against a known fraud keyword pattern (case-insensitive)
+rule "fraud-keyword-purpose" {
+  when
+    purpose regex "(?i)(phishing|betrug|scam|geldwaesche)"
+
+  then
+    label "fraud"
+    alert "fraud-keyword-detected"
+    reject "compliance-block"
+}
+
+# Same but using the ignoreCase DSL modifier on regex (alternative syntax)
+rule "suspicious-counterparty-name" {
+  when
+    counterparty regex "[Ss]hell [Cc]ompan(y|ies)" ignoreCase
+
+  then
+    flag "suspicious-entity"
+}
+
+# ── Numeric range / comparison rules ────────────────────────────────────────
+
+# Structuring suspicion: many small transactions just below reporting threshold
+rule "structuring-suspicion" {
+  when
+    count between 5 20
+    and amount between 8000 9999
+
+  then
+    flag "structuring"
+    alert "aml-structuring-suspicion"
+}
+
+# Very high single payment
+rule "high-value-outgoing" {
+  when
+    amount < -10000
+
+  then
+    flag "high-value"
+    alert "payment-above-threshold"
+}
+
+# Zero-amount transactions (often probing transactions)
+rule "zero-amount-probe" {
+  when
+    amount equals 0
+
+  then
+    flag "probe"
+    alert "zero-amount-detected"
+}
+
+# ── Complex combined rules ───────────────────────────────────────────────────
+
+# Foreign IBAN + amount over 5000 outgoing
+rule "foreign-high-value" {
+  when
+    (not iban regex "^(DE|AT|CH)")
+    and amount < -5000
+
+  then
+    label "fraud"
+    alert "foreign-high-value-outgoing"
+    reject "compliance-block"
+}
+
+# Purpose ends with known internal transfer suffix, but amount is unexpectedly large
+rule "internal-transfer-anomaly" {
+  when
+    purpose endsWith "intern" ignoreCase
+    and (amount > 50000 or amount < -50000)
+
+  then
+    flag "anomaly"
+    alert "internal-transfer-large-amount"
+}
+

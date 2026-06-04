@@ -1,0 +1,98 @@
+schema: transaction-full-v1
+
+# Full schema covering all supported field types and operators.
+# Use this schema together with full-manifest.yaml to run all operator examples.
+
+fields:
+
+  # ── Text fields ──────────────────────────────────────────────────────────
+  purpose:
+    type: text
+    normalizers:
+      - trim
+    operators:
+      - equals
+      - contains
+      - startsWith
+      - endsWith
+      - in
+      - regex
+
+  # purposeNorm has lowercase/umlaut-fold applied; useful for normalizer-aware tests
+  purposeNorm:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+      - german_umlaut_fold
+    operators:
+      - equals
+      - contains
+      - startsWith
+      - endsWith
+      - in
+
+  # IBAN-like field for regex demos
+  iban:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - startsWith
+      - regex
+
+  # SEPA transaction code
+  sepaCode:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - in
+
+  # Counterparty name, no normalizers → ignoreCase modifier carries the weight
+  counterparty:
+    type: text
+    normalizers:
+      - trim
+    operators:
+      - equals
+      - contains
+      - startsWith
+      - endsWith
+      - regex
+
+  # ── Numeric fields ───────────────────────────────────────────────────────
+  amount:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  count:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # ── Collection fields ────────────────────────────────────────────────────
+  tags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll
+

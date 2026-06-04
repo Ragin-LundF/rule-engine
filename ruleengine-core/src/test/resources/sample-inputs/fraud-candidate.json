@@ -1,0 +1,11 @@
+{
+  "purpose": "Geldwaesche Verdacht Referenz 991234",
+  "purposeNorm": "geldwaesche verdacht referenz 991234",
+  "amount": "-9500",
+  "sepaCode": "PMNT",
+  "iban": "GB29NWBK60161331926819",
+  "counterparty": "Shell Companies Ltd",
+  "count": "12",
+  "tags": ["aml-watch", "retail"]
+}
+

@@ -1,0 +1,11 @@
+{
+  "purpose": "Miete Januar 2025",
+  "purposeNorm": "miete januar 2025",
+  "amount": "850",
+  "sepaCode": "PMNT",
+  "iban": "DE89370400440532013000",
+  "counterparty": "Max Mustermann Vermietung",
+  "count": "1",
+  "tags": ["verified", "premium"]
+}
+

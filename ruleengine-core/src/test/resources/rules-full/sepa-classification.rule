@@ -1,0 +1,142 @@
+# sepa-classification.rule
+#
+# Demonstrates:
+#   - equals (case-sensitive, via normalizer)
+#   - in operator (list membership)
+#   - startsWith / endsWith (case-sensitive and ignoreCase)
+#   - contains (case-sensitive via normalizer)
+#   - gte / lte / gt / lt
+#   - not operator
+#   - bracket groups + combined operators
+#
+# Schema: full-schema.yaml
+# Note: sepaCode field has normalizers [trim, uppercase], so values are
+#       uppercased before comparison. The purposeNorm field has [trim, lowercase,
+#       german_umlaut_fold] applied.
+
+# ── SEPA code-based classification ──────────────────────────────────────────
+
+rule "direct-debit" {
+  when
+    sepaCode in ["DMCT", "DRNL", "PRCT"]
+
+  then
+    label "direct-debit"
+    category "banking"
+}
+
+rule "card-payment" {
+  when
+    sepaCode in ["CCRD", "DCRD", "PMNT"]
+
+  then
+    label "card"
+    category "payment"
+}
+
+rule "salary-credit" {
+  when
+    sepaCode equals "SALA"
+    and amount > 0
+
+  then
+    label "salary"
+    category "income"
+}
+
+# ── Purpose text classification ──────────────────────────────────────────────
+
+# Rent: purpose must contain "miete" or "rent" (after normalization to lowercase)
+rule "rent-payment" {
+  when
+    (purposeNorm contains "miete"
+    or purposeNorm contains "rent"
+    or purposeNorm contains "pacht")
+    and amount >= 300
+
+  then
+    label "rent"
+    category "housing"
+}
+
+# Utility bills: purpose starts with known provider keywords (case-insensitive)
+rule "utility-bill" {
+  when
+    (purpose startsWith "Stadtwerke" ignoreCase
+    or purpose startsWith "Gaswerk" ignoreCase
+    or purpose startsWith "EnBW" ignoreCase
+    or purpose startsWith "E.ON" ignoreCase
+    or purpose startsWith "Vattenfall" ignoreCase)
+
+  then
+    label "utility"
+    category "household"
+}
+
+# Insurance: purpose ends with "Versicherung" (case-insensitive)
+rule "insurance-payment" {
+  when
+    purpose endsWith "Versicherung" ignoreCase
+    and amount < 0
+
+  then
+    label "insurance"
+    category "insurance"
+}
+
+# Streaming services: exact match on known providers
+rule "streaming-subscription" {
+  when
+    (counterparty equals "NETFLIX" ignoreCase
+    or counterparty equals "Spotify AB" ignoreCase
+    or counterparty equals "Amazon Digital" ignoreCase
+    or counterparty equals "Disney+" ignoreCase)
+
+  then
+    label "streaming"
+    category "entertainment"
+}
+
+# ── Negative amount rules ────────────────────────────────────────────────────
+
+rule "outgoing-transfer" {
+  when
+    amount < 0
+    and not sepaCode in ["DMCT", "DRNL"]
+
+  then
+    label "outgoing"
+}
+
+rule "large-outgoing" {
+  when
+    amount < -1000
+    and not sepaCode equals "SALA"
+
+  then
+    flag "large-outgoing"
+    score 80
+}
+
+# ── Tags-based classification (string_set) ───────────────────────────────────
+
+rule "premium-customer-transfer" {
+  when
+    tags containsAll ["premium", "verified"]
+    and amount > 0
+
+  then
+    label "premium-credit"
+    score 100
+}
+
+rule "flagged-customer" {
+  when
+    tags containsAny ["blocked", "sanctioned", "aml-watch"]
+
+  then
+    flag "compliance"
+    alert "flagged-customer-transaction"
+    reject "aml-block"
+}
+

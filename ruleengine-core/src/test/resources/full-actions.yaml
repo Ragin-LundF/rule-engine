@@ -1,0 +1,16 @@
+actions:
+  label:
+    argTypes: [string]
+  category:
+    argTypes: [string]
+  flag:
+    argTypes: [string]
+  score:
+    argTypes: [integer]
+  alert:
+    argTypes: [string]
+  reject:
+    argTypes: [string]
+  notify:
+    argTypes: [string]
+

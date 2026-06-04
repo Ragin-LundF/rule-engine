@@ -1,0 +1,11 @@
+{
+  "purpose": "Rueckuberweisung Lastschrift 2024-01",
+  "purposeNorm": "rueckuberweisung lastschrift 2024-01",
+  "amount": "-250",
+  "sepaCode": "DRNL",
+  "iban": "DE89370400440532013000",
+  "counterparty": "ACME GmbH",
+  "count": "1",
+  "tags": ["retail"]
+}
+
