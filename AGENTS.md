@@ -1,0 +1,11 @@
+# Code-Style Guidelines
+- Use named arguments when possible.
+- Functions should only be implemented as block code, not as expression bodies.
+- Functions should have a single responsibility and be small in size.
+- Use descriptive variable and function names.
+- Avoid deep nesting and use early returns to simplify control flow.
+- Testing should use `kotlin.test` annotations and assertions when possible.
+- The tests should cover all code paths and edge cases.
+- Use meaningful comments to explain complex logic or non-obvious decisions.
+- Keep class and function names consistent with their purpose and functionality.
+- Follow the Kotlin style guide for consistent formatting and naming conventions.
