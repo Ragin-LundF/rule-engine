@@ -36,7 +36,7 @@ rule "synthetic-iban" {
 # Match purpose against a known fraud keyword pattern (case-insensitive)
 rule "fraud-keyword-purpose" {
   when
-    purpose regex "(?i)(phishing|betrug|scam|geldwaesche)"
+    purpose regex "(?i)(phishing|fraud|scam|money laundering|hacking|spam)"
 
   then
     label "fraud"

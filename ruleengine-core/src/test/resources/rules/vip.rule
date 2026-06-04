@@ -1,0 +1,9 @@
+rule "vip-customer" {
+  when
+    tags containsAny ["vip", "premium"]
+
+  then
+    label "vip"
+    score 10
+}
+

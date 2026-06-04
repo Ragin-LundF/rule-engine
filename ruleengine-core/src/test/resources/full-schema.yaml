@@ -10,6 +10,8 @@ fields:
     type: text
     normalizers:
       - trim
+      - lowercase
+      - german_umlaut_fold
     operators:
       - equals
       - contains
@@ -95,4 +97,20 @@ fields:
     operators:
       - containsAny
       - containsAll
+
+  country:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  score:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
 

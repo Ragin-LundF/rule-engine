@@ -1,0 +1,9 @@
+rule "high-risk-country" {
+  when
+    country equals "ng" and amount >= 10000
+
+  then
+    flag "review"
+    score 100
+}
+

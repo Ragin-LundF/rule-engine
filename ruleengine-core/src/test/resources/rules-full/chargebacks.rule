@@ -12,9 +12,9 @@
 
 rule "chargeback-small" {
   when
-    (purpose contains "rueckuberweisung" ignoreCase
-    or purpose contains "nicht gedeckt" ignoreCase
-    or purpose contains "stornierung" ignoreCase)
+    (purpose contains "chargeback" ignoreCase
+    or purpose contains "amount not covered" ignoreCase
+    or purpose contains "cancellation" ignoreCase)
     and amount < 0
 
   then
@@ -24,8 +24,8 @@ rule "chargeback-small" {
 
 rule "chargeback-high-value" {
   when
-    (purpose contains "rueckuberweisung" ignoreCase
-    or purpose contains "nicht gedeckt" ignoreCase)
+    (purpose contains "payment returns" ignoreCase
+    or purpose contains "not covered" ignoreCase)
     and amount < -500
 
   then
@@ -37,7 +37,7 @@ rule "chargeback-high-value" {
 rule "micro-transaction" {
   when
     amount between -5 5
-    and not purpose contains "gebuehr" ignoreCase
+    and not purpose contains "fee" ignoreCase
 
   then
     label "micro"
@@ -48,7 +48,7 @@ rule "micro-transaction" {
 rule "batch-payment" {
   when
     amount between 100 5000
-    and purpose startsWith "Sammel" ignoreCase
+    and purpose startsWith "bulk transfer" ignoreCase
 
   then
     label "batch"

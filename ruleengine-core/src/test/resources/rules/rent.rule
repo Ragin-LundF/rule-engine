@@ -1,6 +1,7 @@
 rule "rent-payment" {
   when
-    purpose contains "miete"
+    purpose contains "rent"
+    and purpose contains "apartment"
     and amount >= 500
 
   then
