@@ -8,6 +8,7 @@
 !.idea/detekt.xml
 !.run/
 .vscode/*
+.kotlin
 
 # Build targets
 .gradle/*

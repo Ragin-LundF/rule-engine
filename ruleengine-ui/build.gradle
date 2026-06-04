@@ -1,7 +1,7 @@
 plugins {
-    alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.jetbrains.compose)
     alias(libs.plugins.jetbrains.compose.kotlin.plugin)
+    alias(libs.plugins.kotlin.multiplatform)
 }
 
 group = 'io.finapi.ruleengine'
@@ -13,13 +13,36 @@ repositories {
     maven { url = uri('https://maven.pkg.jetbrains.space/public/p/compose/dev') }
 }
 
-dependencies {
-    implementation(project(":ruleengine-core"))
-    implementation(compose.desktop.currentOs)
-}
-
 kotlin {
     jvmToolchain(21)
+    jvm {
+    }
+    js(IR) {
+        browser()
+        binaries.executable()
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation(compose.runtime)
+                implementation(compose.foundation)
+                implementation(compose.material)
+                implementation(compose.ui)
+            }
+        }
+        jvmMain {
+            dependencies {
+                implementation(project(":ruleengine-core"))
+                implementation(compose.desktop.currentOs)
+            }
+        }
+        jsMain {
+            dependencies {
+                // keep JS main independent from core
+            }
+        }
+    }
 }
 
 compose.desktop {

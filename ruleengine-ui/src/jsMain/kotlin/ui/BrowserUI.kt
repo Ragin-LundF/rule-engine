@@ -61,7 +61,8 @@ fun main() {
         document.body?.appendChild(a)
         a.click()
         a.remove()
-        js("URL.revokeObjectURL(\"$url\")")
+        val jsURL = js("URL")
+        jsURL.revokeObjectURL(url)
     })
 
     val copyRuleBtn = document.getElementById("copyRule")

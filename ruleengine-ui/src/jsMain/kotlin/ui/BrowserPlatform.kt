@@ -27,7 +27,8 @@ actual fun saveRuleToFile(filename: String, content: String) {
     window.document.body?.appendChild(a)
     a.click()
     a.remove()
-    js("URL.revokeObjectURL(\"$url\")")
+    val jsURL = js("URL")
+    jsURL.revokeObjectURL(url)
 }
 
 actual fun copyToClipboard(text: String) {
