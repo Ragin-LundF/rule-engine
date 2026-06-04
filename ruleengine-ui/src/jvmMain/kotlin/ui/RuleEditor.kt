@@ -56,11 +56,47 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
-import androidx.compose.ui.input.pointer.pointerInput
 
+/**
+ * Returns true when [trimmedLine] opens a DSL block that warrants an extra indent level
+ * on the following line.
+ */
+private fun dslLineOpensBlock(trimmedLine: String): Boolean {
+    return trimmedLine.endsWith('{') || trimmedLine == "when" || trimmedLine == "then"
+}
+
+/**
+ * If [text] has `}` at [bracePos] preceded only by whitespace on the same line,
+ * removes up to 4 leading spaces from that line to auto-dedent the brace.
+ * Returns the modified text and the number of spaces removed.
+ */
+private fun autoClosingBraceDedent(text: String, bracePos: Int): Pair<String, Int> {
+    val lineStart = text.lastIndexOf('\n', bracePos - 1) + 1
+    val lineContent = text.substring(startIndex = lineStart, endIndex = bracePos)
+    if (lineContent.isEmpty() || !lineContent.all { it == ' ' }) {
+        return Pair(text, 0)
+    }
+    val spacesToRemove = lineContent.length.coerceAtMost(4)
+    val newText = text.substring(0, lineStart) +
+            lineContent.drop(spacesToRemove) +
+            text.substring(bracePos)
+    return Pair(newText, spacesToRemove)
+}
+
+/**
+ * Returns true when the DSL context strongly implies an immediate next token
+ * (e.g., operator after field, or action name at start of THEN line).
+ * Used to show completions without a typed prefix.
+ */
+private fun isContextuallyImmediate(context: DslCursorContext): Boolean {
+    val expectsOperator = context.section == DslSection.WHEN &&
+            context.precedingField != null &&
+            context.precedingOperator == null
+    val expectsAction = context.section == DslSection.THEN && context.afterAction == null
+    return expectsOperator || expectsAction
+}
+
+// ── Smart indentation helpers ─────────────────────────────────────────────────
 // ── Status kind ───────────────────────────────────────────────────────────────
 enum class StatusKind { IDLE, SUCCESS, ERROR }
 
@@ -135,21 +171,12 @@ private fun Modifier.drawTopLine(w: Dp, color: Color): Modifier = this.drawWithC
     drawLine(color, Offset(0f, 0f), Offset(size.width, 0f), w.toPx())
 }
 
-@Composable
-private fun codeFieldColors() = TextFieldDefaults.outlinedTextFieldColors(
-    textColor            = TextPrimary,
-    backgroundColor      = Bg,
-    cursorColor          = PrimaryBlue,
-    focusedBorderColor   = PrimaryBlue,
-    unfocusedBorderColor = BorderColor,
-    placeholderColor     = TextMuted,
-)
-
 // ── Main composable ───────────────────────────────────────────────────────────
 
 @Composable
 actual fun RuleEditor() {
     var schemaText       by remember { mutableStateOf("") }
+    var schemaFieldValue by remember { mutableStateOf(TextFieldValue("")) }
     var ruleValue        by remember { mutableStateOf(TextFieldValue("")) }
     var status           by remember { mutableStateOf("Ready") }
     var statusKind       by remember { mutableStateOf(StatusKind.IDLE) }
@@ -157,6 +184,7 @@ actual fun RuleEditor() {
 
     var parsedSchema          by remember { mutableStateOf<FieldSchema?>(null) }
     var actionSchemaText      by remember { mutableStateOf("") }
+    var actionFieldValue      by remember { mutableStateOf(TextFieldValue("")) }
     var parsedActionSchema    by remember { mutableStateOf<ActionSchema?>(null) }
     var manifestText          by remember { mutableStateOf("") }
     var manifestBaseDir       by remember { mutableStateOf<String?>(null) }
@@ -173,6 +201,7 @@ actual fun RuleEditor() {
     var autoCompleteIndex     by remember { mutableStateOf(0) }
     var autoCompleteWord      by remember { mutableStateOf("") }
     var autoCompleteWordStart by remember { mutableStateOf(0) }
+    var dslContext            by remember { mutableStateOf(DslCursorContext(section = DslSection.TOP_LEVEL)) }
     var splitFraction         by remember { mutableStateOf(0.33f) }
 
     fun setStatus(msg: String, kind: StatusKind) { status = msg; statusKind = kind }
@@ -186,26 +215,38 @@ actual fun RuleEditor() {
         )
     }
 
-    // ── Autocomplete suggestions ───────────────────────────────────────────────
-    val allCompletions = remember(parsedSchema, parsedActionSchema) {
-        buildAllCompletions(parsedSchema, parsedActionSchema)
-    }
-    val filteredSuggestions = remember(autoCompleteWord, allCompletions) {
-        if (autoCompleteWord.isEmpty()) emptyList()
-        else allCompletions
-            .filter { it.label.startsWith(autoCompleteWord, ignoreCase = true) && it.label != autoCompleteWord }
-            .sortedWith(compareBy({ it.kind.ordinal }, { it.label }))
-            .take(8)
+    // ── Context-aware autocomplete suggestions ────────────────────────────────
+    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema) {
+        val candidates = buildContextualCompletions(
+            context = dslContext,
+            schema = parsedSchema,
+            actionSchema = parsedActionSchema,
+        )
+        if (autoCompleteWord.isEmpty()) {
+            candidates.take(8)
+        } else {
+            candidates
+                .filter { it.label.startsWith(autoCompleteWord, ignoreCase = true) && it.label != autoCompleteWord }
+                .sortedWith(compareBy({ it.kind.ordinal }, { it.label }))
+                .take(8)
+        }
     }
 
-    // ── Track word under cursor for autocomplete ───────────────────────────────
+    // ── Track word + DSL context on every cursor move ─────────────────────────
     LaunchedEffect(ruleValue.text, ruleValue.selection.start) {
         val cursor = ruleValue.selection.start
         val (wordStart, word) = extractCurrentWord(ruleValue.text, cursor)
         autoCompleteWordStart = wordStart
         autoCompleteWord      = word
         autoCompleteIndex     = 0
-        showAutoComplete      = word.isNotEmpty()
+
+        val ctx = analyzeDslContext(text = ruleValue.text, cursorPos = cursor, schema = parsedSchema)
+        dslContext = ctx
+
+        // Show completions when a word prefix is typed OR when context implies an immediate token.
+        val lastChar = if (cursor > 0) ruleValue.text.getOrNull(cursor - 1) else null
+        val afterSpace = lastChar == ' ' || lastChar == '\n'
+        showAutoComplete = word.isNotEmpty() || (afterSpace && isContextuallyImmediate(ctx))
     }
 
     // ── Debounced auto-validation ──────────────────────────────────────────────
@@ -272,6 +313,7 @@ actual fun RuleEditor() {
                         val c = pickSchemaFile()
                         if (c != null) {
                             schemaText = c
+                            schemaFieldValue = TextFieldValue(c)
                             parsedSchema = try { FieldSchemaLoader.loadFromString(c, "ui-schema") } catch (_: Exception) { null }
                             setStatus("Schema loaded — ${parsedSchema?.fields?.size ?: 0} fields", StatusKind.SUCCESS)
                         } else setStatus("Schema load cancelled", StatusKind.IDLE)
@@ -284,9 +326,6 @@ actual fun RuleEditor() {
         BoxWithConstraints(
             modifier = Modifier.weight(1f).fillMaxWidth().padding(12.dp),
         ) {
-            val density        = LocalDensity.current
-            val totalPx        = with(density) { maxWidth.toPx() }
-            val dividerWidthDp = 8.dp
             val leftWidthDp    = maxWidth * splitFraction
 
             Row(modifier = Modifier.fillMaxSize()) {
@@ -315,17 +354,31 @@ actual fun RuleEditor() {
                     // ── Field Schema YAML ─────────────────────────────────────
                     item {
                         SectionHeader("Field Schema YAML")
-                        OutlinedTextField(
-                            value = schemaText,
-                            onValueChange = {
-                                schemaText = it
-                                parsedSchema = try { FieldSchemaLoader.loadFromString(it, "ui-schema") } catch (_: Exception) { null }
-                            },
-                            modifier  = Modifier.fillMaxWidth().height(120.dp),
-                            textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
-                            colors    = codeFieldColors(),
-                            placeholder = { Text("# Paste schema YAML here…", style = MaterialTheme.typography.caption) },
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(140.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Bg)
+                                .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                .padding(8.dp),
+                        ) {
+                            YamlEditor(
+                                value = schemaFieldValue,
+                                onValueChange = { newVal ->
+                                    schemaFieldValue = newVal
+                                    schemaText = newVal.text
+                                    parsedSchema = runCatching {
+                                        FieldSchemaLoader.loadFromString(newVal.text, "ui-schema")
+                                    }.getOrNull()
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                                editorType = YamlEditorType.FIELD_SCHEMA,
+                                annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.FIELD_SCHEMA) },
+                                buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.FIELD_SCHEMA) },
+                                placeholder = "# Paste field schema YAML here…",
+                            )
+                        }
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             AppButton("Load") {
@@ -333,7 +386,8 @@ actual fun RuleEditor() {
                                     val c = pickSchemaFile()
                                     if (c != null) {
                                         schemaText   = c
-                                        parsedSchema = try { FieldSchemaLoader.loadFromString(c, "ui-schema") } catch (_: Exception) { null }
+                                        schemaFieldValue = TextFieldValue(c)
+                                        parsedSchema = runCatching { FieldSchemaLoader.loadFromString(c, "ui-schema") }.getOrNull()
                                         setStatus("Schema loaded", StatusKind.SUCCESS)
                                     }
                                 }
@@ -344,7 +398,10 @@ actual fun RuleEditor() {
                                     setStatus("Schema saved", StatusKind.SUCCESS)
                                 } else setStatus("Nothing to save", StatusKind.IDLE)
                             }
-                            AppButton("Clear", danger = true) { schemaText = ""; parsedSchema = null; setStatus("Schema cleared", StatusKind.IDLE) }
+                            AppButton("Clear", danger = true) {
+                                schemaText = ""; schemaFieldValue = TextFieldValue(""); parsedSchema = null
+                                setStatus("Schema cleared", StatusKind.IDLE)
+                            }
                         }
                         PanelDivider()
                     }
@@ -352,17 +409,31 @@ actual fun RuleEditor() {
                     // ── Action Schema YAML ────────────────────────────────────
                     item {
                         SectionHeader("Action Schema YAML")
-                        OutlinedTextField(
-                            value = actionSchemaText,
-                            onValueChange = {
-                                actionSchemaText   = it
-                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(it) } catch (_: Exception) { null }
-                            },
-                            modifier  = Modifier.fillMaxWidth().height(90.dp),
-                            textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
-                            colors    = codeFieldColors(),
-                            placeholder = { Text("# Paste actions YAML here…", style = MaterialTheme.typography.caption) },
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Bg)
+                                .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                .padding(8.dp),
+                        ) {
+                            YamlEditor(
+                                value = actionFieldValue,
+                                onValueChange = { newVal ->
+                                    actionFieldValue   = newVal
+                                    actionSchemaText   = newVal.text
+                                    parsedActionSchema = runCatching {
+                                        ActionSchemaLoader.loadFromString(newVal.text)
+                                    }.getOrNull()
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                                editorType = YamlEditorType.ACTION_SCHEMA,
+                                annotate = { text -> annotateYaml(text = text, editorType = YamlEditorType.ACTION_SCHEMA) },
+                                buildCompletions = { ctx -> buildYamlCompletions(context = ctx, editorType = YamlEditorType.ACTION_SCHEMA) },
+                                placeholder = "# Paste action schema YAML here…",
+                            )
+                        }
                         Spacer(Modifier.height(6.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             AppButton("Load") {
@@ -370,7 +441,8 @@ actual fun RuleEditor() {
                                     val c = pickSchemaFile()
                                     if (c != null) {
                                         actionSchemaText   = c
-                                        parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
+                                        actionFieldValue   = TextFieldValue(c)
+                                        parsedActionSchema = runCatching { ActionSchemaLoader.loadFromString(c) }.getOrNull()
                                         setStatus("Actions loaded", StatusKind.SUCCESS)
                                     }
                                 }
@@ -381,7 +453,10 @@ actual fun RuleEditor() {
                                     setStatus("Actions saved", StatusKind.SUCCESS)
                                 } else setStatus("Nothing to save", StatusKind.IDLE)
                             }
-                            AppButton("Clear", danger = true) { actionSchemaText = ""; parsedActionSchema = null; setStatus("Actions cleared", StatusKind.IDLE) }
+                            AppButton("Clear", danger = true) {
+                                actionSchemaText = ""; actionFieldValue = TextFieldValue(""); parsedActionSchema = null
+                                setStatus("Actions cleared", StatusKind.IDLE)
+                            }
                         }
                         PanelDivider()
                     }
@@ -446,6 +521,7 @@ actual fun RuleEditor() {
                                                 val p = Path.of(base, sp)
                                                 val c = Files.readString(p)
                                                 schemaText   = c
+                                                schemaFieldValue = TextFieldValue(c)
                                                 parsedSchema = try { FieldSchemaLoader.loadFromString(c, p.fileName.toString()) } catch (_: Exception) { null }
                                             }
                                         }
@@ -455,6 +531,7 @@ actual fun RuleEditor() {
                                                 val p = Path.of(base, ap)
                                                 val c = Files.readString(p)
                                                 actionSchemaText   = c
+                                                actionFieldValue   = TextFieldValue(c)
                                                 parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
                                             }
                                         }
@@ -623,7 +700,22 @@ actual fun RuleEditor() {
                             BasicTextField(
                                 value    = highlightedValue,
                                 onValueChange = { newVal ->
-                                    ruleValue = TextFieldValue(newVal.text, newVal.selection, newVal.composition)
+                                    val isNewChar = newVal.text.length == ruleValue.text.length + 1
+                                    val cursorPos = newVal.selection.start
+                                    // Auto-dedent `}` when typed on an otherwise-whitespace line.
+                                    if (isNewChar && cursorPos > 0 &&
+                                        newVal.text.getOrNull(cursorPos - 1) == '}') {
+                                        val (dedentedText, removed) = autoClosingBraceDedent(
+                                            text = newVal.text, bracePos = cursorPos - 1,
+                                        )
+                                        ruleValue = TextFieldValue(
+                                            text = dedentedText,
+                                            selection = TextRange((cursorPos - removed).coerceAtLeast(0)),
+                                            composition = newVal.composition,
+                                        )
+                                    } else {
+                                        ruleValue = TextFieldValue(newVal.text, newVal.selection, newVal.composition)
+                                    }
                                 },
                                 onTextLayout = { result ->
                                     textLayoutResult = result
@@ -655,7 +747,7 @@ actual fun RuleEditor() {
                                                 acceptSuggestion(filteredSuggestions[autoCompleteIndex])
                                                 true
                                             }
-                                            // ── Enter: preserve indentation ───────────────────
+                                            // ── Enter: smart DSL indentation ──────────────────────
                                             // Always runs (also dismisses autocomplete if open)
                                             event.key == Key.Enter -> {
                                                 if (showAutoComplete) showAutoComplete = false
@@ -663,12 +755,14 @@ actual fun RuleEditor() {
                                                 val selStart = ruleValue.selection.start
                                                 val selEnd   = ruleValue.selection.end
                                                 val lineStart = text.lastIndexOf('\n', selStart - 1) + 1
-                                                val indent    = text.substring(lineStart, selStart)
-                                                    .takeWhile { it == ' ' || it == '\t' }
-                                                val newText = text.substring(0, selStart) + "\n" + indent +
+                                                val currentLine = text.substring(lineStart, selStart)
+                                                val indent    = currentLine.takeWhile { it == ' ' || it == '\t' }
+                                                // Add one extra indent level after block-opening lines.
+                                                val extra = if (dslLineOpensBlock(currentLine.trim())) "    " else ""
+                                                val newText = text.substring(0, selStart) + "\n" + indent + extra +
                                                               text.substring(selEnd)
                                                 ruleValue = TextFieldValue(newText,
-                                                    selection = TextRange(selStart + 1 + indent.length))
+                                                    selection = TextRange(selStart + 1 + indent.length + extra.length))
                                                 true
                                             }
                                             // ── Tab: indent / dedent ──────────────────────────

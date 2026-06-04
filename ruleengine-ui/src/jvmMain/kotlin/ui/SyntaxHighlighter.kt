@@ -23,10 +23,18 @@ val ColorString  = Color(0xFF3FB950)   // AccentGreen – string literals
 val ColorNumber  = Color(0xFF79C0FF)   // cyan-blue – numeric literals
 val ColorOp      = Color(0xFFFF7B72)   // red-orange – comparison operators
 
-private val DSL_STRUCTURE = setOf("rule", "when", "then")
-private val DSL_LOGIC     = setOf("and", "or", "not")
-private val DSL_BOOL      = setOf("true", "false")
-private val OP_CHARS      = setOf('>', '<', '=', '!')
+private val DSL_STRUCTURE  = setOf("rule", "when", "then", "description")
+private val DSL_LOGIC      = setOf("and", "or", "not")
+private val DSL_BOOL       = setOf("true", "false")
+private val OP_CHARS       = setOf('>', '<', '=', '!')
+
+/** Named operator keywords recognized in condition expressions. */
+private val DSL_NAMED_OPS  = setOf(
+    "equals", "contains", "startsWith", "endsWith", "in", "regex",
+    "gt", "gte", "lt", "lte", "between",
+    "containsAny", "containsAll",
+    "ignoreCase",
+)
 
 /**
  * Builds an [AnnotatedString] with syntax colouring for the rule DSL.
@@ -98,6 +106,7 @@ fun annotateRule(
                         tok.text in DSL_BOOL                                   -> SpanStyle(color = ColorNumber)
                         tok.text.all { it in OP_CHARS }                        -> SpanStyle(color = ColorOp)
                         tok.text in fieldNames                                 -> SpanStyle(color = ColorField)
+                        tok.text in DSL_NAMED_OPS                              -> SpanStyle(color = ColorOp)
                         tok.text in actionNames                                -> SpanStyle(color = ColorAction)
                         else                                                   -> SpanStyle(color = TextPrimary)
                     }
