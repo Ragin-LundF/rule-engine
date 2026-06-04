@@ -1,11 +1,13 @@
 package ruleengine.compiler
 
+import ruleengine.compiler.operators.TextComparisonOperators
+import ruleengine.compiler.operators.TextInOperator
+import ruleengine.compiler.operators.TextRegexOperator
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ListLiteral
@@ -16,26 +18,11 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
-import ruleengine.evaluator.compiled.ComparisonOperator
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.DecimalBetweenExpression
-import ruleengine.evaluator.compiled.DecimalComparisonExpression
-import ruleengine.evaluator.compiled.IntegerBetweenExpression
-import ruleengine.evaluator.compiled.IntegerComparisonExpression
-import ruleengine.evaluator.compiled.IntegerComparisonOperator
 import ruleengine.evaluator.compiled.NotExpression
-import ruleengine.compiler.operators.TextRegexOperator
-import ruleengine.compiler.operators.TextInOperator
-import ruleengine.compiler.operators.TextComparisonOperators
 import ruleengine.evaluator.compiled.OrExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
 import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
-import ruleengine.evaluator.compiled.TextContainsExpression
-import ruleengine.evaluator.compiled.TextEndsWithExpression
-import ruleengine.evaluator.compiled.TextEqualsExpression
-import ruleengine.evaluator.compiled.TextInExpression
-import ruleengine.evaluator.compiled.TextRegexExpression
-import ruleengine.evaluator.compiled.TextStartsWithExpression
 
 object Compiler {
 
@@ -149,7 +136,10 @@ object Compiler {
                 normalizerRegistry = normalizerRegistry
             )
 
-            else -> throw CompilationException(ruleIdOrNull(cond), "Field type ${def.type} not supported in compiler yet")
+            else -> throw CompilationException(
+                ruleIdOrNull(cond = cond),
+                "Field type ${def.type} not supported in compiler yet"
+            )
         }
     }
 
@@ -164,8 +154,22 @@ object Compiler {
 
         return when (op) {
             "regex" -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
-            "in" -> TextInOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def, registry = normalizerRegistry)
-            else -> TextComparisonOperators.compile(ruleId = ruleId, op = op, cond = cond, fieldId = fieldId, def = def, registry = normalizerRegistry)
+            "in" -> TextInOperator.compile(
+                ruleId = ruleId,
+                cond = cond,
+                fieldId = fieldId,
+                def = def,
+                registry = normalizerRegistry
+            )
+
+            else -> TextComparisonOperators.compile(
+                ruleId = ruleId,
+                op = op,
+                cond = cond,
+                fieldId = fieldId,
+                def = def,
+                registry = normalizerRegistry
+            )
         }
     }
 
@@ -186,24 +190,46 @@ object Compiler {
     ): CompiledExpression {
         return when (val v = cond.value) {
             is ListLiteral -> {
-                val set = v.items.map { (it as? StringLiteral)?.value ?: throw CompilationException(
-                    ruleIdOrNull(cond),
-                    "Expected string items in list"
-                ) }.toSet()
+                val set = v.items.map {
+                    (it as? StringLiteral)?.value ?: throw CompilationException(
+                        ruleIdOrNull(cond),
+                        "Expected string items in list"
+                    )
+                }.toSet()
                 val normalized = set.map { s -> applyNormalizers(s, def.normalizers, normalizerRegistry) }.toSet()
                 when (op) {
-                    "containsAny" -> StringSetContainsAnyExpression(field = fieldId, expectedNormalized = normalized, ignoreCase = cond.ignoreCase)
-                    "containsAll" -> StringSetContainsAllExpression(field = fieldId, expectedNormalized = normalized, ignoreCase = cond.ignoreCase)
-                    else -> throw CompilationException(ruleIdOrNull(cond), "Unsupported operator '$op' for string set field")
+                    "containsAny" -> StringSetContainsAnyExpression(
+                        field = fieldId,
+                        expectedNormalized = normalized,
+                        ignoreCase = cond.ignoreCase
+                    )
+
+                    "containsAll" -> StringSetContainsAllExpression(
+                        field = fieldId,
+                        expectedNormalized = normalized,
+                        ignoreCase = cond.ignoreCase
+                    )
+
+                    else -> throw CompilationException(
+                        ruleIdOrNull(cond),
+                        "Unsupported operator '$op' for string set field"
+                    )
                 }
             }
 
             is StringLiteral -> {
                 val normalized = applyNormalizers(v.value, def.normalizers, normalizerRegistry)
-                StringSetContainsAnyExpression(field = fieldId, expectedNormalized = setOf(normalized), ignoreCase = cond.ignoreCase)
+                StringSetContainsAnyExpression(
+                    field = fieldId,
+                    expectedNormalized = setOf(normalized),
+                    ignoreCase = cond.ignoreCase
+                )
             }
 
-            else -> throw CompilationException(ruleIdOrNull(cond), "Expected list or string for string set field '${cond.field}'")
+            else -> throw CompilationException(
+                ruleIdOrNull(cond),
+                "Expected list or string for string set field '${cond.field}'"
+            )
         }
     }
 

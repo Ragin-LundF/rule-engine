@@ -1,13 +1,13 @@
 package ruleengine.schema
 
+// ...existing imports...
 import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionDefinition
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.jackson.JacksonUtil
-import tools.jackson.dataformat.yaml.YAMLFactory
 import tools.jackson.core.StreamReadFeature
-// ...existing imports...
+import tools.jackson.dataformat.yaml.YAMLFactory
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -27,7 +27,8 @@ object ActionSchemaLoader {
             Files.newInputStream(path).use { ins ->
                 val bytes = ins.readAllBytes()
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes)).use { p -> mapper.readValue(p, RawActionSchema::class.java) }
+                yf.createParser(java.io.ByteArrayInputStream(bytes))
+                    .use { p -> mapper.readValue(p, RawActionSchema::class.java) }
             }
         }.map { raw ->
             val actions = raw.actions.mapValues { (name, def) ->
@@ -47,7 +48,8 @@ object ActionSchemaLoader {
             val raw: RawActionSchema = run {
                 val bytes = content.toByteArray(Charsets.UTF_8)
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes)).use { p -> mapper.readValue(p, RawActionSchema::class.java) }
+                yf.createParser(java.io.ByteArrayInputStream(bytes))
+                    .use { p -> mapper.readValue(p, RawActionSchema::class.java) }
             }
             val actions = raw.actions.mapValues { (name, def) ->
                 val types = def.argTypes.map { parseArgType(it) }

@@ -8,14 +8,17 @@ object ManifestLoader {
         val mapper = JacksonUtil.jsonMapper
         val yf = tools.jackson.dataformat.yaml.YAMLFactory()
         // try to parse as YAML into ProjectManifest
-        return try {
+        return runCatching {
             // use YAML parser with mapper
             val parser = yf.createParser(content.reader())
             mapper.readValue(parser, ProjectManifest::class.java)
-        } catch (ex: Exception) {
-            // try JSON fallback
-            mapper.readValue(content, ProjectManifest::class.java)
-        }
+        }.fold(
+            onSuccess = { it },
+            onFailure = {
+                // try JSON fallback
+                mapper.readValue(content, ProjectManifest::class.java)
+            }
+        )
     }
 
     fun load(path: Path): ProjectManifest {

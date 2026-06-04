@@ -43,6 +43,7 @@ class Lexer(private val input: String) {
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     fun tokenize(): List<Token> {
         val tokens = mutableListOf<Token>()
         while (true) {

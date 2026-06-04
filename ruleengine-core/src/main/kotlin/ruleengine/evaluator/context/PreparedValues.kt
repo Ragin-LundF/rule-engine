@@ -29,10 +29,24 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
             for ((fieldId, def) in schema.fields) {
                 val raw = ctx.get(fieldId) ?: continue
                 when (def.type) {
-                    FieldType.TEXT -> prepareText(fieldId = fieldId, def = def, raw = raw, map = map, registry = normalizerRegistry)
+                    FieldType.TEXT -> prepareText(
+                        fieldId = fieldId,
+                        def = def,
+                        raw = raw,
+                        map = map,
+                        registry = normalizerRegistry
+                    )
+
                     FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
                     FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.STRING_SET -> prepareStringSet(fieldId = fieldId, def = def, raw = raw, map = map, registry = normalizerRegistry)
+                    FieldType.STRING_SET -> prepareStringSet(
+                        fieldId = fieldId,
+                        def = def,
+                        raw = raw,
+                        map = map,
+                        registry = normalizerRegistry
+                    )
+
                     else -> {
                         // unsupported types for now
                     }

@@ -70,10 +70,6 @@ object Validator {
             is OrAst -> expr.children.forEach { validateExpression(it, schema, diagnostics) }
             is NotAst -> validateExpression(expr.child, schema, diagnostics)
             is ConditionAst -> validateCondition(expr, schema, diagnostics)
-            else -> diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Unknown expression type: ${expr.javaClass}"
-            )
         }
     }
 
@@ -121,12 +117,12 @@ object Validator {
                             message = "Field '${cond.field}' with 'regex' expects string literal pattern"
                         )
                     else {
-                        try {
+                        runCatching {
                             Regex((cond.value as StringLiteral).value)
-                        } catch (ex: Exception) {
+                        }.onFailure {
                             diagnostics += ValidationDiagnostic(
                                 severity = Severity.ERROR,
-                                message = "Invalid regex pattern for field '${cond.field}': ${ex.message}"
+                                message = "Invalid regex pattern for field '${cond.field}': ${it.message}"
                             )
                         }
                     }

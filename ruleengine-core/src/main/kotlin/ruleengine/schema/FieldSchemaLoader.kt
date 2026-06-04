@@ -1,5 +1,6 @@
 package ruleengine.schema
 
+// ...existing imports...
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -8,11 +9,10 @@ import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.jackson.JacksonUtil
-import tools.jackson.dataformat.yaml.YAMLFactory
-import tools.jackson.core.StreamReadFeature
-// ...existing imports...
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
+import tools.jackson.core.StreamReadFeature
+import tools.jackson.dataformat.yaml.YAMLFactory
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -29,7 +29,8 @@ object FieldSchemaLoader {
             Files.newInputStream(path).use { ins ->
                 val bytes = ins.readAllBytes()
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes)).use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
+                yf.createParser(java.io.ByteArrayInputStream(bytes))
+                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
             }
         }.map { raw ->
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
@@ -50,7 +51,8 @@ object FieldSchemaLoader {
             val raw: RawFieldSchema = run {
                 val bytes = content.toByteArray(Charsets.UTF_8)
                 val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes)).use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
+                yf.createParser(java.io.ByteArrayInputStream(bytes))
+                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
             }
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
@@ -67,7 +69,10 @@ object FieldSchemaLoader {
 
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {
         val type = raw.type?.let { parseFieldType(it) }
-            ?: throw SchemaLoadException(path = Path.of(fieldName.value), details = "missing type for field ${fieldName.value}")
+            ?: throw SchemaLoadException(
+                path = Path.of(fieldName.value),
+                details = "missing type for field ${fieldName.value}"
+            )
 
         val normalizers = raw.normalizers?.map { NormalizerId(it) } ?: emptyList()
         val operators = raw.operators?.map { OperatorId(it) }?.toSet() ?: emptySet()
