@@ -34,6 +34,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                         for (n in def.normalizers) normalized = normalizerRegistry.get(n).normalize(normalized)
                         map[fieldId] = PreparedText(original = s, normalized = normalized)
                     }
+
                     FieldType.INTEGER -> {
                         val num = when (raw) {
                             is Number -> raw.toLong()
@@ -42,14 +43,21 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                         }
                         map[fieldId] = PreparedInteger(num)
                     }
+
                     FieldType.DECIMAL -> {
                         val bd = when (raw) {
                             is Number -> BigDecimal(raw.toString())
-                            is String -> try { BigDecimal(raw) } catch (_: Exception) { continue }
+                            is String -> try {
+                                BigDecimal(raw)
+                            } catch (_: Exception) {
+                                continue
+                            }
+
                             else -> continue
                         }
                         map[fieldId] = PreparedDecimal(bd)
                     }
+
                     FieldType.STRING_SET -> {
                         val set = when (raw) {
                             is Collection<*> -> raw.filterNotNull().map { it.toString() }.toSet()
@@ -67,6 +75,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                         }
                         map[fieldId] = PreparedStringSet(original = set, normalized = normalizedSet)
                     }
+
                     else -> {
                         // unsupported types for now
                     }

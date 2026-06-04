@@ -6,7 +6,9 @@ interface RuleContext {
     fun get(field: FieldId): Any?
 
     companion object {
-        fun of(vararg entries: Pair<String, Any?>): RuleContext = MapRuleContext(entries.associate { it.first to it.second })
+        fun of(vararg entries: Pair<String, Any?>): RuleContext {
+            return MapRuleContext(entries.associate { it.first to it.second })
+        }
     }
 }
 

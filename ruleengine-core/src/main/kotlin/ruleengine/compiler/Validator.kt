@@ -1,12 +1,22 @@
 package ruleengine.compiler
 
-import ruleengine.dsl.ast.*
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldId
-import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.core.errors.Severity
-import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType
+import ruleengine.core.errors.Severity
+import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.dsl.ast.ActionAst
+import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ListLiteral
+import ruleengine.dsl.ast.NotAst
+import ruleengine.dsl.ast.NumberLiteral
+import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.StringLiteral
 
 data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
 
@@ -15,7 +25,7 @@ object Validator {
         "==", "equals" -> "equals"
         "=", "eq" -> "equals"
         ">=", "gte" -> "gte"
-        ">" , "gt" -> "gt"
+        ">", "gt" -> "gt"
         "<=", "lte" -> "lte"
         "<", "lt" -> "lt"
         "contains" -> "contains"
@@ -35,7 +45,10 @@ object Validator {
 
         for (rule in asts) {
             if (!ids.add(rule.id)) {
-                diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Duplicate rule id: ${rule.id}")
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Duplicate rule id: ${rule.id}"
+                )
             }
 
             validateExpression(rule.condition, schema, diagnostics)
@@ -45,22 +58,37 @@ object Validator {
         return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
     }
 
-    private fun validateExpression(expr: ExpressionAst, schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
+    private fun validateExpression(
+        expr: ExpressionAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
         when (expr) {
             is AndAst -> expr.children.forEach { validateExpression(it, schema, diagnostics) }
             is OrAst -> expr.children.forEach { validateExpression(it, schema, diagnostics) }
             is NotAst -> validateExpression(expr.child, schema, diagnostics)
             is ConditionAst -> validateCondition(expr, schema, diagnostics)
-            else -> diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Unknown expression type: ${expr.javaClass}")
+            else -> diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Unknown expression type: ${expr.javaClass}"
+            )
         }
     }
 
-    private fun validateCondition(cond: ConditionAst, schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
+    private fun validateCondition(
+        cond: ConditionAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
         val fieldId = FieldId(cond.field)
         val def = schema.fields[fieldId]
         if (def == null) {
             val suggestion = suggestClosest(cond.field, schema.fields.keys.map { it.value })
-            diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Unknown field '${cond.field}' in condition", suggestion = suggestion)
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Unknown field '${cond.field}' in condition",
+                suggestion = suggestion
+            )
             return
         }
 
@@ -68,45 +96,95 @@ object Validator {
         if (def.operators.isNotEmpty() && def.operators.none { it.value.equals(op, ignoreCase = true) }) {
             val allowed = def.operators.map { it.value }
             val suggestion = suggestClosest(op, allowed)
-            diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed", suggestion = suggestion)
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed",
+                suggestion = suggestion
+            )
         }
 
         // type check literal
         when (def.type) {
             FieldType.TEXT -> when (op) {
                 "in" -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'in' expects list or string literal")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' with 'in' expects list or string literal"
+                    )
+
                 "regex" -> {
                     if (cond.value !is StringLiteral)
-                        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'regex' expects string literal pattern")
+                        diagnostics += ValidationDiagnostic(
+                            severity = Severity.ERROR,
+                            message = "Field '${cond.field}' with 'regex' expects string literal pattern"
+                        )
                     else {
-                        try { Regex((cond.value as StringLiteral).value) }
-                        catch (ex: Exception) { diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Invalid regex pattern for field '${cond.field}': ${ex.message}") }
+                        try {
+                            Regex((cond.value as StringLiteral).value)
+                        } catch (ex: Exception) {
+                            diagnostics += ValidationDiagnostic(
+                                severity = Severity.ERROR,
+                                message = "Invalid regex pattern for field '${cond.field}': ${ex.message}"
+                            )
+                        }
                     }
                 }
-                "between" -> diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field")
+
+                "between" -> diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field"
+                )
+
                 else -> if (cond.value !is StringLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects text literal")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' expects text literal"
+                    )
             }
+
             FieldType.DECIMAL -> when (op) {
                 "between" -> if (cond.value !is BetweenLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'between' expects two numeric bounds")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' with 'between' expects two numeric bounds"
+                    )
+
                 else -> if (cond.value !is NumberLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects numeric literal")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' expects numeric literal"
+                    )
             }
+
             FieldType.INTEGER -> when (op) {
                 "between" -> if (cond.value !is BetweenLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' with 'between' expects two integer bounds")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' with 'between' expects two integer bounds"
+                    )
+
                 else -> if (cond.value !is NumberLiteral)
-                    diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects integer literal")
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Field '${cond.field}' expects integer literal"
+                    )
             }
+
             FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
-                diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Field '${cond.field}' expects list or string literal")
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' expects list or string literal"
+                )
+
             else -> {}
         }
     }
 
-    private fun validateActions(actions: List<ActionAst>, schema: ActionSchema, diagnostics: MutableList<ValidationDiagnostic>) {
+    private fun validateActions(
+        actions: List<ActionAst>,
+        schema: ActionSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
         for (a in actions) {
             val def = schema.actions[a.name]
             if (def == null) {
@@ -114,7 +192,10 @@ object Validator {
                 continue
             }
             if (def.argTypes.size != a.arguments.size) {
-                diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Action '${a.name}' expects ${def.argTypes.size} arguments but got ${a.arguments.size}")
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Action '${a.name}' expects ${def.argTypes.size} arguments but got ${a.arguments.size}"
+                )
                 continue
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
@@ -124,7 +205,10 @@ object Validator {
                     ruleengine.core.domain.ActionArgType.INTEGER -> lit is NumberLiteral
                     ruleengine.core.domain.ActionArgType.DECIMAL -> lit is NumberLiteral
                 }
-                if (!ok) diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Action '${a.name}' argument ${idx} expects ${expectedType}")
+                if (!ok) diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Action '${a.name}' argument ${idx} expects ${expectedType}"
+                )
             }
         }
     }
@@ -134,7 +218,9 @@ object Validator {
         var bestDist = Int.MAX_VALUE
         for (c in candidates) {
             val d = levenshtein(input.lowercase(), c.lowercase())
-            if (d < bestDist) { bestDist = d; best = c }
+            if (d < bestDist) {
+                bestDist = d; best = c
+            }
         }
         return if (bestDist <= maxDistance) best else null
     }

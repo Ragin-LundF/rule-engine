@@ -1,20 +1,38 @@
 package ruleengine.dsl.parser
 
+import ruleengine.dsl.ast.ActionAst
+import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ListLiteral
+import ruleengine.dsl.ast.LiteralAst
+import ruleengine.dsl.ast.NotAst
+import ruleengine.dsl.ast.NumberLiteral
+import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
-import ruleengine.dsl.ast.*
-import ruleengine.dsl.diagnostics.ParseException
 
 class Parser(private val input: String) {
     private val tokens: List<Token> = Lexer(input).tokenize()
     private var pos = 0
 
     private fun current(): Token = tokens.getOrElse(pos) { tokens.last() }
-    private fun advance() { if (pos < tokens.size) pos++ }
+    private fun advance() {
+        if (pos < tokens.size) pos++
+    }
+
     private fun expect(type: TokenType): Token {
         val t = current()
-        if (t.type != type) throw ParseException(line = t.line, column = t.col, messageText = "Expected $type but found ${t.type} (${t.text})")
+        if (t.type != type) throw ParseException(
+            line = t.line,
+            column = t.col,
+            messageText = "Expected $type but found ${t.type} (${t.text})"
+        )
         advance()
         return t
     }
@@ -29,7 +47,11 @@ class Parser(private val input: String) {
 
     fun parseRule(): RuleAst {
         val t = current()
-        if (t.type != TokenType.IDENT || t.text != "rule") throw ParseException(line = t.line, column = t.col, messageText = "Expected 'rule' declaration")
+        if (t.type != TokenType.IDENT || t.text != "rule") throw ParseException(
+            line = t.line,
+            column = t.col,
+            messageText = "Expected 'rule' declaration"
+        )
         advance()
 
         val idTok = expect(TokenType.STRING)
@@ -40,18 +62,32 @@ class Parser(private val input: String) {
         // optional description ignored for now
         // parse when
         val whenTok = current()
-        if (whenTok.type != TokenType.IDENT || whenTok.text != "when") throw ParseException(line = whenTok.line, column = whenTok.col, messageText = "Expected 'when' block")
+        if (whenTok.type != TokenType.IDENT || whenTok.text != "when") throw ParseException(
+            line = whenTok.line,
+            column = whenTok.col,
+            messageText = "Expected 'when' block"
+        )
         advance()
         val condition = parseExpression()
 
         val thenTok = current()
-        if (thenTok.type != TokenType.IDENT || thenTok.text != "then") throw ParseException(line = thenTok.line, column = thenTok.col, messageText = "Expected 'then' block")
+        if (thenTok.type != TokenType.IDENT || thenTok.text != "then") throw ParseException(
+            line = thenTok.line,
+            column = thenTok.col,
+            messageText = "Expected 'then' block"
+        )
         advance()
         val actions = mutableListOf<ActionAst>()
         while (true) {
             val c = current()
-            if (c.type == TokenType.RBRACE || c.type == TokenType.EOF) { break }
-            if (c.type != TokenType.IDENT) throw ParseException(line = c.line, column = c.col, messageText = "Expected action identifier but found ${c.text}")
+            if (c.type == TokenType.RBRACE || c.type == TokenType.EOF) {
+                break
+            }
+            if (c.type != TokenType.IDENT) throw ParseException(
+                line = c.line,
+                column = c.col,
+                messageText = "Expected action identifier but found ${c.text}"
+            )
             val name = c.text; advance()
             // parse single argument as string or number or list
             val arg = parseLiteral()
@@ -68,7 +104,7 @@ class Parser(private val input: String) {
 
     private fun parseOr(): ExpressionAst {
         var left = parseAnd()
-        val parts = mutableListOf<ExpressionAst>(left)
+        val parts = mutableListOf(left)
         while (current().type == TokenType.IDENT && current().text == "or") {
             advance()
             parts += parseAnd()
@@ -77,8 +113,8 @@ class Parser(private val input: String) {
     }
 
     private fun parseAnd(): ExpressionAst {
-        var left = parseUnary()
-        val parts = mutableListOf<ExpressionAst>(left)
+        val left = parseUnary()
+        val parts = mutableListOf(left)
         while (current().type == TokenType.IDENT && current().text == "and") {
             advance()
             parts += parseUnary()
@@ -104,19 +140,35 @@ class Parser(private val input: String) {
             return e
         }
         // condition: IDENT OP LITERAL [ignoreCase]
-        if (c.type != TokenType.IDENT) throw ParseException(line = c.line, column = c.col, messageText = "Expected field identifier in condition")
+        if (c.type != TokenType.IDENT) throw ParseException(
+            line = c.line,
+            column = c.col,
+            messageText = "Expected field identifier in condition"
+        )
         val field = c.text; advance()
         val opTok = current()
-        if (opTok.type != TokenType.IDENT) throw ParseException(line = opTok.line, column = opTok.col, messageText = "Expected operator")
+        if (opTok.type != TokenType.IDENT) throw ParseException(
+            line = opTok.line,
+            column = opTok.col,
+            messageText = "Expected operator"
+        )
         val op = opTok.text; advance()
 
         // `between` consumes two number literals rather than one
         val value: LiteralAst = if (op.lowercase() == "between") {
             val lowTok = current()
-            if (lowTok.type != TokenType.NUMBER) throw ParseException(line = lowTok.line, column = lowTok.col, messageText = "Expected lower bound number literal for 'between'")
+            if (lowTok.type != TokenType.NUMBER) throw ParseException(
+                line = lowTok.line,
+                column = lowTok.col,
+                messageText = "Expected lower bound number literal for 'between'"
+            )
             advance()
             val highTok = current()
-            if (highTok.type != TokenType.NUMBER) throw ParseException(line = highTok.line, column = highTok.col, messageText = "Expected upper bound number literal for 'between'")
+            if (highTok.type != TokenType.NUMBER) throw ParseException(
+                line = highTok.line,
+                column = highTok.col,
+                messageText = "Expected upper bound number literal for 'between'"
+            )
             advance()
             BetweenLiteral(low = lowTok.text, high = highTok.text)
         } else {
@@ -134,8 +186,14 @@ class Parser(private val input: String) {
     private fun parseLiteral(): LiteralAst {
         val c = current()
         return when (c.type) {
-            TokenType.STRING -> { advance(); StringLiteral(c.text) }
-            TokenType.NUMBER -> { advance(); NumberLiteral(c.text) }
+            TokenType.STRING -> {
+                advance(); StringLiteral(c.text)
+            }
+
+            TokenType.NUMBER -> {
+                advance(); NumberLiteral(c.text)
+            }
+
             TokenType.LBRACKET -> {
                 advance()
                 val items = mutableListOf<LiteralAst>()
@@ -146,7 +204,12 @@ class Parser(private val input: String) {
                 expect(TokenType.RBRACKET)
                 ListLiteral(items)
             }
-            else -> throw ParseException(line = c.line, column = c.col, messageText = "Expected literal (string/number/list)")
+
+            else -> throw ParseException(
+                line = c.line,
+                column = c.col,
+                messageText = "Expected literal (string/number/list)"
+            )
         }
     }
 }

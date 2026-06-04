@@ -1,14 +1,14 @@
 package ruleengine.cli
 
-import ruleengine.schema.FieldSchemaLoader
-import ruleengine.dsl.parser.Parser
-import ruleengine.compiler.Validator
 import ruleengine.compiler.Compiler
+import ruleengine.compiler.Validator
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
-import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
+import ruleengine.evaluator.context.RuleContext
 import ruleengine.jackson.JacksonUtil
+import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -31,7 +31,8 @@ object EvaluateCli {
             var i = 0
             while (i < args.size) {
                 val k = args[i]
-                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) { args[i + 1]; } else null
+                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
+                    args[i + 1]; } else null
                 kv[k] = v
                 i += if (v != null) 2 else 1
             }
@@ -50,7 +51,9 @@ object EvaluateCli {
                 return 2
             }
 
-            val ruleFiles = Files.walk(rulesDir).filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }.toList()
+            val ruleFiles = Files.walk(rulesDir).filter {
+                Files.isRegularFile(it) && it.toString().endsWith(".rule")
+            }.toList()
             val asts = ruleFiles.flatMap { f -> Parser(Files.readString(f)).parseRules() }
 
             val validation = Validator.validate(asts = asts, schema = schema)
@@ -64,21 +67,30 @@ object EvaluateCli {
 
             val mapper = JacksonUtil.jsonMapper
             val inputJson = Files.readString(Path.of(inputFile))
+
             @Suppress("UNCHECKED_CAST")
             val inputMap: Map<String, Any?> = mapper.readValue(inputJson, Map::class.java) as Map<String, Any?>
 
-            val ctx = RuleContext.of(*inputMap.entries.map { it.key to it.value }.toTypedArray())
+            val ctx = RuleContext.of(*inputMap.entries.map {
+                it.key to it.value
+            }.toTypedArray())
             val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
             val result = engine.evaluate(prepared = prepared, includeTrace = trace)
 
             val outMap = mutableMapOf<String, Any?>()
-            outMap["matches"] = result.matches.map { m -> mapOf("ruleId" to m.ruleId, "actions" to m.actions.map { a -> mapOf("name" to a.name, "arguments" to a.arguments) }) }
+            outMap["matches"] = result.matches.map { m ->
+                mapOf(
+                    "ruleId" to m.ruleId,
+                    "actions" to m.actions.map { a -> mapOf("name" to a.name, "arguments" to a.arguments) })
+            }
             if (trace && result.trace != null) {
                 // result.trace is DecisionTree
                 outMap["decisionTree"] = result.trace
             }
 
-            if (format == "pretty-json") out.append(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(outMap)) else out.append(mapper.writeValueAsString(outMap))
+            if (format == "pretty-json") out.append(
+                mapper.writerWithDefaultPrettyPrinter().writeValueAsString(outMap)
+            ) else out.append(mapper.writeValueAsString(outMap))
             out.append("\n")
             return 0
         } catch (ex: Exception) {
@@ -88,7 +100,10 @@ object EvaluateCli {
     }
 
     private fun usage(out: Appendable): Int {
-        out.append("Usage: --schema <schema.yaml> --rules <rules-dir> --input-file <input.json> [--trace] [--format json|pretty-json]\n")
+        out.append("Usage: --schema <schema.yaml> ")
+            .append("--rules <rules-dir> ")
+            .append("--input-file <input.json> ")
+            .append("[--trace] [--format json|pretty-json]\n")
         return 2
     }
 }

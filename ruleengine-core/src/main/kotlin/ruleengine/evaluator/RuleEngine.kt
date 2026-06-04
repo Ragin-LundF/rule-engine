@@ -1,12 +1,14 @@
 package ruleengine.evaluator
 
 import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.RuleMatch
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.core.domain.FieldSchema
+import ruleengine.evaluator.trace.DecisionTree
+import ruleengine.evaluator.trace.NodeMeta
+import ruleengine.evaluator.trace.NodeType
 import ruleengine.evaluator.trace.NoopTraceCollector
 import ruleengine.evaluator.trace.RecordingTraceCollector
-import ruleengine.evaluator.trace.DecisionTree
 
 class RuleEngine(
     private val compiledRules: List<CompiledRule>,
@@ -19,8 +21,13 @@ class RuleEngine(
 
         for (r in compiledRules) {
             // enter rule node with rule id
-            collector.enter(ruleengine.evaluator.trace.NodeMeta(type = ruleengine.evaluator.trace.NodeType.RULE, ruleId = r.id))
-            val ok = r.expression.evaluate(prepared, collector)
+            collector.enter(
+                NodeMeta(
+                    type = NodeType.RULE,
+                    ruleId = r.id
+                )
+            )
+            val ok = r.expression.evaluate(context = prepared, trace = collector)
             collector.exit(ok)
             if (ok) {
                 matches += RuleMatch(ruleId = r.id, actions = r.actions)
@@ -28,7 +35,11 @@ class RuleEngine(
             }
         }
 
-        val tree = if (includeTrace) DecisionTree(root = collector.root(), matchedRules = matchedRuleIds) else null
+        val tree = if (includeTrace) {
+            DecisionTree(root = collector.root(), matchedRules = matchedRuleIds)
+        } else {
+            null
+        }
         return EvaluationResult(matches = matches, trace = tree)
     }
 }

@@ -54,7 +54,13 @@ class RecordingTraceCollector : TraceCollector {
     private var rootRef: MutableNode? = null
 
     override fun enter(meta: NodeMeta) {
-        val node = MutableNode(id = "n${++counter}", type = meta.type, field = meta.field, operator = meta.operator, expected = meta.expected)
+        val node = MutableNode(
+            id = "n${++counter}",
+            type = meta.type,
+            field = meta.field,
+            operator = meta.operator,
+            expected = meta.expected
+        )
         node.startNs = System.nanoTime()
         node.ruleId = meta.ruleId
         if (stack.isEmpty()) rootRef = node

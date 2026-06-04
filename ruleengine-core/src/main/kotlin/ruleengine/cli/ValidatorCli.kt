@@ -1,9 +1,9 @@
 package ruleengine.cli
 
-import ruleengine.schema.FieldSchemaLoader
-import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
+import ruleengine.dsl.parser.Parser
 import ruleengine.jackson.JacksonUtil
+import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -25,7 +25,8 @@ object ValidatorCli {
             var i = 0
             while (i < args.size) {
                 val k = args[i]
-                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) { args[i + 1]; } else null
+                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
+                    args[i + 1]; } else null
                 kv[k] = v
                 i += if (v != null) 2 else 1
             }
@@ -42,7 +43,8 @@ object ValidatorCli {
                 return 2
             }
 
-            val ruleFiles = Files.walk(rulesDir).filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }.toList()
+            val ruleFiles =
+                Files.walk(rulesDir).filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }.toList()
             val asts = ruleFiles.flatMap { f -> Parser(Files.readString(f)).parseRules() }
 
             val validation = Validator.validate(asts = asts, schema = schema)
@@ -53,7 +55,11 @@ object ValidatorCli {
                 m["diagnostics"] = validation.diagnostics
                 m["ok"] = validation.isValid
                 m["exitCode"] = if (validation.isValid) 0 else 1
-                if (validation.isValid) out.append(mapper.writeValueAsString(m)) else out.append(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(m))
+                if (validation.isValid) {
+                    out.append(mapper.writeValueAsString(m))
+                } else {
+                    out.append(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(m))
+                }
                 out.append("\n")
             } else {
                 if (!validation.isValid) {
