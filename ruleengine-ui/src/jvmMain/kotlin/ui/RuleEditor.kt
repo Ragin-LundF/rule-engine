@@ -15,6 +15,9 @@ import kotlinx.coroutines.launch
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.schema.FieldSchemaLoader
+import ruleengine.schema.ActionSchemaLoader
+import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.ActionDefinition
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
@@ -29,6 +32,8 @@ actual fun RuleEditor() {
     val scope = rememberCoroutineScope()
 
     var parsedSchema by remember { mutableStateOf<FieldSchema?>(null) }
+    var actionSchemaText by remember { mutableStateOf("") }
+    var parsedActionSchema by remember { mutableStateOf<ActionSchema?>(null) }
 
     Column(modifier = Modifier.padding(12.dp).fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -57,6 +62,26 @@ actual fun RuleEditor() {
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
+                    Text("Actions", style = MaterialTheme.typography.subtitle1)
+                    OutlinedTextField(value = actionSchemaText, onValueChange = {
+                        actionSchemaText = it
+                        parsedActionSchema = try { ActionSchemaLoader.loadFromString(it) } catch (_: Exception) { null }
+                    }, modifier = Modifier.fillMaxWidth().height(120.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
+                            scope.launch {
+                                val content = pickSchemaFile()
+                                if (content != null) {
+                                    actionSchemaText = content
+                                    parsedActionSchema = try { ActionSchemaLoader.loadFromString(content) } catch (_: Exception) { null }
+                                    status = "Loaded action schema"
+                                } else status = "Action schema load canceled"
+                            }
+                        }) { Text("Load Actions") }
+                        Button(onClick = { actionSchemaText = ""; parsedActionSchema = null; status = "Cleared actions" }) { Text("Clear") }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text("Fields", style = MaterialTheme.typography.subtitle1)
                     Divider()
                     parsedSchema?.let { s ->
@@ -66,6 +91,27 @@ actual fun RuleEditor() {
                             }
                         }
                     } ?: Text("No schema parsed", style = MaterialTheme.typography.body2)
+
+                    parsedActionSchema?.let { aschema ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Available Actions", style = MaterialTheme.typography.subtitle1)
+                        LazyColumn(modifier = Modifier.fillMaxHeight(0.25f)) {
+                            items(aschema.actions.entries.toList()) { (name, def) ->
+                                Row(modifier = Modifier.fillMaxWidth().clickable {
+                                    // insert action template: name + placeholder literal
+                                    val placeholder = when (def.argTypes.firstOrNull()) {
+                                        ruleengine.core.domain.ActionArgType.INTEGER -> " 0"
+                                        ruleengine.core.domain.ActionArgType.DECIMAL -> " 0"
+                                        else -> " \"arg\""
+                                    }
+                                    ruleText = ruleText + "${name} ${placeholder}"
+                                }.padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(name, modifier = Modifier.weight(1f))
+                                    Text(def.argTypes.joinToString(", ") { it.name.lowercase() }, style = MaterialTheme.typography.caption)
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -106,7 +152,7 @@ actual fun RuleEditor() {
                                     if (ruleText.isBlank()) { status = "No rule to validate"; return@launch }
 
                                     val asts = Parser(ruleText).parseRules()
-                                    val result = Validator.validate(asts = asts, schema = parsedSchema!!)
+                                    val result = Validator.validate(asts = asts, schema = parsedSchema!!, actions = parsedActionSchema)
                                     if (result.isValid) {
                                         status = "Validation OK"
                                         diagnosticsText = "OK"
