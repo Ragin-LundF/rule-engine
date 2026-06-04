@@ -6,6 +6,7 @@ import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.system.exitProcess
 
 /**
  * CLI to validate rules against a schema.
@@ -16,40 +17,39 @@ object ValidatorCli {
     @JvmStatic
     fun main(args: Array<String>) {
         val exit = runCli(args)
-        kotlin.system.exitProcess(exit)
+        exitProcess(status = exit)
     }
 
+    @Suppress("MagicNumber")
     fun runCli(args: Array<String>, out: Appendable = System.out): Int {
-        try {
-            val kv = mutableMapOf<String, String?>()
-            var i = 0
-            while (i < args.size) {
-                val k = args[i]
-                val v = if (i + 1 < args.size && !args[i + 1].startsWith("--")) {
-                    args[i + 1]
-                } else {
-                    null
-                }
+        var exitCode = 0
 
-                kv[k] = v
-                i += if (v != null) 2 else 1
+        runCatching {
+            val argsMap = parseArgs(argsArray = args)
+
+            val schemaPath = argsMap["--schema"]
+            val rulesPath = argsMap["--rules"]
+            if (schemaPath == null || rulesPath == null) {
+                exitCode = usage(out)
+                return@runCatching
             }
 
-            val schemaPath = kv["--schema"] ?: return usage(out)
-            val rulesPath = kv["--rules"] ?: return usage(out)
-            val format = kv["--format"]?.lowercase()
+            val format = argsMap["--format"]?.lowercase()
 
             val schema = FieldSchemaLoader.load(Path.of(schemaPath))
 
             val rulesDir = Path.of(rulesPath)
             if (!Files.exists(rulesDir) || !Files.isDirectory(rulesDir)) {
                 out.append("Rules path is not a directory: $rulesPath\n")
-                return 2
+                exitCode = 2
+                return@runCatching
             }
 
-            val ruleFiles =
-                Files.walk(rulesDir).filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }.toList()
-            val asts = ruleFiles.flatMap { f -> Parser(Files.readString(f)).parseRules() }
+            val ruleFiles = Files.walk(rulesDir)
+                .filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }
+                .toList()
+
+            val asts = ruleFiles.flatMap { file -> Parser(input = Files.readString(file)).parseRules() }
 
             val validation = Validator.validate(asts = asts, schema = schema)
 
@@ -68,16 +68,37 @@ object ValidatorCli {
             } else {
                 if (!validation.isValid) {
                     out.append("Validation failed: ${validation.diagnostics}\n")
-                    return 1
+                    exitCode = 1
+                    return@runCatching Unit
                 }
                 out.append("Validation OK\n")
             }
 
-            return if (validation.isValid) 0 else 1
-        } catch (ex: Exception) {
+            exitCode = if (validation.isValid) 0 else 1
+        }.onFailure { ex ->
             out.append("Error: ${ex.message}\n")
-            return 3
+            exitCode = 3
         }
+
+        return exitCode
+    }
+
+    private fun parseArgs(argsArray: Array<String>): Map<String, String?> {
+        val result = mutableMapOf<String, String?>()
+        var index = 0
+        while (index < argsArray.size) {
+            val key = argsArray[index]
+            val value = if (index + 1 < argsArray.size && !argsArray[index + 1].startsWith("--")) {
+                argsArray[index + 1]
+            } else {
+                null
+            }
+
+            result[key] = value
+            index += if (value != null) 2 else 1
+        }
+
+        return result
     }
 
     private fun usage(out: Appendable): Int {

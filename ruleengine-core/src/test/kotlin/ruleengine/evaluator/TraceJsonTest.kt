@@ -1,24 +1,26 @@
 package ruleengine.evaluator
 
-import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.assertNotNull
-import ruleengine.jackson.JacksonUtil
-import tools.jackson.databind.JsonNode
-import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.parser.Parser
+import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import ruleengine.jackson.JacksonUtil
+import tools.jackson.databind.JsonNode
+import kotlin.test.Test
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class TraceJsonTest {
     @Test
+    @Suppress("LongMethod")
     fun `decision tree serializes to JSON and contains expected fields`() {
         val txt = """
             rule "rent-payment" {
@@ -31,38 +33,56 @@ class TraceJsonTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "transaction-v1",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(FieldId("purpose"), FieldType.TEXT, normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")), operators = setOf(OperatorId("contains"), OperatorId("equals"))),
-                FieldId("amount") to FieldDefinition(FieldId("amount"), FieldType.DECIMAL, normalizers = emptyList(), operators = setOf(OperatorId("gte"), OperatorId("gt"), OperatorId("equals")))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
+                    operators = setOf(OperatorId(value = "contains"), OperatorId(value = "equals"))
+                ),
+                FieldId(value = "amount") to FieldDefinition(
+                    id = FieldId(value = "amount"),
+                    type = FieldType.DECIMAL,
+                    normalizers = emptyList(),
+                    operators = setOf(
+                        OperatorId(value = "gte"),
+                        OperatorId(value = "gt"),
+                        OperatorId(value = "equals")
+                    )
+                )
             )
         )
 
-        val validation = Validator.validate(asts, schema)
-        assertTrue(validation.isValid)
+        val validation = Validator.validate(asts = asts, schema = schema)
+        assertTrue(actual = validation.isValid)
 
-        val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
+        val compiled = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
         val engine = RuleEngine(compiledRules = compiled, schema = schema)
 
         val ctx = RuleContext.of("purpose" to "Miete Januar", "amount" to "850")
-        val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)
+        val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
         val result = engine.evaluate(prepared = prepared, includeTrace = true)
 
-        assertNotNull(result.trace)
+        assertNotNull(actual = result.trace)
         val mapper = JacksonUtil.jsonMapper
         val json = mapper.writeValueAsString(result.trace)
         val node = mapper.readTree(json)
 
         // matchedRules should contain the rule id
         val matched: JsonNode = node.get("matchedRules")
-        assertNotNull(matched)
-        assertTrue(matched.isArray())
+        assertNotNull(actual = matched)
+        assertTrue(actual = matched.isArray)
         var found = false
         for (i in 0 until matched.size()) {
             val el = matched.get(i)
-            if (el.asText() == "rent-payment") {
+            if (el.asString() == "rent-payment") {
                 found = true
                 break
             }
@@ -71,9 +91,9 @@ class TraceJsonTest {
 
         // root should exist and have children (AND node has children)
         val root = node.get("root")
-        assertNotNull(root)
+        assertNotNull(actual = root)
         val children = root.get("children")
-        assertNotNull(children)
+        assertNotNull(actual = children)
     }
 }
 

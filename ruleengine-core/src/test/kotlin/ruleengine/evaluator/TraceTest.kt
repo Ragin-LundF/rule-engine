@@ -1,20 +1,20 @@
 package ruleengine.evaluator
 
-import kotlin.test.Test
-import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
-import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.trace.DecisionTree
+import kotlin.test.Test
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class TraceTest {
     @Test
@@ -30,29 +30,47 @@ class TraceTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "transaction-v1",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(FieldId("purpose"), FieldType.TEXT, normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")), operators = setOf(OperatorId("contains"), OperatorId("equals"))),
-                FieldId("amount") to FieldDefinition(FieldId("amount"), FieldType.DECIMAL, normalizers = emptyList(), operators = setOf(OperatorId("gte"), OperatorId("gt"), OperatorId("equals")))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
+                    operators = setOf(OperatorId(value = "contains"), OperatorId(value = "equals"))
+                ),
+                FieldId(value = "amount") to FieldDefinition(
+                    id = FieldId(value = "amount"),
+                    type = FieldType.DECIMAL,
+                    normalizers = emptyList(),
+                    operators = setOf(
+                        OperatorId(value = "gte"),
+                        OperatorId(value = "gt"),
+                        OperatorId(value = "equals")
+                    )
+                )
             )
         )
 
         val validation = Validator.validate(asts, schema)
-        assertTrue(validation.isValid)
+        assertTrue(actual = validation.isValid)
 
-        val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
+        val compiled = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
         val engine = RuleEngine(compiledRules = compiled, schema = schema)
 
         val ctx = RuleContext.of("purpose" to "Miete Januar", "amount" to "850")
         val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)
         val result = engine.evaluate(prepared = prepared, includeTrace = true)
 
-        assertNotNull(result.trace)
+        assertNotNull(actual = result.trace)
         val tree = result.trace as? DecisionTree
-        assertNotNull(tree)
-        assertTrue(tree?.matchedRules?.contains("rent-payment") == true)
+        assertNotNull(actual = tree)
+        assertTrue(actual = tree?.matchedRules?.contains("rent-payment") == true)
     }
 }
 

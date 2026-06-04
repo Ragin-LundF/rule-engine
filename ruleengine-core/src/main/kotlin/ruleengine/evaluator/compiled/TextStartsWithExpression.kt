@@ -14,7 +14,7 @@ class TextStartsWithExpression(
     override val cost: EvaluationCost = EvaluationCost.CHEAP
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
-            NodeMeta(
+            meta = NodeMeta(
                 type = NodeType.CONDITION, field = field.value,
                 operator = if (ignoreCase) "startsWithIgnoreCase" else "startsWith", expected = expectedNormalized
             )
@@ -22,15 +22,17 @@ class TextStartsWithExpression(
 
         val v = context.get(field) as? ruleengine.evaluator.context.PreparedText
         if (v == null) {
-            trace?.exit(false)
+            trace?.exit(result = false)
             return false
         }
 
-        val res = if (ignoreCase) v.normalized.startsWith(expectedNormalized, ignoreCase = true) else v.normalized.startsWith(
-            expectedNormalized
-        )
+        val res = if (ignoreCase) {
+            v.normalized.startsWith(prefix = expectedNormalized, ignoreCase = true)
+        } else {
+            v.normalized.startsWith(prefix = expectedNormalized)
+        }
 
-        trace?.exit(res)
+        trace?.exit(result = res)
         return res
     }
 }

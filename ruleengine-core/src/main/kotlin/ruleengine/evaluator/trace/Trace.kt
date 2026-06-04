@@ -68,6 +68,7 @@ class RecordingTraceCollector : TraceCollector {
         stack.addLast(node)
     }
 
+    @Suppress("MagicNumber")
     override fun exit(result: Boolean) {
         val node = stack.removeLastOrNull() ?: return
         node.result = result
@@ -94,6 +95,7 @@ class RecordingTraceCollector : TraceCollector {
     }
 }
 
+@Suppress("EmptyFunctionBlock")
 class NoopTraceCollector : TraceCollector {
     override fun enter(meta: NodeMeta) {}
     override fun exit(result: Boolean) {}
