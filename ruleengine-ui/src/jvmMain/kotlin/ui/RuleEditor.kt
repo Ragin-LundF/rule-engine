@@ -205,7 +205,7 @@ actual fun RuleEditor() {
                     .border(1.dp, BorderColor, RoundedCornerShape(8.dp))
                     .padding(14.dp),
             ) {
-                // Schema header
+                // Panel title (fixed, not scrolling)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Schema", style = MaterialTheme.typography.h6, color = TextPrimary)
                     Spacer(Modifier.weight(1f))
@@ -213,70 +213,75 @@ actual fun RuleEditor() {
                 }
                 PanelDivider()
 
-                // Field Schema YAML
-                SectionHeader("Field Schema YAML")
-                OutlinedTextField(
-                    value = schemaText,
-                    onValueChange = {
-                        schemaText = it
-                        parsedSchema = try { FieldSchemaLoader.loadFromString(it, "ui-schema") } catch (_: Exception) { null }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(120.dp),
-                    textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
-                    colors = codeFieldColors(),
-                    placeholder = { Text("# Paste schema YAML here…", style = MaterialTheme.typography.caption) },
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AppButton("Load") {
-                        scope.launch {
-                            val c = pickSchemaFile()
-                            if (c != null) {
-                                schemaText = c
-                                parsedSchema = try { FieldSchemaLoader.loadFromString(c, "ui-schema") } catch (_: Exception) { null }
-                                setStatus("Schema loaded", StatusKind.SUCCESS)
+                // All sections in a single LazyColumn so every section gets space
+                LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+
+                    // ── Field Schema YAML ─────────────────────────────────────
+                    item {
+                        SectionHeader("Field Schema YAML")
+                        OutlinedTextField(
+                            value = schemaText,
+                            onValueChange = {
+                                schemaText = it
+                                parsedSchema = try { FieldSchemaLoader.loadFromString(it, "ui-schema") } catch (_: Exception) { null }
+                            },
+                            modifier  = Modifier.fillMaxWidth().height(120.dp),
+                            textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
+                            colors    = codeFieldColors(),
+                            placeholder = { Text("# Paste schema YAML here…", style = MaterialTheme.typography.caption) },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AppButton("Load") {
+                                scope.launch {
+                                    val c = pickSchemaFile()
+                                    if (c != null) {
+                                        schemaText   = c
+                                        parsedSchema = try { FieldSchemaLoader.loadFromString(c, "ui-schema") } catch (_: Exception) { null }
+                                        setStatus("Schema loaded", StatusKind.SUCCESS)
+                                    }
+                                }
                             }
+                            AppButton("Clear", danger = true) { schemaText = ""; parsedSchema = null; setStatus("Schema cleared", StatusKind.IDLE) }
                         }
+                        PanelDivider()
                     }
-                    AppButton("Clear", danger = true) { schemaText = ""; parsedSchema = null; setStatus("Schema cleared", StatusKind.IDLE) }
-                }
 
-                PanelDivider()
-
-                // Action Schema YAML
-                SectionHeader("Action Schema YAML")
-                OutlinedTextField(
-                    value = actionSchemaText,
-                    onValueChange = {
-                        actionSchemaText = it
-                        parsedActionSchema = try { ActionSchemaLoader.loadFromString(it) } catch (_: Exception) { null }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(90.dp),
-                    textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
-                    colors = codeFieldColors(),
-                    placeholder = { Text("# Paste actions YAML here…", style = MaterialTheme.typography.caption) },
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AppButton("Load") {
-                        scope.launch {
-                            val c = pickSchemaFile()
-                            if (c != null) {
-                                actionSchemaText = c
-                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
-                                setStatus("Actions loaded", StatusKind.SUCCESS)
+                    // ── Action Schema YAML ────────────────────────────────────
+                    item {
+                        SectionHeader("Action Schema YAML")
+                        OutlinedTextField(
+                            value = actionSchemaText,
+                            onValueChange = {
+                                actionSchemaText   = it
+                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(it) } catch (_: Exception) { null }
+                            },
+                            modifier  = Modifier.fillMaxWidth().height(90.dp),
+                            textStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = TextPrimary),
+                            colors    = codeFieldColors(),
+                            placeholder = { Text("# Paste actions YAML here…", style = MaterialTheme.typography.caption) },
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            AppButton("Load") {
+                                scope.launch {
+                                    val c = pickSchemaFile()
+                                    if (c != null) {
+                                        actionSchemaText   = c
+                                        parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
+                                        setStatus("Actions loaded", StatusKind.SUCCESS)
+                                    }
+                                }
                             }
+                            AppButton("Clear", danger = true) { actionSchemaText = ""; parsedActionSchema = null; setStatus("Actions cleared", StatusKind.IDLE) }
                         }
+                        PanelDivider()
                     }
-                    AppButton("Clear", danger = true) { actionSchemaText = ""; parsedActionSchema = null; setStatus("Actions cleared", StatusKind.IDLE) }
-                }
 
-                PanelDivider()
+                    // ── Fields list ───────────────────────────────────────────
+                    item { SectionHeader("Fields") }
 
-                // Fields list
-                SectionHeader("Fields")
-                if (parsedSchema != null) {
-                    LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (parsedSchema != null) {
                         items(parsedSchema!!.fields.entries.toList()) { (fid, def) ->
                             FieldItem(fid, def) { ins ->
                                 val pos     = ruleValue.selection.start
@@ -284,25 +289,25 @@ actual fun RuleEditor() {
                                 ruleValue   = TextFieldValue(newText, selection = TextRange(pos + ins.length))
                             }
                         }
+                    } else {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Bg)
+                                    .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("Load a schema to see fields", style = MaterialTheme.typography.body2)
+                            }
+                        }
                     }
-                } else {
-                    Box(
-                        modifier = Modifier.weight(1f).fillMaxWidth()
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Bg)
-                            .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("Load a schema to see fields", style = MaterialTheme.typography.body2)
-                    }
-                }
 
-                // Actions list
-                parsedActionSchema?.let { aschema ->
-                    PanelDivider()
-                    SectionHeader("Available Actions")
-                    LazyColumn(modifier = Modifier.heightIn(max = 150.dp).fillMaxWidth()) {
+                    // ── Available Actions ─────────────────────────────────────
+                    parsedActionSchema?.let { aschema ->
+                        item { PanelDivider(); SectionHeader("Available Actions") }
                         items(aschema.actions.entries.toList()) { (name, def) ->
                             Row(
                                 modifier = Modifier
@@ -327,13 +332,10 @@ actual fun RuleEditor() {
                             }
                         }
                     }
-                }
 
-                // Manifest entries
-                parsedManifest?.let { manifest ->
-                    PanelDivider()
-                    SectionHeader("Manifest Entries")
-                    LazyColumn(modifier = Modifier.heightIn(max = 130.dp).fillMaxWidth()) {
+                    // ── Manifest Entries ──────────────────────────────────────
+                    parsedManifest?.let { manifest ->
+                        item { PanelDivider(); SectionHeader("Manifest Entries") }
                         items(manifest.entries) { entry ->
                             val sel = selectedManifestEntry == entry.id
                             Row(
@@ -343,37 +345,71 @@ actual fun RuleEditor() {
                                     .background(if (sel) BgElevated else Color.Transparent)
                                     .clickable {
                                         selectedManifestEntry = entry.id
-                                        manifestBaseDir?.let { base ->
-                                            entry.schema?.let { sp ->
-                                                runCatching {
-                                                    val p = Path.of(base, sp)
-                                                    val c = Files.readString(p)
-                                                    schemaText   = c
-                                                    parsedSchema = try { FieldSchemaLoader.loadFromString(c, p.fileName.toString()) } catch (_: Exception) { null }
-                                                }
-                                            }
-                                            entry.actions?.let { ap ->
-                                                runCatching {
-                                                    val p = Path.of(base, ap)
-                                                    val c = Files.readString(p)
-                                                    actionSchemaText   = c
-                                                    parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
-                                                }
+                                        val base = manifestBaseDir ?: return@clickable
+                                        var loadedRules = 0
+
+                                        // Load schema
+                                        entry.schema?.let { sp ->
+                                            runCatching {
+                                                val p = Path.of(base, sp)
+                                                val c = Files.readString(p)
+                                                schemaText   = c
+                                                parsedSchema = try { FieldSchemaLoader.loadFromString(c, p.fileName.toString()) } catch (_: Exception) { null }
                                             }
                                         }
+                                        // Load actions
+                                        entry.actions?.let { ap ->
+                                            runCatching {
+                                                val p = Path.of(base, ap)
+                                                val c = Files.readString(p)
+                                                actionSchemaText   = c
+                                                parsedActionSchema = try { ActionSchemaLoader.loadFromString(c) } catch (_: Exception) { null }
+                                            }
+                                        }
+                                        // Load and concatenate all rule files
+                                        if (entry.rules.isNotEmpty()) {
+                                            val combined = buildString {
+                                                entry.rules.forEachIndexed { idx, rp ->
+                                                    runCatching {
+                                                        val p = Path.of(base, rp)
+                                                        val c = Files.readString(p)
+                                                        if (idx > 0) append("\n\n")
+                                                        append("# --- ${p.fileName} ---\n")
+                                                        append(c)
+                                                        loadedRules++
+                                                    }
+                                                }
+                                            }
+                                            if (combined.isNotBlank()) {
+                                                ruleValue = TextFieldValue(combined)
+                                            }
+                                        }
+                                        setStatus(
+                                            "Loaded entry '${entry.id}'" +
+                                            (if (entry.schema != null) ", schema" else "") +
+                                            (if (entry.actions != null) ", actions" else "") +
+                                            (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
+                                            StatusKind.SUCCESS,
+                                        )
                                     }
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    .padding(horizontal = 8.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Box(Modifier.size(6.dp).background(if (sel) PrimaryBlue else Color.Transparent, CircleShape))
                                 Spacer(Modifier.width(8.dp))
-                                Text(entry.id, modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.body1,
-                                    color = if (sel) TextPrimary else TextSecondary)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(entry.id, style = MaterialTheme.typography.body1, color = if (sel) TextPrimary else TextSecondary)
+                                    if (entry.rules.isNotEmpty()) {
+                                        Text("${entry.rules.size} rule file(s)", style = MaterialTheme.typography.caption)
+                                    }
+                                }
                                 Chip("${entry.rules.size} rules")
                             }
                         }
                     }
+
+                    // bottom padding
+                    item { Spacer(Modifier.height(8.dp)) }
                 }
             }
 
