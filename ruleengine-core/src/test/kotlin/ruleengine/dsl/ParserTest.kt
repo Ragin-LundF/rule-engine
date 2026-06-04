@@ -19,7 +19,7 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val parser = Parser(txt)
+        val parser = Parser(input = txt)
         val rules = parser.parseRules()
         assertEquals(expected = 1, actual = rules.size)
         val r = rules[0]

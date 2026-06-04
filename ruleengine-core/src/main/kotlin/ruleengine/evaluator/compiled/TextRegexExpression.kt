@@ -13,7 +13,7 @@ class TextRegexExpression(
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
-            NodeMeta(
+            meta = NodeMeta(
                 type = NodeType.CONDITION,
                 field = field.value,
                 operator = "regex",
@@ -21,14 +21,14 @@ class TextRegexExpression(
             )
         )
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedText
-        if (v == null) {
-            trace?.exit(false)
+        val fieldValue = context.get(field = field) as? ruleengine.evaluator.context.PreparedText
+        if (fieldValue == null) {
+            trace?.exit(result = false)
             return false
         }
 
-        val res = pattern.containsMatchIn(v.original)
-        trace?.exit(res)
+        val res = pattern.containsMatchIn(input = fieldValue.original)
+        trace?.exit(result = res)
         return res
     }
 }

@@ -1,10 +1,11 @@
 package ruleengine.manifest
 
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
-import java.nio.file.Path
 
 class ManifestLoaderTest {
     @Test
@@ -22,18 +23,18 @@ class ManifestLoaderTest {
 
         entry.schema?.let { schemaPath ->
             val p = base.resolve(schemaPath)
-            assertTrue(java.nio.file.Files.exists(p), "schema file $p should exist")
+            assertTrue(actual = Files.exists(p), message = "schema file $p should exist")
         } ?: fail("schema missing in manifest entry")
 
         entry.actions?.let { actionsPath ->
             val p = base.resolve(actionsPath)
-            assertTrue(java.nio.file.Files.exists(p), "actions file $p should exist")
+            assertTrue(actual = Files.exists(p), message = "actions file $p should exist")
         } ?: fail("actions missing in manifest entry")
 
-        assertTrue(entry.rules.isNotEmpty(), "manifest should reference at least one rule file")
+        assertTrue(actual = entry.rules.isNotEmpty(), message = "manifest should reference at least one rule file")
         entry.rules.forEach { r ->
             val p = base.resolve(r)
-            assertTrue(java.nio.file.Files.exists(p), "rule file $p should exist")
+            assertTrue(actual = Files.exists(p), message = "rule file $p should exist")
         }
     }
 }
