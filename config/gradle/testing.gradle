@@ -1,0 +1,7 @@
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+
+    failOnNoDiscoveredTests = false
+    minHeapSize = "512m"
+    maxHeapSize = "3072m"
+}

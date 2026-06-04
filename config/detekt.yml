@@ -1,0 +1,32 @@
+# Overwrites for Detekt
+# Example for most configs: https://github.com/detekt/detekt/blob/main/config/detekt/detekt.yml
+# Docs: https://detekt.dev/docs/intro
+style:
+  # using 5 instead of 2
+  ReturnCount:
+    active: true
+    excludeGuardClauses: true
+    max: 5
+  MagicNumber:
+    ignoreAnnotation: true
+  ForbiddenComment:
+    active: false
+
+complexity:
+  NamedArguments:
+    active: true
+    allowedArguments: 15
+    ignoreArgumentsMatchingNames: false
+  LongParameterList:
+    ignoreDefaultParameters: true
+    allowedFunctionParameters: 25
+    allowedConstructorParameters: 15
+  TooManyFunctions:
+    allowedFunctionsPerClass: 20
+    allowedFunctionsPerInterface: 20
+    allowedFunctionsPerObject: 20
+
+performance:
+  # disabled since Kotlin compiler optimizations since 1.1.60
+  SpreadOperator:
+    active: false

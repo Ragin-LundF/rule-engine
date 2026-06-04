@@ -1,0 +1,37 @@
+plugins.withType(JavaPlugin) {
+    java {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(java_version))
+        }
+        withSourcesJar()
+    }
+}
+
+plugins.withId("org.jetbrains.kotlin.jvm") {
+    kotlin {
+        jvmToolchain {
+            languageVersion.set(JavaLanguageVersion.of(java_version))
+        }
+        compilerOptions {
+            jvmTarget = JvmTarget.fromTarget(java_version)
+            freeCompilerArgs = [
+                    "-Xjvm-default=all"
+            ]
+        }
+    }
+}
+
+plugins.withId("org.jetbrains.kotlin.multiplatform") {
+    kotlin {
+        jvmToolchain {
+            languageVersion.set(JavaLanguageVersion.of(java_version))
+        }
+    }
+}
+
+tasks.withType(KotlinCompile).configureEach {
+    compilerOptions {
+        jvmTarget = JvmTarget.fromTarget(java_version)
+        freeCompilerArgs.add("-Xjvm-default=all")
+    }
+}

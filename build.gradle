@@ -1,23 +1,24 @@
+import dev.detekt.gradle.Detekt
+import dev.detekt.gradle.DetektCreateBaselineTask
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.jvm) apply false
+    alias(libs.plugins.kotlin.multiplatform) apply false
+    alias(libs.plugins.jetbrains.compose) apply false
+    alias(libs.plugins.jetbrains.compose.kotlin.plugin) apply false
+    alias(libs.plugins.detekt) apply false
 }
 
-group = 'io.finapi'
-version = '1.0-SNAPSHOT'
+subprojects {
+    // export of classes for subscripts
+    ext.KotlinCompile = KotlinCompile
+    ext.JvmTarget = JvmTarget
+    ext.Detekt = Detekt
+    ext.DetektCreateBaselineTask = DetektCreateBaselineTask
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    // use version catalog aliases from gradle/libs.versions.toml
-    testImplementation libs.kotlin.test
-}
-
-kotlin {
-    jvmToolchain(21)
-}
-
-test {
-    useJUnitPlatform()
+    apply from: "${rootDir}/config/gradle/java.gradle"
+    apply from: "${rootDir}/config/gradle/testing.gradle"
+    apply from: "${rootDir}/config/gradle/static_analysis.gradle"
 }

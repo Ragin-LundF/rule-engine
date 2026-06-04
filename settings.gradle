@@ -16,7 +16,16 @@ pluginManagement {
 plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
-rootProject.name = 'untitled'
+
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url = uri('https://maven.pkg.jetbrains.space/public/p/compose/dev') }
+    }
+}
+
+rootProject.name = 'rule-engine'
 
 // Include new submodules
 include ':ruleengine-core'

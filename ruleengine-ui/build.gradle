@@ -4,19 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
 
-group = 'io.finapi.ruleengine'
-version = '1.0-SNAPSHOT'
-
-repositories {
-    mavenCentral()
-    google()
-    maven { url = uri('https://maven.pkg.jetbrains.space/public/p/compose/dev') }
-}
-
 kotlin {
-    jvmToolchain(21)
-    jvm {
-    }
+    jvm()
     js(IR) {
         browser()
         binaries.executable()
