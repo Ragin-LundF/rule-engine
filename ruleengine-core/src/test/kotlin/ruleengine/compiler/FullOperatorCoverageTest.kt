@@ -1,7 +1,5 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertTrue
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -13,6 +11,8 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Full operator coverage test — verifies every supported operator end-to-end
@@ -301,10 +301,10 @@ class FullOperatorCoverageTest {
     fun `decimal between operator`() {
         val e = buildEngine()
         assertTrue(e.evaluate(ctx("amount" to "2500")).matches.any { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "100")).matches.any  { it.ruleId == "amount-between" })
+        assertTrue(e.evaluate(ctx("amount" to "100")).matches.any { it.ruleId == "amount-between" })
         assertTrue(e.evaluate(ctx("amount" to "5000")).matches.any { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "99")).matches.none  { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "5001")).matches.none{ it.ruleId == "amount-between" })
+        assertTrue(e.evaluate(ctx("amount" to "99")).matches.none { it.ruleId == "amount-between" })
+        assertTrue(e.evaluate(ctx("amount" to "5001")).matches.none { it.ruleId == "amount-between" })
     }
 
     @Test
@@ -331,14 +331,17 @@ class FullOperatorCoverageTest {
     fun `bracket OR group with AND`() {
         val e = buildEngine()
         // purpose contains "Rueckuberweisung" AND amount < 0 → matches rule "bracket-or"
-        assertTrue(e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "-250"))
-            .matches.any { it.ruleId == "bracket-or" })
+        assertTrue(
+            e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "-250"))
+                .matches.any { it.ruleId == "bracket-or" })
         // purpose contains "Nicht Gedeckt" AND amount < 0 → matches
-        assertTrue(e.evaluate(ctx("purpose" to "Lastschrift Nicht Gedeckt", "amount" to "-10"))
-            .matches.any { it.ruleId == "bracket-or" })
+        assertTrue(
+            e.evaluate(ctx("purpose" to "Lastschrift Nicht Gedeckt", "amount" to "-10"))
+                .matches.any { it.ruleId == "bracket-or" })
         // purpose matches but amount positive → does NOT match
-        assertTrue(e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "10"))
-            .matches.none { it.ruleId == "bracket-or" })
+        assertTrue(
+            e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "10"))
+                .matches.none { it.ruleId == "bracket-or" })
     }
 
     // ─── Resource file loading test ────────────────────────────────────────

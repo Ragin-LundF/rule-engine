@@ -1,18 +1,18 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.assertEquals
-import ruleengine.dsl.parser.Parser
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class CompilerTest {
     @Test
@@ -33,8 +33,18 @@ class CompilerTest {
         val schema = FieldSchema(
             name = "transaction-v1",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(FieldId("purpose"), FieldType.TEXT, normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")), operators = setOf(OperatorId("contains"), OperatorId("equals"))),
-                FieldId("amount") to FieldDefinition(FieldId("amount"), FieldType.DECIMAL, normalizers = emptyList(), operators = setOf(OperatorId("gte"), OperatorId("gt"), OperatorId("equals")))
+                FieldId("purpose") to FieldDefinition(
+                    FieldId("purpose"),
+                    FieldType.TEXT,
+                    normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")),
+                    operators = setOf(OperatorId("contains"), OperatorId("equals"))
+                ),
+                FieldId("amount") to FieldDefinition(
+                    FieldId("amount"),
+                    FieldType.DECIMAL,
+                    normalizers = emptyList(),
+                    operators = setOf(OperatorId("gte"), OperatorId("gt"), OperatorId("equals"))
+                )
             )
         )
 

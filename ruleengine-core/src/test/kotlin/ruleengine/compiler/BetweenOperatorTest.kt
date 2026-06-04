@@ -1,14 +1,17 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
-import ruleengine.core.domain.*
+import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertTrue
 
 /**
  * Tests for the `between` operator (inclusive range check: low <= field <= high).
@@ -52,12 +55,14 @@ class BetweenOperatorTest {
 
     @Test
     fun `decimal between - values inside range match`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "normal-range" {
               when amount between 100 5000
               then label "normal"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(amount = "100")).matches.isNotEmpty())    // lower bound inclusive
         assertTrue(e.evaluate(ctx(amount = "5000")).matches.isNotEmpty())   // upper bound inclusive
         assertTrue(e.evaluate(ctx(amount = "2500")).matches.isNotEmpty())   // midpoint
@@ -66,12 +71,14 @@ class BetweenOperatorTest {
 
     @Test
     fun `decimal between - values outside range do not match`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "normal-range" {
               when amount between 100 5000
               then label "normal"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(amount = "99.99")).matches.isEmpty())   // just below lower
         assertTrue(e.evaluate(ctx(amount = "5000.01")).matches.isEmpty()) // just above upper
         assertTrue(e.evaluate(ctx(amount = "-100")).matches.isEmpty())    // negative
@@ -79,12 +86,14 @@ class BetweenOperatorTest {
 
     @Test
     fun `decimal between - negative range works`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "small-negative" {
               when amount between -5 -1
               then label "small-neg"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(amount = "-5")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(amount = "-1")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(amount = "-3")).matches.isNotEmpty())
@@ -94,7 +103,8 @@ class BetweenOperatorTest {
 
     @Test
     fun `decimal between combined with other condition`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "chargeback-small" {
               when
                 amount between -500 -1
@@ -102,7 +112,8 @@ class BetweenOperatorTest {
               then
                 label "small-chargeback"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(amount = "-250")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(amount = "-500")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(amount = "-501")).matches.isEmpty())
@@ -113,12 +124,14 @@ class BetweenOperatorTest {
 
     @Test
     fun `integer between - values inside range match`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "structuring" {
               when count between 5 20
               then flag "structuring"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(count = 5)).matches.isNotEmpty())   // lower bound inclusive
         assertTrue(e.evaluate(ctx(count = 20)).matches.isNotEmpty())  // upper bound inclusive
         assertTrue(e.evaluate(ctx(count = 12)).matches.isNotEmpty())  // midpoint
@@ -126,12 +139,14 @@ class BetweenOperatorTest {
 
     @Test
     fun `integer between - values outside range do not match`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "structuring" {
               when count between 5 20
               then flag "structuring"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(count = 4)).matches.isEmpty())
         assertTrue(e.evaluate(ctx(count = 21)).matches.isEmpty())
         assertTrue(e.evaluate(ctx(count = 0)).matches.isEmpty())
@@ -139,7 +154,8 @@ class BetweenOperatorTest {
 
     @Test
     fun `integer between combined with decimal between`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "suspicious" {
               when
                 count between 5 20
@@ -148,7 +164,8 @@ class BetweenOperatorTest {
               then
                 flag "aml-structuring"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         // Both conditions satisfied
         assertTrue(e.evaluate(ctx(amount = "9500", count = 12)).matches.isNotEmpty())
         // count outside range

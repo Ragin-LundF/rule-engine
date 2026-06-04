@@ -1,8 +1,5 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -14,6 +11,9 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Tests for the `ignoreCase` trailing modifier on all text operators:
@@ -56,12 +56,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `equals ignoreCase matches mixed-case input`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose equals "Miete" ignoreCase
               then label "ok"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("MIETE")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("miete")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("Miete")).matches.isNotEmpty())
@@ -70,12 +72,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `equals without ignoreCase is case-sensitive`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose equals "Miete"
               then label "ok"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("Miete")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("MIETE")).matches.isEmpty())  // no match without ignoreCase
     }
@@ -84,12 +88,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `contains ignoreCase matches mixed-case substring`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose contains "rueckuberweisung" ignoreCase
               then label "chargeback"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("Rueckuberweisung Lastschrift")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("RUECKUBERWEISUNG 123")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("prefix rueckuberweisung suffix")).matches.isNotEmpty())
@@ -98,14 +104,16 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `contains ignoreCase works in bracket OR group`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "chargeback" {
               when
                 (purpose contains "rueckuberweisung" ignoreCase
                 or purpose contains "nicht gedeckt" ignoreCase)
               then label "chargeback"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("RUECKUBERWEISUNG")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("Nicht Gedeckt")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("Regular payment")).matches.isEmpty())
@@ -115,12 +123,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `startsWith ignoreCase matches prefix regardless of case`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose startsWith "Sammel" ignoreCase
               then label "batch"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("SAMMELAUFTRAG 001")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("sammelauftrag")).matches.isNotEmpty())
         assertFalse(e.evaluate(ctx("Einzelauftrag")).matches.isNotEmpty())
@@ -130,12 +140,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `endsWith ignoreCase matches suffix regardless of case`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose endsWith "Versicherung" ignoreCase
               then label "insurance"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("Allianz VERSICHERUNG")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("HUK-COBURG versicherung")).matches.isNotEmpty())
         assertFalse(e.evaluate(ctx("Stadtwerke Muenchen")).matches.isNotEmpty())
@@ -145,12 +157,14 @@ class IgnoreCaseOperatorTest {
 
     @Test
     fun `in ignoreCase matches set members regardless of case`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "r" {
               when purpose in ["PMNT", "CCRD", "SALA"] ignoreCase
               then label "known-sepa"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx("pmnt")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("Ccrd")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx("sala")).matches.isNotEmpty())

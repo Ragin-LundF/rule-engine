@@ -1,8 +1,5 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -14,6 +11,9 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * Tests for the `regex` operator.
@@ -57,12 +57,14 @@ class RegexOperatorTest {
 
     @Test
     fun `regex matches DACH IBAN prefix`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "dach-iban" {
               when iban regex "^(DE|AT|CH)"
               then label "dach"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         // regex runs against original value; trim normalizer applies but NOT uppercase (original preserved for regex)
         assertTrue(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(iban = "AT611904300234573201")).matches.isNotEmpty())
@@ -72,24 +74,28 @@ class RegexOperatorTest {
 
     @Test
     fun `not regex detects non-DACH IBANs`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "foreign" {
               when not iban regex "^(DE|AT|CH)"
               then flag "foreign-iban"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(iban = "GB29NWBK60161331926819")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isEmpty())
     }
 
     @Test
     fun `regex with digit anchor matches all-zero synthetic IBAN`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "synthetic" {
               when iban regex "^[A-Z]{2}[0-9]{2}0{8,}"
               then flag "synthetic"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(iban = "DE000000000000000000")).matches.isNotEmpty())
         assertFalse(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
     }
@@ -98,12 +104,14 @@ class RegexOperatorTest {
 
     @Test
     fun `regex ignoreCase matches regardless of casing in input`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "fraud-keyword" {
               when purpose regex "betrug|phishing|scam" ignoreCase
               then label "fraud"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(purpose = "BETRUG Verdacht")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(purpose = "Phishing-Link gesehen")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(purpose = "Normaler Einkauf")).matches.isEmpty())
@@ -111,12 +119,14 @@ class RegexOperatorTest {
 
     @Test
     fun `regex without ignoreCase is case-sensitive`() {
-        val e = engine("""
+        val e = engine(
+            """
             rule "case-sensitive" {
               when purpose regex "^Miete"
               then label "rent"
             }
-        """.trimIndent())
+        """.trimIndent()
+        )
         assertTrue(e.evaluate(ctx(purpose = "Miete Januar")).matches.isNotEmpty())
         assertTrue(e.evaluate(ctx(purpose = "MIETE Januar")).matches.isEmpty())
     }

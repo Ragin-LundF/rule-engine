@@ -1,18 +1,17 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertTrue
-import kotlin.test.assertEquals
-import ruleengine.dsl.parser.Parser
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class TextInOperatorTest {
     @Test
@@ -31,7 +30,12 @@ class TextInOperatorTest {
         val schema = FieldSchema(
             name = "test",
             fields = mapOf(
-                FieldId("sepaCode") to FieldDefinition(FieldId("sepaCode"), FieldType.TEXT, normalizers = listOf(NormalizerId("trim"), NormalizerId("uppercase")), operators = setOf(OperatorId("in")))
+                FieldId("sepaCode") to FieldDefinition(
+                    FieldId("sepaCode"),
+                    FieldType.TEXT,
+                    normalizers = listOf(NormalizerId("trim"), NormalizerId("uppercase")),
+                    operators = setOf(OperatorId("in"))
+                )
             )
         )
 
@@ -43,7 +47,8 @@ class TextInOperatorTest {
 
         val ctx = RuleContext.of("sepaCode" to "PMNT")
         val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)
-        val preparedValue = prepared.get(ruleengine.core.domain.FieldId("sepaCode")) as? ruleengine.evaluator.context.PreparedText
+        val preparedValue =
+            prepared.get(ruleengine.core.domain.FieldId("sepaCode")) as? ruleengine.evaluator.context.PreparedText
         kotlin.test.assertTrue(preparedValue != null)
         kotlin.test.assertEquals(expected = "PMNT", actual = preparedValue!!.normalized)
         val res = engine.evaluate(prepared)

@@ -1,11 +1,5 @@
 package ruleengine.compiler
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
-import ruleengine.dsl.parser.Parser
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.OrAst
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -13,9 +7,15 @@ import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Tests that parentheses can be used to create logical groups in rule conditions.
@@ -89,16 +89,50 @@ class ParenthesizedExpressionTest {
         val engine = RuleEngine(compiledRules = compiled, schema = schema)
 
         // Matches: purpose contains "miete" → true, amount 850 ≥ 500 → true
-        assertTrue(engine.evaluate(PreparedRuleContext.prepare(RuleContext.of("purpose" to "Miete Januar", "amount" to "850"), schema)).matches.isNotEmpty())
+        assertTrue(
+            engine.evaluate(
+                PreparedRuleContext.prepare(
+                    RuleContext.of(
+                        "purpose" to "Miete Januar",
+                        "amount" to "850"
+                    ), schema
+                )
+            ).matches.isNotEmpty()
+        )
 
         // Matches: purpose contains "rent" → true, amount 600 ≥ 500 → true
-        assertTrue(engine.evaluate(PreparedRuleContext.prepare(RuleContext.of("purpose" to "Monthly Rent", "amount" to "600"), schema)).matches.isNotEmpty())
+        assertTrue(
+            engine.evaluate(
+                PreparedRuleContext.prepare(
+                    RuleContext.of(
+                        "purpose" to "Monthly Rent",
+                        "amount" to "600"
+                    ), schema
+                )
+            ).matches.isNotEmpty()
+        )
 
         // Does NOT match: purpose matches but amount too low
-        assertTrue(engine.evaluate(PreparedRuleContext.prepare(RuleContext.of("purpose" to "Miete", "amount" to "100"), schema)).matches.isEmpty())
+        assertTrue(
+            engine.evaluate(
+                PreparedRuleContext.prepare(
+                    RuleContext.of("purpose" to "Miete", "amount" to "100"),
+                    schema
+                )
+            ).matches.isEmpty()
+        )
 
         // Does NOT match: amount fine but purpose doesn't match
-        assertTrue(engine.evaluate(PreparedRuleContext.prepare(RuleContext.of("purpose" to "Salary payment", "amount" to "1000"), schema)).matches.isEmpty())
+        assertTrue(
+            engine.evaluate(
+                PreparedRuleContext.prepare(
+                    RuleContext.of(
+                        "purpose" to "Salary payment",
+                        "amount" to "1000"
+                    ), schema
+                )
+            ).matches.isEmpty()
+        )
     }
 
     @Test
@@ -131,10 +165,14 @@ class ParenthesizedExpressionTest {
         val bracketAsts = Parser(bracketRule).parseRules()
 
         // The flat rule's root should be OR; the bracket rule's root should be AND
-        assertTrue(flatAsts.single().condition is OrAst,
-            "Flat rule root should be OR (or binds less tightly than and)")
-        assertTrue(bracketAsts.single().condition is AndAst,
-            "Bracket rule root should be AND")
+        assertTrue(
+            flatAsts.single().condition is OrAst,
+            "Flat rule root should be OR (or binds less tightly than and)"
+        )
+        assertTrue(
+            bracketAsts.single().condition is AndAst,
+            "Bracket rule root should be AND"
+        )
 
         val flatCompiled = Compiler.compileRules(flatAsts, schema, NormalizerRegistry.default)
         val bracketCompiled = Compiler.compileRules(bracketAsts, schema, NormalizerRegistry.default)
@@ -147,10 +185,14 @@ class ParenthesizedExpressionTest {
         // bracket: AND(OR(miete=true, rent=false), gte-500=false)                 → false (amount check fails)
         val ctx = PreparedRuleContext.prepare(RuleContext.of("purpose" to "Miete", "amount" to "100"), schema)
 
-        assertTrue(flatEngine.evaluate(ctx).matches.isNotEmpty(),
-            "Flat rule should match because 'miete' branch alone satisfies the OR")
-        assertTrue(bracketEngine.evaluate(ctx).matches.isEmpty(),
-            "Bracket rule should NOT match because amount < 500 fails the outer AND")
+        assertTrue(
+            flatEngine.evaluate(ctx).matches.isNotEmpty(),
+            "Flat rule should match because 'miete' branch alone satisfies the OR"
+        )
+        assertTrue(
+            bracketEngine.evaluate(ctx).matches.isEmpty(),
+            "Bracket rule should NOT match because amount < 500 fails the outer AND"
+        )
     }
 }
 
