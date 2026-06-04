@@ -48,6 +48,11 @@ class Lexer(private val input: String) {
                 ',' -> { tokens += makeToken(TokenType.COMMA, ","); advance() }
                 '"' -> tokens += readString()
                 '>', '<', '=', '!' -> tokens += readOperator()
+                '#' -> {
+                    // Single-line comment — skip everything up to (but not including) the newline.
+                    // The newline itself is left for skipWhitespace() so line tracking stays correct.
+                    while (current() != null && current() != '\n') advance()
+                }
                 else -> {
                     if (c.isLetter() || c == '_' ) tokens += readIdentOrKeyword()
                     else if (c.isDigit() || c == '-') tokens += readNumber()

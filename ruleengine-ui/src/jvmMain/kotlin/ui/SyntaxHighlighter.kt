@@ -53,7 +53,7 @@ fun annotateRule(
         return (lineStartOffsets[li] + (col - 1).coerceAtLeast(0)).coerceAtMost(text.length)
     }
 
-    // Collect comment ranges (# … end-of-line) – the Lexer doesn't handle '#'.
+    // Collect comment ranges (# … end-of-line) – used for styling and skip-check.
     val commentRanges = buildList<IntRange> {
         var inComment = false; var start = 0
         text.forEachIndexed { idx, ch ->
@@ -63,20 +63,6 @@ fun annotateRule(
             }
         }
         if (inComment) add(start until text.length)
-    }
-
-    // Sanitise the text for the Lexer: replace comment content with spaces
-    // so line/col offsets stay identical.
-    val sanitized = buildString(text.length) {
-        var inC = false
-        for (ch in text) {
-            when {
-                ch == '#'  -> { inC = true; append(' ') }
-                ch == '\n' -> { inC = false; append('\n') }
-                inC        -> append(' ')
-                else       -> append(ch)
-            }
-        }
     }
 
     return buildAnnotatedString {
@@ -90,9 +76,9 @@ fun annotateRule(
             )
         }
 
-        // ── Token-based colours ────────────────────────────────────────────────
+        // ── Token-based colours (Lexer now natively skips # comments) ─────────
         try {
-            for (tok in Lexer(sanitized).tokenize()) {
+            for (tok in Lexer(text).tokenize()) {
                 if (tok.type == TokenType.EOF) break
                 val start = absOffset(tok.line, tok.col)
                 val end   = (start + tok.text.length).coerceAtMost(text.length)
