@@ -1,12 +1,15 @@
 package ui
 
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
+import org.jetbrains.skia.EncodedImageFormat
 import java.awt.FileDialog
 import java.awt.Frame
-import java.io.File
-import java.io.FilenameFilter
-import java.nio.file.Files
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
+import java.io.File
+import java.io.FilenameFilter
+import org.jetbrains.skia.Image as SkiaImage
 
 // ── Global last-used directory (persists for the whole app session) ───────────
 private var lastDirectory: String? = null
@@ -79,5 +82,19 @@ actual fun saveManifestToFile(filename: String, content: String) {
 
 actual fun copyToClipboard(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+}
+
+/**
+ * Opens the native save dialog pre-filled with "diagram.png", then encodes
+ * [bitmap] as PNG and writes the bytes to the selected file.
+ * Does nothing silently if the user cancels the dialog or encoding fails.
+ */
+fun saveDiagramAsPng(bitmap: ImageBitmap) {
+    val file = nativeSave(title = "Export Diagram as PNG", suggestedName = "diagram.png")
+        ?: return
+    val skiaImage = SkiaImage.makeFromBitmap(bitmap.asSkiaBitmap())
+    val data = skiaImage.encodeToData(EncodedImageFormat.PNG, quality = 100)
+        ?: return
+    file.writeBytes(data.bytes)
 }
 
