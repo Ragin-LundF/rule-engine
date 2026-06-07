@@ -28,35 +28,39 @@ class CompilerTest {
             }
         """.trimIndent()
 
-        val parser = Parser(txt)
+        val parser = Parser(input = txt)
         val asts = parser.parseRules()
         val schema = FieldSchema(
             name = "transaction-v1",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")),
-                    operators = setOf(OperatorId("contains"), OperatorId("equals"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
+                    operators = setOf(OperatorId(value = "contains"), OperatorId(value = "equals"))
                 ),
-                FieldId("amount") to FieldDefinition(
-                    FieldId("amount"),
-                    FieldType.DECIMAL,
+                FieldId(value = "amount") to FieldDefinition(
+                    id = FieldId(value = "amount"),
+                    type = FieldType.DECIMAL,
                     normalizers = emptyList(),
-                    operators = setOf(OperatorId("gte"), OperatorId("gt"), OperatorId("equals"))
+                    operators = setOf(OperatorId(value = "gte"), OperatorId(value = "gt"), OperatorId(value = "equals"))
                 )
             )
         )
 
-        val validation = Validator.validate(asts, schema)
-        assertTrue(validation.isValid, "Validation failed: ${validation.diagnostics}")
+        val validation = Validator.validate(asts = asts, schema = schema)
+        assertTrue(actual = validation.isValid, message = "Validation failed: ${validation.diagnostics}")
 
-        val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
+        val compiled = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
         val engine = RuleEngine(compiledRules = compiled, schema = schema)
 
         val ctx = RuleContext.of("purpose" to "Miete Januar", "amount" to "850")
         val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)
-        val result = engine.evaluate(prepared)
+        val result = engine.evaluate(prepared = prepared)
         assertEquals(expected = 1, actual = result.matches.size)
         assertEquals(expected = "rent-payment", actual = result.matches.first().ruleId)
     }

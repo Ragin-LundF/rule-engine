@@ -27,29 +27,40 @@ class RegexOperatorTest {
     private val schema = FieldSchema(
         name = "test",
         fields = mapOf(
-            FieldId("iban") to FieldDefinition(
-                id = FieldId("iban"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim"), NormalizerId("uppercase")),
-                operators = setOf(OperatorId("regex"), OperatorId("equals"), OperatorId("startsWith"))
+            FieldId(value = "iban") to FieldDefinition(
+                id = FieldId(value = "iban"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "uppercase")),
+                operators = setOf(
+                    OperatorId(value = "regex"),
+                    OperatorId(value = "equals"),
+                    OperatorId(value = "startsWith")
+                )
             ),
-            FieldId("purpose") to FieldDefinition(
-                id = FieldId("purpose"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim")),
-                operators = setOf(OperatorId("regex"), OperatorId("contains"))
+            FieldId(value = "purpose") to FieldDefinition(
+                id = FieldId(value = "purpose"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim")),
+                operators = setOf(OperatorId(value = "regex"), OperatorId(value = "contains"))
             )
         )
     )
 
     private fun engine(ruleText: String): RuleEngine {
-        val asts = Parser(ruleText).parseRules()
-        val validation = Validator.validate(asts, schema)
-        assertTrue(validation.isValid, "Validation failed: ${validation.diagnostics}")
-        val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
+        val asts = Parser(input = ruleText).parseRules()
+        val validation = Validator.validate(asts = asts, schema = schema)
+        assertTrue(actual = validation.isValid, message = "Validation failed: ${validation.diagnostics}")
+        val compiled = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
         return RuleEngine(compiledRules = compiled, schema = schema)
     }
 
     private fun ctx(iban: String = "", purpose: String = ""): PreparedRuleContext {
-        val prepared = PreparedRuleContext.prepare(RuleContext.of("iban" to iban, "purpose" to purpose), schema)
+        val prepared = PreparedRuleContext.prepare(
+            ctx = RuleContext.of("iban" to iban, "purpose" to purpose),
+            schema = schema
+        )
         return prepared
     }
 
@@ -58,46 +69,46 @@ class RegexOperatorTest {
     @Test
     fun `regex matches DACH IBAN prefix`() {
         val e = engine(
-            """
-            rule "dach-iban" {
-              when iban regex "^(DE|AT|CH)"
-              then label "dach"
-            }
-        """.trimIndent()
+            ruleText = """
+                        rule "dach-iban" {
+                          when iban regex "^(DE|AT|CH)"
+                          then label "dach"
+                        }
+                    """.trimIndent()
         )
         // regex runs against original value; trim normalizer applies but NOT uppercase (original preserved for regex)
-        assertTrue(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(iban = "AT611904300234573201")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(iban = "CH5604835012345678009")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(iban = "GB29NWBK60161331926819")).matches.isEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "AT611904300234573201")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "CH5604835012345678009")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "GB29NWBK60161331926819")).matches.isEmpty())
     }
 
     @Test
     fun `not regex detects non-DACH IBANs`() {
         val e = engine(
-            """
-            rule "foreign" {
-              when not iban regex "^(DE|AT|CH)"
-              then flag "foreign-iban"
-            }
-        """.trimIndent()
+            ruleText = """
+                        rule "foreign" {
+                          when not iban regex "^(DE|AT|CH)"
+                          then flag "foreign-iban"
+                        }
+                    """.trimIndent()
         )
-        assertTrue(e.evaluate(ctx(iban = "GB29NWBK60161331926819")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "GB29NWBK60161331926819")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "DE89370400440532013000")).matches.isEmpty())
     }
 
     @Test
     fun `regex with digit anchor matches all-zero synthetic IBAN`() {
         val e = engine(
-            """
-            rule "synthetic" {
-              when iban regex "^[A-Z]{2}[0-9]{2}0{8,}"
-              then flag "synthetic"
-            }
-        """.trimIndent()
+            ruleText = """
+                        rule "synthetic" {
+                          when iban regex "^[A-Z]{2}[0-9]{2}0{8,}"
+                          then flag "synthetic"
+                        }
+                    """.trimIndent()
         )
-        assertTrue(e.evaluate(ctx(iban = "DE000000000000000000")).matches.isNotEmpty())
-        assertFalse(e.evaluate(ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(iban = "DE000000000000000000")).matches.isNotEmpty())
+        assertFalse(actual = e.evaluate(prepared = ctx(iban = "DE89370400440532013000")).matches.isNotEmpty())
     }
 
     // ── regex ignoreCase modifier ─────────────────────────────────────────
@@ -105,30 +116,30 @@ class RegexOperatorTest {
     @Test
     fun `regex ignoreCase matches regardless of casing in input`() {
         val e = engine(
-            """
-            rule "fraud-keyword" {
-              when purpose regex "betrug|phishing|scam" ignoreCase
-              then label "fraud"
-            }
-        """.trimIndent()
+            ruleText = """
+                        rule "fraud-keyword" {
+                          when purpose regex "betrug|phishing|scam" ignoreCase
+                          then label "fraud"
+                        }
+                    """.trimIndent()
         )
-        assertTrue(e.evaluate(ctx(purpose = "BETRUG Verdacht")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(purpose = "Phishing-Link gesehen")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(purpose = "Normaler Einkauf")).matches.isEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(purpose = "BETRUG Verdacht")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(purpose = "Phishing-Link gesehen")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(purpose = "Normaler Einkauf")).matches.isEmpty())
     }
 
     @Test
     fun `regex without ignoreCase is case-sensitive`() {
         val e = engine(
-            """
-            rule "case-sensitive" {
-              when purpose regex "^Miete"
-              then label "rent"
-            }
-        """.trimIndent()
+            ruleText = """
+                        rule "case-sensitive" {
+                          when purpose regex "^Miete"
+                          then label "rent"
+                        }
+                    """.trimIndent()
         )
-        assertTrue(e.evaluate(ctx(purpose = "Miete Januar")).matches.isNotEmpty())
-        assertTrue(e.evaluate(ctx(purpose = "MIETE Januar")).matches.isEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(purpose = "Miete Januar")).matches.isNotEmpty())
+        assertTrue(actual = e.evaluate(prepared = ctx(purpose = "MIETE Januar")).matches.isEmpty())
     }
 
     // ── Validator rejects invalid regex ──────────────────────────────────
@@ -141,10 +152,10 @@ class RegexOperatorTest {
               then label "x"
             }
         """.trimIndent()
-        val asts = Parser(txt).parseRules()
-        val result = Validator.validate(asts, schema)
-        assertFalse(result.isValid, "Validator should reject invalid regex")
-        assertTrue(result.diagnostics.any { it.message.contains("regex", ignoreCase = true) })
+        val asts = Parser(input = txt).parseRules()
+        val result = Validator.validate(asts = asts, schema = schema)
+        assertFalse(actual = result.isValid, message = "Validator should reject invalid regex")
+        assertTrue(actual = result.diagnostics.any { it.message.contains(other = "regex", ignoreCase = true) })
     }
 }
 

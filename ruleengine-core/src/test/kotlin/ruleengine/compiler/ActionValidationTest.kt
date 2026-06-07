@@ -25,21 +25,21 @@ class ActionValidationTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "t",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim")),
-                    operators = setOf(OperatorId("contains"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim")),
+                    operators = setOf(OperatorId(value = "contains"))
                 )
             )
         )
 
         val result = Validator.validate(asts = asts, schema = schema, actions = DefaultActionSchema.basic)
-        assertTrue(result.isValid, "Expected actions to validate: ${result.diagnostics}")
+        assertTrue(actual = result.isValid, message = "Expected actions to validate: ${result.diagnostics}")
     }
 
     @Test
@@ -53,21 +53,21 @@ class ActionValidationTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "t",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim")),
-                    operators = setOf(OperatorId("contains"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId("purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim")),
+                    operators = setOf(OperatorId(value = "contains"))
                 )
             )
         )
 
         val result = Validator.validate(asts = asts, schema = schema, actions = DefaultActionSchema.basic)
-        assertFalse(result.isValid)
+        assertFalse(actual = result.isValid)
     }
 
     @Test
@@ -81,21 +81,21 @@ class ActionValidationTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "t",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim")),
-                    operators = setOf(OperatorId("contains"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId("purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim")),
+                    operators = setOf(OperatorId(value = "contains"))
                 )
             )
         )
 
         val result = Validator.validate(asts = asts, schema = schema, actions = DefaultActionSchema.basic)
-        assertFalse(result.isValid)
+        assertFalse(actual = result.isValid)
     }
 }
 

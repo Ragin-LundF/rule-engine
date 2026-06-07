@@ -27,20 +27,20 @@ class FullOperatorCoverageTest {
         name = "full-test",
         fields = mapOf(
             // TEXT — no normalizer (ignoreCase carries the weight in relevant tests)
-            FieldId("purpose") to FieldDefinition(
-                id = FieldId("purpose"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim")),
+            FieldId(value = "purpose") to FieldDefinition(
+                id = FieldId(value = "purpose"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim")),
                 operators = setOf(
-                    OperatorId("equals"), OperatorId("contains"),
-                    OperatorId("startsWith"), OperatorId("endsWith"),
-                    OperatorId("in"), OperatorId("regex")
+                    OperatorId(value = "equals"), OperatorId(value = "contains"),
+                    OperatorId(value = "startsWith"), OperatorId(value = "endsWith"),
+                    OperatorId(value = "in"), OperatorId(value = "regex")
                 )
             ),
             // TEXT — with lowercase normalizer (classic approach)
-            FieldId("purposeNorm") to FieldDefinition(
-                id = FieldId("purposeNorm"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")),
-                operators = setOf(OperatorId("equals"), OperatorId("contains"), OperatorId("endsWith"))
+            FieldId(value = "purposeNorm") to FieldDefinition(
+                id = FieldId(value = "purposeNorm"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
+                operators = setOf(OperatorId(value = "equals"), OperatorId(value = "contains"), OperatorId(value = "endsWith"))
             ),
             FieldId("iban") to FieldDefinition(
                 id = FieldId("iban"), type = FieldType.TEXT,
