@@ -46,44 +46,48 @@ class FullOperatorCoverageTest {
                     OperatorId(value = "endsWith")
                 )
             ),
-            FieldId("iban") to FieldDefinition(
-                id = FieldId("iban"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim")),
-                operators = setOf(OperatorId("regex"), OperatorId("startsWith"))
+            FieldId(value = "iban") to FieldDefinition(
+                id = FieldId(value = "iban"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim")),
+                operators = setOf(OperatorId(value = "regex"), OperatorId(value = "startsWith"))
             ),
-            FieldId("sepaCode") to FieldDefinition(
-                id = FieldId("sepaCode"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim"), NormalizerId("uppercase")),
-                operators = setOf(OperatorId("equals"), OperatorId("in"))
+            FieldId(value = "sepaCode") to FieldDefinition(
+                id = FieldId(value = "sepaCode"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "uppercase")),
+                operators = setOf(OperatorId(value = "equals"), OperatorId(value = "in"))
             ),
-            FieldId("counterparty") to FieldDefinition(
-                id = FieldId("counterparty"), type = FieldType.TEXT,
-                normalizers = listOf(NormalizerId("trim")),
-                operators = setOf(OperatorId("equals"), OperatorId("contains"), OperatorId("endsWith"))
+            FieldId(value = "counterparty") to FieldDefinition(
+                id = FieldId(value = "counterparty"), type = FieldType.TEXT,
+                normalizers = listOf(NormalizerId(value = "trim")),
+                operators = setOf(
+                    OperatorId(value = "equals"),
+                    OperatorId(value = "contains"),
+                    OperatorId(value = "endsWith")
+                )
             ),
             // DECIMAL
-            FieldId("amount") to FieldDefinition(
-                id = FieldId("amount"), type = FieldType.DECIMAL,
+            FieldId(value = "amount") to FieldDefinition(
+                id = FieldId(value = "amount"), type = FieldType.DECIMAL,
                 normalizers = emptyList(),
                 operators = setOf(
-                    OperatorId("equals"), OperatorId("gt"), OperatorId("gte"),
-                    OperatorId("lt"), OperatorId("lte"), OperatorId("between")
+                    OperatorId(value = "equals"), OperatorId(value = "gt"), OperatorId(value = "gte"),
+                    OperatorId(value = "lt"), OperatorId(value = "lte"), OperatorId(value = "between")
                 )
             ),
             // INTEGER
-            FieldId("count") to FieldDefinition(
-                id = FieldId("count"), type = FieldType.INTEGER,
+            FieldId(value = "count") to FieldDefinition(
+                id = FieldId(value = "count"), type = FieldType.INTEGER,
                 normalizers = emptyList(),
                 operators = setOf(
-                    OperatorId("equals"), OperatorId("gt"), OperatorId("gte"),
-                    OperatorId("lt"), OperatorId("lte"), OperatorId("between")
+                    OperatorId(value = "equals"), OperatorId(value = "gt"), OperatorId(value = "gte"),
+                    OperatorId(value = "lt"), OperatorId(value = "lte"), OperatorId(value = "between")
                 )
             ),
             // STRING_SET
-            FieldId("tags") to FieldDefinition(
-                id = FieldId("tags"), type = FieldType.STRING_SET,
-                normalizers = listOf(NormalizerId("trim"), NormalizerId("lowercase")),
-                operators = setOf(OperatorId("containsAny"), OperatorId("containsAll"))
+            FieldId(value = "tags") to FieldDefinition(
+                id = FieldId(value = "tags"), type = FieldType.STRING_SET,
+                normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
+                operators = setOf(OperatorId(value = "containsAny"), OperatorId(value = "containsAll"))
             )
         )
     )
@@ -216,15 +220,16 @@ class FullOperatorCoverageTest {
     """.trimIndent()
 
     private fun buildEngine(): RuleEngine {
-        val asts = Parser(allOperatorsRuleText).parseRules()
-        val validation = Validator.validate(asts, schema)
-        assertTrue(validation.isValid, "Validation failed: ${validation.diagnostics}")
-        val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
+        val asts = Parser(input = allOperatorsRuleText).parseRules()
+        val validation = Validator.validate(asts = asts, schema = schema)
+        assertTrue(actual = validation.isValid, message = "Validation failed: ${validation.diagnostics}")
+        val compiled =
+            Compiler.compileRules(asts = asts, schema = schema, normalizerRegistry = NormalizerRegistry.default)
         return RuleEngine(compiledRules = compiled, schema = schema)
     }
 
     private fun ctx(vararg pairs: Pair<String, Any?>): PreparedRuleContext {
-        val prepared = PreparedRuleContext.prepare(RuleContext.of(*pairs), schema)
+        val prepared = PreparedRuleContext.prepare(ctx = RuleContext.of(*pairs), schema = schema)
         return prepared
     }
 
@@ -233,102 +238,158 @@ class FullOperatorCoverageTest {
     @Test
     fun `equals matches SEPA code after uppercase normalization`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("sepaCode" to "pmnt")).matches.any { it.ruleId == "eq-sepa" })
-        assertTrue(e.evaluate(ctx("sepaCode" to "PMNT")).matches.any { it.ruleId == "eq-sepa" })
+        assertTrue(actual = e.evaluate(prepared = ctx("sepaCode" to "pmnt")).matches.any {
+            it.ruleId == "eq-sepa"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("sepaCode" to "PMNT")).matches.any {
+            it.ruleId == "eq-sepa"
+        })
     }
 
     @Test
     fun `equals ignoreCase on counterparty`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("counterparty" to "NETFLIX")).matches.any { it.ruleId == "eq-ic-counterparty" })
-        assertTrue(e.evaluate(ctx("counterparty" to "netflix")).matches.any { it.ruleId == "eq-ic-counterparty" })
-        assertTrue(e.evaluate(ctx("counterparty" to "Netflix")).matches.any { it.ruleId == "eq-ic-counterparty" })
+        assertTrue(actual = e.evaluate(prepared = ctx("counterparty" to "NETFLIX")).matches.any {
+            it.ruleId == "eq-ic-counterparty"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("counterparty" to "netflix")).matches.any {
+            it.ruleId == "eq-ic-counterparty"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("counterparty" to "Netflix")).matches.any {
+            it.ruleId == "eq-ic-counterparty"
+        })
     }
 
     @Test
     fun `contains via normalizer and via ignoreCase`() {
         val e = buildEngine()
         // purposeNorm has lowercase normalizer → "Miete" becomes "miete"
-        assertTrue(e.evaluate(ctx("purposeNorm" to "Miete Januar")).matches.any { it.ruleId == "contains-norm" })
+        assertTrue(actual = e.evaluate(prepared = ctx("purposeNorm" to "Miete Januar")).matches.any {
+            it.ruleId == "contains-norm"
+        })
         // purpose has trim only → ignoreCase needed
-        assertTrue(e.evaluate(ctx("purpose" to "RUECKUBERWEISUNG 001")).matches.any { it.ruleId == "contains-ic" })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "RUECKUBERWEISUNG 001")).matches.any {
+            it.ruleId == "contains-ic"
+        })
     }
 
     @Test
     fun `startsWith and endsWith with ignoreCase`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("iban" to "DE89370400440532013000")).matches.any { it.ruleId == "starts-iban" })
-        assertTrue(e.evaluate(ctx("purpose" to "SAMMELAUFTRAG 001")).matches.any { it.ruleId == "starts-ic" })
-        assertTrue(e.evaluate(ctx("purposeNorm" to "muster gmbh")).matches.any { it.ruleId == "ends-norm" })
-        assertTrue(e.evaluate(ctx("purpose" to "Allianz VERSICHERUNG")).matches.any { it.ruleId == "ends-ic" })
+        assertTrue(actual = e.evaluate(prepared = ctx("iban" to "DE89370400440532013000")).matches.any {
+            it.ruleId == "starts-iban"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "SAMMELAUFTRAG 001")).matches.any {
+            it.ruleId == "starts-ic"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purposeNorm" to "muster gmbh")).matches.any {
+            it.ruleId == "ends-norm"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "Allianz VERSICHERUNG")).matches.any {
+            it.ruleId == "ends-ic"
+        })
     }
 
     @Test
     fun `in operator list match`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("sepaCode" to "CCRD")).matches.any { it.ruleId == "in-sepa" })
-        assertTrue(e.evaluate(ctx("sepaCode" to "dcrd")).matches.any { it.ruleId == "in-sepa" }) // uppercase normalizer
-        assertTrue(e.evaluate(ctx("sepaCode" to "PMNT")).matches.none { it.ruleId == "in-sepa" })
+        assertTrue(actual = e.evaluate(prepared = ctx("sepaCode" to "CCRD")).matches.any {
+            it.ruleId == "in-sepa"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("sepaCode" to "dcrd")).matches.any {
+            it.ruleId == "in-sepa"
+        }) // uppercase normalizer
+        assertTrue(actual = e.evaluate(prepared = ctx("sepaCode" to "PMNT")).matches.none {
+            it.ruleId == "in-sepa"
+        })
     }
 
     @Test
     fun `regex operator with and without ignoreCase`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("iban" to "DE89370400440532013000")).matches.any { it.ruleId == "regex-iban" })
-        assertTrue(e.evaluate(ctx("iban" to "GB29NWBK60161331926819")).matches.none { it.ruleId == "regex-iban" })
-        assertTrue(e.evaluate(ctx("purpose" to "BETRUG!")).matches.any { it.ruleId == "regex-fraud-ic" })
-        assertTrue(e.evaluate(ctx("purpose" to "Normal payment")).matches.none { it.ruleId == "regex-fraud-ic" })
+        assertTrue(actual = e.evaluate(prepared = ctx("iban" to "DE89370400440532013000")).matches.any {
+            it.ruleId == "regex-iban"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("iban" to "GB29NWBK60161331926819")).matches.none {
+            it.ruleId == "regex-iban"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "BETRUG!")).matches.any {
+            it.ruleId == "regex-fraud-ic"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "Normal payment")).matches.none {
+            it.ruleId == "regex-fraud-ic"
+        })
     }
 
     @Test
     fun `not operator`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("purpose" to "Normal payment")).matches.any { it.ruleId == "not-spam" })
-        assertTrue(e.evaluate(ctx("purpose" to "spam offer")).matches.none { it.ruleId == "not-spam" })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "Normal payment")).matches.any {
+            it.ruleId == "not-spam"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("purpose" to "spam offer")).matches.none {
+            it.ruleId == "not-spam"
+        })
     }
 
     @Test
     fun `decimal comparison operators gt gte lt lte`() {
         val e = buildEngine()
         val debit = ctx("amount" to "-600")
-        assertTrue(e.evaluate(debit).matches.any { it.ruleId == "amount-lt" })
-        assertTrue(e.evaluate(debit).matches.any { it.ruleId == "amount-lte" })
-        assertTrue(e.evaluate(debit).matches.none { it.ruleId == "amount-gt" })
+        assertTrue(actual = e.evaluate(prepared = debit).matches.any { it.ruleId == "amount-lt" })
+        assertTrue(actual = e.evaluate(prepared = debit).matches.any { it.ruleId == "amount-lte" })
+        assertTrue(actual = e.evaluate(prepared = debit).matches.none { it.ruleId == "amount-gt" })
 
         val credit = ctx("amount" to "850")
-        assertTrue(e.evaluate(credit).matches.any { it.ruleId == "amount-gt" })
-        assertTrue(e.evaluate(credit).matches.any { it.ruleId == "amount-gte" })
-        assertTrue(e.evaluate(credit).matches.none { it.ruleId == "amount-lt" })
+        assertTrue(actual = e.evaluate(prepared = credit).matches.any { it.ruleId == "amount-gt" })
+        assertTrue(actual = e.evaluate(prepared = credit).matches.any { it.ruleId == "amount-gte" })
+        assertTrue(actual = e.evaluate(prepared = credit).matches.none { it.ruleId == "amount-lt" })
     }
 
     @Test
     fun `decimal between operator`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("amount" to "2500")).matches.any { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "100")).matches.any { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "5000")).matches.any { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "99")).matches.none { it.ruleId == "amount-between" })
-        assertTrue(e.evaluate(ctx("amount" to "5001")).matches.none { it.ruleId == "amount-between" })
+        assertTrue(actual = e.evaluate(prepared = ctx("amount" to "2500")).matches.any {
+            it.ruleId == "amount-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("amount" to "100")).matches.any {
+            it.ruleId == "amount-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("amount" to "5000")).matches.any {
+            it.ruleId == "amount-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("amount" to "99")).matches.none {
+            it.ruleId == "amount-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("amount" to "5001")).matches.none {
+            it.ruleId == "amount-between"
+        })
     }
 
     @Test
     fun `integer between operator`() {
         val e = buildEngine()
-        assertTrue(e.evaluate(ctx("count" to 5)).matches.any { it.ruleId == "count-between" })
-        assertTrue(e.evaluate(ctx("count" to 1)).matches.none { it.ruleId == "count-between" })
-        assertTrue(e.evaluate(ctx("count" to 11)).matches.none { it.ruleId == "count-between" })
+        assertTrue(actual = e.evaluate(prepared = ctx("count" to 5)).matches.any {
+            it.ruleId == "count-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("count" to 1)).matches.none {
+            it.ruleId == "count-between"
+        })
+        assertTrue(actual = e.evaluate(prepared = ctx("count" to 11)).matches.none {
+            it.ruleId == "count-between"
+        })
     }
 
     @Test
     fun `string set containsAny and containsAll`() {
         val e = buildEngine()
         val premiumVerified = ctx("tags" to listOf("premium", "verified"))
-        assertTrue(e.evaluate(premiumVerified).matches.any { it.ruleId == "tag-any" })
-        assertTrue(e.evaluate(premiumVerified).matches.any { it.ruleId == "tag-all" })
+        assertTrue(actual = e.evaluate(prepared = premiumVerified).matches.any { it.ruleId == "tag-any" })
+        assertTrue(actual = e.evaluate(prepared = premiumVerified).matches.any { it.ruleId == "tag-all" })
 
         val vipOnly = ctx("tags" to listOf("vip"))
-        assertTrue(e.evaluate(vipOnly).matches.any { it.ruleId == "tag-any" })
-        assertTrue(e.evaluate(vipOnly).matches.none { it.ruleId == "tag-all" }) // missing "premium"
+        assertTrue(actual = e.evaluate(prepared = vipOnly).matches.any { it.ruleId == "tag-any" })
+        assertTrue(actual = e.evaluate(prepared = vipOnly).matches.none { it.ruleId == "tag-all" }) // missing "premium"
     }
 
     @Test
@@ -336,15 +397,15 @@ class FullOperatorCoverageTest {
         val e = buildEngine()
         // purpose contains "Rueckuberweisung" AND amount < 0 → matches rule "bracket-or"
         assertTrue(
-            e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "-250"))
+            actual = e.evaluate(prepared = ctx("purpose" to "Rueckuberweisung 001", "amount" to "-250"))
                 .matches.any { it.ruleId == "bracket-or" })
         // purpose contains "Nicht Gedeckt" AND amount < 0 → matches
         assertTrue(
-            e.evaluate(ctx("purpose" to "Lastschrift Nicht Gedeckt", "amount" to "-10"))
+            actual = e.evaluate(prepared = ctx("purpose" to "Lastschrift Nicht Gedeckt", "amount" to "-10"))
                 .matches.any { it.ruleId == "bracket-or" })
         // purpose matches but amount positive → does NOT match
         assertTrue(
-            e.evaluate(ctx("purpose" to "Rueckuberweisung 001", "amount" to "10"))
+            actual = e.evaluate(prepared = ctx("purpose" to "Rueckuberweisung 001", "amount" to "10"))
                 .matches.none { it.ruleId == "bracket-or" })
     }
 
@@ -355,14 +416,14 @@ class FullOperatorCoverageTest {
         val url = javaClass.classLoader.getResource("rules-full/chargebacks.rule")
             ?: error("chargebacks.rule not found on classpath")
         val text = java.io.File(url.toURI()).readText()
-        val asts = Parser(text).parseRules()
-        assertTrue(asts.isNotEmpty())
+        val asts = Parser(input = text).parseRules()
+        assertTrue(actual = asts.isNotEmpty())
 
         val schemaUrl = javaClass.classLoader.getResource("full-schema.yaml")
             ?: error("full-schema.yaml not found")
         val loadedSchema = ruleengine.schema.FieldSchemaLoader.load(java.nio.file.Path.of(schemaUrl.toURI()))
-        val result = Validator.validate(asts, loadedSchema)
-        assertTrue(result.isValid, "chargebacks.rule validation failed: ${result.diagnostics}")
+        val result = Validator.validate(asts = asts, schema = loadedSchema)
+        assertTrue(actual = result.isValid, message = "chargebacks.rule validation failed: ${result.diagnostics}")
     }
 
     @Test
@@ -370,13 +431,13 @@ class FullOperatorCoverageTest {
         val url = javaClass.classLoader.getResource("rules-full/fraud-detection.rule")
             ?: error("fraud-detection.rule not found on classpath")
         val text = java.io.File(url.toURI()).readText()
-        val asts = Parser(text).parseRules()
-        assertTrue(asts.isNotEmpty())
+        val asts = Parser(input = text).parseRules()
+        assertTrue(actual = asts.isNotEmpty())
 
         val schemaUrl = javaClass.classLoader.getResource("full-schema.yaml") ?: error("schema not found")
         val loadedSchema = ruleengine.schema.FieldSchemaLoader.load(java.nio.file.Path.of(schemaUrl.toURI()))
-        val result = Validator.validate(asts, loadedSchema)
-        assertTrue(result.isValid, "fraud-detection.rule validation failed: ${result.diagnostics}")
+        val result = Validator.validate(asts = asts, schema = loadedSchema)
+        assertTrue(actual = result.isValid, message = "fraud-detection.rule validation failed: ${result.diagnostics}")
     }
 
     @Test
@@ -384,13 +445,16 @@ class FullOperatorCoverageTest {
         val url = javaClass.classLoader.getResource("rules-full/sepa-classification.rule")
             ?: error("sepa-classification.rule not found on classpath")
         val text = java.io.File(url.toURI()).readText()
-        val asts = Parser(text).parseRules()
-        assertTrue(asts.isNotEmpty())
+        val asts = Parser(input = text).parseRules()
+        assertTrue(actual = asts.isNotEmpty())
 
         val schemaUrl = javaClass.classLoader.getResource("full-schema.yaml") ?: error("schema not found")
         val loadedSchema = ruleengine.schema.FieldSchemaLoader.load(java.nio.file.Path.of(schemaUrl.toURI()))
-        val result = Validator.validate(asts, loadedSchema)
-        assertTrue(result.isValid, "sepa-classification.rule validation failed: ${result.diagnostics}")
+        val result = Validator.validate(asts = asts, schema = loadedSchema)
+        assertTrue(
+            actual = result.isValid,
+            message = "sepa-classification.rule validation failed: ${result.diagnostics}"
+        )
     }
 }
 
