@@ -44,7 +44,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1046,14 +1045,14 @@ actual fun RuleEditor() {
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .clip(RoundedCornerShape(6.dp))
-                                .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
-                                .drawWithContent {
-                                    // Record into the graphics layer so Export PNG can capture it.
-                                    diagramGraphicsLayer.record { this@drawWithContent.drawContent() }
-                                    drawLayer(diagramGraphicsLayer)
-                                },
+                                .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
                         ) {
-                            RuleDiagramView(rules = diagramRules)
+                            // Pass the capture layer down so recording happens on the
+                            // full-height content column, not on this clipped viewport box.
+                            RuleDiagramView(
+                                rules        = diagramRules,
+                                captureLayer = diagramGraphicsLayer,
+                            )
                         }
                     } else {
 

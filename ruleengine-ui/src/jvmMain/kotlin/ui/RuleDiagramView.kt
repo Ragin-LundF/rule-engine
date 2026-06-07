@@ -23,9 +23,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -87,28 +89,70 @@ private val ConnectorW = 1.5.dp
  *     leaf conditions are horizontal rows)
  *  3. Actions node
  *
- * This replaces the previous horizontal-spreading tree layout with a
- * fixed-width container-node approach that never exceeds the available width.
+ * [captureLayer] — when provided, the full-height content column records itself
+ * into this layer before drawing to the screen. Call [GraphicsLayer.toImageBitmap]
+ * to export the complete diagram, including content below the visible viewport.
+ * Attaching the layer here (instead of on the outer viewport box) is essential:
+ * the inner content Column is measured at its natural height by the scroll
+ * layout pass, so the recording captures the entire diagram, not just the
+ * currently visible portion.
  */
 @Composable
-fun RuleDiagramView(rules: List<RuleAst>) {
+fun RuleDiagramView(
+    rules        : List<RuleAst>,
+    captureLayer : GraphicsLayer? = null,
+) {
     val scrollState = rememberScrollState()
 
+    // Build the capture modifier once; reuse for both empty and normal states.
+    val captureModifier = if (captureLayer != null) {
+        Modifier.drawWithContent {
+            // Inside record{} the receiver is a plain DrawScope, so the
+            // explicit outer receiver is needed to reach ContentDrawScope.drawContent().
+            captureLayer.record { this@drawWithContent.drawContent() }
+            drawContent()
+        }
+    } else {
+        Modifier
+    }
+
     if (rules.isEmpty()) {
-        EmptyDiagramPlaceholder()
+        // Empty state — still participates in capture so the placeholder is exported.
+        Box(
+            modifier         = Modifier
+                .fillMaxSize()
+                .background(DiagramBg)
+                .then(captureModifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            EmptyDiagramPlaceholderContent()
+        }
         return
     }
 
-    Column(
+    // ── Scroll viewport (fixed to available size, clips content) ─────────────
+    // The Box with verticalScroll measures its child WITHOUT a max-height
+    // constraint, so the inner Column lays out at its full natural height.
+    // The capture layer is attached to the inner Column, not to this Box,
+    // which is why the recording is never clipped to the viewport.
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(DiagramBg)
-            .verticalScroll(scrollState)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(48.dp),
+            .verticalScroll(scrollState),
     ) {
-        rules.forEach { rule ->
-            SingleRuleDiagram(rule = rule)
+        // ── Full-height content column (what actually gets captured) ──────────
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DiagramBg)
+                .then(captureModifier)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(48.dp),
+        ) {
+            rules.forEach { rule ->
+                SingleRuleDiagram(rule = rule)
+            }
         }
     }
 }
@@ -500,31 +544,30 @@ private fun formatLiteral(lit: LiteralAst): String {
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
+/**
+ * Content shown when no rules are available. Extracted so the outer Box
+ * (with the optional capture modifier) lives in [RuleDiagramView].
+ */
 @Composable
-private fun EmptyDiagramPlaceholder() {
-    Box(
-        modifier         = Modifier.fillMaxSize().background(DiagramBg),
-        contentAlignment = Alignment.Center,
+private fun EmptyDiagramPlaceholderContent() {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text  = "⬡",
-                style = TextStyle(fontSize = 40.sp, color = BorderColor),
-            )
-            Text(
-                text  = "No valid rules to display",
-                style = MaterialTheme.typography.body1,
-                color = TextDesc,
-            )
-            Text(
-                text  = "Write a rule in the Code tab and it will appear here",
-                style = MaterialTheme.typography.caption,
-                color = TextDesc.copy(alpha = 0.6f),
-            )
-        }
+        Text(
+            text  = "⬡",
+            style = TextStyle(fontSize = 40.sp, color = BorderColor),
+        )
+        Text(
+            text  = "No valid rules to display",
+            style = MaterialTheme.typography.body1,
+            color = TextDesc,
+        )
+        Text(
+            text  = "Write a rule in the Code tab and it will appear here",
+            style = MaterialTheme.typography.caption,
+            color = TextDesc.copy(alpha = 0.6f),
+        )
     }
 }
 
