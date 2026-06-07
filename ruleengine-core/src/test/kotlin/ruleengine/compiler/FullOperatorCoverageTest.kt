@@ -40,7 +40,11 @@ class FullOperatorCoverageTest {
             FieldId(value = "purposeNorm") to FieldDefinition(
                 id = FieldId(value = "purposeNorm"), type = FieldType.TEXT,
                 normalizers = listOf(NormalizerId(value = "trim"), NormalizerId(value = "lowercase")),
-                operators = setOf(OperatorId(value = "equals"), OperatorId(value = "contains"), OperatorId(value = "endsWith"))
+                operators = setOf(
+                    OperatorId(value = "equals"),
+                    OperatorId(value = "contains"),
+                    OperatorId(value = "endsWith")
+                )
             ),
             FieldId("iban") to FieldDefinition(
                 id = FieldId("iban"), type = FieldType.TEXT,
