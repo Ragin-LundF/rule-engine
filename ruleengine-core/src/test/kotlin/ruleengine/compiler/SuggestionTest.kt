@@ -8,8 +8,8 @@ import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class SuggestionTest {
     @Test
@@ -23,22 +23,22 @@ class SuggestionTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "s",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim")),
-                    operators = setOf(OperatorId("contains"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim")),
+                    operators = setOf(OperatorId(value = "contains"))
                 )
             )
         )
-        val res = Validator.validate(asts, schema)
-        assertFalse(res.isValid)
+        val res = Validator.validate(asts = asts, schema = schema)
+        assertFalse(actual = res.isValid)
         val diag = res.diagnostics.firstOrNull()
-        assertTrue(diag?.suggestion == "purpose")
+        assertEquals(expected = diag?.suggestion, actual = "purpose")
     }
 
     @Test
@@ -52,22 +52,22 @@ class SuggestionTest {
             }
         """.trimIndent()
 
-        val asts = Parser(txt).parseRules()
+        val asts = Parser(input = txt).parseRules()
         val schema = FieldSchema(
             name = "s",
             fields = mapOf(
-                FieldId("purpose") to FieldDefinition(
-                    FieldId("purpose"),
-                    FieldType.TEXT,
-                    normalizers = listOf(NormalizerId("trim")),
-                    operators = setOf(OperatorId("contains"), OperatorId("equals"))
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    normalizers = listOf(NormalizerId(value = "trim")),
+                    operators = setOf(OperatorId(value = "contains"), OperatorId(value = "equals"))
                 )
             )
         )
-        val res = Validator.validate(asts, schema)
-        assertFalse(res.isValid)
+        val res = Validator.validate(asts = asts, schema = schema)
+        assertFalse(actual = res.isValid)
         val diag = res.diagnostics.firstOrNull { it.message.contains("Operator") }
-        assertTrue(diag?.suggestion == "contains")
+        assertEquals(expected = diag?.suggestion, actual = "contains")
     }
 }
 
