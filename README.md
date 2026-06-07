@@ -1,6 +1,6 @@
-Rule Engine — Small DSL + YAML schema
+# Rule Engine — Small DSL + YAML schema
 
-Overview
+## Overview
 
 This repository contains a small, pluggable rule engine written in Kotlin. Key features:
 - YAML field schema loader
@@ -8,8 +8,14 @@ This repository contains a small, pluggable rule engine written in Kotlin. Key f
 - Parser, validator, compiler and compiled evaluator
 - Tracing / decision tree export
 - CLI tools for validation and evaluation
+- UI to edit or visualize rules
 
-Quick CLI examples
+## Documentation
+
+[Here](docs/README.md) is a detailed guide to the concepts, writing rules, and integrating them into software.
+
+
+## Quick CLI examples
 
 Validate rules (human-readable):
 
@@ -57,11 +63,11 @@ rule "rent-payment" {
 }
 ```
 
-DSL overview
+## DSL overview
 - Each rule begins with `rule "id" {` and contains a `when` block (the condition) and a `then` block (a sequence of actions).
 - Conditions are boolean expressions built from field comparisons combined with `and`, `or` and `not`.
 
-Supported operators (examples)
+## Supported operators (examples)
 - Text fields (FieldType.TEXT):
   - equals: `name equals "Alice"`
   - contains: `description contains "urgent"`
@@ -79,7 +85,7 @@ Supported operators (examples)
   - containsAny / containsAll: `tags containsAny ["premium","vip"]`
   - single string treated as containsAny: `tags containsAny "vip"`
 
-Actions and action schema
+## Actions and action schema
 - Actions appear in the `then` block as identifiers followed by one or more literal arguments.
 - The available actions and their expected argument types can be defined in an actions YAML file. Example (`src/test/resources/actions.yaml`):
 
