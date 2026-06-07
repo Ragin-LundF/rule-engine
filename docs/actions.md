@@ -58,11 +58,11 @@ Each action can accept **exactly one argument** of a declared type.
 
 ### Argument Types
 
-| Type | Accepted values |
-|---|---|
-| `string` | Any text value in double quotes |
-| `integer` | A whole number |
-| `decimal` | A number with decimal places |
+| Type      | Accepted values                 |
+|-----------|---------------------------------|
+| `string`  | Any text value in double quotes |
+| `integer` | A whole number                  |
+| `decimal` | A number with decimal places    |
 
 ---
 
