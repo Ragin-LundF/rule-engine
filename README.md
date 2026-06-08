@@ -14,6 +14,7 @@ This repository contains a small, pluggable rule engine written in Kotlin. Key f
 
 [Here](docs/README.md) is a detailed guide to the concepts, writing rules, and integrating them into software.
 
+If you want to create rules with AI, the system provides a [RULE-SPEC.md](RULE-SPEC.md) which can be used as specification for AI to create or convert existing rules.
 
 ## Quick CLI examples
 
