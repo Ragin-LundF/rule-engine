@@ -15,6 +15,7 @@ import java.nio.file.Path
 
 object SampleRunner {
     @JvmStatic
+    @Suppress("LongMethod", "ReturnCount")
     fun main(args: Array<String>) {
         // determine manifest path (use test manifest by default)
         val manifestPath = Path.of("src/test/resources/full-manifest.yaml")
@@ -96,12 +97,15 @@ object SampleRunner {
         }
         outputMap["decisionTree"] = result.trace
 
-        val out = try {
+        val out = runCatching {
             JacksonUtil.jsonMapper.writerWithDefaultPrettyPrinter().writeValueAsString(outputMap)
-        } catch (ex: Exception) {
-            System.err.println("Failed to serialize result: ${ex.message}")
-            return
-        }
+        }.fold(
+            onSuccess = { it },
+            onFailure = { ex ->
+                System.err.println("Failed to serialize result: ${ex.message}")
+                return
+            }
+        )
 
         println(out)
     }
