@@ -2,15 +2,22 @@ package ui.editor.rules
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import ruleengine.manifest.ProjectManifest
-import ruleengine.core.errors.ValidationDiagnostic
-import ui.DslCursorContext
-import ui.DslSection
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldSchema
+import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.manifest.ManifestEntry
+import ruleengine.manifest.ProjectManifest
+import ruleengine.schema.ActionSchemaLoader
+import ruleengine.schema.FieldSchemaLoader
+import ui.DslCursorContext
+import ui.DslSection
+import ui.autocompletion.CompletionItem
+import java.nio.file.Files
+import java.nio.file.Path
 
 /**
  * Centralized state holder for the Rule Editor.
@@ -20,6 +27,10 @@ import ruleengine.core.domain.FieldSchema
 class RuleEditorState(
     val scope: CoroutineScope,
 ) {
+    companion object {
+        /** Default split fraction between the left schema panel and the right editor panel. */
+        private const val DEFAULT_SPLIT_FRACTION = 0.33f
+    }
     // Text fields
     val schemaText: MutableState<String> = mutableStateOf("")
     val schemaFieldValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
@@ -37,6 +48,7 @@ class RuleEditorState(
 
     // Manifest
     val manifestText: MutableState<String> = mutableStateOf("")
+    val manifestFieldValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
     val manifestBaseDir: MutableState<String?> = mutableStateOf(null)
     val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(null)
     val selectedManifestEntry: MutableState<String?> = mutableStateOf(null)
@@ -57,7 +69,7 @@ class RuleEditorState(
     val autoCompleteWord: MutableState<String> = mutableStateOf("")
     val autoCompleteWordStart: MutableState<Int> = mutableStateOf(0)
     val dslContext: MutableState<DslCursorContext> = mutableStateOf(DslCursorContext(section = DslSection.TOP_LEVEL))
-    val splitFraction: MutableState<Float> = mutableStateOf(0.33f)
+    val splitFraction: MutableState<Float> = mutableStateOf(DEFAULT_SPLIT_FRACTION)
     val viewMode: MutableState<ViewMode> = mutableStateOf(ViewMode.CODE)
     val showExpandedDiagram: MutableState<Boolean> = mutableStateOf(false)
 
@@ -68,6 +80,70 @@ class RuleEditorState(
         status.value = msg
         statusKind.value = kind
     }
-}
 
-// end
+    /** Accept an autocomplete suggestion and insert it at the current cursor position. */
+    fun acceptSuggestion(item: CompletionItem) {
+        val cursor = ruleValue.value.selection.start
+        val newText = ruleValue.value.text.substring(startIndex = 0, endIndex = autoCompleteWordStart.value) +
+                item.insertText +
+                ruleValue.value.text.substring(startIndex = cursor)
+        val newPos = autoCompleteWordStart.value + item.insertText.length
+        ruleValue.value = TextFieldValue(text = newText, selection = TextRange(index = newPos))
+        showAutoComplete.value = false
+    }
+
+    /** Load all files referenced by a manifest entry into the editor state. */
+    fun loadManifestEntry(entry: ManifestEntry) {
+        selectedManifestEntry.value = entry.id
+        val base = manifestBaseDir.value ?: return
+        var loadedRules = 0
+
+        // Load schema if referenced
+        entry.schema?.let { sp ->
+            runCatching {
+                val p = Path.of(base, sp)
+                val c = Files.readString(p)
+                schemaText.value = c
+                schemaFieldValue.value = TextFieldValue(text = c)
+                parsedSchema.value = runCatching {
+                    FieldSchemaLoader.loadFromString(content = c, nameHint = p.fileName.toString())
+                }.getOrNull()
+            }
+        }
+        // Load actions if referenced
+        entry.actions?.let { ap ->
+            runCatching {
+                val p = Path.of(base, ap)
+                val c = Files.readString(p)
+                actionSchemaText.value = c
+                actionFieldValue.value = TextFieldValue(text = c)
+                parsedActionSchema.value = runCatching {
+                    ActionSchemaLoader.loadFromString(content = c)
+                }.getOrNull()
+            }
+        }
+        // Load and concatenate all rule files
+        if (entry.rules.isNotEmpty()) {
+            val combined = buildString {
+                entry.rules.forEachIndexed { idx, rp ->
+                    runCatching {
+                        val p = Path.of(base, rp)
+                        val c = Files.readString(p)
+                        if (idx > 0) append("\n\n")
+                        append("# --- ${p.fileName} ---\n")
+                        append(c)
+                        loadedRules++
+                    }
+                }
+            }
+            if (combined.isNotBlank()) ruleValue.value = TextFieldValue(text = combined)
+        }
+        setStatus(
+            msg = "Loaded '${entry.id}'" +
+                    (if (entry.schema != null) ", schema" else "") +
+                    (if (entry.actions != null) ", actions" else "") +
+                    (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
+            kind = StatusKind.SUCCESS,
+        )
+    }
+}
