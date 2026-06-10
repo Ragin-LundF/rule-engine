@@ -84,11 +84,10 @@ import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewMode
 import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.autoClosingBraceDedent
-import ui.editor.rules.RuleEditorStateCommon
-import ui.editor.rules.drawBottomLine
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
 import ui.editor.rules.isContextuallyImmediate
+import ui.editor.rules.sections.TopBarSection
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -303,38 +302,7 @@ actual fun RuleEditor() {
     Column(modifier = Modifier.fillMaxSize().background(color = Bg)) {
 
         // ── Top Bar ───────────────────────────────────────────────────────────
-        Surface(color = BgSurface, elevation = 0.dp) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .drawBottomLine(w = 1.dp, color = BorderColor)
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
-            ) {
-                Text(text = "⚙", fontSize = 18.sp)
-                Text(text = "Rule Engine", style = MaterialTheme.typography.h6, color = TextPrimary)
-                Chip(label = "Editor", bg = BgElevated, textColor = PrimaryBlue)
-                Spacer(Modifier.weight(weight = 1f))
-                AppButton(label = "Load Manifest") {
-                    scope.launch {
-                        val m = pickManifestFile()
-                        if (m != null) {
-                            manifestText = m.first
-                            manifestBaseDir = m.second
-                            // Reset selection so auto-load of first entry triggers.
-                            selectedManifestEntry = null
-                            parsedManifest = runCatching {
-                                ManifestLoader.loadFromString(content = manifestText)
-                            }.getOrNull()
-                            setStatus(msg = "Manifest loaded", kind = StatusKind.SUCCESS)
-                        } else {
-                            setStatus(msg = "Manifest load cancelled", kind = StatusKind.IDLE)
-                        }
-                    }
-                }
-            }
-        }
+        TopBarSection(state = state, scope = scope)
 
         // ── Main layout ───────────────────────────────────────────────────────
         BoxWithConstraints(
