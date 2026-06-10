@@ -39,7 +39,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -65,14 +64,10 @@ import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
 import ruleengine.core.errors.Severity
-import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestLoader
-import ruleengine.manifest.ProjectManifest
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.ACTION_SCHEMA_EXAMPLE
@@ -83,11 +78,13 @@ import ui.editor.rules.DesktopRuleEditorSchemaSection
 import ui.editor.rules.FIELD_SCHEMA_EXAMPLE
 import ui.editor.rules.MANIFEST_EXAMPLE
 import ui.editor.rules.PanelDivider
+import ui.editor.rules.RuleEditorState
 import ui.editor.rules.SectionHeader
 import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewMode
 import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.autoClosingBraceDedent
+import ui.editor.rules.RuleEditorStateCommon
 import ui.editor.rules.drawBottomLine
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
@@ -99,44 +96,47 @@ import java.nio.file.Path
 
 @Composable
 actual fun RuleEditor() {
-    var schemaText by remember { mutableStateOf(value = "") }
-    var schemaFieldValue by remember { mutableStateOf(value = TextFieldValue("")) }
-    var ruleValue by remember { mutableStateOf(value = TextFieldValue("")) }
-    var status by remember { mutableStateOf(value = "Ready") }
-    var statusKind by remember { mutableStateOf(value = StatusKind.IDLE) }
     val scope = rememberCoroutineScope()
+    // Centralized state container for the editor
+    val state = remember { RuleEditorState(scope = scope) }
 
-    var parsedSchema by remember { mutableStateOf<FieldSchema?>(value = null) }
-    var actionSchemaText by remember { mutableStateOf(value = "") }
-    var actionFieldValue by remember { mutableStateOf(value = TextFieldValue("")) }
-    var parsedActionSchema by remember { mutableStateOf<ActionSchema?>(value = null) }
-    var manifestText by remember { mutableStateOf(value = "") }
-    var manifestBaseDir by remember { mutableStateOf<String?>(value = null) }
-    var parsedManifest by remember { mutableStateOf<ProjectManifest?>(value = null) }
-    var selectedManifestEntry by remember { mutableStateOf<String?>(value = null) }
-    var diagnosticsList by remember { mutableStateOf<List<ValidationDiagnostic>>(value = emptyList()) }
-    var diagnosticsText by remember { mutableStateOf(value = "") }
+    var schemaText by state.schemaText
+    var schemaFieldValue by state.schemaFieldValue
+    var ruleValue by state.ruleValue
+    var status by state.status
+    var statusKind by state.statusKind
+
+    var parsedSchema by state.parsedSchema
+    var actionSchemaText by state.actionSchemaText
+    var actionFieldValue by state.actionFieldValue
+    var parsedActionSchema by state.parsedActionSchema
+    var manifestText by state.manifestText
+    var manifestBaseDir by state.manifestBaseDir
+    var parsedManifest by state.parsedManifest
+    var selectedManifestEntry by state.selectedManifestEntry
+    var diagnosticsList by state.diagnosticsList
+    var diagnosticsText by state.diagnosticsText
 
     // ── Editor expand/collapse state ──────────────────────────────────────────
-    var schemaExpanded by remember { mutableStateOf(value = false) }
-    var actionsExpanded by remember { mutableStateOf(value = false) }
-    var showManifestYaml by remember { mutableStateOf(value = false) }
+    var schemaExpanded by state.schemaExpanded
+    var actionsExpanded by state.actionsExpanded
+    var showManifestYaml by state.showManifestYaml
 
     // ── Editor UX state ───────────────────────────────────────────────────────
     val editorScrollState = rememberScrollState()
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(value = null) }
-    var cursorRect by remember { mutableStateOf(value = Rect.Zero) }
+    var cursorRect by state.cursorRect
 
-    var showAutoComplete by remember { mutableStateOf(value = false) }
-    var autoCompleteIndex by remember { mutableStateOf(value = 0) }
-    var autoCompleteWord by remember { mutableStateOf(value = "") }
-    var autoCompleteWordStart by remember { mutableStateOf(value = 0) }
-    var dslContext by remember { mutableStateOf(value = DslCursorContext(section = DslSection.TOP_LEVEL)) }
-    var splitFraction by remember { mutableStateOf(value = 0.33f) }
-    var viewMode by remember { mutableStateOf(value = ViewMode.CODE) }
+    var showAutoComplete by state.showAutoComplete
+    var autoCompleteIndex by state.autoCompleteIndex
+    var autoCompleteWord by state.autoCompleteWord
+    var autoCompleteWordStart by state.autoCompleteWordStart
+    var dslContext by state.dslContext
+    var splitFraction by state.splitFraction
+    var viewMode by state.viewMode
     // ── Diagram-specific state ────────────────────────────────────────────────
     val diagramGraphicsLayer = rememberGraphicsLayer()
-    var showExpandedDiagram by remember { mutableStateOf(value = false) }
+    var showExpandedDiagram by state.showExpandedDiagram
 
     // ── Parsed rules for live diagram view ────────────────────────────────────
     val diagramRules = remember(key1 = ruleValue.text) {
@@ -635,7 +635,7 @@ actual fun RuleEditor() {
 
                         // ── Manifest entries list ─────────────────────────────
                         parsedManifest?.let { manifest ->
-                            items(manifest.entries) { entry ->
+                            items(items = manifest.entries) { entry ->
                                 val sel = selectedManifestEntry == entry.id
                                 Row(
                                     modifier = Modifier
