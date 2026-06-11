@@ -31,47 +31,50 @@ class RuleEditorState(
         /** Default split fraction between the left schema panel and the right editor panel. */
         private const val DEFAULT_SPLIT_FRACTION = 0.33f
     }
+
     // Text fields
-    val schemaText: MutableState<String> = mutableStateOf("")
-    val schemaFieldValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
-    val ruleValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
+    val schemaText: MutableState<String> = mutableStateOf(value = "")
+    val schemaFieldValue: MutableState<TextFieldValue> = mutableStateOf(value = TextFieldValue(text = ""))
+    val ruleValue: MutableState<TextFieldValue> = mutableStateOf(value = TextFieldValue(text = ""))
 
     // Status
-    val status: MutableState<String> = mutableStateOf("Ready")
-    val statusKind: MutableState<StatusKind> = mutableStateOf(StatusKind.IDLE)
+    val status: MutableState<String> = mutableStateOf(value = "Ready")
+    val statusKind: MutableState<StatusKind> = mutableStateOf(value = StatusKind.IDLE)
 
     // Parsed schema/action
-    val parsedSchema: MutableState<FieldSchema?> = mutableStateOf(null)
-    val actionSchemaText: MutableState<String> = mutableStateOf("")
-    val actionFieldValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
-    val parsedActionSchema: MutableState<ActionSchema?> = mutableStateOf(null)
+    val parsedSchema: MutableState<FieldSchema?> = mutableStateOf(value = null)
+    val actionSchemaText: MutableState<String> = mutableStateOf(value = "")
+    val actionFieldValue: MutableState<TextFieldValue> = mutableStateOf(value = TextFieldValue(text = ""))
+    val parsedActionSchema: MutableState<ActionSchema?> = mutableStateOf(value = null)
 
     // Manifest
-    val manifestText: MutableState<String> = mutableStateOf("")
-    val manifestFieldValue: MutableState<TextFieldValue> = mutableStateOf(TextFieldValue(text = ""))
-    val manifestBaseDir: MutableState<String?> = mutableStateOf(null)
-    val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(null)
-    val selectedManifestEntry: MutableState<String?> = mutableStateOf(null)
+    val manifestText: MutableState<String> = mutableStateOf(value = "")
+    val manifestFieldValue: MutableState<TextFieldValue> = mutableStateOf(value = TextFieldValue(text = ""))
+    val manifestBaseDir: MutableState<String?> = mutableStateOf(value = null)
+    val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(value = null)
+    val selectedManifestEntry: MutableState<String?> = mutableStateOf(value = null)
 
     // Diagnostics
-    val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(emptyList())
-    val diagnosticsText: MutableState<String> = mutableStateOf("")
+    val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
+    val diagnosticsText: MutableState<String> = mutableStateOf(value = "")
 
     // Expand/collapse
-    val schemaExpanded: MutableState<Boolean> = mutableStateOf(false)
-    val actionsExpanded: MutableState<Boolean> = mutableStateOf(false)
-    val showManifestYaml: MutableState<Boolean> = mutableStateOf(false)
+    val schemaExpanded: MutableState<Boolean> = mutableStateOf(value = false)
+    val actionsExpanded: MutableState<Boolean> = mutableStateOf(value = false)
+    val showManifestYaml: MutableState<Boolean> = mutableStateOf(value = false)
 
     // Editor UX
-    val cursorRect: MutableState<Rect> = mutableStateOf(Rect.Zero)
-    val showAutoComplete: MutableState<Boolean> = mutableStateOf(false)
-    val autoCompleteIndex: MutableState<Int> = mutableStateOf(0)
-    val autoCompleteWord: MutableState<String> = mutableStateOf("")
-    val autoCompleteWordStart: MutableState<Int> = mutableStateOf(0)
-    val dslContext: MutableState<DslCursorContext> = mutableStateOf(DslCursorContext(section = DslSection.TOP_LEVEL))
-    val splitFraction: MutableState<Float> = mutableStateOf(DEFAULT_SPLIT_FRACTION)
-    val viewMode: MutableState<ViewMode> = mutableStateOf(ViewMode.CODE)
-    val showExpandedDiagram: MutableState<Boolean> = mutableStateOf(false)
+    val cursorRect: MutableState<Rect> = mutableStateOf(value = Rect.Zero)
+    val showAutoComplete: MutableState<Boolean> = mutableStateOf(value = false)
+    val autoCompleteIndex: MutableState<Int> = mutableStateOf(value = 0)
+    val autoCompleteWord: MutableState<String> = mutableStateOf(value = "")
+    val autoCompleteWordStart: MutableState<Int> = mutableStateOf(value = 0)
+    val dslContext: MutableState<DslCursorContext> = mutableStateOf(
+        value = DslCursorContext(section = DslSection.TOP_LEVEL)
+    )
+    val splitFraction: MutableState<Float> = mutableStateOf(value = DEFAULT_SPLIT_FRACTION)
+    val viewMode: MutableState<ViewMode> = mutableStateOf(value = ViewMode.CODE)
+    val showExpandedDiagram: MutableState<Boolean> = mutableStateOf(value = false)
 
     // Parsed rules for diagram are derived in UI; kept as helper nullable here if needed
 
