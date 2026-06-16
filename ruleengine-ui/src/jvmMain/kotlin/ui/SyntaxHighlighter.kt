@@ -49,7 +49,7 @@ fun annotateRule(
     if (text.isEmpty()) return AnnotatedString(text)
 
     val fieldNames = schema?.fields?.flatMap { (id, field) ->
-        listOf(id.value, field.alias).filter { !it.isNullOrBlank() }
+        listOf(id.value, field.alias).filter { it != null && it.isNotBlank() }
     }?.toSet() ?: emptySet()
     val actionNames = actions?.actions?.keys?.toSet() ?: emptySet()
 
