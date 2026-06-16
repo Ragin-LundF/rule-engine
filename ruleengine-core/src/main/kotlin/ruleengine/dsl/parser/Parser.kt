@@ -169,16 +169,38 @@ class Parser(private val input: String) {
     }
 
     private fun parsePrimary(): ExpressionAst {
-        val token = current()
-        if (token.type == TokenType.LPAREN) {
-            advance()
-            val innerExpression = parseExpression()
-            expect(type = TokenType.RPAREN)
-            return innerExpression
+        return if (current().type == TokenType.LPAREN) {
+            parseParenthesizedExpression()
+        } else {
+            parseCondition()
         }
+    }
 
-        // condition: IDENT | IDENT.IDENT | ...
-        if (token.type != TokenType.IDENT && token.type != TokenType.DOT) {
+    private fun parseParenthesizedExpression(): ExpressionAst {
+        advance()
+        val innerExpression = parseExpression()
+        expect(type = TokenType.RPAREN)
+        return innerExpression
+    }
+
+    private fun parseCondition(): ConditionAst {
+        val field = parseConditionField()
+        val operator = parseConditionOperator()
+        val value = parseConditionValue(operator = operator)
+        val ignoreCase = parseIgnoreCaseModifier()
+
+        return ConditionAst(
+            field = field,
+            operator = operator,
+            value = value,
+            ignoreCase = ignoreCase
+        )
+    }
+
+    @Suppress("ThrowsCount")
+    private fun parseConditionField(): String {
+        val token = current()
+        if (token.type != TokenType.IDENT) {
             throw ParseException(
                 line = token.line,
                 column = token.col,
@@ -187,111 +209,83 @@ class Parser(private val input: String) {
         }
 
         val parts = mutableListOf<String>()
-        
-        // Consume the initial identifier
-        @Suppress("ThrowsCount", "LongMethod")
-        private fun parsePrimary(): ExpressionAst {
-            val token = current()
-            if (token.type == TokenType.LPAREN) {
-                advance()
-                val innerExpression = parseExpression()
-                expect(type = TokenType.RPAREN)
-                return innerExpression
-            }
+        parts.add(token.text)
+        advance()
 
-            // condition: IDENT | IDENT.IDENT | ...
-            if (token.type != TokenType.IDENT && token.type != TokenType.DOT) {
-                throw ParseException(
-                    line = token.line,
-                    column = token.col,
-                    messageText = "Expected field identifier in condition"
-                )
-            }
-
-            val parts = mutableListOf<String>()
-        
-            // Consume the initial identifier
-            if (token.type == TokenType.IDENT) {
-                parts.add(token.text)
-                advance()
-            }
-
-            // Consume dot-separated segments
-            while (current().type == TokenType.DOT) {
-                advance() // consume '.'
-                val next = current()
-                if (next.type != TokenType.IDENT) {
-                    throw ParseException(
-                        line = next.line,
-                        column = next.col,
-                        messageText = "Expected identifier after dot"
-                    )
-                }
-                parts.add(next.text)
-                advance()
-            }
-
-            val field = parts.joinToString(separator = ".")
-
-            val opTok = current()
-            if (opTok.type != TokenType.IDENT) {
-                throw ParseException(
-                    line = opTok.line,
-                    column = opTok.col,
-                    messageText = "Expected operator"
-                )
-            }
-
-            val op = opTok.text
+        while (current().type == TokenType.DOT) {
             advance()
-
-            // `between` consumes two number literals rather than one
-            val value: LiteralAst
-            if (op.lowercase() == "between") {
-                val lowTok = current()
-                if (lowTok.type != TokenType.NUMBER) {
-                    throw ParseException(
-                        line = lowTok.line,
-                        column = lowTok.col,
-                        messageText = "Expected lower bound number literal for 'between'"
-                    )
-                }
-
-                advance()
-                val highTok = current()
-                if (highTok.type != TokenType.NUMBER) {
-                    throw ParseException(
-                        line = highTok.line,
-                        column = highTok.col,
-                        messageText = "Expected upper bound number literal for 'between'"
-                    )
-                }
-
-                advance()
-                value = BetweenLiteral(low = lowTok.text, high = highTok.text)
-            } else {
-                value = parseLiteral()
+            val next = current()
+            if (next.type != TokenType.IDENT) {
+                throw ParseException(
+                    line = next.line,
+                    column = next.col,
+                    messageText = "Expected identifier after dot"
+                )
             }
 
-            // Optional trailing `ignoreCase` modifier (only meaningful for text operators)
-            val ignoreCase: Boolean
-            if (current().type == TokenType.IDENT && current().text == "ignoreCase") {
-                advance()
-                ignoreCase = true
-            } else {
-                ignoreCase = false
-            }
-
-            return ConditionAst(field = field, operator = op, value = value, ignoreCase = ignoreCase)
+            parts.add(next.text)
+            advance()
         }
 
-            advance()
-            ignoreCase = true
+        return parts.joinToString(separator = ".")
+    }
+
+    private fun parseConditionOperator(): String {
+        val opTok = current()
+        if (opTok.type != TokenType.IDENT) {
+            throw ParseException(
+                line = opTok.line,
+                column = opTok.col,
+                messageText = "Expected operator"
+            )
+        }
+
+        advance()
+        return opTok.text
+    }
+
+    private fun parseConditionValue(operator: String): LiteralAst {
+        return if (operator.lowercase() == "between") {
+            parseBetweenLiteral()
         } else {
-            ignoreCase = false
+            parseLiteral()
+        }
+    }
+
+    @Suppress("ThrowsCount")
+    private fun parseBetweenLiteral(): BetweenLiteral {
+        val lowTok = current()
+        if (lowTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = lowTok.line,
+                column = lowTok.col,
+                messageText = "Expected lower bound number literal for 'between'"
+            )
         }
 
-        return ConditionAst(field = field, operator = op, value = value, ignoreCase = ignoreCase)
+        advance()
+
+        val highTok = current()
+        if (highTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = highTok.line,
+                column = highTok.col,
+                messageText = "Expected upper bound number literal for 'between'"
+            )
+        }
+
+        advance()
+
+        return BetweenLiteral(low = lowTok.text, high = highTok.text)
+    }
+
+    private fun parseIgnoreCaseModifier(): Boolean {
+        if (current().type == TokenType.IDENT && current().text == "ignoreCase") {
+            advance()
+            return true
+        }
+
+        return false
     }
 
     private fun parseLiteral(): LiteralAst {
