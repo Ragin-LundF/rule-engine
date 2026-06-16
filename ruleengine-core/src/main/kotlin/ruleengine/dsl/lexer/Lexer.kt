@@ -76,6 +76,9 @@ class Lexer(private val input: String) {
                         readIdentOrKeyword()
                     } else if (c.isDigit() || c == '-') {
                         readNumber()
+                    } else if (c == '$') {
+                        // Extraction reference: $1, $2, … – tokenised as IDENT "$N"
+                        readExtractionRef()
                     } else {
                         throw ParseException(line = line, column = col, messageText = "Unexpected character: '$c'")
                     }
@@ -158,6 +161,31 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
     }
 
+    /**
+     * Reads an extraction reference token of the form `$N` (e.g. `$1`).
+     * The `$` prefix plus one or more digits are consumed and the result is
+     * emitted as a [TokenType.IDENT] token so the rest of the parser can
+     * distinguish it by a leading `$`.
+     */
+    @Suppress("LoopWithTooManyJumpStatements")
+    private fun readExtractionRef(): Token {
+        val startLine = line
+        val startCol = col
+        val sb = StringBuilder()
+        // consume the leading '$'
+        sb.append(advance())
+        while (true) {
+            val c = current() ?: break
+            if (c.isDigit()) {
+                sb.append(c)
+                advance()
+            } else {
+                break
+            }
+        }
+        return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
+    }
+
     @Suppress("LoopWithTooManyJumpStatements")
     private fun readNumber(): Token {
         val startLine = line
@@ -181,4 +209,3 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.NUMBER, text = sb.toString(), line = startLine, col = startCol)
     }
 }
-

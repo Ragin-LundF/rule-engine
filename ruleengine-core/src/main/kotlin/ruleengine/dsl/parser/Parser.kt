@@ -5,6 +5,8 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ExtractionAst
+import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.NotAst
@@ -73,7 +75,6 @@ class Parser(private val input: String) {
 
         expect(type = TokenType.LBRACE)
 
-        // optional description ignored for now
         // parse when
         val whenTok = current()
         if (whenTok.type != TokenType.IDENT || whenTok.text != "when") {
@@ -112,12 +113,17 @@ class Parser(private val input: String) {
                 )
             }
 
-            val name = c.text
-            advance()
+            if (c.text == "extract") {
+                advance()
+                actions += parseExtractAction()
+            } else {
+                val name = c.text
+                advance()
 
-            // parse single argument as string or number or list
-            val arg = parseLiteral()
-            actions += ActionAst(name = name, arguments = listOf(arg))
+                // parse single argument as string or number or list
+                val arg = parseLiteral()
+                actions += ActionAst(name = name, arguments = listOf(arg))
+            }
         }
 
         expect(type = TokenType.RBRACE)
@@ -274,5 +280,99 @@ class Parser(private val input: String) {
 
         return result
     }
-}
 
+    /**
+     * Parses a literal or an extraction reference (`$N`).
+     * Extraction references may only appear as arguments to an action that
+     * also carries an [ExtractionAst].
+     */
+    private fun parseLiteralOrRef(): LiteralAst {
+        val token = current()
+        if (token.type == TokenType.IDENT && token.text.startsWith(prefix = "$")) {
+            advance()
+            val groupIndex = token.text.removePrefix(prefix = "$").toIntOrNull()
+                ?: throw ParseException(
+                    line = token.line,
+                    column = token.col,
+                    messageText = "Invalid extraction reference '${token.text}'; expected \$N where N is an integer"
+                )
+            return ExtractionRefLiteral(groupIndex = groupIndex)
+        }
+        return parseLiteral()
+    }
+
+    /**
+     * Parses the body of an `extract` clause:
+     * ```
+     * extract <sourceField> regex("<pattern>", <groupIndex>) <actionName> <arg>
+     * ```
+     */
+    @Suppress("ThrowsCount")
+    private fun parseExtractAction(): ActionAst {
+        val fieldTok = current()
+        if (fieldTok.type != TokenType.IDENT) {
+            throw ParseException(
+                line = fieldTok.line,
+                column = fieldTok.col,
+                messageText = "Expected source field name after 'extract' but found '${fieldTok.text}'"
+            )
+        }
+        val sourceField = fieldTok.text
+        advance()
+
+        val methodTok = current()
+        if (methodTok.type != TokenType.IDENT || methodTok.text != "regex") {
+            throw ParseException(
+                line = methodTok.line,
+                column = methodTok.col,
+                messageText = "Expected extraction method 'regex' but found '${methodTok.text}'"
+            )
+        }
+        advance()
+
+        expect(type = TokenType.LPAREN)
+        val patternTok = expect(type = TokenType.STRING)
+        expect(type = TokenType.COMMA)
+        val groupIndexTok = current()
+        if (groupIndexTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = groupIndexTok.line,
+                column = groupIndexTok.col,
+                messageText = "Expected integer group index in regex extraction but found '${groupIndexTok.text}'"
+            )
+        }
+        val groupIndex = groupIndexTok.text.toIntOrNull()
+            ?: throw ParseException(
+                line = groupIndexTok.line,
+                column = groupIndexTok.col,
+                messageText = "Invalid group index '${groupIndexTok.text}': must be a non-negative integer"
+            )
+        advance()
+        expect(type = TokenType.RPAREN)
+
+        val extraction = ExtractionAst.RegexExtraction(
+            sourceField = sourceField,
+            pattern = patternTok.text,
+            groupIndex = groupIndex
+        )
+
+        val actionNameTok = current()
+        if (actionNameTok.type != TokenType.IDENT) {
+            throw ParseException(
+                line = actionNameTok.line,
+                column = actionNameTok.col,
+                messageText = "Expected action name after extraction definition but found '${actionNameTok.text}'"
+            )
+        }
+        val actionName = actionNameTok.text
+        advance()
+
+        val arg = parseLiteralOrRef()
+
+        return ActionAst(
+            name = actionName,
+            arguments = listOf(arg),
+            extraction = extraction
+        )
+    }
+}

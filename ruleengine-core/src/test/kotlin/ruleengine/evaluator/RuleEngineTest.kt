@@ -6,8 +6,8 @@ import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
-import ruleengine.core.domain.RuleAction
 import ruleengine.evaluator.compiled.AndExpression
+import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.ComparisonOperator
 import ruleengine.evaluator.compiled.DecimalComparisonExpression
 import ruleengine.evaluator.compiled.TextEqualsExpression
@@ -25,9 +25,7 @@ class RuleEngineTest {
             fields = mapOf(
                 FieldId(value = "purpose") to FieldDefinition(
                     id = FieldId(value = "purpose"), type = FieldType.TEXT,
-                    normalizers = listOf(
-                        NormalizerId(value = "trim")
-                    ),
+                    normalizers = listOf(NormalizerId(value = "trim")),
                     operators = setOf(OperatorId(value = "equals"))
                 ),
                 FieldId(value = "amount") to FieldDefinition(
@@ -51,7 +49,12 @@ class RuleEngineTest {
         val rule = CompiledRule(
             id = "rent-payment",
             expression = expr,
-            actions = listOf(RuleAction(name = "label", arguments = listOf("rent")))
+            actions = listOf(
+                CompiledAction(
+                    name = "label",
+                    arguments = listOf(CompiledActionArgument.Static(value = "rent"))
+                )
+            )
         )
 
         val engine = RuleEngine(compiledRules = listOf(rule), schema = schema)
@@ -64,4 +67,3 @@ class RuleEngineTest {
         assertEquals(expected = "rent-payment", actual = result.matches.first().ruleId)
     }
 }
-

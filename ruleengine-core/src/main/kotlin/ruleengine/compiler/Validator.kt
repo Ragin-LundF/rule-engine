@@ -14,6 +14,8 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ExtractionAst
+import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
@@ -39,8 +41,25 @@ object Validator {
             }
 
             validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
+
+            // Always validate extraction clauses so invalid patterns / unknown fields are caught
+            // even when no action schema is supplied.
+            for (a in rule.actions) {
+                if (a.extraction != null) {
+                    validateExtraction(
+                        extraction = a.extraction,
+                        fieldSchema = schema,
+                        diagnostics = diagnostics
+                    )
+                }
+            }
+
             if (actions != null) {
-                validateActions(actions = rule.actions, schema = actions, diagnostics = diagnostics)
+                validateActions(
+                    actions = rule.actions,
+                    actionSchema = actions,
+                    diagnostics = diagnostics
+                )
             }
         }
 
@@ -54,19 +73,11 @@ object Validator {
     ) {
         when (expr) {
             is AndAst -> expr.children.forEach {
-                validateExpression(
-                    expr = it,
-                    schema = schema,
-                    diagnostics = diagnostics
-                )
+                validateExpression(expr = it, schema = schema, diagnostics = diagnostics)
             }
 
             is OrAst -> expr.children.forEach {
-                validateExpression(
-                    expr = it,
-                    schema = schema,
-                    diagnostics = diagnostics
-                )
+                validateExpression(expr = it, schema = schema, diagnostics = diagnostics)
             }
 
             is NotAst -> validateExpression(expr = expr.child, schema = schema, diagnostics = diagnostics)
@@ -96,7 +107,7 @@ object Validator {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Field '${cond.field}' uses unsupported field type ${def.type}; " +
-                    "BOOLEAN and DATE are not supported yet"
+                        "BOOLEAN and DATE are not supported yet"
             )
             return
         }
@@ -114,7 +125,6 @@ object Validator {
             return
         }
 
-        // type check literal
         when (def.type) {
             FieldType.TEXT -> when (op) {
                 "in" -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
@@ -154,27 +164,13 @@ object Validator {
             }
 
             FieldType.DECIMAL -> when (op) {
-                        "between" -> validateDecimalBounds(
-                            cond = cond,
-                            diagnostics = diagnostics
-                        )
-
-                        else -> validateDecimalLiteral(
-                            cond = cond,
-                            diagnostics = diagnostics
-                        )
+                "between" -> validateDecimalBounds(cond = cond, diagnostics = diagnostics)
+                else -> validateDecimalLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.INTEGER -> when (op) {
-                        "between" -> validateIntegerBounds(
-                            cond = cond,
-                            diagnostics = diagnostics
-                        )
-
-                        else -> validateIntegerLiteral(
-                            cond = cond,
-                            diagnostics = diagnostics
-                        )
+                "between" -> validateIntegerBounds(cond = cond, diagnostics = diagnostics)
+                else -> validateIntegerLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
@@ -188,11 +184,12 @@ object Validator {
     @Suppress("LoopWithTooManyJumpStatements")
     private fun validateActions(
         actions: List<ActionAst>,
-        schema: ActionSchema,
+        actionSchema: ActionSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         for (a in actions) {
-            val def = schema.actions[a.name]
+            // Extraction validity is checked independently in validate(); skip it here.
+            val def = actionSchema.actions[a.name]
             if (def == null) {
                 diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = "Unknown action '${a.name}'")
                 continue
@@ -206,6 +203,23 @@ object Validator {
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
                 val lit = a.arguments.getOrNull(index = idx)
+                // ExtractionRefLiteral resolves to a String at evaluation time
+                if (lit is ExtractionRefLiteral) {
+                    if (a.extraction == null) {
+                        diagnostics += ValidationDiagnostic(
+                            severity = Severity.ERROR,
+                            message = "Action '${a.name}' argument $idx uses " +
+                                    "extraction reference but no 'extract' clause is present"
+                        )
+                    } else if (expectedType != ActionArgType.STRING) {
+                        diagnostics += ValidationDiagnostic(
+                            severity = Severity.ERROR,
+                            message = "Action '${a.name}' argument $idx expects $expectedType " +
+                                    "but extraction always produces a string"
+                        )
+                    }
+                    continue
+                }
                 val ok = when (expectedType) {
                     ActionArgType.STRING -> lit is StringLiteral
                     ActionArgType.INTEGER -> lit is NumberLiteral
@@ -219,6 +233,49 @@ object Validator {
         }
     }
 
+    private fun validateExtraction(
+        extraction: ExtractionAst,
+        fieldSchema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        when (extraction) {
+            is ExtractionAst.RegexExtraction -> {
+                val fieldId = FieldId(value = extraction.sourceField)
+                val def = fieldSchema.fields[fieldId]
+                if (def == null) {
+                    val suggestion = suggestClosest(
+                        input = extraction.sourceField,
+                        candidates = fieldSchema.fields.keys.map { it.value }
+                    )
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Extraction references unknown field '${extraction.sourceField}'",
+                        suggestion = suggestion
+                    )
+                } else if (def.type != FieldType.TEXT) {
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Extraction source field '${extraction.sourceField}' must be of type TEXT " +
+                                "but is ${def.type}"
+                    )
+                }
+                runCatching {
+                    Regex(pattern = extraction.pattern)
+                }.onFailure { cause ->
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Invalid regex pattern '${extraction.pattern}' in extraction: ${cause.message}"
+                    )
+                }
+                if (extraction.groupIndex < 0) {
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Extraction group index must be >= 0 but was ${extraction.groupIndex}"
+                    )
+                }
+            }
+        }
+    }
 }
 
 private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
@@ -266,7 +323,6 @@ private fun validateDecimalBounds(cond: ConditionAst, diagnostics: MutableList<V
         )
         return
     }
-
     validateDecimalBound(
         value = between.low,
         diagnostics = diagnostics,
@@ -287,10 +343,7 @@ private fun validateDecimalBound(
     runCatching {
         BigDecimal(value)
     }.onFailure {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = message
-        )
+        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
     }
 }
 
@@ -320,7 +373,6 @@ private fun validateIntegerBounds(cond: ConditionAst, diagnostics: MutableList<V
         )
         return
     }
-
     validateIntegerBound(
         value = between.low,
         diagnostics = diagnostics,
@@ -341,10 +393,7 @@ private fun validateIntegerBound(
     runCatching {
         value.toLong()
     }.onFailure {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = message
-        )
+        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
     }
 }
 
@@ -382,5 +431,3 @@ private fun levenshtein(a: String, b: String): Int {
     }
     return dp[aLen][bLen]
 }
-
-
