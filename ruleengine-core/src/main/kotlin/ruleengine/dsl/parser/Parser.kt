@@ -307,7 +307,7 @@ class Parser(private val input: String) {
      * extract <sourceField> regex("<pattern>", <groupIndex>) <actionName> <arg>
      * ```
      */
-    @Suppress("ThrowsCount")
+    @Suppress("ThrowsCount", "LongMethod")
     private fun parseExtractAction(): ActionAst {
         val fieldTok = current()
         if (fieldTok.type != TokenType.IDENT) {

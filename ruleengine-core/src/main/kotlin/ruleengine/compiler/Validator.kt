@@ -181,7 +181,7 @@ object Validator {
         }
     }
 
-    @Suppress("LoopWithTooManyJumpStatements")
+    @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "NestedBlockDepth")
     private fun validateActions(
         actions: List<ActionAst>,
         actionSchema: ActionSchema,
