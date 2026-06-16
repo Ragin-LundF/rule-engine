@@ -19,27 +19,57 @@ import kotlin.test.assertTrue
 class TraceTest {
     @Test
     fun `evaluation produces decision trace with all evaluated rules`() {
-        val txt = """
-            rule "rent-payment" {
-              when
-                purpose contains "miete"
-                and amount >= 500
+        val engine = buildEngine()
+        val result = engine.evaluate(prepared = preparedContext(), includeTrace = true)
 
-              then
-                label "rent"
-            }
+        assertTraceContainsAllRules(result = result)
+    }
 
-            rule "vip-payment" {
-              when
-                purpose contains "vip"
+    private fun buildEngine(): RuleEngine {
+        val asts = Parser(input = traceRules()).parseRules()
+        val schema = traceSchema()
 
-              then
-                label "vip"
-            }
-        """.trimIndent()
+        val validation = Validator.validate(asts = asts, schema = schema)
+        assertTrue(actual = validation.isValid)
 
-        val asts = Parser(input = txt).parseRules()
-        val schema = FieldSchema(
+        val compiled = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
+        return RuleEngine(compiledRules = compiled, schema = schema)
+    }
+
+    private fun preparedContext(): ruleengine.evaluator.context.PreparedRuleContext {
+        return ruleengine.evaluator.context.PreparedRuleContext.prepare(
+            ctx = RuleContext.of(
+                "purpose" to "Miete Januar",
+                "amount" to "850"
+            ),
+            schema = traceSchema()
+        )
+    }
+
+    private fun assertTraceContainsAllRules(result: ruleengine.core.domain.EvaluationResult) {
+        assertNotNull(actual = result.trace)
+        val tree = result.trace as? DecisionTree
+        assertNotNull(actual = tree)
+        assertTrue(actual = tree.matchedRules.contains("rent-payment"))
+
+        val root = tree.root
+        assertNotNull(actual = root)
+        assertTrue(actual = root.children.size == 2)
+
+        val tracedRuleIds = root.children.mapNotNull { it.ruleId }
+        assertTrue(actual = tracedRuleIds.contains("rent-payment"))
+        assertTrue(actual = tracedRuleIds.contains("vip-payment"))
+
+        val nonMatchingRule = root.children.first { it.ruleId == "vip-payment" }
+        assertTrue(actual = nonMatchingRule.result.not())
+    }
+
+    private fun traceSchema(): FieldSchema {
+        return FieldSchema(
             name = "transaction-v1",
             fields = mapOf(
                 FieldId(value = "purpose") to FieldDefinition(
@@ -60,36 +90,27 @@ class TraceTest {
                 )
             )
         )
+    }
 
-        val validation = Validator.validate(asts, schema)
-        assertTrue(actual = validation.isValid)
+    private fun traceRules(): String {
+        return """
+            rule "rent-payment" {
+              when
+                purpose contains "miete"
+                and amount >= 500
 
-        val compiled = Compiler.compileRules(
-            asts = asts,
-            schema = schema,
-            normalizerRegistry = NormalizerRegistry.default
-        )
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+              then
+                label "rent"
+            }
 
-        val ctx = RuleContext.of("purpose" to "Miete Januar", "amount" to "850")
-        val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)
-        val result = engine.evaluate(prepared = prepared, includeTrace = true)
+            rule "vip-payment" {
+              when
+                purpose contains "vip"
 
-        assertNotNull(actual = result.trace)
-        val tree = result.trace as? DecisionTree
-        assertNotNull(actual = tree)
-        assertTrue(actual = tree.matchedRules.contains("rent-payment"))
-
-        val root = tree.root
-        assertNotNull(actual = root)
-        assertTrue(actual = root.children.size == 2)
-
-        val tracedRuleIds = root.children.mapNotNull { it.ruleId }
-        assertTrue(actual = tracedRuleIds.contains("rent-payment"))
-        assertTrue(actual = tracedRuleIds.contains("vip-payment"))
-
-        val nonMatchingRule = root.children.first { it.ruleId == "vip-payment" }
-        assertTrue(actual = nonMatchingRule.result.not())
+              then
+                label "vip"
+            }
+        """.trimIndent()
     }
 }
 

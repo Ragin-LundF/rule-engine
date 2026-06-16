@@ -1,6 +1,7 @@
 package ruleengine.compiler
 
 import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
@@ -91,6 +92,15 @@ object Validator {
             return
         }
 
+        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' uses unsupported field type ${def.type}; " +
+                    "BOOLEAN and DATE are not supported yet"
+            )
+            return
+        }
+
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
         val allowedOperators = allowedOperatorsFor(def = def)
         if (op !in allowedOperators) {
@@ -172,135 +182,6 @@ object Validator {
                     severity = Severity.ERROR,
                     message = "Field '${cond.field}' expects list or string literal"
                 )
-
-            else -> {}
-        }
-    }
-
-    private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
-        return if (def.operators.isNotEmpty()) {
-            def.operators.mapTo(mutableSetOf()) { operator ->
-                OperatorUtils.normalizeOperator(op = operator.value)
-            }
-        } else {
-            supportedOperatorsFor(type = def.type)
-        }
-    }
-
-    private fun supportedOperatorsFor(type: FieldType): Set<String> {
-        return when (type) {
-            FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
-            FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
-            FieldType.STRING_SET -> setOf("containsAny", "containsAll")
-            else -> emptySet()
-        }
-    }
-
-    private fun validateDecimalLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-        val literal = cond.value as? NumberLiteral ?: run {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects numeric literal"
-            )
-            return
-        }
-        runCatching {
-            BigDecimal(literal.value)
-        }.onFailure {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Invalid decimal literal: ${literal.value}"
-            )
-        }
-    }
-
-    private fun validateDecimalBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-        val between = cond.value as? BetweenLiteral ?: run {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Field '${cond.field}' with 'between' expects two numeric bounds"
-            )
-            return
-        }
-
-        validateDecimalBound(
-            value = between.low,
-            diagnostics = diagnostics,
-            message = "Invalid lower bound: ${between.low}"
-        )
-        validateDecimalBound(
-            value = between.high,
-            diagnostics = diagnostics,
-            message = "Invalid upper bound: ${between.high}"
-        )
-    }
-
-    private fun validateDecimalBound(
-        value: String,
-        diagnostics: MutableList<ValidationDiagnostic>,
-        message: String
-    ) {
-        runCatching {
-            BigDecimal(value)
-        }.onFailure {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = message
-            )
-        }
-    }
-
-    private fun validateIntegerLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-        val literal = cond.value as? NumberLiteral ?: run {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects integer literal"
-            )
-            return
-        }
-        runCatching {
-            literal.value.toLong()
-        }.onFailure {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Invalid integer literal: ${literal.value}"
-            )
-        }
-    }
-
-    private fun validateIntegerBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-        val between = cond.value as? BetweenLiteral ?: run {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Field '${cond.field}' with 'between' expects two integer bounds"
-            )
-            return
-        }
-
-        validateIntegerBound(
-            value = between.low,
-            diagnostics = diagnostics,
-            message = "Invalid lower bound: ${between.low}"
-        )
-        validateIntegerBound(
-            value = between.high,
-            diagnostics = diagnostics,
-            message = "Invalid upper bound: ${between.high}"
-        )
-    }
-
-    private fun validateIntegerBound(
-        value: String,
-        diagnostics: MutableList<ValidationDiagnostic>,
-        message: String
-    ) {
-        runCatching {
-            value.toLong()
-        }.onFailure {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = message
-            )
         }
     }
 
@@ -326,9 +207,9 @@ object Validator {
             for ((idx, expectedType) in def.argTypes.withIndex()) {
                 val lit = a.arguments.getOrNull(index = idx)
                 val ok = when (expectedType) {
-                    ruleengine.core.domain.ActionArgType.STRING -> lit is StringLiteral
-                    ruleengine.core.domain.ActionArgType.INTEGER -> lit is NumberLiteral
-                    ruleengine.core.domain.ActionArgType.DECIMAL -> lit is NumberLiteral
+                    ActionArgType.STRING -> lit is StringLiteral
+                    ActionArgType.INTEGER -> lit is NumberLiteral
+                    ActionArgType.DECIMAL -> lit is NumberLiteral
                 }
                 if (!ok) diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
@@ -338,40 +219,168 @@ object Validator {
         }
     }
 
-    private fun suggestClosest(input: String, candidates: List<String>, maxDistance: Int = 3): String? {
-        var best: String? = null
-        var bestDist = Int.MAX_VALUE
-        for (c in candidates) {
-            val d = levenshtein(a = input.lowercase(), b = c.lowercase())
-            if (d < bestDist) {
-                bestDist = d
-                best = c
-            }
-        }
-        return if (bestDist <= maxDistance) best else null
-    }
-
-    private fun levenshtein(a: String, b: String): Int {
-        if (a == b) return 0
-        if (a.isEmpty()) return b.length
-        if (b.isEmpty()) return a.length
-        val aLen = a.length
-        val bLen = b.length
-        val dp = Array(aLen + 1) { IntArray(bLen + 1) }
-        for (i in 0..aLen) dp[i][0] = i
-        for (j in 0..bLen) dp[0][j] = j
-        for (i in 1..aLen) {
-            for (j in 1..bLen) {
-                val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-                dp[i][j] = minOf(
-                    dp[i - 1][j] + 1,
-                    dp[i][j - 1] + 1,
-                    dp[i - 1][j - 1] + cost
-                )
-            }
-        }
-        return dp[aLen][bLen]
-    }
-
 }
+
+private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
+    return if (def.operators.isNotEmpty()) {
+        def.operators.mapTo(mutableSetOf()) { operator ->
+            OperatorUtils.normalizeOperator(op = operator.value)
+        }
+    } else {
+        supportedOperatorsFor(type = def.type)
+    }
+}
+
+private fun supportedOperatorsFor(type: FieldType): Set<String> {
+    return when (type) {
+        FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
+        FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
+        FieldType.STRING_SET -> setOf("containsAny", "containsAll")
+        else -> emptySet()
+    }
+}
+
+private fun validateDecimalLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+    val literal = cond.value as? NumberLiteral ?: run {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Field '${cond.field}' expects numeric literal"
+        )
+        return
+    }
+    runCatching {
+        BigDecimal(literal.value)
+    }.onFailure {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Invalid decimal literal: ${literal.value}"
+        )
+    }
+}
+
+private fun validateDecimalBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+    val between = cond.value as? BetweenLiteral ?: run {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Field '${cond.field}' with 'between' expects two numeric bounds"
+        )
+        return
+    }
+
+    validateDecimalBound(
+        value = between.low,
+        diagnostics = diagnostics,
+        message = "Invalid lower bound: ${between.low}"
+    )
+    validateDecimalBound(
+        value = between.high,
+        diagnostics = diagnostics,
+        message = "Invalid upper bound: ${between.high}"
+    )
+}
+
+private fun validateDecimalBound(
+    value: String,
+    diagnostics: MutableList<ValidationDiagnostic>,
+    message: String
+) {
+    runCatching {
+        BigDecimal(value)
+    }.onFailure {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = message
+        )
+    }
+}
+
+private fun validateIntegerLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+    val literal = cond.value as? NumberLiteral ?: run {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Field '${cond.field}' expects integer literal"
+        )
+        return
+    }
+    runCatching {
+        literal.value.toLong()
+    }.onFailure {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Invalid integer literal: ${literal.value}"
+        )
+    }
+}
+
+private fun validateIntegerBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+    val between = cond.value as? BetweenLiteral ?: run {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Field '${cond.field}' with 'between' expects two integer bounds"
+        )
+        return
+    }
+
+    validateIntegerBound(
+        value = between.low,
+        diagnostics = diagnostics,
+        message = "Invalid lower bound: ${between.low}"
+    )
+    validateIntegerBound(
+        value = between.high,
+        diagnostics = diagnostics,
+        message = "Invalid upper bound: ${between.high}"
+    )
+}
+
+private fun validateIntegerBound(
+    value: String,
+    diagnostics: MutableList<ValidationDiagnostic>,
+    message: String
+) {
+    runCatching {
+        value.toLong()
+    }.onFailure {
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = message
+        )
+    }
+}
+
+private fun suggestClosest(input: String, candidates: List<String>, maxDistance: Int = 3): String? {
+    var best: String? = null
+    var bestDist = Int.MAX_VALUE
+    for (c in candidates) {
+        val d = levenshtein(a = input.lowercase(), b = c.lowercase())
+        if (d < bestDist) {
+            bestDist = d
+            best = c
+        }
+    }
+    return if (bestDist <= maxDistance) best else null
+}
+
+private fun levenshtein(a: String, b: String): Int {
+    if (a == b) return 0
+    if (a.isEmpty()) return b.length
+    if (b.isEmpty()) return a.length
+    val aLen = a.length
+    val bLen = b.length
+    val dp = Array(aLen + 1) { IntArray(bLen + 1) }
+    for (i in 0..aLen) dp[i][0] = i
+    for (j in 0..bLen) dp[0][j] = j
+    for (i in 1..aLen) {
+        for (j in 1..bLen) {
+            val cost = if (a[i - 1] == b[j - 1]) 0 else 1
+            dp[i][j] = minOf(
+                dp[i - 1][j] + 1,
+                dp[i][j - 1] + 1,
+                dp[i - 1][j - 1] + cost
+            )
+        }
+    }
+    return dp[aLen][bLen]
+}
+
 
