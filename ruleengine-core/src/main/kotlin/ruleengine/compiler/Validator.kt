@@ -2,6 +2,7 @@ package ruleengine.compiler
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
@@ -18,6 +19,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import java.math.BigDecimal
 
 data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
 
@@ -90,14 +92,16 @@ object Validator {
         }
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
-        if (def.operators.isNotEmpty() && def.operators.none { it.value.equals(other = op, ignoreCase = true) }) {
-            val allowed = def.operators.map { it.value }
+        val allowedOperators = allowedOperatorsFor(def = def)
+        if (op !in allowedOperators) {
+            val allowed = allowedOperators.sorted()
             val suggestion = suggestClosest(input = op, candidates = allowed)
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed",
                 suggestion = suggestion
             )
+            return
         }
 
         // type check literal
@@ -140,31 +144,27 @@ object Validator {
             }
 
             FieldType.DECIMAL -> when (op) {
-                "between" -> if (cond.value !is BetweenLiteral)
-                    diagnostics += ValidationDiagnostic(
-                        severity = Severity.ERROR,
-                        message = "Field '${cond.field}' with 'between' expects two numeric bounds"
-                    )
+                        "between" -> validateDecimalBounds(
+                            cond = cond,
+                            diagnostics = diagnostics
+                        )
 
-                else -> if (cond.value !is NumberLiteral)
-                    diagnostics += ValidationDiagnostic(
-                        severity = Severity.ERROR,
-                        message = "Field '${cond.field}' expects numeric literal"
-                    )
+                        else -> validateDecimalLiteral(
+                            cond = cond,
+                            diagnostics = diagnostics
+                        )
             }
 
             FieldType.INTEGER -> when (op) {
-                "between" -> if (cond.value !is BetweenLiteral)
-                    diagnostics += ValidationDiagnostic(
-                        severity = Severity.ERROR,
-                        message = "Field '${cond.field}' with 'between' expects two integer bounds"
-                    )
+                        "between" -> validateIntegerBounds(
+                            cond = cond,
+                            diagnostics = diagnostics
+                        )
 
-                else -> if (cond.value !is NumberLiteral)
-                    diagnostics += ValidationDiagnostic(
-                        severity = Severity.ERROR,
-                        message = "Field '${cond.field}' expects integer literal"
-                    )
+                        else -> validateIntegerLiteral(
+                            cond = cond,
+                            diagnostics = diagnostics
+                        )
             }
 
             FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
@@ -174,6 +174,133 @@ object Validator {
                 )
 
             else -> {}
+        }
+    }
+
+    private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
+        return if (def.operators.isNotEmpty()) {
+            def.operators.mapTo(mutableSetOf()) { operator ->
+                OperatorUtils.normalizeOperator(op = operator.value)
+            }
+        } else {
+            supportedOperatorsFor(type = def.type)
+        }
+    }
+
+    private fun supportedOperatorsFor(type: FieldType): Set<String> {
+        return when (type) {
+            FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
+            FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
+            FieldType.STRING_SET -> setOf("containsAny", "containsAll")
+            else -> emptySet()
+        }
+    }
+
+    private fun validateDecimalLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+        val literal = cond.value as? NumberLiteral ?: run {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' expects numeric literal"
+            )
+            return
+        }
+        runCatching {
+            BigDecimal(literal.value)
+        }.onFailure {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Invalid decimal literal: ${literal.value}"
+            )
+        }
+    }
+
+    private fun validateDecimalBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+        val between = cond.value as? BetweenLiteral ?: run {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' with 'between' expects two numeric bounds"
+            )
+            return
+        }
+
+        validateDecimalBound(
+            value = between.low,
+            diagnostics = diagnostics,
+            message = "Invalid lower bound: ${between.low}"
+        )
+        validateDecimalBound(
+            value = between.high,
+            diagnostics = diagnostics,
+            message = "Invalid upper bound: ${between.high}"
+        )
+    }
+
+    private fun validateDecimalBound(
+        value: String,
+        diagnostics: MutableList<ValidationDiagnostic>,
+        message: String
+    ) {
+        runCatching {
+            BigDecimal(value)
+        }.onFailure {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = message
+            )
+        }
+    }
+
+    private fun validateIntegerLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+        val literal = cond.value as? NumberLiteral ?: run {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' expects integer literal"
+            )
+            return
+        }
+        runCatching {
+            literal.value.toLong()
+        }.onFailure {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Invalid integer literal: ${literal.value}"
+            )
+        }
+    }
+
+    private fun validateIntegerBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
+        val between = cond.value as? BetweenLiteral ?: run {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' with 'between' expects two integer bounds"
+            )
+            return
+        }
+
+        validateIntegerBound(
+            value = between.low,
+            diagnostics = diagnostics,
+            message = "Invalid lower bound: ${between.low}"
+        )
+        validateIntegerBound(
+            value = between.high,
+            diagnostics = diagnostics,
+            message = "Invalid upper bound: ${between.high}"
+        )
+    }
+
+    private fun validateIntegerBound(
+        value: String,
+        diagnostics: MutableList<ValidationDiagnostic>,
+        message: String
+    ) {
+        runCatching {
+            value.toLong()
+        }.onFailure {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = message
+            )
         }
     }
 
