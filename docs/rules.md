@@ -227,6 +227,103 @@ All of them are returned when the rule matches.
 
 ---
 
+## Extracting Values into Actions — the `extract` Clause
+
+Sometimes the argument you want to pass to an action is not a fixed string but a **value computed from the input data at the time the rule fires**.
+The `extract` clause lets you apply a regular-expression capture group to a text field and use the result as the action argument.
+
+### Syntax
+
+```
+extract <fieldName> regex("<pattern>", <groupIndex>) <actionName> $1
+```
+
+| Part | Description |
+|---|---|
+| `fieldName` | The name of a **text** field in the field schema |
+| `"<pattern>"` | A regular expression with one or more capture groups |
+| `<groupIndex>` | The capture group to extract: `1` for the first group, `2` for the second, `0` for the whole match |
+| `<actionName>` | The action that will receive the extracted value |
+| `$1` | A placeholder that refers to the extracted value |
+
+### Example — Extract a transaction ID from a reference field
+
+```
+rule "tag-transaction-id" {
+  when
+    reference regex "TXN-[0-9]+"
+
+  then
+    extract reference regex("TXN-([0-9]+)", 1) label $1
+}
+```
+
+When a transaction has `reference = "TXN-98765"`, the rule matches and the result contains:
+
+```json
+{ "name": "label", "arguments": ["98765"] }
+```
+
+### Example — Extract an email username
+
+```
+rule "label-by-username" {
+  when
+    user_email regex ".+@.+"
+
+  then
+    extract user_email regex("([a-z0-9._%+\\-]+)@.*", 1) label $1
+}
+```
+
+### Combining `extract` with static actions
+
+An `extract` clause produces exactly one action.
+You can freely mix `extract` actions and regular static actions in the same `then` block:
+
+```
+rule "classify-with-id" {
+  when
+    reference regex "TXN-[0-9]+"
+
+  then
+    extract reference regex("TXN-([0-9]+)", 1) label $1
+    category "transactions"
+}
+```
+
+This emits two actions: a `label` with the extracted ID, and a static `category "transactions"`.
+
+### What happens when the pattern does not match
+
+If the extraction regex does not find a match in the field value at evaluation time, the action argument is **`null`** (empty).
+The action is still emitted — the consuming application should handle `null` arguments defensively.
+
+This is intentional: the rule's `when` condition governs whether the rule fires; a failing extraction at the action level does not suppress the action.
+
+> **Tip:** Align the `when` condition and the extraction pattern so the extraction can only fail in practice if the input data is malformed. For example, use the same regex in both:
+>
+> ```
+> when
+>   reference regex "TXN-[0-9]+"
+> then
+>   extract reference regex("TXN-([0-9]+)", 1) label $1
+> ```
+
+### Extraction — Validation Rules
+
+| Constraint | Example of invalid usage |
+|---|---|
+| Source field must exist in the field schema | `extract unknownField regex("(.*)", 1) label $1` |
+| Source field must be of type `text` | Using `extract` on a `decimal` or `integer` field |
+| Regex pattern must be valid | `extract ref regex("[invalid", 1) label $1` |
+| Group index must be ≥ 0 | `extract ref regex("(.*)", -1) label $1` |
+| `$1` requires an `extract` clause | Using `$1` in a plain action without `extract` |
+| Action argument type must be `string` | Using `$1` with an `integer` action like `score` |
+
+
+---
+
 ## Comments
 
 Lines starting with `#` are comments and are ignored by the engine:
@@ -395,4 +492,6 @@ rule "flagged-customer" {
 - **Test incrementally** — validate rules against sample data before deploying
 - **Use the `ignoreCase` modifier** instead of duplicating rules for different capitalizations
 - **Prefer `in` over many `or equals`** — `sepaCode in ["CCRD", "DCRD", "PMNT"]` is cleaner than three separate conditions
+- **Mirror the extraction pattern in the `when` condition** — if you use `extract ref regex("TXN-([0-9]+)", 1)` in the `then` block, guard the rule with `reference regex "TXN-[0-9]+"` so the extraction only runs when a match is guaranteed
+- **Extraction always produces a string** — only use `$1` as the argument for `string`-typed actions; it cannot be used with `integer` or `decimal` action arguments
 
