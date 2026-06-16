@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 
 class TraceTest {
     @Test
-    fun `evaluation produces decision trace`() {
+    fun `evaluation produces decision trace with all evaluated rules`() {
         val txt = """
             rule "rent-payment" {
               when
@@ -27,6 +27,14 @@ class TraceTest {
 
               then
                 label "rent"
+            }
+
+            rule "vip-payment" {
+              when
+                purpose contains "vip"
+
+              then
+                label "vip"
             }
         """.trimIndent()
 
@@ -70,7 +78,18 @@ class TraceTest {
         assertNotNull(actual = result.trace)
         val tree = result.trace as? DecisionTree
         assertNotNull(actual = tree)
-        assertTrue(actual = tree?.matchedRules?.contains("rent-payment") == true)
+        assertTrue(actual = tree.matchedRules.contains("rent-payment"))
+
+        val root = tree.root
+        assertNotNull(actual = root)
+        assertTrue(actual = root.children.size == 2)
+
+        val tracedRuleIds = root.children.mapNotNull { it.ruleId }
+        assertTrue(actual = tracedRuleIds.contains("rent-payment"))
+        assertTrue(actual = tracedRuleIds.contains("vip-payment"))
+
+        val nonMatchingRule = root.children.first { it.ruleId == "vip-payment" }
+        assertTrue(actual = nonMatchingRule.result.not())
     }
 }
 
