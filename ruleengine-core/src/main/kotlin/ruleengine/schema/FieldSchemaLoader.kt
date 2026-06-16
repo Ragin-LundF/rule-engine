@@ -8,6 +8,7 @@ import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.errors.SchemaLoadException
+import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
@@ -26,12 +27,8 @@ object FieldSchemaLoader {
         }
 
         return runCatching {
-            Files.newInputStream(path).use { ins ->
-                val bytes = ins.readAllBytes()
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
-            }
+            val content = FileInputSupport.readBoundedText(path = path, kind = "schema")
+            parseSchema(content = content)
         }.map { raw ->
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
@@ -48,12 +45,7 @@ object FieldSchemaLoader {
     fun loadFromReader(reader: java.io.Reader, nameHint: String? = null): FieldSchema {
         val content = reader.use { it.readText() }
         return runCatching {
-            val raw: RawFieldSchema = run {
-                val bytes = content.toByteArray(Charsets.UTF_8)
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
-            }
+            val raw = parseSchema(content = content)
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
@@ -65,6 +57,13 @@ object FieldSchemaLoader {
 
     fun loadFromString(content: String, nameHint: String? = null): FieldSchema {
         return loadFromReader(java.io.StringReader(content), nameHint)
+    }
+
+    private fun parseSchema(content: String): RawFieldSchema {
+        val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
+        return yf.createParser(content).use { p ->
+            mapper.readValue(p, RawFieldSchema::class.java)
+        }
     }
 
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {
@@ -82,7 +81,7 @@ object FieldSchemaLoader {
 
     private fun parseFieldType(s: String): FieldType {
         return when (s.lowercase()) {
-            "text", "string", "string" -> FieldType.TEXT
+            "text", "string" -> FieldType.TEXT
             "integer", "int", "long" -> FieldType.INTEGER
             "decimal", "bigdecimal", "number" -> FieldType.DECIMAL
             "boolean", "bool" -> FieldType.BOOLEAN

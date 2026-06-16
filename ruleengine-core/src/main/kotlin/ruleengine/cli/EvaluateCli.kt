@@ -10,6 +10,7 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
@@ -66,7 +67,10 @@ object EvaluateCli {
         )
         val engine = RuleEngine(compiledRules = compiledRules, schema = schema)
 
-        val inputJson = Files.readString(Path.of(cliOptions.inputFilePath))
+        val inputJson = FileInputSupport.readBoundedText(
+            path = Path.of(cliOptions.inputFilePath),
+            kind = "input JSON"
+        )
         val inputMap = readInputMap(inputJson = inputJson)
 
         val preparedContext = prepareRuleContext(inputMap = inputMap, schema = schema)
@@ -121,11 +125,14 @@ object EvaluateCli {
     }
 
     private fun loadRuleAstList(rulesDirectory: Path): List<RuleAst> {
-        val ruleFiles = Files.walk(rulesDirectory).filter {
-            Files.isRegularFile(it) && it.toString().endsWith(".rule")
-        }.toList()
-
-        return ruleFiles.flatMap { ruleFile -> Parser(input = Files.readString(ruleFile)).parseRules() }
+        return FileInputSupport.walkRuleFiles(root = rulesDirectory).flatMap { ruleFile ->
+            Parser(
+                input = FileInputSupport.readBoundedText(
+                    path = ruleFile,
+                    kind = "rule file"
+                )
+            ).parseRules()
+        }
     }
 
     private fun readInputMap(inputJson: String): Map<String, Any?> {
