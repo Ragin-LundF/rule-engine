@@ -8,7 +8,9 @@ import ruleengine.core.domain.FieldSchema
 import ui.DslCursorContext
 import ui.DslSection
 
-private fun FieldDefinition.getDisplayId(): String = alias ?: id.value
+private fun FieldDefinition.getDisplayId(): String {
+    return alias ?: id.value
+}
 
 /** Forwarding function for contextual completions. */
 public fun buildContextualCompletions(
@@ -71,14 +73,14 @@ private fun buildWhenCompletions(
     return when {
         context.precedingField != null && context.precedingOperator == null ->
             buildOperatorCompletions(
-                fieldName = context.precedingField!!,
+                fieldName = context.precedingField,
                 schema = schema
             )
 
         context.precedingField != null && context.precedingOperator != null ->
             buildValuePlaceholderCompletions(
-                fieldName = context.precedingField!!,
-                operator = context.precedingOperator!!,
+                fieldName = context.precedingField,
+                operator = context.precedingOperator,
                 schema = schema
             )
 
@@ -98,7 +100,7 @@ private fun buildThenCompletions(
         )
     } else {
         buildActionArgCompletions(
-            actionName = context.afterAction!!,
+            actionName = context.afterAction,
             actionSchema = actionSchema
         )
     }

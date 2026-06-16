@@ -49,8 +49,8 @@ fun annotateRule(
     if (text.isEmpty()) return AnnotatedString(text)
 
     val fieldNames = schema?.fields?.flatMap { (id, field) ->
-        listOf(id.value.orEmpty(), field.alias.orEmpty())
-    }?.filter { it.isNotEmpty() }?.toSet() ?: emptySet()
+        listOf(id.value, field.alias).filter { !it.isNullOrBlank() }
+    }?.toSet() ?: emptySet()
     val actionNames = actions?.actions?.keys?.toSet() ?: emptySet()
 
     // Pre-compute line start offsets for fast (line, col) → absolute offset mapping.
