@@ -21,6 +21,7 @@ enum class FieldType {
 data class FieldDefinition(
     val id: FieldId,
     val type: FieldType,
+    val alias: String? = null,
     val normalizers: List<NormalizerId> = emptyList(),
     val operators: Set<OperatorId> = emptySet()
 )

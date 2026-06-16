@@ -91,9 +91,54 @@ The fields and allowed operators come from the [Field Schema](./field-schema.md)
 | `containsAny` | `tags containsAny ["vip", "premium"]` | At least one listed value is in the set |
 | `containsAll` | `tags containsAll ["verified", "active"]` | All listed values are in the set |
 
----
+### Field Notation and Aliases
 
-## Combining Conditions
+Rules can use either the **full dot-notation path** or a **field alias** to refer to data fields. 
+
+#### Full Dot-Notation
+Use the complete path to a field as defined in the schema. This is highly explicit and avoids ambiguity.
+
+To understand how dot-notation works, consider the following input JSON:
+
+```json
+{
+  "user": {
+    "profile": {
+      "email": "user@example.com",
+      "age": 30
+    },
+    "account_info": {
+      "status": "active"
+    }
+  },
+  "transaction": {
+    "metadata": {
+      "vendor_id": "VEND-123",
+      "location": {
+        "city": "Berlin",
+        "country": "DE"
+      }
+    }
+  }
+}
+```
+
+The paths to specific fields would be:
+- `user.profile.email`
+- `user.account_info.status`
+- `transaction.metadata.vendor_id`
+- `transaction.metadata.location.city`
+
+#### Field Aliases
+To make rules more readable and maintainable, you can define short aliases for complex paths in your schema configuration.
+
+```
+# If 'user.profile.email' is aliased to 'email'
+email contains "@gmail.com"
+
+# If 'transaction.metadata.vendor_id' is aliased to 'vendor'
+vendor equals "VEND-123"
+```
 
 ### AND — All conditions must be true
 

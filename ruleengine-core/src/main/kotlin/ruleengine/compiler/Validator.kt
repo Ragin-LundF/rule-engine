@@ -32,6 +32,22 @@ object Validator {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
         val ids = mutableSetOf<String>()
 
+        // Check for duplicate aliases in the schema
+        val aliasToFieldId = mutableMapOf<String, FieldId>()
+        schema.fields.forEach { (fieldId, definition) ->
+            definition.alias?.let { alias ->
+                val existingFieldId = aliasToFieldId[alias]
+                if (existingFieldId != null) {
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Duplicate alias '$alias' found in fields '${existingFieldId.value}' and '${fieldId.value}'"
+                    )
+                } else {
+                    aliasToFieldId[alias] = fieldId
+                }
+            }
+        }
+
         for (rule in asts) {
             if (!ids.add(rule.id)) {
                 diagnostics += ValidationDiagnostic(
@@ -91,7 +107,8 @@ object Validator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
-        val fieldId = FieldId(value = cond.field)
+        val resolvedFieldId = resolveIdentifier(identifier = cond.field, schema = schema)
+        val fieldId = FieldId(value = resolvedFieldId)
         val def = schema.fields[fieldId]
         if (def == null) {
             val suggestion = suggestClosest(input = cond.field, candidates = schema.fields.keys.map { it.value })
@@ -103,14 +120,13 @@ object Validator {
             return
         }
 
-        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE) {
+        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE)
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Field '${cond.field}' uses unsupported field type ${def.type}; " +
                         "BOOLEAN and DATE are not supported yet"
             )
             return
-        }
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
         val allowedOperators = allowedOperatorsFor(def = def)
@@ -142,10 +158,10 @@ object Validator {
                     else {
                         runCatching {
                             Regex(pattern = cond.value.value)
-                        }.onFailure {
+                        }.onFailure { cause ->
                             diagnostics += ValidationDiagnostic(
                                 severity = Severity.ERROR,
-                                message = "Invalid regex pattern for field '${cond.field}': ${it.message}"
+                                message = "Invalid regex pattern for field '${cond.field}': ${cause.message}"
                             )
                         }
                     }
@@ -178,7 +194,27 @@ object Validator {
                     severity = Severity.ERROR,
                     message = "Field '${cond.field}' expects list or string literal"
                 )
+            
+            else -> diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Unsupported field type for validation: ${def.type}"
+            )
         }
+    }
+
+    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
+        val fieldId = FieldId(value = identifier)
+        if (schema.fields.containsKey(fieldId)) {
+            return identifier
+        }
+
+        for ((id, definition) in schema.fields) {
+            if (definition.alias == identifier) {
+                return id.value
+            }
+        }
+
+        return identifier
     }
 
     @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "NestedBlockDepth")

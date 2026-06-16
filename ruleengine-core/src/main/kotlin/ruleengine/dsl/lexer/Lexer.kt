@@ -51,7 +51,7 @@ class Lexer(private val input: String) {
                 '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
                 '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
                 '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
-                ',' to TokenType.COMMA
+                ',' to TokenType.COMMA, '.' to TokenType.DOT
             )
 
             if (singleCharTokens.containsKey(c)) {

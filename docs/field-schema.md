@@ -18,11 +18,37 @@ schema: my-schema-v1
 fields:
   fieldName:
     type: <type>
+    alias: <optional_alias> # Must be unique across all fields. Used to simplify rule readability.
+
     normalizers:
       - <normalizer>
     operators:
       - <operator>
 ```
+
+---
+
+## Aliases
+
+Field aliases allow you to define a user-friendly name for a field that is different from its technical implementation name. This is particularly useful for improving the readability of rules written by non-technical analysts.
+
+### Usage and Constraints
+
+- **Uniqueness:** Every `alias` must be unique across the entire schema. The engine will fail to load if two different fields share the same alias.
+- **Readability:** Use aliases to map complex or technical field names (e.g., `sepa_transaction_amount_decimal`) to something simple and intuitive (e.g., `amount`).
+
+Example:
+
+```yaml
+fields:
+  sepa_transaction_amount_decimal:
+    type: decimal
+    alias: amount
+    operators:
+      - gt
+```
+
+In a rule, you would use the alias: `amount gt 100`.
 
 ---
 
@@ -39,7 +65,7 @@ Each field has exactly one type. The type determines which operators can be used
 | `string_set` | A set of strings | Tags, labels, categories — multiple values per field |
 | `date` | Dates | Dates (future use) |
 
-> **Aliases accepted:** `text` can also be written as `string`. `integer` as `int` or `long`. `decimal` as `number` or `bigdecimal`. `string_set` as `stringset` or `set`. `boolean` as `bool`.
+|> **Aliases accepted:** `text` can also be written as `string`. `integer` can be written as `int` or `long`. `decimal` can be written as `number` or `bigdecimal`. `string_set` can also be written as `stringset` or `set`. `boolean` can be written as `bool`.
 
 ---
 
@@ -129,7 +155,7 @@ If you list specific operators, only those are permitted — the validator will 
 | `lte` | Less than or equal | `amount <= 9999` |
 | `between` | Inclusive range check | `amount between 100 5000` |
 
-> Symbolic operators `>`, `>=`, `<`, `<=`, `==` can be used in rules instead of the word forms.
+|> Symbolic operators `>`, `>=`, `<`, `<=`, `==` can be used in rules instead of the word forms.
 
 ### String Set Field Operators
 
@@ -165,6 +191,7 @@ fields:
   # IBAN – kept uppercase for format checks
   iban:
     type: text
+    alias: iban_code
     normalizers:
       - trim
       - uppercase
@@ -185,7 +212,7 @@ fields:
 
   # Signed transaction amount (negative = outgoing)
   amount:
-    type: decimal
+    type: number
     operators:
       - equals
       - gt
@@ -225,4 +252,3 @@ fields:
 - **Version your schema name** (e.g. `transaction-v1`, `transaction-v2`) so you can identify which schema version a rule set was written against.
 - **Use `string_set` for multi-value fields** like tags, labels, or categories — never store multiple values in a single text field separated by commas.
 - **Keep field names consistent** across all your schemas if multiple rule sets share the same data model — this makes rules more portable.
-
