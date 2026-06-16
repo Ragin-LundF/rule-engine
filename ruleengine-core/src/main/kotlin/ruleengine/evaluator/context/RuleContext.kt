@@ -19,7 +19,7 @@ private class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
         for (key in keys) {
             if (current is Map<*, *>) {
                 @Suppress("UNCHECKED_CAST")
-                current = current[key] as Any?
+                current = current[key]
             } else {
                 return null
             }

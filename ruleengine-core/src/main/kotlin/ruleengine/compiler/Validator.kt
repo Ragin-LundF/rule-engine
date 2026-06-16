@@ -40,7 +40,8 @@ object Validator {
                 if (existingFieldId != null) {
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
-                        message = "Duplicate alias '$alias' found in fields '${existingFieldId.value}' and '${fieldId.value}'"
+                        message = "Duplicate alias '$alias' found in fields " +
+                                "'${existingFieldId.value}' and '${fieldId.value}'"
                     )
                 } else {
                     aliasToFieldId[alias] = fieldId
@@ -120,13 +121,14 @@ object Validator {
             return
         }
 
-        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE)
+        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Field '${cond.field}' uses unsupported field type ${def.type}; " +
                         "BOOLEAN and DATE are not supported yet"
             )
             return
+        }
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
         val allowedOperators = allowedOperatorsFor(def = def)
@@ -194,11 +196,6 @@ object Validator {
                     severity = Severity.ERROR,
                     message = "Field '${cond.field}' expects list or string literal"
                 )
-            
-            else -> diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Unsupported field type for validation: ${def.type}"
-            )
         }
     }
 
