@@ -1,6 +1,5 @@
 package ruleengine.schema
 
-// ...existing imports...
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema

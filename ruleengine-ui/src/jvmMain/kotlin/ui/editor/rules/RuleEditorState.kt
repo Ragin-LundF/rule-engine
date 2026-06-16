@@ -98,49 +98,27 @@ class RuleEditorState(
     /** Load all files referenced by a manifest entry into the editor state. */
     fun loadManifestEntry(entry: ManifestEntry) {
         selectedManifestEntry.value = entry.id
-        val base = manifestBaseDir.value ?: return
-        var loadedRules = 0
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
+            reportManifestPathIssue(message = "Manifest base directory is not set")
+            return
+        }
 
-        // Load schema if referenced
-        entry.schema?.let { sp ->
-            runCatching {
-                val p = Path.of(base, sp)
-                val c = Files.readString(p)
-                schemaText.value = c
-                schemaFieldValue.value = TextFieldValue(text = c)
-                parsedSchema.value = runCatching {
-                    FieldSchemaLoader.loadFromString(content = c, nameHint = p.fileName.toString())
-                }.getOrNull()
-            }
+        val validationMessage = validateManifestEntryPaths(baseDir = base, entry = entry)
+        if (validationMessage != null) {
+            reportManifestPathIssue(message = validationMessage)
+            return
         }
-        // Load actions if referenced
-        entry.actions?.let { ap ->
-            runCatching {
-                val p = Path.of(base, ap)
-                val c = Files.readString(p)
-                actionSchemaText.value = c
-                actionFieldValue.value = TextFieldValue(text = c)
-                parsedActionSchema.value = runCatching {
-                    ActionSchemaLoader.loadFromString(content = c)
-                }.getOrNull()
-            }
+
+        if (!loadManifestSchema(baseDir = base, entry = entry)) {
+            return
         }
-        // Load and concatenate all rule files
-        if (entry.rules.isNotEmpty()) {
-            val combined = buildString {
-                entry.rules.forEachIndexed { idx, rp ->
-                    runCatching {
-                        val p = Path.of(base, rp)
-                        val c = Files.readString(p)
-                        if (idx > 0) append("\n\n")
-                        append("# --- ${p.fileName} ---\n")
-                        append(c)
-                        loadedRules++
-                    }
-                }
-            }
-            if (combined.isNotBlank()) ruleValue.value = TextFieldValue(text = combined)
+        if (!loadManifestActions(baseDir = base, entry = entry)) {
+            return
         }
+        val loadedRules = loadManifestRules(baseDir = base, entry = entry) ?: return
+
+        diagnosticsText.value = ""
+        diagnosticsList.value = emptyList()
         setStatus(
             msg = "Loaded '${entry.id}'" +
                     (if (entry.schema != null) ", schema" else "") +
@@ -148,5 +126,135 @@ class RuleEditorState(
                     (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
             kind = StatusKind.SUCCESS,
         )
+    }
+
+    private fun loadManifestSchema(baseDir: Path, entry: ManifestEntry): Boolean {
+        val relativePath = entry.schema ?: return true
+        return runCatching {
+            val path = resolveManifestPathOrThrow(
+                baseDir = baseDir,
+                relativePath = relativePath,
+                label = "schema",
+            )
+            val content = Files.readString(path)
+            schemaText.value = content
+            schemaFieldValue.value = TextFieldValue(text = content)
+            parsedSchema.value = runCatching {
+                FieldSchemaLoader.loadFromString(
+                    content = content,
+                    nameHint = path.fileName.toString(),
+                )
+            }.getOrNull()
+            true
+        }.getOrElse { ex ->
+            reportManifestPathIssue(message = "Failed to load manifest schema: ${ex.message}")
+            false
+        }
+    }
+
+    private fun loadManifestActions(baseDir: Path, entry: ManifestEntry): Boolean {
+        val relativePath = entry.actions ?: return true
+        return runCatching {
+            val path = resolveManifestPathOrThrow(
+                baseDir = baseDir,
+                relativePath = relativePath,
+                label = "actions",
+            )
+            val content = Files.readString(path)
+            actionSchemaText.value = content
+            actionFieldValue.value = TextFieldValue(text = content)
+            parsedActionSchema.value = runCatching {
+                ActionSchemaLoader.loadFromString(content = content)
+            }.getOrNull()
+            true
+        }.getOrElse { ex ->
+            reportManifestPathIssue(message = "Failed to load manifest actions: ${ex.message}")
+            false
+        }
+    }
+
+    private fun loadManifestRules(baseDir: Path, entry: ManifestEntry): Int? {
+        if (entry.rules.isEmpty()) {
+            return 0
+        }
+
+        var loadedRules = 0
+        val combined = buildString {
+            entry.rules.forEachIndexed { index, relativePath ->
+                runCatching {
+                    val path = resolveManifestPathOrThrow(
+                        baseDir = baseDir,
+                        relativePath = relativePath,
+                        label = "rule",
+                    )
+                    val content = Files.readString(path)
+                    if (index > 0) {
+                        append("\n\n")
+                    }
+                    append("# --- ${path.fileName} ---\n")
+                    append(content)
+                    loadedRules++
+                }.getOrElse { ex ->
+                    reportManifestPathIssue(message = "Failed to load manifest rule: ${ex.message}")
+                    return null
+                }
+            }
+        }
+
+        if (combined.isNotBlank()) {
+            ruleValue.value = TextFieldValue(text = combined)
+        }
+        return loadedRules
+    }
+
+    private fun validateManifestEntryPaths(baseDir: Path, entry: ManifestEntry): String? {
+        entry.schema?.let {
+            val rejected = ManifestPathResolver.resolveWithinBase(
+                baseDir = baseDir,
+                relativePath = it,
+                label = "schema",
+            )
+            if (rejected is ManifestPathResolution.Rejected) return rejected.message
+        }
+        entry.actions?.let {
+            val rejected = ManifestPathResolver.resolveWithinBase(
+                baseDir = baseDir,
+                relativePath = it,
+                label = "actions",
+            )
+            if (rejected is ManifestPathResolution.Rejected) return rejected.message
+        }
+        for (relativePath in entry.rules) {
+            val rejected = ManifestPathResolver.resolveWithinBase(
+                baseDir = baseDir,
+                relativePath = relativePath,
+                label = "rule",
+            )
+            if (rejected is ManifestPathResolution.Rejected) return rejected.message
+        }
+        return null
+    }
+
+    private fun resolveManifestPathOrThrow(
+        baseDir: Path,
+        relativePath: String,
+        label: String,
+    ): Path {
+        return when (
+            val resolution = ManifestPathResolver.resolveWithinBase(
+                baseDir = baseDir,
+                relativePath = relativePath,
+                label = label,
+            )
+        ) {
+            is ManifestPathResolution.Accepted -> resolution.path
+            is ManifestPathResolution.Rejected -> throw IllegalArgumentException(resolution.message)
+        }
+    }
+
+    private fun reportManifestPathIssue(message: String) {
+        diagnosticsText.value = message
+        diagnosticsList.value = emptyList()
+        setStatus(msg = message, kind = StatusKind.ERROR)
     }
 }

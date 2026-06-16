@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import ruleengine.manifest.ManifestLoader
+import java.nio.file.Path
 import ui.BgElevated
 import ui.BgSurface
 import ui.PrimaryBlue
@@ -48,7 +49,7 @@ fun TopBarSection(state: RuleEditorState, scope: CoroutineScope) {
                     val m = pickManifestFile()
                     if (m != null) {
                         state.manifestText.value = m.first
-                        state.manifestBaseDir.value = m.second
+                        state.manifestBaseDir.value = Path.of(m.second).toAbsolutePath().normalize().toString()
                         // Reset selection so auto-load of first entry triggers.
                         state.selectedManifestEntry.value = null
                         state.parsedManifest.value = runCatching {
