@@ -45,7 +45,8 @@ val FIELD_SCHEMA_EXAMPLE: String = """
 schema: my-schema
 
 fields:
-  fieldName:
+  myobject.name:
+    alias: obj_name
     type: text
     normalizers:
       - trim
