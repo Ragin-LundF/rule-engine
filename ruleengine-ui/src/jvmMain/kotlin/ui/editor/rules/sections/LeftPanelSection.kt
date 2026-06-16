@@ -117,6 +117,7 @@ fun LeftPanelSection(state: RuleEditorState, scope: CoroutineScope, modifier: Mo
                     parsedSchema = parsedSchema,
                     schemaExpanded = schemaExpanded,
                     schemaFieldValue = schemaFieldValue,
+                    onToggleExpanded = { schemaExpanded = !schemaExpanded },
                     onSchemaFieldValueChange = { newVal ->
                         schemaFieldValue = newVal
                         schemaText = newVal.text
@@ -187,6 +188,7 @@ fun LeftPanelSection(state: RuleEditorState, scope: CoroutineScope, modifier: Mo
                     parsedActionSchema = parsedActionSchema,
                     actionsExpanded = actionsExpanded,
                     actionFieldValue = actionFieldValue,
+                    onToggleExpanded = { actionsExpanded = !actionsExpanded },
                     onActionFieldValueChange = { newVal ->
                         actionFieldValue = newVal
                         actionSchemaText = newVal.text

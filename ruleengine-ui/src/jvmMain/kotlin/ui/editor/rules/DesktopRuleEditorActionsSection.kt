@@ -38,6 +38,7 @@ fun DesktopRuleEditorActionsSection(
     actionsExpanded: Boolean,
     actionFieldValue: TextFieldValue,
     onActionFieldValueChange: (TextFieldValue) -> Unit,
+    onToggleExpanded: () -> Unit,
     onExample: () -> Unit,
     onLoad: () -> Unit,
     onSave: () -> Unit,
@@ -56,7 +57,7 @@ fun DesktopRuleEditorActionsSection(
                     .clip(shape = RoundedCornerShape(size = 3.dp))
                     .background(color = BgHover)
                     .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 3.dp))
-                    .clickable { /* parent toggles */ }
+                    .clickable { onToggleExpanded() }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
