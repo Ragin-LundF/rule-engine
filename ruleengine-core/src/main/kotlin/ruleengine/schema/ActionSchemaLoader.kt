@@ -59,7 +59,8 @@ object ActionSchemaLoader {
 
     private fun parseSchema(content: String): RawActionSchema {
         val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-        return yf.createParser(content).use { p ->
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return yf.createParser(bytes).use { p ->
             mapper.readValue(p, RawActionSchema::class.java)
         }
     }

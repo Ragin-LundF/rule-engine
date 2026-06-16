@@ -31,6 +31,28 @@ class FieldSchemaLoaderTest {
     }
 
     @Test
+    fun `invalid normalizer throws SchemaLoadException`() {
+        val path = Files.createTempFile("invalid-normalizer", ".yaml")
+        Files.writeString(
+            path,
+            """
+                schema: invalid-normalizer
+                fields:
+                  purpose:
+                    type: text
+                    normalizers:
+                      - does_not_exist
+            """.trimIndent()
+        )
+
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.load(path = path)
+        }
+
+        assertTrue(actual = exception.details.contains(other = "Unknown normalizer"))
+    }
+
+    @Test
     fun `oversized schema file throws SchemaLoadException`() {
         val path = Files.createTempFile("oversized-schema", ".yaml")
         Files.writeString(path, oversizedContent())

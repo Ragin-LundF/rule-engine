@@ -9,6 +9,7 @@ import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
+import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
@@ -61,7 +62,8 @@ object FieldSchemaLoader {
 
     private fun parseSchema(content: String): RawFieldSchema {
         val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-        return yf.createParser(content).use { p ->
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return yf.createParser(bytes).use { p ->
             mapper.readValue(p, RawFieldSchema::class.java)
         }
     }
@@ -74,9 +76,23 @@ object FieldSchemaLoader {
             )
 
         val normalizers = raw.normalizers?.map { NormalizerId(it) } ?: emptyList()
+        validateNormalizers(fieldName = fieldName, normalizers = normalizers)
         val operators = raw.operators?.map { OperatorId(it) }?.toSet() ?: emptySet()
 
         return FieldDefinition(id = fieldName, type = type, normalizers = normalizers, operators = operators)
+    }
+
+    private fun validateNormalizers(fieldName: FieldId, normalizers: List<NormalizerId>) {
+        for (normalizerId in normalizers) {
+            runCatching {
+                NormalizerRegistry.default.get(id = normalizerId)
+            }.getOrElse {
+                throw SchemaLoadException(
+                    path = Path.of(fieldName.value),
+                    details = "Unknown normalizer '${normalizerId.value}' for field '${fieldName.value}'"
+                )
+            }
+        }
     }
 
     private fun parseFieldType(s: String): FieldType {
