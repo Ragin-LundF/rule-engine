@@ -7,9 +7,9 @@ pluginManagement {
     }
     plugins {
         // Declare plugin versions here so module build scripts can apply them without repeating versions
-        id 'org.jetbrains.kotlin.multiplatform' version '2.3.21'
+        id 'org.jetbrains.kotlin.multiplatform' version '2.4.0'
         id 'org.jetbrains.compose' version '1.11.1'
-        id 'org.jetbrains.kotlin.plugin.compose' version '2.3.21'
+        id 'org.jetbrains.kotlin.plugin.compose' version '2.4.0'
     }
 }
 
