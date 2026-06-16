@@ -11,6 +11,11 @@ class TextRegexExpression(
     private val pattern: Regex
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
+
+    companion object {
+        const val MAX_INPUT_LENGTH = 10_000
+    }
+
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
             meta = NodeMeta(
@@ -23,6 +28,11 @@ class TextRegexExpression(
 
         val fieldValue = context.get(field = field) as? ruleengine.evaluator.context.PreparedText
         if (fieldValue == null) {
+            trace?.exit(result = false)
+            return false
+        }
+
+        if (fieldValue.original.length > MAX_INPUT_LENGTH) {
             trace?.exit(result = false)
             return false
         }

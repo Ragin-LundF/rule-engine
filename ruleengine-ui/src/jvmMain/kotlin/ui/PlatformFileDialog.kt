@@ -50,33 +50,33 @@ private val ruleFilter = FilenameFilter { _, n -> n.endsWith(".rule") }
 // ── Platform implementations ──────────────────────────────────────────────────
 
 actual suspend fun pickSchemaFile(): String? =
-    nativeOpen("Open Schema YAML", yamlFilter)?.readText()
+    nativeOpen(title = "Open Schema YAML", filter = yamlFilter)?.readText()
 
 actual suspend fun pickRuleFile(): String? =
-    nativeOpen("Open Rule File", ruleFilter)?.readText()
+    nativeOpen(title = "Open Rule File", filter = ruleFilter)?.readText()
 
 actual suspend fun pickManifestFile(): Pair<String, String>? {
-    val file = nativeOpen("Open Manifest YAML", yamlFilter) ?: return null
+    val file = nativeOpen(title = "Open Manifest YAML", filter = yamlFilter) ?: return null
     return Pair(file.readText(), file.parent ?: ".")
 }
 
 actual fun saveRuleToFile(filename: String, content: String) {
-    val file = nativeSave("Save Rule", filename) ?: return
+    val file = nativeSave(title = "Save Rule", suggestedName = filename) ?: return
     file.writeText(content)
 }
 
 actual fun saveSchemaToFile(filename: String, content: String) {
-    val file = nativeSave("Save Schema YAML", filename) ?: return
+    val file = nativeSave(title = "Save Schema YAML", suggestedName = filename) ?: return
     file.writeText(content)
 }
 
 actual fun saveActionsToFile(filename: String, content: String) {
-    val file = nativeSave("Save Actions YAML", filename) ?: return
+    val file = nativeSave(title = "Save Actions YAML", suggestedName = filename) ?: return
     file.writeText(content)
 }
 
 actual fun saveManifestToFile(filename: String, content: String) {
-    val file = nativeSave("Save Manifest YAML", filename) ?: return
+    val file = nativeSave(title = "Save Manifest YAML", suggestedName = filename) ?: return
     file.writeText(content)
 }
 
@@ -90,11 +90,9 @@ actual fun copyToClipboard(text: String) {
  * Does nothing silently if the user cancels the dialog or encoding fails.
  */
 fun saveDiagramAsPng(bitmap: ImageBitmap) {
-    val file = nativeSave(title = "Export Diagram as PNG", suggestedName = "diagram.png")
-        ?: return
+    val file = nativeSave(title = "Export Diagram as PNG", suggestedName = "diagram.png") ?: return
     val skiaImage = SkiaImage.makeFromBitmap(bitmap.asSkiaBitmap())
-    val data = skiaImage.encodeToData(EncodedImageFormat.PNG, quality = 100)
-        ?: return
+    val data = skiaImage.encodeToData(format = EncodedImageFormat.PNG, quality = 100) ?: return
     file.writeBytes(data.bytes)
 }
 

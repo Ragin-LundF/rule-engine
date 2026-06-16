@@ -30,7 +30,10 @@ class RuleEngine(
             val ok = r.expression.evaluate(context = prepared, trace = collector)
             collector.exit(ok)
             if (ok) {
-                matches += RuleMatch(ruleId = r.id, actions = r.actions)
+                val resolvedActions = r.actions.map { compiledAction ->
+                    compiledAction.resolve(context = prepared)
+                }
+                matches += RuleMatch(ruleId = r.id, actions = resolvedActions)
                 matchedRuleIds += r.id
             }
         }

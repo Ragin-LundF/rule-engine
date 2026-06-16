@@ -14,7 +14,18 @@ interface RuleContext {
 
 private class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
     override fun get(field: FieldId): Any? {
-        return map[field.value]
+        val keys = field.value.split('.')
+        var current: Any? = map
+        for (key in keys) {
+            if (current is Map<*, *>) {
+                @Suppress("UNCHECKED_CAST")
+                current = current[key]
+            } else {
+                return null
+            }
+        }
+        return current
     }
 }
+
 

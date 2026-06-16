@@ -31,6 +31,13 @@ kotlin {
                 // keep JS main independent from core
             }
         }
+        jvmTest {
+            dependencies {
+                implementation(project(":ruleengine-core"))
+                runtimeOnly(project(":ruleengine-core"))
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 

@@ -5,6 +5,8 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ExtractionAst
+import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.NotAst
@@ -73,7 +75,6 @@ class Parser(private val input: String) {
 
         expect(type = TokenType.LBRACE)
 
-        // optional description ignored for now
         // parse when
         val whenTok = current()
         if (whenTok.type != TokenType.IDENT || whenTok.text != "when") {
@@ -112,12 +113,17 @@ class Parser(private val input: String) {
                 )
             }
 
-            val name = c.text
-            advance()
+            if (c.text == "extract") {
+                advance()
+                actions += parseExtractAction()
+            } else {
+                val name = c.text
+                advance()
 
-            // parse single argument as string or number or list
-            val arg = parseLiteral()
-            actions += ActionAst(name = name, arguments = listOf(arg))
+                // parse single argument as string or number or list
+                val arg = parseLiteral()
+                actions += ActionAst(name = name, arguments = listOf(arg))
+            }
         }
 
         expect(type = TokenType.RBRACE)
@@ -162,28 +168,69 @@ class Parser(private val input: String) {
         return parsePrimary()
     }
 
-    @Suppress("ThrowsCount", "LongMethod")
     private fun parsePrimary(): ExpressionAst {
-        val c = current()
-        if (c.type == TokenType.LPAREN) {
-            advance()
-            val innerExpression = parseExpression()
-            expect(type = TokenType.RPAREN)
-            return innerExpression
+        return if (current().type == TokenType.LPAREN) {
+            parseParenthesizedExpression()
+        } else {
+            parseCondition()
         }
+    }
 
-        // condition: IDENT OP LITERAL [ignoreCase]
-        if (c.type != TokenType.IDENT) {
+    private fun parseParenthesizedExpression(): ExpressionAst {
+        advance()
+        val innerExpression = parseExpression()
+        expect(type = TokenType.RPAREN)
+        return innerExpression
+    }
+
+    private fun parseCondition(): ConditionAst {
+        val field = parseConditionField()
+        val operator = parseConditionOperator()
+        val value = parseConditionValue(operator = operator)
+        val ignoreCase = parseIgnoreCaseModifier()
+
+        return ConditionAst(
+            field = field,
+            operator = operator,
+            value = value,
+            ignoreCase = ignoreCase
+        )
+    }
+
+    @Suppress("ThrowsCount")
+    private fun parseConditionField(): String {
+        val token = current()
+        if (token.type != TokenType.IDENT) {
             throw ParseException(
-                line = c.line,
-                column = c.col,
+                line = token.line,
+                column = token.col,
                 messageText = "Expected field identifier in condition"
             )
         }
 
-        val field = c.text
+        val parts = mutableListOf<String>()
+        parts.add(token.text)
         advance()
 
+        while (current().type == TokenType.DOT) {
+            advance()
+            val next = current()
+            if (next.type != TokenType.IDENT) {
+                throw ParseException(
+                    line = next.line,
+                    column = next.col,
+                    messageText = "Expected identifier after dot"
+                )
+            }
+
+            parts.add(next.text)
+            advance()
+        }
+
+        return parts.joinToString(separator = ".")
+    }
+
+    private fun parseConditionOperator(): String {
         val opTok = current()
         if (opTok.type != TokenType.IDENT) {
             throw ParseException(
@@ -193,47 +240,52 @@ class Parser(private val input: String) {
             )
         }
 
-        val op = opTok.text
+        advance()
+        return opTok.text
+    }
+
+    private fun parseConditionValue(operator: String): LiteralAst {
+        return if (operator.lowercase() == "between") {
+            parseBetweenLiteral()
+        } else {
+            parseLiteral()
+        }
+    }
+
+    @Suppress("ThrowsCount")
+    private fun parseBetweenLiteral(): BetweenLiteral {
+        val lowTok = current()
+        if (lowTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = lowTok.line,
+                column = lowTok.col,
+                messageText = "Expected lower bound number literal for 'between'"
+            )
+        }
+
         advance()
 
-        // `between` consumes two number literals rather than one
-        val value: LiteralAst
-        if (op.lowercase() == "between") {
-            val lowTok = current()
-            if (lowTok.type != TokenType.NUMBER) {
-                throw ParseException(
-                    line = lowTok.line,
-                    column = lowTok.col,
-                    messageText = "Expected lower bound number literal for 'between'"
-                )
-            }
-
-            advance()
-            val highTok = current()
-            if (highTok.type != TokenType.NUMBER) {
-                throw ParseException(
-                    line = highTok.line,
-                    column = highTok.col,
-                    messageText = "Expected upper bound number literal for 'between'"
-                )
-            }
-
-            advance()
-            value = BetweenLiteral(low = lowTok.text, high = highTok.text)
-        } else {
-            value = parseLiteral()
+        val highTok = current()
+        if (highTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = highTok.line,
+                column = highTok.col,
+                messageText = "Expected upper bound number literal for 'between'"
+            )
         }
 
-        // Optional trailing `ignoreCase` modifier (only meaningful for text operators)
-        val ignoreCase: Boolean
+        advance()
+
+        return BetweenLiteral(low = lowTok.text, high = highTok.text)
+    }
+
+    private fun parseIgnoreCaseModifier(): Boolean {
         if (current().type == TokenType.IDENT && current().text == "ignoreCase") {
             advance()
-            ignoreCase = true
-        } else {
-            ignoreCase = false
+            return true
         }
 
-        return ConditionAst(field = field, operator = op, value = value, ignoreCase = ignoreCase)
+        return false
     }
 
     private fun parseLiteral(): LiteralAst {
@@ -274,5 +326,99 @@ class Parser(private val input: String) {
 
         return result
     }
-}
 
+    /**
+     * Parses a literal or an extraction reference (`$N`).
+     * Extraction references may only appear as arguments to an action that
+     * also carries an [ExtractionAst].
+     */
+    private fun parseLiteralOrRef(): LiteralAst {
+        val token = current()
+        if (token.type == TokenType.IDENT && token.text.startsWith(prefix = "$")) {
+            advance()
+            val groupIndex = token.text.removePrefix(prefix = "$").toIntOrNull()
+                ?: throw ParseException(
+                    line = token.line,
+                    column = token.col,
+                    messageText = "Invalid extraction reference '${token.text}'; expected \$N where N is an integer"
+                )
+            return ExtractionRefLiteral(groupIndex = groupIndex)
+        }
+        return parseLiteral()
+    }
+
+    /**
+     * Parses the body of an `extract` clause:
+     * ```
+     * extract <sourceField> regex("<pattern>", <groupIndex>) <actionName> <arg>
+     * ```
+     */
+    @Suppress("ThrowsCount", "LongMethod")
+    private fun parseExtractAction(): ActionAst {
+        val fieldTok = current()
+        if (fieldTok.type != TokenType.IDENT) {
+            throw ParseException(
+                line = fieldTok.line,
+                column = fieldTok.col,
+                messageText = "Expected source field name after 'extract' but found '${fieldTok.text}'"
+            )
+        }
+        val sourceField = fieldTok.text
+        advance()
+
+        val methodTok = current()
+        if (methodTok.type != TokenType.IDENT || methodTok.text != "regex") {
+            throw ParseException(
+                line = methodTok.line,
+                column = methodTok.col,
+                messageText = "Expected extraction method 'regex' but found '${methodTok.text}'"
+            )
+        }
+        advance()
+
+        expect(type = TokenType.LPAREN)
+        val patternTok = expect(type = TokenType.STRING)
+        expect(type = TokenType.COMMA)
+        val groupIndexTok = current()
+        if (groupIndexTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = groupIndexTok.line,
+                column = groupIndexTok.col,
+                messageText = "Expected integer group index in regex extraction but found '${groupIndexTok.text}'"
+            )
+        }
+        val groupIndex = groupIndexTok.text.toIntOrNull()
+            ?: throw ParseException(
+                line = groupIndexTok.line,
+                column = groupIndexTok.col,
+                messageText = "Invalid group index '${groupIndexTok.text}': must be a non-negative integer"
+            )
+        advance()
+        expect(type = TokenType.RPAREN)
+
+        val extraction = ExtractionAst.RegexExtraction(
+            sourceField = sourceField,
+            pattern = patternTok.text,
+            groupIndex = groupIndex
+        )
+
+        val actionNameTok = current()
+        if (actionNameTok.type != TokenType.IDENT) {
+            throw ParseException(
+                line = actionNameTok.line,
+                column = actionNameTok.col,
+                messageText = "Expected action name after extraction definition but found '${actionNameTok.text}'"
+            )
+        }
+        val actionName = actionNameTok.text
+        advance()
+
+        val arg = parseLiteralOrRef()
+
+        return ActionAst(
+            name = actionName,
+            arguments = listOf(arg),
+            extraction = extraction
+        )
+    }
+}

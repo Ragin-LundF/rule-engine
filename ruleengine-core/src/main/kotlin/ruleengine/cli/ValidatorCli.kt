@@ -1,6 +1,7 @@
 package ruleengine.cli
 
 import ruleengine.compiler.Validator
+import ruleengine.core.io.FileInputSupport
 import ruleengine.dsl.parser.Parser
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.FieldSchemaLoader
@@ -45,11 +46,14 @@ object ValidatorCli {
                 return@runCatching
             }
 
-            val ruleFiles = Files.walk(rulesDir)
-                .filter { Files.isRegularFile(it) && it.toString().endsWith(".rule") }
-                .toList()
-
-            val asts = ruleFiles.flatMap { file -> Parser(input = Files.readString(file)).parseRules() }
+            val asts = FileInputSupport.walkRuleFiles(root = rulesDir).flatMap { file ->
+                Parser(
+                    input = FileInputSupport.readBoundedText(
+                        path = file,
+                        kind = "rule file"
+                    )
+                ).parseRules()
+            }
 
             val validation = Validator.validate(asts = asts, schema = schema)
 

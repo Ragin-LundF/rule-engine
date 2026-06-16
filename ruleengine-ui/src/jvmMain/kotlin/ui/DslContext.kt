@@ -32,7 +32,9 @@ fun analyzeDslContext(
     cursorPos: Int,
     schema: FieldSchema?,
 ): DslCursorContext {
-    val fieldNames = schema?.fields?.keys?.map { it.value }?.toSet() ?: emptySet()
+    val fieldNames = schema?.fields?.flatMap { (id, def) ->
+        listOf(id.value, def.alias).mapNotNull { it }.filter { it.isNotEmpty() }
+    }?.toSet() ?: emptySet()
     return runCatching {
         val wordStart = findWordStart(text = text, cursorPos = cursorPos)
         val prefix = text.substring(startIndex = 0, endIndex = wordStart)

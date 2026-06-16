@@ -1,6 +1,5 @@
 package ruleengine.schema
 
-// ...existing imports...
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
@@ -8,6 +7,8 @@ import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.errors.SchemaLoadException
+import ruleengine.core.io.FileInputSupport
+import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
@@ -26,12 +27,8 @@ object FieldSchemaLoader {
         }
 
         return runCatching {
-            Files.newInputStream(path).use { ins ->
-                val bytes = ins.readAllBytes()
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
-            }
+            val content = FileInputSupport.readBoundedText(path = path, kind = "schema")
+            parseSchema(content = content)
         }.map { raw ->
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
@@ -48,12 +45,7 @@ object FieldSchemaLoader {
     fun loadFromReader(reader: java.io.Reader, nameHint: String? = null): FieldSchema {
         val content = reader.use { it.readText() }
         return runCatching {
-            val raw: RawFieldSchema = run {
-                val bytes = content.toByteArray(Charsets.UTF_8)
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawFieldSchema::class.java) }
-            }
+            val raw = parseSchema(content = content)
             val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
@@ -67,6 +59,14 @@ object FieldSchemaLoader {
         return loadFromReader(java.io.StringReader(content), nameHint)
     }
 
+    private fun parseSchema(content: String): RawFieldSchema {
+        val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return yf.createParser(bytes).use { p ->
+            mapper.readValue(p, RawFieldSchema::class.java)
+        }
+    }
+
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {
         val type = raw.type?.let { parseFieldType(it) }
             ?: throw SchemaLoadException(
@@ -75,14 +75,34 @@ object FieldSchemaLoader {
             )
 
         val normalizers = raw.normalizers?.map { NormalizerId(it) } ?: emptyList()
+        validateNormalizers(fieldName = fieldName, normalizers = normalizers)
         val operators = raw.operators?.map { OperatorId(it) }?.toSet() ?: emptySet()
 
-        return FieldDefinition(id = fieldName, type = type, normalizers = normalizers, operators = operators)
+        return FieldDefinition(
+            id = fieldName,
+            type = type,
+            alias = raw.alias,
+            normalizers = normalizers,
+            operators = operators
+        )
+    }
+
+    private fun validateNormalizers(fieldName: FieldId, normalizers: List<NormalizerId>) {
+        for (normalizerId in normalizers) {
+            runCatching {
+                NormalizerRegistry.default.get(id = normalizerId)
+            }.getOrElse {
+                throw SchemaLoadException(
+                    path = Path.of(fieldName.value),
+                    details = "Unknown normalizer '${normalizerId.value}' for field '${fieldName.value}'"
+                )
+            }
+        }
     }
 
     private fun parseFieldType(s: String): FieldType {
         return when (s.lowercase()) {
-            "text", "string", "string" -> FieldType.TEXT
+            "text", "string" -> FieldType.TEXT
             "integer", "int", "long" -> FieldType.INTEGER
             "decimal", "bigdecimal", "number" -> FieldType.DECIMAL
             "boolean", "bool" -> FieldType.BOOLEAN

@@ -32,23 +32,23 @@ data class YamlCursorContext(
 
 // ── YAML completion candidates ────────────────────────────────────────────────
 
-private val FIELD_TYPE_VALUES   = listOf("text", "integer", "decimal", "boolean", "stringSet", "date")
-private val NORMALIZER_VALUES   = listOf(
+private val FIELD_TYPE_VALUES = listOf("text", "integer", "decimal", "boolean", "stringSet", "date")
+private val NORMALIZER_VALUES = listOf(
     "trim", "lowercase", "uppercase",
     "german_umlaut_fold", "ascii_fold",
     "collapse_whitespace", "remove_punctuation",
 )
-private val OPERATOR_VALUES     = listOf(
+private val OPERATOR_VALUES = listOf(
     "equals", "contains", "startsWith", "endsWith", "in", "regex",
     "gt", "gte", "lt", "lte", "between",
     "containsAny", "containsAll",
 )
-private val ARG_TYPE_VALUES     = listOf("string", "integer", "decimal")
+private val ARG_TYPE_VALUES = listOf("string", "integer", "decimal")
 
-private val FIELD_SCHEMA_TOP_KEYS   = listOf("schema", "fields")
-private val ACTION_SCHEMA_TOP_KEYS  = listOf("actions")
-private val FIELD_DEF_KEYS          = listOf("type", "normalizers", "operators")
-private val ACTION_DEF_KEYS         = listOf("argTypes")
+private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")
+private val ACTION_SCHEMA_TOP_KEYS = listOf("actions")
+private val FIELD_DEF_KEYS = listOf("type", "normalizers", "operators")
+private val ACTION_DEF_KEYS = listOf("argTypes")
 
 // ── YAML cursor context analyzer ──────────────────────────────────────────────
 
@@ -105,8 +105,8 @@ private fun findParentKey(text: String, lineStart: Int, childIndent: Int): Strin
         if (line.isBlank()) continue
         val trimmed = line.trimStart()
         val lineIndent = line.length - trimmed.length
-        if (lineIndent < childIndent && trimmed.contains(':')) {
-            return extractKey(trimmed)
+        if (lineIndent < childIndent && trimmed.contains(char = ':')) {
+            return extractKey(trimmedLine = trimmed)
         }
     }
     return null
@@ -149,13 +149,23 @@ fun buildYamlCompletions(
         // Keys at indent 4 (sub-keys of a field definition)
         context.currentIndent == 4 && editorType == YamlEditorType.FIELD_SCHEMA ->
             FIELD_DEF_KEYS.map { key ->
-                CompletionItem(label = key, insertText = "$key:", kind = CompletionKind.KEYWORD, hint = "field property")
+                CompletionItem(
+                    label = key,
+                    insertText = "$key:",
+                    kind = CompletionKind.KEYWORD,
+                    hint = "field property"
+                )
             }
 
         // Keys at indent 4 (sub-keys of an action definition)
         context.currentIndent == 4 && editorType == YamlEditorType.ACTION_SCHEMA ->
             ACTION_DEF_KEYS.map { key ->
-                CompletionItem(label = key, insertText = "$key: []", kind = CompletionKind.KEYWORD, hint = "action property")
+                CompletionItem(
+                    label = key,
+                    insertText = "$key: []",
+                    kind = CompletionKind.KEYWORD,
+                    hint = "action property"
+                )
             }
 
         // Top-level keys for field schema
@@ -168,6 +178,17 @@ fun buildYamlCompletions(
         context.currentIndent == 0 && editorType == YamlEditorType.ACTION_SCHEMA ->
             ACTION_SCHEMA_TOP_KEYS.map { key ->
                 CompletionItem(label = key, insertText = "$key:", kind = CompletionKind.KEYWORD, hint = "schema key")
+            }
+
+        // Field name values (at indent 2, under `fields:`) → suggest field names
+        context.currentIndent == 2 && context.parentKey == "fields" && editorType == YamlEditorType.FIELD_SCHEMA ->
+            FIELD_SCHEMA_TOP_KEYS.map { key ->
+                CompletionItem(
+                    label = key,
+                    insertText = "$key: ",
+                    kind = CompletionKind.KEYWORD,
+                    hint = "field property"
+                )
             }
 
         else -> emptyList()
@@ -197,7 +218,7 @@ fun annotateYaml(text: String, editorType: YamlEditorType): AnnotatedString {
         for (line in lines) {
             val lineLen = line.length
             val trimmed = line.trimStart()
-            val indent  = lineLen - trimmed.length
+            val indent = lineLen - trimmed.length
 
             // Pop all stack frames whose indent is >= current line indent.
             // This handles "de-indenting" back to a shallower level.
@@ -205,8 +226,8 @@ fun annotateYaml(text: String, editorType: YamlEditorType): AnnotatedString {
                 contextStack.removeLast()
             }
 
-        val parentEntry = contextStack.lastOrNull()
-        val parentKey   = parentEntry?.second
+            val parentEntry = contextStack.lastOrNull()
+            val parentKey = parentEntry?.second
 
             when {
                 trimmed.startsWith('#') -> {
@@ -214,13 +235,13 @@ fun annotateYaml(text: String, editorType: YamlEditorType): AnnotatedString {
                     addStyle(
                         style = SpanStyle(color = TextMuted, fontStyle = FontStyle.Italic),
                         start = lineOffset,
-                        end   = lineOffset + lineLen,
+                        end = lineOffset + lineLen,
                     )
                 }
 
                 trimmed.startsWith("- ") || trimmed == "-" -> {
                     // List item.
-                    val dashAbs  = lineOffset + indent
+                    val dashAbs = lineOffset + indent
                     val valueAbs = dashAbs + 2 // skip "- "
                     val valueStr = if (trimmed.length > 2) trimmed.substring(2).trimEnd() else ""
 
@@ -239,14 +260,14 @@ fun annotateYaml(text: String, editorType: YamlEditorType): AnnotatedString {
 
                 trimmed.contains(':') -> {
                     // Key-value line (or key-only line like `fields:`).
-                    val colonIdx   = trimmed.indexOf(':')
-                    val key        = trimmed.substring(0, colonIdx).trim()
-                    val valueRaw   = trimmed.substring(colonIdx + 1)
+                    val colonIdx = trimmed.indexOf(':')
+                    val key = trimmed.substring(0, colonIdx).trim()
+                    val valueRaw = trimmed.substring(colonIdx + 1)
                     val valueTrimmed = valueRaw.trim()
 
                     val keyAbsStart = lineOffset + indent
-                    val keyAbsEnd   = keyAbsStart + key.length
-                    val colonAbs    = keyAbsEnd
+                    val keyAbsEnd = keyAbsStart + key.length
+                    val colonAbs = keyAbsEnd
 
                     // Colour the key.
                     val keyStyle = resolveKeyStyle(
@@ -293,14 +314,14 @@ private fun resolveKeyStyle(
         // Top-level structural keys (`schema`, `fields`, `actions`).
         indent == 0 -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
 
-        // Field names are at indent 2 under `fields`.
+        // Field names are at indent 2 under `fields` (including aliases).
         indent == 2 && parentKey == "fields" -> SpanStyle(color = ColorField)
 
         // Action names are at indent 2 under `actions`.
         indent == 2 && parentKey == "actions" -> SpanStyle(color = ColorAction)
 
-        // Sub-keys of field definitions (`type`, `normalizers`, `operators`).
-        key in setOf("type", "normalizers", "operators", "argTypes") ->
+        // Sub-keys of field definitions (`type`, `normalizers`, `operators`, `alias`).
+        key in setOf("type", "normalizers", "operators", "alias") ->
             SpanStyle(color = ColorKeyword)
 
         else -> SpanStyle(color = TextSecondary)
@@ -311,9 +332,9 @@ private fun resolveKeyStyle(
 private fun resolveListItemStyle(parentKey: String?): SpanStyle {
     return when (parentKey) {
         "normalizers" -> SpanStyle(color = AccentOrange)
-        "operators"   -> SpanStyle(color = ColorOp)
-        "argTypes"    -> SpanStyle(color = ColorNumber)
-        else          -> SpanStyle(color = TextPrimary)
+        "operators" -> SpanStyle(color = ColorOp)
+        "argTypes" -> SpanStyle(color = ColorNumber)
+        else -> SpanStyle(color = TextPrimary)
     }
 }
 
@@ -342,9 +363,9 @@ private fun AnnotatedString.Builder.applyValueStyle(
         )
     } else {
         val valueStyle = when (key) {
-            "type"   -> fieldTypeValueColor(value)
+            "type" -> fieldTypeValueColor(value)
             "schema" -> SpanStyle(color = ColorString)
-            else     -> SpanStyle(color = TextPrimary)
+            else -> SpanStyle(color = ColorField)  // Field name values (including aliases)
         }
         addStyle(style = valueStyle, start = valueAbsStart, end = valueAbsStart + value.length)
     }
@@ -357,10 +378,10 @@ private fun AnnotatedString.Builder.colorInlineListItems(
     key: String,
 ) {
     val itemStyle = when (key) {
-        "argTypes"    -> SpanStyle(color = ColorNumber)
+        "argTypes" -> SpanStyle(color = ColorNumber)
         "normalizers" -> SpanStyle(color = AccentOrange)
-        "operators"   -> SpanStyle(color = ColorOp)
-        else          -> SpanStyle(color = TextPrimary)
+        "operators" -> SpanStyle(color = ColorOp)
+        else -> SpanStyle(color = TextPrimary)
     }
     var scanOffset = 0
     bracketContent.split(',').forEach { rawItem ->
@@ -371,7 +392,7 @@ private fun AnnotatedString.Builder.colorInlineListItems(
                 addStyle(
                     style = itemStyle,
                     start = bracketAbsStart + itemStart,
-                    end   = bracketAbsStart + itemStart + item.length,
+                    end = bracketAbsStart + itemStart + item.length,
                 )
                 scanOffset = itemStart + item.length
             }
@@ -382,13 +403,13 @@ private fun AnnotatedString.Builder.colorInlineListItems(
 /** Returns a [SpanStyle] whose colour represents the YAML `type:` field value. */
 private fun fieldTypeValueColor(value: String): SpanStyle {
     val color: Color = when (value.lowercase().trim()) {
-        "text", "string"               -> Color(0xFF79C0FF)
-        "integer", "int", "long"       -> Color(0xFF58A6FF)
+        "text", "string" -> Color(0xFF79C0FF)
+        "integer", "int", "long" -> Color(0xFF58A6FF)
         "decimal", "bigdecimal", "number" -> Color(0xFF58A6FF)
-        "boolean", "bool"              -> AccentPurple
+        "boolean", "bool" -> AccentPurple
         "stringset", "string_set", "set" -> AccentGreen
-        "date"                         -> AccentOrange
-        else                           -> TextPrimary
+        "date" -> AccentOrange
+        else -> TextPrimary
     }
     return SpanStyle(color = color)
 }

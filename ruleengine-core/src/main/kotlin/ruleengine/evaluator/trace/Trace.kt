@@ -2,7 +2,7 @@ package ruleengine.evaluator.trace
 
 import ruleengine.jackson.JacksonUtil
 
-enum class NodeType { CONDITION, AND, OR, NOT, RULE }
+enum class NodeType { EVALUATION, CONDITION, AND, OR, NOT, RULE }
 
 data class DecisionNode(
     val id: String,
@@ -51,7 +51,13 @@ class RecordingTraceCollector : TraceCollector {
 
     private val stack = ArrayDeque<MutableNode>()
     private var counter = 0
-    private var rootRef: MutableNode? = null
+    private val rootRef = MutableNode(
+        id = "n0",
+        type = NodeType.EVALUATION,
+        field = null,
+        operator = null,
+        expected = null
+    )
 
     override fun enter(meta: NodeMeta) {
         val node = MutableNode(
@@ -63,7 +69,7 @@ class RecordingTraceCollector : TraceCollector {
         )
         node.startNs = System.nanoTime()
         node.ruleId = meta.ruleId
-        if (stack.isEmpty()) rootRef = node
+        if (stack.isEmpty()) rootRef.children.add(node)
         else stack.last().children.add(node)
         stack.addLast(node)
     }
@@ -77,7 +83,7 @@ class RecordingTraceCollector : TraceCollector {
     }
 
     override fun root(): DecisionNode? {
-        return rootRef?.toDecisionNode()
+        return rootRef.toDecisionNode()
     }
 
     private fun MutableNode.toDecisionNode(): DecisionNode {

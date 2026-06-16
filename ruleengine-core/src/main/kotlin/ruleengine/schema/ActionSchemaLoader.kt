@@ -5,6 +5,7 @@ import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionDefinition
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.errors.SchemaLoadException
+import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import tools.jackson.core.StreamReadFeature
 import tools.jackson.dataformat.yaml.YAMLFactory
@@ -24,12 +25,8 @@ object ActionSchemaLoader {
         }
 
         return runCatching {
-            Files.newInputStream(path).use { ins ->
-                val bytes = ins.readAllBytes()
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawActionSchema::class.java) }
-            }
+            val content = FileInputSupport.readBoundedText(path = path, kind = "action schema")
+            parseSchema(content = content)
         }.map { raw ->
             val actions = raw.actions.mapValues { (name, def) ->
                 val types = def.argTypes.map { parseArgType(it) }
@@ -45,12 +42,7 @@ object ActionSchemaLoader {
     fun loadFromReader(reader: java.io.Reader): ActionSchema {
         val content = reader.use { it.readText() }
         return runCatching {
-            val raw: RawActionSchema = run {
-                val bytes = content.toByteArray(Charsets.UTF_8)
-                val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-                yf.createParser(java.io.ByteArrayInputStream(bytes))
-                    .use { p -> mapper.readValue(p, RawActionSchema::class.java) }
-            }
+            val raw = parseSchema(content = content)
             val actions = raw.actions.mapValues { (name, def) ->
                 val types = def.argTypes.map { parseArgType(it) }
                 ActionDefinition(name = name, argTypes = types)
@@ -63,6 +55,14 @@ object ActionSchemaLoader {
 
     fun loadFromString(content: String): ActionSchema {
         return loadFromReader(java.io.StringReader(content))
+    }
+
+    private fun parseSchema(content: String): RawActionSchema {
+        val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
+        val bytes = content.toByteArray(Charsets.UTF_8)
+        return yf.createParser(bytes).use { p ->
+            mapper.readValue(p, RawActionSchema::class.java)
+        }
     }
 
     private fun parseArgType(s: String): ActionArgType {

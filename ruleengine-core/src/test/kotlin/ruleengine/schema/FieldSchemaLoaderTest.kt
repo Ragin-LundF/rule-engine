@@ -1,11 +1,14 @@
 package ruleengine.schema
 
+import ruleengine.core.errors.SchemaLoadException
+import ruleengine.core.io.FileInputSupport
+import java.nio.file.Files
+import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import ruleengine.core.errors.SchemaLoadException
+import kotlin.test.assertTrue
 import ruleengine.core.domain.FieldType
-import java.nio.file.Path
 
 class FieldSchemaLoaderTest {
     @Test
@@ -25,6 +28,44 @@ class FieldSchemaLoaderTest {
     fun `missing file throws SchemaLoadException`() {
         val path = Path.of("src/test/resources/nonexistent.yaml")
         assertFailsWith<SchemaLoadException> { FieldSchemaLoader.load(path = path) }
+    }
+
+    @Test
+    fun `invalid normalizer throws SchemaLoadException`() {
+        val path = Files.createTempFile("invalid-normalizer", ".yaml")
+        Files.writeString(
+            path,
+            """
+                schema: invalid-normalizer
+                fields:
+                  purpose:
+                    type: text
+                    normalizers:
+                      - does_not_exist
+            """.trimIndent()
+        )
+
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.load(path = path)
+        }
+
+        assertTrue(actual = exception.details.contains(other = "Unknown normalizer"))
+    }
+
+    @Test
+    fun `oversized schema file throws SchemaLoadException`() {
+        val path = Files.createTempFile("oversized-schema", ".yaml")
+        Files.writeString(path, oversizedContent())
+
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.load(path = path)
+        }
+
+        assertTrue(actual = exception.details.contains(other = "exceeds limit"))
+    }
+
+    private fun oversizedContent(): String {
+        return "a".repeat(FileInputSupport.DEFAULT_MAX_BYTES.toInt() + 1)
     }
 }
 

@@ -115,8 +115,7 @@ All colours and typography are defined in `ui.Theme` (jvmMain). Use the named co
 ### ruleengine-core Tests
 
 - **Unit tests** are mirroring main source packages.
-- **Integration tests** (e.g. `FullManifestIntegrationTest`) load real YAML schemas and `.rule` files from
-  `src/test/resources/`. New integration scenarios should follow this pattern.
+- **Integration tests** (e.g. `FullManifestIntegrationTest`) load real YAML schemas and `.rule` files from `src/test/resources/`. New integration scenarios should follow this pattern.
 - Inline DSL strings in tests must be valid rule-DSL (parseable by `Parser`). Use `trimIndent()` for multi-line strings.
 - Always assert both positive (match) and negative (no match) evaluation paths.
 - When testing validation, assert the exact `Severity` and inspect the `diagnostics` list, not just `isValid`.
@@ -126,21 +125,20 @@ All colours and typography are defined in `ui.Theme` (jvmMain). Use the named co
 ## Static Analysis
 
 - Detekt is configured in `config/detekt.yml`. All code must pass Detekt checks.
-- Use `@Suppress` with a named reason only for individual, justified suppressions (e.g.
-  `@Suppress("TooManyFunctions")`). Never suppress whole files.
+- Use `@Suppress` with a named reason only for individual, justified suppressions (e.g. `@Suppress("TooManyFunctions")`).
+- Never suppress whole files.
 
 # Code-Style Guidelines
 
 - Use always named arguments when Kotlin or with Kotlin implemented functions are called. Use also named arguments for constructors and assertions.
 - Use `runCatching` instead of try/catch if possible
 - Functions should only be implemented as block code, not as expression bodies.
-- Functions should have a single responsibility and be small in size.
+- Functions should have a single responsibility and be small in size. If functions are too complex, consider refactoring into smaller functions.
 - Use descriptive variable and function names.
 - Avoid deep nesting and use early returns to simplify control flow.
 - Avoid files with multiple classes if possible. Classes should live in their own files.
 - Use meaningful comments to explain complex logic or non-obvious decisions.
 - Keep class and function names consistent with their purpose and functionality.
-- Follow the Kotlin style guide for consistent formatting and naming conventions for everything which is not defined
-  here.
+- Follow the Kotlin style guide for consistent formatting and naming conventions for everything which is not defined here.
 - Testing should use `kotlin.test` annotations and assertions when possible.
 - The tests should cover all code paths and edge cases.

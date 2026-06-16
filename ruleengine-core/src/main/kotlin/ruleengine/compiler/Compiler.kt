@@ -13,23 +13,28 @@ import ruleengine.core.domain.FieldType.DECIMAL
 import ruleengine.core.domain.FieldType.INTEGER
 import ruleengine.core.domain.FieldType.STRING_SET
 import ruleengine.core.domain.FieldType.TEXT
-import ruleengine.core.domain.RuleAction
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ExtractionAst
+import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
+import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.NotExpression
 import ruleengine.evaluator.compiled.OrExpression
+import ruleengine.evaluator.compiled.RegexExtractExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
 import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
 
@@ -49,17 +54,65 @@ object Compiler {
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
     ): CompiledRule {
         val expr = compileExpression(expr = ast.condition, schema = schema, normalizerRegistry = normalizerRegistry)
-        val actions = ast.actions.map { action ->
-            RuleAction(name = action.name, arguments = action.arguments.map { lit ->
-                when (lit) {
-                    is StringLiteral -> lit.value
-                    is NumberLiteral -> lit.value
-                    is ListLiteral -> lit.items.map { (it as? StringLiteral)?.value ?: it.toString() }
-                    else -> null
-                }
-            })
+        val compiledActions = ast.actions.map { action ->
+            compileAction(action = action, schema = schema)
         }
-        return CompiledRule(id = ast.id, expression = expr, actions = actions)
+        return CompiledRule(id = ast.id, expression = expr, actions = compiledActions)
+    }
+
+    private fun compileAction(action: ActionAst, schema: FieldSchema): CompiledAction {
+        val compiledExtraction = action.extraction?.let { extraction ->
+            compileExtraction(extraction = extraction, schema = schema)
+        }
+
+        val compiledArguments = action.arguments.map { literal ->
+            when {
+                literal is ExtractionRefLiteral -> {
+                    if (compiledExtraction == null) {
+                        throw CompilationException(
+                            ruleId = null,
+                            details = "Action '${action.name}' uses extraction reference but has no 'extract' clause"
+                        )
+                    }
+                    CompiledActionArgument.ExtractionRef(extraction = compiledExtraction)
+                }
+                literal is StringLiteral -> CompiledActionArgument.Static(value = literal.value)
+                literal is NumberLiteral -> CompiledActionArgument.Static(value = literal.value)
+                literal is ListLiteral -> CompiledActionArgument.Static(
+                    value = literal.items.map { (it as? StringLiteral)?.value ?: it.toString() }
+                )
+                else -> CompiledActionArgument.Static(value = null)
+            }
+        }
+
+        return CompiledAction(name = action.name, arguments = compiledArguments)
+    }
+
+    private fun compileExtraction(extraction: ExtractionAst, schema: FieldSchema): RegexExtractExpression {
+        return when (extraction) {
+            is ExtractionAst.RegexExtraction -> {
+                val fieldId = FieldId(value = extraction.sourceField)
+                if (schema.fields[fieldId] == null) {
+                    throw CompilationException(
+                        ruleId = null,
+                        details = "Extraction references unknown field '${extraction.sourceField}'"
+                    )
+                }
+                val compiledPattern = runCatching {
+                    Regex(pattern = extraction.pattern)
+                }.getOrElse { cause ->
+                    throw CompilationException(
+                        ruleId = null,
+                        details = "Invalid regex pattern '${extraction.pattern}' in extraction: ${cause.message}"
+                    )
+                }
+                RegexExtractExpression(
+                    field = fieldId,
+                    pattern = compiledPattern,
+                    groupIndex = extraction.groupIndex
+                )
+            }
+        }
     }
 
     private fun compileExpression(
@@ -101,7 +154,11 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
-        val fieldId = FieldId(value = cond.field)
+        val resolvedId = resolveIdentifier(
+            identifier = cond.field,
+            schema = schema
+        )
+        val fieldId = FieldId(value = resolvedId)
         val def = schema.fields[fieldId] ?: throw CompilationException(
             ruleId = ruleIdOrNull(cond = cond),
             details = "Unknown field '${cond.field}'"
@@ -269,5 +326,23 @@ object Compiler {
     private fun ruleIdOrNull(cond: ConditionAst): String? {
         return null
     }
-}
 
+    /**
+     * Resolves a field identifier from user input to the canonical field ID.
+     * Checks the field ID first, then falls back to alias matching.
+     */
+    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
+        val fieldId = FieldId(value = identifier)
+        if (schema.fields.containsKey(fieldId)) {
+            return identifier
+        }
+
+        for ((id, definition) in schema.fields) {
+            if (definition.alias == identifier) {
+                return id.value
+            }
+        }
+
+        return identifier
+    }
+}
