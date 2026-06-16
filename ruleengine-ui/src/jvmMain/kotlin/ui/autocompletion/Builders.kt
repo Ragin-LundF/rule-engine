@@ -12,6 +12,21 @@ private fun FieldDefinition.getDisplayId(): String {
     return alias ?: id.value
 }
 
+/**
+ * Resolves a field identifier from user input to the actual field definition.
+ * Checks the field ID first, then falls back to alias matching.
+ */
+private fun resolveFieldByIdentifier(
+    identifier: String,
+    schema: FieldSchema?
+): FieldDefinition? {
+    val fieldId = FieldId(value = identifier)
+    if (schema?.fields?.containsKey(fieldId) == true) {
+        return schema.fields[fieldId]
+    }
+    return schema?.fields?.values?.find { it.alias == identifier }
+}
+
 /** Forwarding function for contextual completions. */
 public fun buildContextualCompletions(
     context: DslCursorContext,
@@ -117,7 +132,7 @@ private fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionIt
             add(
                 CompletionItem(
                     label = def.getDisplayId(),
-                    insertText = id.value,
+                    insertText = def.getDisplayId(),
                     kind = CompletionKind.FIELD,
                     hint = def.type.name.lowercase()
                 )
@@ -130,7 +145,10 @@ private fun buildOperatorCompletions(
     fieldName: String,
     schema: FieldSchema?
 ): List<CompletionItem> {
-    val def = schema?.fields?.get(FieldId(fieldName)) ?: return emptyList()
+    val def = resolveFieldByIdentifier(
+        identifier = fieldName,
+        schema = schema
+    ) ?: return emptyList()
     val operators = if (def.operators.isNotEmpty()) {
         def.operators.map { it.value }
     } else {
@@ -142,9 +160,10 @@ private fun buildOperatorCompletions(
             op = op,
             fieldType = def.type
         )
+        val displayId = def.getDisplayId()
         CompletionItem(
-            label = "$op ${def.getDisplayId()}",
-            insertText = "$op $placeholder",
+            label = "$op $displayId",
+            insertText = "$displayId $op $placeholder",
             kind = CompletionKind.OPERATOR,
             hint = def.type.name.lowercase()
         )
@@ -156,7 +175,10 @@ private fun buildValuePlaceholderCompletions(
     operator: String,
     schema: FieldSchema?
 ): List<CompletionItem> {
-    val def = schema?.fields?.get(FieldId(fieldName)) ?: return emptyList()
+    val def = resolveFieldByIdentifier(
+        identifier = fieldName,
+        schema = schema
+    ) ?: return emptyList()
     val placeholder = valuePlaceholderForOperator(
         op = operator,
         fieldType = def.type
@@ -164,7 +186,7 @@ private fun buildValuePlaceholderCompletions(
     return listOf(
         CompletionItem(
             label = "${def.getDisplayId()} $placeholder",
-            insertText = placeholder,
+            insertText = "${def.getDisplayId()} $operator $placeholder",
             kind = CompletionKind.LITERAL,
             hint = def.type.name.lowercase()
         )
@@ -229,7 +251,7 @@ public fun buildAllCompletions(
             add(
                 CompletionItem(
                     label = def.getDisplayId(),
-                    insertText = id.value,
+                    insertText = def.getDisplayId(),
                     kind = CompletionKind.FIELD,
                     hint = def.type.name.lowercase()
                 )

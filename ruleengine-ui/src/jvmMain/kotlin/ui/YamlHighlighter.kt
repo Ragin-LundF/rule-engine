@@ -293,14 +293,14 @@ private fun resolveKeyStyle(
         // Top-level structural keys (`schema`, `fields`, `actions`).
         indent == 0 -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
 
-        // Field names are at indent 2 under `fields`.
+        // Field names are at indent 2 under `fields` (including aliases).
         indent == 2 && parentKey == "fields" -> SpanStyle(color = ColorField)
 
         // Action names are at indent 2 under `actions`.
         indent == 2 && parentKey == "actions" -> SpanStyle(color = ColorAction)
 
-        // Sub-keys of field definitions (`type`, `normalizers`, `operators`).
-        key in setOf("type", "normalizers", "operators", "argTypes") ->
+        // Sub-keys of field definitions (`type`, `normalizers`, `operators`, `alias`).
+        key in setOf("type", "normalizers", "operators", "alias") ->
             SpanStyle(color = ColorKeyword)
 
         else -> SpanStyle(color = TextSecondary)
