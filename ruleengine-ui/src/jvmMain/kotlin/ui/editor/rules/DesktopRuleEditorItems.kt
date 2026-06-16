@@ -140,10 +140,11 @@ private fun ViewModeTab(
 @Composable
 fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
     val tc = fieldTypeColor(def.type)
+    val displayName = def.alias ?: id.value
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = id.value,
+                text = displayName,
                 style = MaterialTheme.typography.body1,
                 color = TextPrimary,
                 modifier = Modifier.weight(1f),
@@ -155,7 +156,7 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
                     .clip(shape = RoundedCornerShape(size = 3.dp))
                     .background(color = BgHover)
                     .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 3.dp))
-                    .clickable { onInsert(id.value) }
+                    .clickable { onInsert(displayName) }
                     .padding(horizontal = 5.dp, vertical = 2.dp),
             ) {
                 Text(text = "⤵", style = MaterialTheme.typography.caption, color = TextMuted)
@@ -189,7 +190,7 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
                                     FieldType.BOOLEAN -> " true"
                                     FieldType.DATE -> " \"2024-01-01\""
                                 }
-                                onInsert("${id.value} $opText$ph")
+                                onInsert("$displayName $opText$ph")
                             }
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                     ) {

@@ -154,7 +154,11 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
-        val fieldId = FieldId(value = cond.field)
+        val resolvedId = resolveIdentifier(
+            identifier = cond.field,
+            schema = schema
+        )
+        val fieldId = FieldId(value = resolvedId)
         val def = schema.fields[fieldId] ?: throw CompilationException(
             ruleId = ruleIdOrNull(cond = cond),
             details = "Unknown field '${cond.field}'"
@@ -321,5 +325,24 @@ object Compiler {
     @Suppress("FunctionOnlyReturningConstant", "UnusedParameter")
     private fun ruleIdOrNull(cond: ConditionAst): String? {
         return null
+    }
+
+    /**
+     * Resolves a field identifier from user input to the canonical field ID.
+     * Checks the field ID first, then falls back to alias matching.
+     */
+    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
+        val fieldId = FieldId(value = identifier)
+        if (schema.fields.containsKey(fieldId)) {
+            return identifier
+        }
+
+        for ((id, definition) in schema.fields) {
+            if (definition.alias == identifier) {
+                return id.value
+            }
+        }
+
+        return identifier
     }
 }

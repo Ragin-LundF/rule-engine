@@ -30,7 +30,7 @@ class ValidatorAliasResolutionTest {
         val condition = ConditionAst(
             field = "age",
             operator = "equals",
-            value = StringLiteral("25")
+            value = ruleengine.dsl.ast.NumberLiteral("25")
         )
         val rule = ruleengine.dsl.ast.RuleAst(
             id = "rule1",

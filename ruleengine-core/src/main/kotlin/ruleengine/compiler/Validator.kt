@@ -112,7 +112,13 @@ object Validator {
         val fieldId = FieldId(value = resolvedFieldId)
         val def = schema.fields[fieldId]
         if (def == null) {
-            val suggestion = suggestClosest(input = cond.field, candidates = schema.fields.keys.map { it.value })
+            val suggestion = suggestClosest(
+                input = cond.field,
+                candidates = buildList {
+                    addAll(schema.fields.keys.map { it.value })
+                    addAll(schema.fields.mapNotNull { it.value.alias })
+                }
+            )
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Unknown field '${cond.field}' in condition",
@@ -273,12 +279,19 @@ object Validator {
     ) {
         when (extraction) {
             is ExtractionAst.RegexExtraction -> {
-                val fieldId = FieldId(value = extraction.sourceField)
+                val resolvedSource = resolveIdentifier(
+                    identifier = extraction.sourceField,
+                    schema = fieldSchema
+                )
+                val fieldId = FieldId(value = resolvedSource)
                 val def = fieldSchema.fields[fieldId]
                 if (def == null) {
                     val suggestion = suggestClosest(
                         input = extraction.sourceField,
-                        candidates = fieldSchema.fields.keys.map { it.value }
+                        candidates = buildList {
+                            addAll(fieldSchema.fields.keys.map { it.value })
+                            addAll(fieldSchema.fields.mapNotNull { it.value.alias })
+                        }
                     )
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,

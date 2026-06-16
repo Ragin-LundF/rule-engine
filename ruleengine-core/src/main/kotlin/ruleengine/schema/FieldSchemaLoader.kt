@@ -78,7 +78,13 @@ object FieldSchemaLoader {
         validateNormalizers(fieldName = fieldName, normalizers = normalizers)
         val operators = raw.operators?.map { OperatorId(it) }?.toSet() ?: emptySet()
 
-        return FieldDefinition(id = fieldName, type = type, normalizers = normalizers, operators = operators)
+        return FieldDefinition(
+            id = fieldName,
+            type = type,
+            alias = raw.alias,
+            normalizers = normalizers,
+            operators = operators
+        )
     }
 
     private fun validateNormalizers(fieldName: FieldId, normalizers: List<NormalizerId>) {
