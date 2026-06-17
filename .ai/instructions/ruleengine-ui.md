@@ -18,17 +18,17 @@ Use this file when touching `ruleengine-ui`, UI source sets, Compose code, autoc
 
 ## UI design system
 
-- Colours and typography are defined in `ui.Theme` in `jvmMain`.
-- Use named colour constants such as `PrimaryBlue`, `AccentGreen`, `AccentRed`, `BgSurface`, and `TextPrimary`.
-- Do not use hardcoded `Color(0x...)` literals outside `Theme.kt`.
+- Colours and typography are defined in `ui.Theme` in `commonMain`.
+- Use named colour constants from the theme (e.g., `PrimaryBlue`, `AccentOrange`, `TextSecondary`).
+- Do not use hardcoded `Color(0x...)` literals.
 
 ## Syntax highlighting and autocomplete
 
-- Syntax highlighting via `annotateRule` is driven directly by the `Lexer` from `ruleengine-core`.
-- Do not duplicate tokenisation logic in the UI.
-- Autocomplete is context-sensitive via `DslCursorContext` and `DslSection`.
-- New DSL keywords or operators must be added to relevant `build*Completions` functions in `AutoComplete.kt`.
-- New DSL keywords or operators must also be added to the relevant `DSL_NAMED_OPS`, `DSL_STRUCTURE`, or `DSL_LOGIC` sets in `SyntaxHighlighter.kt`.
+- **Syntax highlighting:** Handled by `annotateRule`. It uses the `Lexer` from `ruleengine-core` to tokenize text and then applies colors based on token type and context (keywords, logic, field/action names). It also handles `#` comments and renders `ValidationDiagnostic` underlines (Red for ERROR, Orange for WARNING).
+- **Autocomplete:** Implementation is encapsulated in `ui.autocompletion` using typealiases (e.g., `CompletionItem`) for the public `ui` API.
+- **Updating patterns:**
+    - New DSL keywords/operators must be added to `build*Completions` functions in `AutoComplete.kt`.
+    - New DSL keywords/operators must also be added to the relevant `DSL_NAMED_OPS`, `DSL_STRUCTURE`, or `DSL_LOGIC` sets in `SyntaxHighlighter.kt`.
 
 ## When to also read core instructions
 
