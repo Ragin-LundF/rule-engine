@@ -2,9 +2,10 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.trace.TraceCollector
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 
 class TextRegexExpression(
     private val field: FieldId,
@@ -26,7 +27,7 @@ class TextRegexExpression(
             )
         )
 
-        val fieldValue = context.get(field = field) as? ruleengine.evaluator.context.PreparedText
+        val fieldValue = context.get(field = field) as? PreparedText
         if (fieldValue == null) {
             trace?.exit(result = false)
             return false

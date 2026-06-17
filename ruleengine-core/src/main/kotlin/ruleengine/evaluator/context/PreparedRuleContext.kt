@@ -1,17 +1,16 @@
 package ruleengine.evaluator.context
 
+import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.evaluator.context.dto.PreparedDecimal
+import ruleengine.evaluator.context.dto.PreparedInteger
+import ruleengine.evaluator.context.dto.PreparedStringSet
+import ruleengine.evaluator.context.dto.PreparedText
+import ruleengine.evaluator.context.dto.PreparedValue
 import java.math.BigDecimal
-
-sealed interface PreparedValue
-
-data class PreparedText(val original: String, val normalized: String) : PreparedValue
-data class PreparedInteger(val value: Long) : PreparedValue
-data class PreparedDecimal(val value: BigDecimal) : PreparedValue
-data class PreparedStringSet(val original: Set<String>, val normalized: Set<String>) : PreparedValue
 
 class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
     fun get(field: FieldId): PreparedValue? {
@@ -58,14 +57,14 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
 
         private fun prepareText(
             fieldId: FieldId,
-            def: ruleengine.core.domain.FieldDefinition,
+            def: FieldDefinition,
             raw: Any?,
             map: MutableMap<FieldId, PreparedValue>,
             registry: NormalizerRegistry
         ) {
             val s = raw.toString()
             var normalized = s
-            for (n in def.normalizers) normalized = registry.get(n).normalize(normalized)
+            for (n in def.normalizers) normalized = registry.get(n).normalize(value = normalized)
             map[fieldId] = PreparedText(original = s, normalized = normalized)
         }
 
@@ -75,7 +74,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                 is String -> raw.toLongOrNull() ?: return
                 else -> return
             }
-            map[fieldId] = PreparedInteger(num)
+            map[fieldId] = PreparedInteger(value = num)
         }
 
         private fun prepareDecimal(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
@@ -89,12 +88,12 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
 
                 else -> return
             }
-            map[fieldId] = PreparedDecimal(bd)
+            map[fieldId] = PreparedDecimal(value = bd)
         }
 
         private fun prepareStringSet(
             fieldId: FieldId,
-            def: ruleengine.core.domain.FieldDefinition,
+            def: FieldDefinition,
             raw: Any?,
             map: MutableMap<FieldId, PreparedValue>,
             registry: NormalizerRegistry
@@ -109,7 +108,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
             if (def.normalizers.isNotEmpty()) {
                 normalizedSet = set.map { v ->
                     var n = v
-                    for (nn in def.normalizers) n = registry.get(nn).normalize(n)
+                    for (nn in def.normalizers) n = registry.get(nn).normalize(value = n)
                     n
                 }.toSet()
             }

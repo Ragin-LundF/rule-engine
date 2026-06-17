@@ -2,9 +2,10 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.trace.TraceCollector
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import java.math.BigDecimal
 
 class DecimalBetweenExpression(
@@ -23,14 +24,14 @@ class DecimalBetweenExpression(
             )
         )
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedDecimal
+        val v = context.get(field) as? PreparedDecimal
         if (v == null) {
-            trace?.exit(false)
+            trace?.exit(result = false)
             return false
         }
 
         val res = v.value in low..high
-        trace?.exit(res)
+        trace?.exit(result = res)
         return res
     }
 }

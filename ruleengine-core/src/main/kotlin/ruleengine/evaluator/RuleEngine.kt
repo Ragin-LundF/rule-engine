@@ -4,11 +4,11 @@ import ruleengine.core.domain.EvaluationResult
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.RuleMatch
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.DecisionTree
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
-import ruleengine.evaluator.trace.NoopTraceCollector
+import ruleengine.evaluator.trace.dto.DecisionTree
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.evaluator.trace.RecordingTraceCollector
+import ruleengine.evaluator.trace.NoopTraceCollector
 
 class RuleEngine(
     private val compiledRules: List<CompiledRule>,
@@ -22,13 +22,13 @@ class RuleEngine(
         for (r in compiledRules) {
             // enter rule node with rule id
             collector.enter(
-                NodeMeta(
+                meta = NodeMeta(
                     type = NodeType.RULE,
                     ruleId = r.id
                 )
             )
             val ok = r.expression.evaluate(context = prepared, trace = collector)
-            collector.exit(ok)
+            collector.exit(result = ok)
             if (ok) {
                 val resolvedActions = r.actions.map { compiledAction ->
                     compiledAction.resolve(context = prepared)

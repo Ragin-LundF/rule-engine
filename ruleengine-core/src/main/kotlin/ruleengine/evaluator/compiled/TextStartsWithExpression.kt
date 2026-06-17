@@ -2,8 +2,9 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedText
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.evaluator.trace.TraceCollector
 
 class TextStartsWithExpression(
@@ -20,7 +21,7 @@ class TextStartsWithExpression(
             )
         )
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedText
+        val v = context.get(field) as? PreparedText
         if (v == null) {
             trace?.exit(result = false)
             return false

@@ -2,8 +2,9 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedDecimal
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.evaluator.trace.TraceCollector
 import java.math.BigDecimal
 
@@ -14,9 +15,16 @@ class DecimalComparisonExpression(
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.VERY_CHEAP
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
-        trace?.enter(NodeMeta(type = NodeType.CONDITION, field = field.value, operator = op.name, expected = expected))
+        trace?.enter(
+            meta = NodeMeta(
+                type = NodeType.CONDITION,
+                field = field.value,
+                operator = op.name,
+                expected = expected
+            )
+        )
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedDecimal
+        val v = context.get(field) as? PreparedDecimal
         if (v == null) {
             trace?.exit(false)
             return false
@@ -24,13 +32,13 @@ class DecimalComparisonExpression(
 
         val res = when (op) {
             ComparisonOperator.EQ -> v.value.compareTo(expected) == 0
-            ComparisonOperator.GT -> v.value.compareTo(expected) > 0
-            ComparisonOperator.GTE -> v.value.compareTo(expected) >= 0
-            ComparisonOperator.LT -> v.value.compareTo(expected) < 0
-            ComparisonOperator.LTE -> v.value.compareTo(expected) <= 0
+            ComparisonOperator.GT -> v.value > expected
+            ComparisonOperator.GTE -> v.value >= expected
+            ComparisonOperator.LT -> v.value < expected
+            ComparisonOperator.LTE -> v.value <= expected
         }
 
-        trace?.exit(res)
+        trace?.exit(result = res)
         return res
     }
 }
