@@ -49,9 +49,10 @@ If the change affects DSL keywords or operators, also update relevant UI syntax 
 
 ## Adding normalizers
 
-- Register built-in normalizers in `NormalizerRegistry.builtins`.
-- Use descriptive `snake_case` keys.
-- `Normalizer` takes a `String` and returns a `String`.
+- Use `NormalizerRegistry.default` to access built-in normalizers.
+- Register custom normalizers via the `NormalizerRegistry` API.
+- `Normalizer` is a `fun interface` taking a `String` and returning a `String`.
+- Use descriptive `snake_case` keys for normalizer IDs.
 
 ## Serialization
 
