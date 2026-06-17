@@ -2,9 +2,10 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.trace.TraceCollector
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 
 class IntegerBetweenExpression(
     private val field: FieldId,
@@ -14,7 +15,7 @@ class IntegerBetweenExpression(
     override val cost: EvaluationCost = EvaluationCost.VERY_CHEAP
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
-            NodeMeta(
+            meta = NodeMeta(
                 type = NodeType.CONDITION,
                 field = field.value,
                 operator = "between",
@@ -22,14 +23,14 @@ class IntegerBetweenExpression(
             )
         )
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedInteger
+        val v = context.get(field) as? PreparedInteger
         if (v == null) {
-            trace?.exit(false)
+            trace?.exit(result = false)
             return false
         }
 
         val res = v.value in low..high
-        trace?.exit(res)
+        trace?.exit(result = res)
         return res
     }
 }

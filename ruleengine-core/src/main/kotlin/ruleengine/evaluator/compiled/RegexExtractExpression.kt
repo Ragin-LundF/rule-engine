@@ -2,7 +2,7 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.context.PreparedText
+import ruleengine.evaluator.context.dto.PreparedText
 
 /**
  * Executes a regex extraction against a text field value at evaluation time.

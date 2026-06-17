@@ -1,8 +1,8 @@
 package ruleengine.evaluator.compiled
 
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.evaluator.trace.TraceCollector
 
 class AndExpression(children: List<CompiledExpression>) : CompiledExpression {

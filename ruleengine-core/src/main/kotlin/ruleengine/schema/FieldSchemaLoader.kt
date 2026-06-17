@@ -12,8 +12,11 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
+import tools.jackson.core.ObjectReadContext
 import tools.jackson.core.StreamReadFeature
 import tools.jackson.dataformat.yaml.YAMLFactory
+import java.io.Reader
+import java.io.StringReader
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -30,7 +33,7 @@ object FieldSchemaLoader {
             val content = FileInputSupport.readBoundedText(path = path, kind = "schema")
             parseSchema(content = content)
         }.map { raw ->
-            val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
+            val fields = raw.fields.mapKeys { FieldId(value = it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
             FieldSchema(name = raw.schema ?: path.fileName.toString(), fields = fields)
@@ -42,11 +45,11 @@ object FieldSchemaLoader {
     /** Load from a Reader (useful for UI or in-memory content). If nameHint is provided it will be used when the
      * raw schema doesn't include a schema name. */
     @Throws(SchemaLoadException::class)
-    fun loadFromReader(reader: java.io.Reader, nameHint: String? = null): FieldSchema {
+    fun loadFromReader(reader: Reader, nameHint: String? = null): FieldSchema {
         val content = reader.use { it.readText() }
         return runCatching {
             val raw = parseSchema(content = content)
-            val fields = raw.fields.mapKeys { FieldId(it.key) }.mapValues { (k, v) ->
+            val fields = raw.fields.mapKeys { FieldId(value = it.key) }.mapValues { (k, v) ->
                 mapRawDefinition(fieldName = k, raw = v)
             }
             FieldSchema(name = raw.schema ?: nameHint ?: "schema", fields = fields)
@@ -56,27 +59,27 @@ object FieldSchemaLoader {
     }
 
     fun loadFromString(content: String, nameHint: String? = null): FieldSchema {
-        return loadFromReader(java.io.StringReader(content), nameHint)
+        return loadFromReader(reader = StringReader(content), nameHint = nameHint)
     }
 
     private fun parseSchema(content: String): RawFieldSchema {
         val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
         val bytes = content.toByteArray(Charsets.UTF_8)
-        return yf.createParser(bytes).use { p ->
+        return yf.createParser(ObjectReadContext.empty(), bytes).use { p ->
             mapper.readValue(p, RawFieldSchema::class.java)
         }
     }
 
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {
-        val type = raw.type?.let { parseFieldType(it) }
+        val type = raw.type?.let { parseFieldType(s = it) }
             ?: throw SchemaLoadException(
                 path = Path.of(fieldName.value),
                 details = "missing type for field ${fieldName.value}"
             )
 
-        val normalizers = raw.normalizers?.map { NormalizerId(it) } ?: emptyList()
+        val normalizers = raw.normalizers?.map { NormalizerId(value = it) } ?: emptyList()
         validateNormalizers(fieldName = fieldName, normalizers = normalizers)
-        val operators = raw.operators?.map { OperatorId(it) }?.toSet() ?: emptySet()
+        val operators = raw.operators?.map { OperatorId(value = it) }?.toSet() ?: emptySet()
 
         return FieldDefinition(
             id = fieldName,

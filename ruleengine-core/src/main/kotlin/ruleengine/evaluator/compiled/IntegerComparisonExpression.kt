@@ -2,8 +2,9 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.trace.NodeMeta
-import ruleengine.evaluator.trace.NodeType
+import ruleengine.evaluator.context.dto.PreparedInteger
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.evaluator.trace.TraceCollector
 
 class IntegerComparisonExpression(
@@ -15,9 +16,9 @@ class IntegerComparisonExpression(
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(NodeMeta(type = NodeType.CONDITION, field = field.value, operator = op.name, expected = expected))
 
-        val v = context.get(field) as? ruleengine.evaluator.context.PreparedInteger
+        val v = context.get(field) as? PreparedInteger
         if (v == null) {
-            trace?.exit(false)
+            trace?.exit(result = false)
             return false
         }
 
@@ -29,7 +30,7 @@ class IntegerComparisonExpression(
             IntegerComparisonOperator.LTE -> v.value <= expected
         }
 
-        trace?.exit(res)
+        trace?.exit(result = res)
         return res
     }
 }
