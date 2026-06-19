@@ -12,6 +12,10 @@ class FunctionCallCompiledValueExpression(
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
 
     override fun evaluate(context: PreparedRuleContext): ExpressionValue {
+        return context.cache.getOrPut(key = this) { computeValue(context = context) }
+    }
+
+    private fun computeValue(context: PreparedRuleContext): ExpressionValue {
         val argValue = argument.evaluate(context = context)
         return when (function) {
             AggregateFunctionName.COUNT -> evaluateCount(argValue = argValue)
