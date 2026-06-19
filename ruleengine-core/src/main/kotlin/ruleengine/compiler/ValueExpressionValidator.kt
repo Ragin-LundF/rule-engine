@@ -50,7 +50,7 @@ internal object ValueExpressionValidator {
         ) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Operator '${expr.operator}' is not supported for text comparisons; use == or !="
+                message = "Operator '${expr.operator}' is not allowed for text comparisons; use == or !="
             )
         }
     }
@@ -83,6 +83,7 @@ internal object ValueExpressionValidator {
             }
         }
         if (expr.path.any { it is FilterSegmentAst } || expr.path.size > 1) {
+            // multi-segment or filtered path — treated as numeric array projection
             return ValueKind.NUMERIC
         }
         if (expr.path[0] !is FieldSegmentAst) {
@@ -102,13 +103,8 @@ internal object ValueExpressionValidator {
         return when (def.type) {
             FieldType.INTEGER, FieldType.DECIMAL -> ValueKind.NUMERIC
             FieldType.TEXT -> ValueKind.TEXT
-            else -> {
-                diagnostics += ValidationDiagnostic(
-                    severity = Severity.ERROR,
-                    message = "Field '$name' has unsupported type ${def.type} in value expression"
-                )
-                ValueKind.UNKNOWN
-            }
+            // array-like types are valid as aggregate function arguments
+            else -> ValueKind.NUMERIC
         }
     }
 
@@ -117,8 +113,10 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
-        if (expr is ComparisonExpressionAst) {
-            validate(expr = expr, schema = schema, diagnostics = diagnostics)
+        when (expr) {
+            is ComparisonExpressionAst -> validate(expr = expr, schema = schema, diagnostics = diagnostics)
+            // ConditionAst (legacy) and other boolean expressions are valid filter expressions
+            else -> Unit
         }
     }
 
@@ -132,7 +130,7 @@ internal object ValueExpressionValidator {
         if (leftKind == ValueKind.TEXT || rightKind == ValueKind.TEXT) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Arithmetic operator '${expr.operator}' requires numeric operands"
+                message = "Arithmetic operator '${expr.operator}' requires numeric operands, but got a text value"
             )
             return ValueKind.UNKNOWN
         }
@@ -144,22 +142,38 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
-        val known = AggregateFunctionName.entries.any { it.name.equals(expr.name, ignoreCase = true) }
-        if (!known) {
+        val knownNames = AggregateFunctionName.entries.map { it.name.lowercase() }
+        if (!knownNames.contains(expr.name.lowercase())) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Unknown function '${expr.name}'"
+                message = "Unknown function '${expr.name}'; supported functions are: ${knownNames.joinToString()}"
             )
             return ValueKind.UNKNOWN
         }
         if (expr.arguments.size != 1) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Function '${expr.name}' requires exactly one argument"
+                message = "Function '${expr.name}' requires exactly one argument, but got ${expr.arguments.size}"
             )
             return ValueKind.UNKNOWN
         }
-        validateValueExpression(expr = expr.arguments[0], schema = schema, diagnostics = diagnostics)
+        val argKind = validateValueExpression(expr = expr.arguments[0], schema = schema, diagnostics = diagnostics)
+        val functionName = AggregateFunctionName.entries.first { it.name.equals(expr.name, ignoreCase = true) }
+        if (functionName == AggregateFunctionName.COUNT) {
+            if (argKind == ValueKind.TEXT) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "count() expects an array-like argument, but got a text value"
+                )
+            }
+        } else {
+            if (argKind == ValueKind.TEXT) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "${expr.name}() expects an array of numbers, but got a text value"
+                )
+            }
+        }
         return ValueKind.NUMERIC
     }
 
