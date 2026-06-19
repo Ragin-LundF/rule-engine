@@ -17,6 +17,7 @@ import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ExtractionAst
@@ -146,6 +147,11 @@ object Compiler {
             )
 
             is ConditionAst -> compileCondition(cond = expr, schema = schema, normalizerRegistry = normalizerRegistry)
+
+            is ComparisonExpressionAst -> throw CompilationException(
+                ruleId = null,
+                details = "ComparisonExpressionAst compilation is not yet implemented"
+            )
         }
     }
 
