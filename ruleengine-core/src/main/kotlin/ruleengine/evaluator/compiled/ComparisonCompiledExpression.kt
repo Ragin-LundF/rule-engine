@@ -16,6 +16,7 @@ class ComparisonCompiledExpression(
         return compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun compareValues(
         leftValue: ExpressionValue,
         operator: ComparisonOperatorAst,
@@ -24,8 +25,8 @@ class ComparisonCompiledExpression(
         if (leftValue is MissingExpressionValue || rightValue is MissingExpressionValue) {
             return false
         }
-        return when {
-            leftValue is NumberExpressionValue && rightValue is NumberExpressionValue -> {
+        return when (leftValue) {
+            is NumberExpressionValue if rightValue is NumberExpressionValue -> {
                 val cmp = leftValue.value.compareTo(rightValue.value)
                 when (operator) {
                     ComparisonOperatorAst.EQ -> cmp == 0
@@ -36,13 +37,15 @@ class ComparisonCompiledExpression(
                     ComparisonOperatorAst.LTE -> cmp <= 0
                 }
             }
-            leftValue is TextExpressionValue && rightValue is TextExpressionValue -> {
+
+            is TextExpressionValue if rightValue is TextExpressionValue -> {
                 when (operator) {
                     ComparisonOperatorAst.EQ -> leftValue.value == rightValue.value
                     ComparisonOperatorAst.NEQ -> leftValue.value != rightValue.value
                     else -> false
                 }
             }
+
             else -> false
         }
     }

@@ -41,7 +41,9 @@ class FieldAccessCompiledValueExpression(
         context: PreparedRuleContext
     ): ExpressionValue {
         if (index >= segments.size) {
-            val values = current.mapNotNull { rawToExpressionValue(raw = it).takeIf { v -> v !is MissingExpressionValue } }
+            val values = current.mapNotNull {
+                rawToExpressionValue(raw = it).takeIf { v -> v !is MissingExpressionValue }
+            }
             return when {
                 values.isEmpty() -> MissingExpressionValue
                 values.size == 1 -> values[0]
@@ -60,11 +62,13 @@ class FieldAccessCompiledValueExpression(
                                 else -> listOf(v)
                             }
                         }
+
                         else -> emptyList()
                     }
                 }
                 resolveSegments(current = projected, segments = segments, index = index + 1, context = context)
             }
+
             is CompiledFilterSegment -> {
                 val filtered = current.filter { element ->
                     if (element !is Map<*, *>) {
@@ -90,6 +94,7 @@ class FieldAccessCompiledValueExpression(
                 }
                 ArrayExpressionValue(values = elements)
             }
+
             is Map<*, *> -> ObjectExpressionValue
             else -> MissingExpressionValue
         }

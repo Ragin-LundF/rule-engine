@@ -230,7 +230,8 @@ class Parser(private val input: String) {
                 if (isModernExpression(left) || isModernExpression(right) || isModernOnlyOperator(op)) {
                     ComparisonExpressionAst(left = left, operator = op, right = right)
                 } else {
-                    // Both sides are plain field/literal with a legacy-compatible operator — keep as legacy ConditionAst
+                    // Both sides are plain field/literal with a legacy-compatible operator
+                    // — keep as legacy ConditionAst
                     pos = savedPos
                     parseCondition()
                 }
@@ -296,7 +297,11 @@ class Parser(private val input: String) {
     private fun parseMultiplicativeValue(): ValueExpressionAst {
         var left = parsePrimaryValue()
         while (current().type == TokenType.STAR || current().type == TokenType.SLASH) {
-            val op = if (current().type == TokenType.STAR) ArithmeticOperatorAst.MULTIPLY else ArithmeticOperatorAst.DIVIDE
+            val op = if (current().type == TokenType.STAR) {
+                ArithmeticOperatorAst.MULTIPLY
+            } else {
+                ArithmeticOperatorAst.DIVIDE
+            }
             advance()
             val right = parsePrimaryValue()
             left = ArithmeticValueAst(left = left, operator = op, right = right)

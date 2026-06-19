@@ -3,7 +3,6 @@ package ruleengine.evaluator.compiled
 import ruleengine.evaluator.context.PreparedRuleContext
 import java.math.BigDecimal
 import java.math.MathContext
-import java.math.RoundingMode
 
 class FunctionCallCompiledValueExpression(
     private val function: AggregateFunctionName,
@@ -47,6 +46,7 @@ class FunctionCallCompiledValueExpression(
                 }
                 NumberExpressionValue(value = total)
             }
+
             is NumberExpressionValue -> argValue
             else -> MissingExpressionValue
         }
@@ -85,7 +85,9 @@ class FunctionCallCompiledValueExpression(
         return if (numbers.size % 2 == 1) {
             NumberExpressionValue(value = numbers[mid])
         } else {
-            NumberExpressionValue(value = numbers[mid - 1].add(numbers[mid]).divide(BigDecimal(2), MathContext.DECIMAL128))
+            NumberExpressionValue(
+                value = numbers[mid - 1].add(numbers[mid]).divide(BigDecimal(2), MathContext.DECIMAL128)
+            )
         }
     }
 
@@ -96,7 +98,9 @@ class FunctionCallCompiledValueExpression(
         }
         var max = numbers[0]
         for (n in numbers) {
-            if (n > max) max = n
+            if (n > max) {
+                max = n
+            }
         }
         return NumberExpressionValue(value = max)
     }
@@ -108,7 +112,9 @@ class FunctionCallCompiledValueExpression(
         }
         var min = numbers[0]
         for (n in numbers) {
-            if (n < min) min = n
+            if (n < min) {
+                min = n
+            }
         }
         return NumberExpressionValue(value = min)
     }

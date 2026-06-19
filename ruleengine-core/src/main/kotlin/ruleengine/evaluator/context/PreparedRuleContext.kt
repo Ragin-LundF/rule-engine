@@ -5,11 +5,11 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.evaluator.compiled.EvaluationCache
 import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedStringSet
 import ruleengine.evaluator.context.dto.PreparedText
-import ruleengine.evaluator.compiled.EvaluationCache
 import ruleengine.evaluator.context.dto.PreparedValue
 import java.math.BigDecimal
 
@@ -23,7 +23,11 @@ class PreparedRuleContext(
     }
 
     fun child(element: Map<*, *>): PreparedRuleContext {
-        return PreparedRuleContext(values = emptyMap(), rawContext = ElementRuleContext(element = element), cache = cache)
+        return PreparedRuleContext(
+            values = emptyMap(),
+            rawContext = ElementRuleContext(element = element),
+            cache = cache
+        )
     }
 
     companion object {
