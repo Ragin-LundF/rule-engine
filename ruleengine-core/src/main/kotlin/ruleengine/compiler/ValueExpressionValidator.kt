@@ -16,6 +16,7 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.evaluator.compiled.AggregateFunctionName
 
 internal object ValueExpressionValidator {
 
@@ -66,7 +67,7 @@ internal object ValueExpressionValidator {
             }
             is FieldAccessAst -> validateFieldAccess(expr = expr, schema = schema, diagnostics = diagnostics)
             is ArithmeticValueAst -> validateArithmetic(expr = expr, schema = schema, diagnostics = diagnostics)
-            is FunctionCallValueAst -> ValueKind.UNKNOWN
+            is FunctionCallValueAst -> validateFunctionCall(expr = expr, schema = schema, diagnostics = diagnostics)
         }
     }
 
@@ -119,6 +120,30 @@ internal object ValueExpressionValidator {
             )
             return ValueKind.UNKNOWN
         }
+        return ValueKind.NUMERIC
+    }
+
+    private fun validateFunctionCall(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ): ValueKind {
+        val known = AggregateFunctionName.entries.any { it.name.equals(expr.name, ignoreCase = true) }
+        if (!known) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Unknown function '${expr.name}'"
+            )
+            return ValueKind.UNKNOWN
+        }
+        if (expr.arguments.size != 1) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Function '${expr.name}' requires exactly one argument"
+            )
+            return ValueKind.UNKNOWN
+        }
+        validateValueExpression(expr = expr.arguments[0], schema = schema, diagnostics = diagnostics)
         return ValueKind.NUMERIC
     }
 

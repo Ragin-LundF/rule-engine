@@ -12,10 +12,12 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.ArithmeticCompiledValueExpression
 import ruleengine.evaluator.compiled.CompiledValueExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.FunctionCallCompiledValueExpression
 import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.NumberExpressionValue
 import ruleengine.evaluator.compiled.TextExpressionValue
@@ -27,10 +29,7 @@ internal object ValueExpressionCompiler {
             is LiteralValueAst -> compileLiteral(literal = expr)
             is FieldAccessAst -> compileFieldAccess(expr = expr, schema = schema)
             is ArithmeticValueAst -> compileArithmetic(expr = expr, schema = schema)
-            is FunctionCallValueAst -> throw CompilationException(
-                ruleId = null,
-                details = "Function calls in value expressions are not yet supported in this iteration"
-            )
+            is FunctionCallValueAst -> compileFunctionCall(expr = expr, schema = schema)
         }
     }
 
@@ -64,6 +63,23 @@ internal object ValueExpressionCompiler {
         val resolvedFirst = resolveIdentifier(identifier = firstSegment, schema = schema)
         val fieldPath = listOf(resolvedFirst) + segments.drop(1)
         return FieldAccessCompiledValueExpression(fieldPath = fieldPath)
+    }
+
+    private fun compileFunctionCall(expr: FunctionCallValueAst, schema: FieldSchema): CompiledValueExpression {
+        val functionName = AggregateFunctionName.entries.find {
+            it.name.equals(expr.name, ignoreCase = true)
+        } ?: throw CompilationException(
+            ruleId = null,
+            details = "Unknown function '${expr.name}'"
+        )
+        if (expr.arguments.size != 1) {
+            throw CompilationException(
+                ruleId = null,
+                details = "Function '${expr.name}' requires exactly one argument"
+            )
+        }
+        val compiledArg = compile(expr = expr.arguments[0], schema = schema)
+        return FunctionCallCompiledValueExpression(function = functionName, argument = compiledArg)
     }
 
     private fun compileArithmetic(expr: ArithmeticValueAst, schema: FieldSchema): CompiledValueExpression {

@@ -42,6 +42,7 @@ class FieldAccessCompiledValueExpression(
                 }
                 ArrayExpressionValue(values = elements)
             }
+            is Map<*, *> -> ObjectExpressionValue
             else -> MissingExpressionValue
         }
     }

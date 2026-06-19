@@ -21,3 +21,5 @@ data class ArrayExpressionValue(
 ) : ExpressionValue
 
 data object MissingExpressionValue : ExpressionValue
+
+data object ObjectExpressionValue : ExpressionValue
