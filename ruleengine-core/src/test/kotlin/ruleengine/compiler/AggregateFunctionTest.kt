@@ -62,23 +62,33 @@ class AggregateFunctionTest {
             mapOf("amount" to 20),
             mapOf("amount" to 30)
         )
-        assertTrue(evaluate(makeRule("count(transactions) > 2"), "transactions" to threeTransactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "count(transactions) > 2"),
+                "transactions" to threeTransactions
+            )
+        )
     }
 
     @Test
     fun `count - does not match when transaction count is not greater than threshold`() {
-        val result = evaluate(makeRule("count(transactions) > 2"), "transactions" to transactions)
+        val result = evaluate(rule = makeRule(condition = "count(transactions) > 2"), "transactions" to transactions)
         assertEquals(expected = false, actual = result)
     }
 
     @Test
     fun `count - matches when count equals threshold with GTE`() {
-        assertTrue(evaluate(makeRule("count(transactions) >= 2"), "transactions" to transactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "count(transactions) >= 2"),
+                "transactions" to transactions
+            )
+        )
     }
 
     @Test
     fun `count - missing field evaluates to false`() {
-        val result = evaluate(makeRule("count(transactions) > 0"))
+        val result = evaluate(rule = makeRule(condition = "count(transactions) > 0"))
         assertEquals(expected = false, actual = result)
     }
 
@@ -115,7 +125,12 @@ class AggregateFunctionTest {
             mapOf("purpose" to "no amount"),
             mapOf("amount" to 300)
         )
-        assertTrue(evaluate(makeRule("sum(transactions.amount) > 1000"), "transactions" to mixed))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "sum(transactions.amount) > 1000"),
+                "transactions" to mixed
+            )
+        )
     }
 
     // --- validation errors ---
@@ -123,7 +138,7 @@ class AggregateFunctionTest {
     @Test
     fun `unknown function name produces validation error`() {
         val result = Validator.validate(
-            asts = Parser(input = makeRule("unknown_fn(transactions) > 0")).parseRules(),
+            asts = Parser(input = makeRule(condition = "unknown_fn(transactions) > 0")).parseRules(),
             schema = schema
         )
         assertFalse(actual = result.isValid, message = "Expected invalid")
@@ -136,7 +151,7 @@ class AggregateFunctionTest {
     @Test
     fun `wrong arity produces validation error`() {
         val result = Validator.validate(
-            asts = Parser(input = makeRule("count(transactions, amount) > 0")).parseRules(),
+            asts = Parser(input = makeRule(condition = "count(transactions, amount) > 0")).parseRules(),
             schema = schema
         )
         assertFalse(actual = result.isValid, message = "Expected invalid")
@@ -151,13 +166,23 @@ class AggregateFunctionTest {
     @Test
     fun `subtract - matches when result exceeds threshold`() {
         // subtract([10, 20]) = 10 - 20 = -10 > -15
-        assertTrue(evaluate(makeRule("subtract(transactions.amount) > -15"), "transactions" to transactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "subtract(transactions.amount) > -15"),
+                "transactions" to transactions
+            )
+        )
     }
 
     @Test
     fun `subtract - empty array returns zero`() {
         // subtract([]) = 0, 0 > 5 = false
-        assertFalse(evaluate(makeRule("subtract(transactions.amount) > 5"), "transactions" to emptyList<Map<String, Any>>()))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = "subtract(transactions.amount) > 5"),
+                "transactions" to emptyList<Map<String, Any>>()
+            )
+        )
     }
 
     @Test
@@ -168,7 +193,12 @@ class AggregateFunctionTest {
             mapOf("label" to "a", "amount" to 20)
         )
         // subtract(a amounts) = 100 - 20 = 80 > 50
-        assertTrue(evaluate(makeRule("""subtract(transactions[label == "a"].amount) > 50"""), "transactions" to data))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = """subtract(transactions[label == "a"].amount) > 50"""),
+                "transactions" to data
+            )
+        )
     }
 
     // --- avg ---
@@ -176,12 +206,22 @@ class AggregateFunctionTest {
     @Test
     fun `avg - matches when average exceeds threshold`() {
         // avg([10, 20]) = 15 > 12
-        assertTrue(evaluate(makeRule("avg(transactions.amount) > 12"), "transactions" to transactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "avg(transactions.amount) > 12"),
+                "transactions" to transactions
+            )
+        )
     }
 
     @Test
     fun `avg - empty array returns missing, comparison is false`() {
-        assertFalse(evaluate(makeRule("avg(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = "avg(transactions.amount) > 0"),
+                "transactions" to emptyList<Map<String, Any>>()
+            )
+        )
     }
 
     @Test
@@ -192,7 +232,12 @@ class AggregateFunctionTest {
             mapOf("label" to "risk", "amount" to 200)
         )
         // avg(risk amounts) = avg([100, 200]) = 150 > 100
-        assertTrue(evaluate(makeRule("""avg(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = """avg(transactions[label == "risk"].amount) > 100"""),
+                "transactions" to data
+            )
+        )
     }
 
     // --- median ---
@@ -205,7 +250,12 @@ class AggregateFunctionTest {
             mapOf("amount" to 10)
         )
         // median([1, 5, 10]) = 5 > 4
-        assertTrue(evaluate(makeRule("median(transactions.amount) > 4"), "transactions" to data))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "median(transactions.amount) > 4"),
+                "transactions" to data
+            )
+        )
     }
 
     @Test
@@ -217,12 +267,22 @@ class AggregateFunctionTest {
             mapOf("amount" to 20)
         )
         // median([1, 5, 10, 20]) = 7.5 > 7
-        assertTrue(evaluate(makeRule("median(transactions.amount) > 7"), "transactions" to data))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "median(transactions.amount) > 7"),
+                "transactions" to data
+            )
+        )
     }
 
     @Test
     fun `median - empty array returns missing, comparison is false`() {
-        assertFalse(evaluate(makeRule("median(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = "median(transactions.amount) > 0"),
+                "transactions" to emptyList<Map<String, Any>>()
+            )
+        )
     }
 
     // --- max ---
@@ -230,12 +290,22 @@ class AggregateFunctionTest {
     @Test
     fun `max - matches when max exceeds threshold`() {
         // max([10, 20]) = 20 > 15
-        assertTrue(evaluate(makeRule("max(transactions.amount) > 15"), "transactions" to transactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "max(transactions.amount) > 15"),
+                "transactions" to transactions
+            )
+        )
     }
 
     @Test
     fun `max - empty array returns missing, comparison is false`() {
-        assertFalse(evaluate(makeRule("max(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = "max(transactions.amount) > 0"),
+                "transactions" to emptyList<Map<String, Any>>()
+            )
+        )
     }
 
     @Test
@@ -246,7 +316,12 @@ class AggregateFunctionTest {
             mapOf("label" to "risk", "amount" to 200)
         )
         // max(risk amounts) = 200 > 100
-        assertTrue(evaluate(makeRule("""max(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = """max(transactions[label == "risk"].amount) > 100"""),
+                "transactions" to data
+            )
+        )
     }
 
     // --- min ---
@@ -254,12 +329,22 @@ class AggregateFunctionTest {
     @Test
     fun `min - matches when min exceeds threshold`() {
         // min([10, 20]) = 10 > 5
-        assertTrue(evaluate(makeRule("min(transactions.amount) > 5"), "transactions" to transactions))
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "min(transactions.amount) > 5"),
+                "transactions" to transactions
+            )
+        )
     }
 
     @Test
     fun `min - empty array returns missing, comparison is false`() {
-        assertFalse(evaluate(makeRule("min(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = "min(transactions.amount) > 0"),
+                "transactions" to emptyList<Map<String, Any>>()
+            )
+        )
     }
 
     @Test
@@ -270,6 +355,11 @@ class AggregateFunctionTest {
             mapOf("label" to "risk", "amount" to 200)
         )
         // min(risk amounts) = 50 < 100
-        assertFalse(evaluate(makeRule("""min(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+        assertFalse(
+            actual = evaluate(
+                rule = makeRule(condition = """min(transactions[label == "risk"].amount) > 100"""),
+                "transactions" to data
+            )
+        )
     }
 }

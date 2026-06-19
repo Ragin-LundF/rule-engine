@@ -52,7 +52,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `unknown function name produces error with function name in message`() {
-        val result = validate("foobar(transactions) > 0")
+        val result = validate(condition = "foobar(transactions) > 0")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -69,7 +69,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `function with zero arguments produces arity error`() {
-        val result = validate("sum() > 0")
+        val result = validate(condition = "sum() > 0")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -86,7 +86,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `count with text field argument produces error mentioning array-like`() {
-        val result = validate("count(name) > 0")
+        val result = validate(condition = "count(name) > 0")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -103,7 +103,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `sum with text field argument produces error mentioning array of numbers`() {
-        val result = validate("sum(name) > 0")
+        val result = validate(condition = "sum(name) > 0")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -118,7 +118,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `avg with text field argument produces error`() {
-        val result = validate("avg(name) > 0")
+        val result = validate(condition = "avg(name) > 0")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(actual = error.message.contains("avg"), message = "Got: ${error.message}")
@@ -128,7 +128,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `arithmetic with text literal produces error mentioning operator and text`() {
-        val result = validate("""amount + "hello" > 0""")
+        val result = validate(condition = """amount + "hello" > 0""")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -145,7 +145,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `comparing numeric field to text literal produces incompatible types error`() {
-        val result = validate("""amount == "hello"""")
+        val result = validate(condition = """amount == "hello"""")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -158,18 +158,20 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `GT operator on text fields produces error mentioning operator`() {
-        val result = validate("""name > "alice"""")
+        val result = validate(condition = """name > "alice"""")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
-            actual = error.message.contains("GT") || error.message.contains(">") || error.message.contains("not allowed"),
+            actual = error.message.contains("GT") ||
+                    error.message.contains(">") ||
+                    error.message.contains("not allowed"),
             message = "Expected operator info in message, got: ${error.message}"
         )
     }
 
     @Test
     fun `LT operator on text fields produces error`() {
-        val result = validate("""name < "alice"""")
+        val result = validate(condition = """name < "alice"""")
         assertFalse(actual = result.isValid)
         assertTrue(actual = result.diagnostics.any { it.severity == Severity.ERROR })
     }
@@ -178,7 +180,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `unknown field in expression produces error with field name`() {
-        val result = validate("unknown_field > 100")
+        val result = validate(condition = "unknown_field > 100")
         assertFalse(actual = result.isValid)
         val error = result.diagnostics.first { it.severity == Severity.ERROR }
         assertTrue(
@@ -195,7 +197,7 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `all diagnostics for invalid expression have ERROR severity`() {
-        val result = validate("foobar(transactions) > 0")
+        val result = validate(condition = "foobar(transactions) > 0")
         assertTrue(
             actual = result.diagnostics.all { it.severity == Severity.ERROR },
             message = "Expected all diagnostics to be ERROR, got: ${result.diagnostics}"
@@ -206,19 +208,19 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `valid sum expression passes validation`() {
-        val result = validate("sum(transactions.amount) > 100")
+        val result = validate(condition = "sum(transactions.amount) > 100")
         assertTrue(actual = result.isValid, message = "Expected valid: ${result.diagnostics}")
     }
 
     @Test
     fun `valid count expression passes validation`() {
-        val result = validate("count(transactions) > 0")
+        val result = validate(condition = "count(transactions) > 0")
         assertTrue(actual = result.isValid, message = "Expected valid: ${result.diagnostics}")
     }
 
     @Test
     fun `valid filtered sum expression passes validation`() {
-        val result = validate("""sum(transactions[amount > 0].amount) > 100""")
+        val result = validate(condition = """sum(transactions[amount > 0].amount) > 100""")
         assertTrue(actual = result.isValid, message = "Expected valid: ${result.diagnostics}")
     }
 
@@ -226,14 +228,14 @@ class ValidationDiagnosticsTest {
 
     @Test
     fun `unknown function produces exactly one error`() {
-        val result = validate("foobar(transactions) > 0")
+        val result = validate(condition = "foobar(transactions) > 0")
         val errors = result.diagnostics.filter { it.severity == Severity.ERROR }
         assertEquals(expected = 1, actual = errors.size, message = "Expected exactly 1 error, got: $errors")
     }
 
     @Test
     fun `wrong arity produces exactly one error`() {
-        val result = validate("sum() > 0")
+        val result = validate(condition = "sum() > 0")
         val errors = result.diagnostics.filter { it.severity == Severity.ERROR }
         assertEquals(expected = 1, actual = errors.size, message = "Expected exactly 1 error, got: $errors")
     }

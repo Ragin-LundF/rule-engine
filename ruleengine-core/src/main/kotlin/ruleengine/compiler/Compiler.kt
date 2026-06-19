@@ -32,21 +32,21 @@ import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
+import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.CompiledFieldSegment
 import ruleengine.evaluator.compiled.CompiledValueExpression
-import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
 import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.NotExpression
 import ruleengine.evaluator.compiled.NumberExpressionValue
 import ruleengine.evaluator.compiled.OrExpression
-import ruleengine.evaluator.compiled.TextExpressionValue
 import ruleengine.evaluator.compiled.RegexExtractExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
 import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
+import ruleengine.evaluator.compiled.TextExpressionValue
 
 @Suppress("TooManyFunctions")
 object Compiler {
@@ -86,11 +86,13 @@ object Compiler {
                     }
                     CompiledActionArgument.ExtractionRef(extraction = compiledExtraction)
                 }
+
                 literal is StringLiteral -> CompiledActionArgument.Static(value = literal.value)
                 literal is NumberLiteral -> CompiledActionArgument.Static(value = literal.value)
                 literal is ListLiteral -> CompiledActionArgument.Static(
                     value = literal.items.map { (it as? StringLiteral)?.value ?: it.toString() }
                 )
+
                 else -> CompiledActionArgument.Static(value = null)
             }
         }
@@ -203,7 +205,14 @@ object Compiler {
 
     private fun compileLiteralValue(literal: ruleengine.dsl.ast.LiteralAst): CompiledValueExpression {
         return when (literal) {
-            is NumberLiteral -> LiteralCompiledValueExpression(value = NumberExpressionValue(value = java.math.BigDecimal(literal.value)))
+            is NumberLiteral -> LiteralCompiledValueExpression(
+                value = NumberExpressionValue(
+                    value = java.math.BigDecimal(
+                        literal.value
+                    )
+                )
+            )
+
             is StringLiteral -> LiteralCompiledValueExpression(value = TextExpressionValue(value = literal.value))
             else -> throw CompilationException(
                 ruleId = null,
@@ -216,8 +225,16 @@ object Compiler {
         expr: ComparisonExpressionAst,
         schema: FieldSchema
     ): CompiledExpression {
-        val left = ValueExpressionCompiler.compile(expr = expr.left, schema = schema, filterCompiler = ::compileFilterExpression)
-        val right = ValueExpressionCompiler.compile(expr = expr.right, schema = schema, filterCompiler = ::compileFilterExpression)
+        val left = ValueExpressionCompiler.compile(
+            expr = expr.left,
+            schema = schema,
+            filterCompiler = ::compileFilterExpression
+        )
+        val right = ValueExpressionCompiler.compile(
+            expr = expr.right,
+            schema = schema,
+            filterCompiler = ::compileFilterExpression
+        )
         val cost = maxOf(left.cost, right.cost)
         return ComparisonCompiledExpression(
             left = left,

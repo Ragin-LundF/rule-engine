@@ -4,6 +4,7 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ArithmeticValueAst
+import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FieldSegmentAst
 import ruleengine.dsl.ast.FilterSegmentAst
@@ -12,7 +13,6 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.ArithmeticCompiledValueExpression
 import ruleengine.evaluator.compiled.CompiledExpression
@@ -20,7 +20,6 @@ import ruleengine.evaluator.compiled.CompiledFieldSegment
 import ruleengine.evaluator.compiled.CompiledFilterSegment
 import ruleengine.evaluator.compiled.CompiledPathSegment
 import ruleengine.evaluator.compiled.CompiledValueExpression
-import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
 import ruleengine.evaluator.compiled.FunctionCallCompiledValueExpression
 import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
@@ -38,7 +37,11 @@ internal object ValueExpressionCompiler {
             is LiteralValueAst -> compileLiteral(literal = expr)
             is FieldAccessAst -> compileFieldAccess(expr = expr, schema = schema, filterCompiler = filterCompiler)
             is ArithmeticValueAst -> compileArithmetic(expr = expr, schema = schema, filterCompiler = filterCompiler)
-            is FunctionCallValueAst -> compileFunctionCall(expr = expr, schema = schema, filterCompiler = filterCompiler)
+            is FunctionCallValueAst -> compileFunctionCall(
+                expr = expr,
+                schema = schema,
+                filterCompiler = filterCompiler
+            )
         }
     }
 
@@ -70,6 +73,7 @@ internal object ValueExpressionCompiler {
                     }
                     compiledSegments += CompiledFieldSegment(name = name)
                 }
+
                 is FilterSegmentAst -> {
                     val compiler = filterCompiler ?: throw CompilationException(
                         ruleId = null,

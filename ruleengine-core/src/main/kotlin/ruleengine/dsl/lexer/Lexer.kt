@@ -146,6 +146,7 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private fun readOperatorOrMinus(): Token {
         val startLine = line
         val startCol = col
@@ -157,14 +158,9 @@ class Lexer(private val input: String) {
         if (first == '-' && next != null && next.isDigit()) {
             val sb = StringBuilder()
             sb.append('-')
-            while (true) {
-                val c = current() ?: break
-                if (c.isDigit() || c == '.') {
-                    sb.append(c)
-                    advance()
-                } else {
-                    break
-                }
+            while (current()?.let { it.isDigit() || it == '.' } == true) {
+                sb.append(current())
+                advance()
             }
             return Token(type = TokenType.NUMBER, text = sb.toString(), line = startLine, col = startCol)
         }
@@ -174,25 +170,25 @@ class Lexer(private val input: String) {
         }
 
         val twoChar = next == '='
-        return when {
-            first == '=' && next == '=' -> {
+        return when (first) {
+            '=' if next == '=' -> {
                 advance()
                 Token(type = TokenType.EQEQ, text = "==", line = startLine, col = startCol)
             }
-            first == '!' && twoChar -> {
+            '!' if twoChar -> {
                 advance()
                 Token(type = TokenType.BANGEQ, text = "!=", line = startLine, col = startCol)
             }
-            first == '>' && twoChar -> {
+            '>' if twoChar -> {
                 advance()
                 Token(type = TokenType.GTE, text = ">=", line = startLine, col = startCol)
             }
-            first == '>' -> Token(type = TokenType.GT, text = ">", line = startLine, col = startCol)
-            first == '<' && twoChar -> {
+            '>' -> Token(type = TokenType.GT, text = ">", line = startLine, col = startCol)
+            '<' if twoChar -> {
                 advance()
                 Token(type = TokenType.LTE, text = "<=", line = startLine, col = startCol)
             }
-            first == '<' -> Token(type = TokenType.LT, text = "<", line = startLine, col = startCol)
+            '<' -> Token(type = TokenType.LT, text = "<", line = startLine, col = startCol)
             else -> {
                 // fallback: emit as IDENT for legacy named operators that start with these chars
                 val sb = StringBuilder()
