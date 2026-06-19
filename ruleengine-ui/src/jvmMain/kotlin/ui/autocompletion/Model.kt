@@ -14,8 +14,8 @@ public data class CompletionItem(
 )
 
 // Export some small helpers that builder needs
-internal val TEXT_OPS    = listOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
-internal val NUM_OPS     = listOf("equals", "gt", "gte", "lt", "lte", "between")
+internal val TEXT_OPS    = listOf("equals", "contains", "startsWith", "endsWith", "in", "regex", "==", "!=")
+internal val NUM_OPS     = listOf("equals", "gt", "gte", "lt", "lte", "between", "==", "!=", ">", ">=", "<", "<=")
 internal val BOOL_OPS    = listOf("equals")
 internal val SET_OPS     = listOf("contains", "containsAny", "containsAll")
 internal val DATE_OPS    = listOf("equals", "gt", "gte", "lt", "lte", "between")

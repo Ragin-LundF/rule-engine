@@ -117,4 +117,35 @@ class LexerTest {
             actual = types
         )
     }
+
+    @Test
+    fun `aggregate function names tokenize as IDENT`() {
+        val functions = listOf("count", "sum", "subtract", "avg", "median", "max", "min")
+        for (fn in functions) {
+            val types = tokenTypes("$fn(transactions) > 0")
+            assertEquals(
+                expected = TokenType.IDENT,
+                actual = types.first(),
+                message = "Expected IDENT for $fn"
+            )
+            val texts = tokenTexts("$fn(transactions) > 0")
+            assertEquals(
+                expected = fn,
+                actual = texts.first(),
+                message = "Expected token text '$fn'"
+            )
+        }
+    }
+
+    @Test
+    fun `percentage rule expression tokenizes without error`() {
+        val input = """sum(transactions[label == "risk"].amount) > sum(transactions[amount > 0].amount) * 0.03"""
+        val types = tokenTypes(input)
+        assertEquals(expected = TokenType.EOF, actual = types.last())
+        assert(TokenType.IDENT in types)
+        assert(TokenType.EQEQ in types)
+        assert(TokenType.GT in types)
+        assert(TokenType.STAR in types)
+        assert(TokenType.NUMBER in types)
+    }
 }

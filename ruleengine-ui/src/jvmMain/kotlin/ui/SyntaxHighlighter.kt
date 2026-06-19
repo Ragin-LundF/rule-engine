@@ -36,6 +36,11 @@ private val DSL_NAMED_OPS = setOf(
     "ignoreCase",
 )
 
+/** Aggregate function names recognized in value expressions. */
+private val DSL_FUNCTIONS = setOf(
+    "count", "sum", "subtract", "avg", "median", "max", "min",
+)
+
 /**
  * Builds an [AnnotatedString] with syntax colouring for the rule DSL.
  * Accepts optional [diagnostics] to render error/warning underlines.
@@ -110,6 +115,12 @@ fun annotateRule(
                     TokenType.LBRACKET, TokenType.RBRACKET,
                     TokenType.COMMA -> SpanStyle(color = TextSecondary)
 
+                    TokenType.PLUS, TokenType.MINUS,
+                    TokenType.STAR, TokenType.SLASH,
+                    TokenType.EQEQ, TokenType.BANGEQ,
+                    TokenType.GT, TokenType.GTE,
+                    TokenType.LT, TokenType.LTE -> SpanStyle(color = ColorOp)
+
                     TokenType.IDENT -> when {
                         tok.text in DSL_STRUCTURE -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
                         tok.text in DSL_LOGIC -> SpanStyle(color = ColorLogic, fontWeight = FontWeight.Medium)
@@ -117,6 +128,7 @@ fun annotateRule(
                         tok.text.all { it in OP_CHARS } -> SpanStyle(color = ColorOp)
                         tok.text in fieldNames -> SpanStyle(color = ColorField)
                         tok.text in DSL_NAMED_OPS -> SpanStyle(color = ColorOp)
+                        tok.text in DSL_FUNCTIONS -> SpanStyle(color = ColorOp, fontWeight = FontWeight.Medium)
                         tok.text in actionNames -> SpanStyle(color = ColorAction)
                         else -> SpanStyle(color = TextPrimary)
                     }
