@@ -20,6 +20,10 @@ class PreparedRuleContext(
         return values[field]
     }
 
+    fun child(element: Map<*, *>): PreparedRuleContext {
+        return PreparedRuleContext(values = emptyMap(), rawContext = ElementRuleContext(element = element))
+    }
+
     companion object {
         fun prepare(
             ctx: RuleContext,

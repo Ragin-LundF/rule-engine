@@ -12,8 +12,13 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.ArithmeticCompiledValueExpression
+import ruleengine.evaluator.compiled.CompiledExpression
+import ruleengine.evaluator.compiled.CompiledFieldSegment
+import ruleengine.evaluator.compiled.CompiledFilterSegment
+import ruleengine.evaluator.compiled.CompiledPathSegment
 import ruleengine.evaluator.compiled.CompiledValueExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
@@ -24,12 +29,16 @@ import ruleengine.evaluator.compiled.TextExpressionValue
 import java.math.BigDecimal
 
 internal object ValueExpressionCompiler {
-    fun compile(expr: ValueExpressionAst, schema: FieldSchema): CompiledValueExpression {
+    fun compile(
+        expr: ValueExpressionAst,
+        schema: FieldSchema,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)? = null
+    ): CompiledValueExpression {
         return when (expr) {
             is LiteralValueAst -> compileLiteral(literal = expr)
-            is FieldAccessAst -> compileFieldAccess(expr = expr, schema = schema)
-            is ArithmeticValueAst -> compileArithmetic(expr = expr, schema = schema)
-            is FunctionCallValueAst -> compileFunctionCall(expr = expr, schema = schema)
+            is FieldAccessAst -> compileFieldAccess(expr = expr, schema = schema, filterCompiler = filterCompiler)
+            is ArithmeticValueAst -> compileArithmetic(expr = expr, schema = schema, filterCompiler = filterCompiler)
+            is FunctionCallValueAst -> compileFunctionCall(expr = expr, schema = schema, filterCompiler = filterCompiler)
         }
     }
 
@@ -45,27 +54,40 @@ internal object ValueExpressionCompiler {
         return LiteralCompiledValueExpression(value = value)
     }
 
-    private fun compileFieldAccess(expr: FieldAccessAst, schema: FieldSchema): CompiledValueExpression {
-        if (expr.path.any { it is FilterSegmentAst }) {
-            throw CompilationException(
-                ruleId = null,
-                details = "Filter segments in field paths are not yet supported in this iteration"
-            )
+    private fun compileFieldAccess(
+        expr: FieldAccessAst,
+        schema: FieldSchema,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression {
+        val compiledSegments = mutableListOf<CompiledPathSegment>()
+        for ((index, segment) in expr.path.withIndex()) {
+            when (segment) {
+                is FieldSegmentAst -> {
+                    val name = if (index == 0) {
+                        resolveIdentifier(identifier = segment.name, schema = schema)
+                    } else {
+                        segment.name
+                    }
+                    compiledSegments += CompiledFieldSegment(name = name)
+                }
+                is FilterSegmentAst -> {
+                    val compiler = filterCompiler ?: throw CompilationException(
+                        ruleId = null,
+                        details = "Filter segments in field paths are not supported in this context"
+                    )
+                    val compiledFilter = compiler(segment.expression, schema)
+                    compiledSegments += CompiledFilterSegment(expression = compiledFilter)
+                }
+            }
         }
-        if (expr.path.any { it !is FieldSegmentAst }) {
-            throw CompilationException(
-                ruleId = null,
-                details = "Non-field segments in field paths are not yet supported in this iteration"
-            )
-        }
-        val segments = expr.path.map { (it as FieldSegmentAst).name }
-        val firstSegment = segments[0]
-        val resolvedFirst = resolveIdentifier(identifier = firstSegment, schema = schema)
-        val fieldPath = listOf(resolvedFirst) + segments.drop(1)
-        return FieldAccessCompiledValueExpression(fieldPath = fieldPath)
+        return FieldAccessCompiledValueExpression(segments = compiledSegments)
     }
 
-    private fun compileFunctionCall(expr: FunctionCallValueAst, schema: FieldSchema): CompiledValueExpression {
+    private fun compileFunctionCall(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression {
         val functionName = AggregateFunctionName.entries.find {
             it.name.equals(expr.name, ignoreCase = true)
         } ?: throw CompilationException(
@@ -78,13 +100,17 @@ internal object ValueExpressionCompiler {
                 details = "Function '${expr.name}' requires exactly one argument"
             )
         }
-        val compiledArg = compile(expr = expr.arguments[0], schema = schema)
+        val compiledArg = compile(expr = expr.arguments[0], schema = schema, filterCompiler = filterCompiler)
         return FunctionCallCompiledValueExpression(function = functionName, argument = compiledArg)
     }
 
-    private fun compileArithmetic(expr: ArithmeticValueAst, schema: FieldSchema): CompiledValueExpression {
-        val left = compile(expr = expr.left, schema = schema)
-        val right = compile(expr = expr.right, schema = schema)
+    private fun compileArithmetic(
+        expr: ArithmeticValueAst,
+        schema: FieldSchema,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression {
+        val left = compile(expr = expr.left, schema = schema, filterCompiler = filterCompiler)
+        val right = compile(expr = expr.right, schema = schema, filterCompiler = filterCompiler)
         val cost = maxOf(left.cost, right.cost)
         return ArithmeticCompiledValueExpression(
             left = left,

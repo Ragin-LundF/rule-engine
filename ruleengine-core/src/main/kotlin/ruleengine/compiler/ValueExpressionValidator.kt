@@ -8,6 +8,7 @@ import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ComparisonOperatorAst
+import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FieldSegmentAst
 import ruleengine.dsl.ast.FilterSegmentAst
@@ -76,10 +77,15 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
-        if (expr.path.any { it is FilterSegmentAst }) {
-            return ValueKind.UNKNOWN
+        for (segment in expr.path) {
+            if (segment is FilterSegmentAst) {
+                validateFilterExpression(expr = segment.expression, schema = schema, diagnostics = diagnostics)
+            }
         }
-        if (expr.path.size != 1 || expr.path[0] !is FieldSegmentAst) {
+        if (expr.path.any { it is FilterSegmentAst } || expr.path.size > 1) {
+            return ValueKind.NUMERIC
+        }
+        if (expr.path[0] !is FieldSegmentAst) {
             return ValueKind.UNKNOWN
         }
         val name = (expr.path[0] as FieldSegmentAst).name
@@ -103,6 +109,16 @@ internal object ValueExpressionValidator {
                 )
                 ValueKind.UNKNOWN
             }
+        }
+    }
+
+    private fun validateFilterExpression(
+        expr: ExpressionAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        if (expr is ComparisonExpressionAst) {
+            validate(expr = expr, schema = schema, diagnostics = diagnostics)
         }
     }
 

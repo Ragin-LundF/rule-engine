@@ -34,10 +34,16 @@ import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.NotExpression
+import ruleengine.evaluator.compiled.CompiledFieldSegment
+import ruleengine.evaluator.compiled.CompiledValueExpression
 import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.NotExpression
+import ruleengine.evaluator.compiled.NumberExpressionValue
 import ruleengine.evaluator.compiled.OrExpression
+import ruleengine.evaluator.compiled.TextExpressionValue
 import ruleengine.evaluator.compiled.RegexExtractExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
 import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
@@ -155,12 +161,63 @@ object Compiler {
         }
     }
 
+    internal fun compileFilterExpression(
+        expr: ExpressionAst,
+        schema: FieldSchema
+    ): CompiledExpression {
+        return when (expr) {
+            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema)
+            is ConditionAst -> compileFilterCondition(cond = expr)
+            else -> throw CompilationException(
+                ruleId = null,
+                details = "Only comparison expressions are supported in filter segments"
+            )
+        }
+    }
+
+    private fun compileFilterCondition(cond: ConditionAst): CompiledExpression {
+        val op = OperatorUtils.normalizeOperator(op = cond.operator)
+        val comparisonOperator = when (op) {
+            "==" -> ComparisonOperatorAst.EQ
+            "!=" -> ComparisonOperatorAst.NEQ
+            ">", "gt", "greater_than" -> ComparisonOperatorAst.GT
+            ">=", "gte", "greater_than_or_equal" -> ComparisonOperatorAst.GTE
+            "<", "lt", "less_than" -> ComparisonOperatorAst.LT
+            "<=", "lte", "less_than_or_equal" -> ComparisonOperatorAst.LTE
+            else -> throw CompilationException(
+                ruleId = null,
+                details = "Operator '$op' is not supported in filter segments"
+            )
+        }
+        val left = FieldAccessCompiledValueExpression(
+            segments = listOf(CompiledFieldSegment(name = cond.field))
+        )
+        val right = compileLiteralValue(literal = cond.value)
+        return ComparisonCompiledExpression(
+            left = left,
+            operator = comparisonOperator,
+            right = right,
+            cost = EvaluationCost.CHEAP
+        )
+    }
+
+    private fun compileLiteralValue(literal: ruleengine.dsl.ast.LiteralAst): CompiledValueExpression {
+        return when (literal) {
+            is NumberLiteral -> LiteralCompiledValueExpression(value = NumberExpressionValue(value = java.math.BigDecimal(literal.value)))
+            is StringLiteral -> LiteralCompiledValueExpression(value = TextExpressionValue(value = literal.value))
+            else -> throw CompilationException(
+                ruleId = null,
+                details = "Unsupported literal type in filter: ${literal::class.simpleName}"
+            )
+        }
+    }
+
     private fun compileComparisonExpression(
         expr: ComparisonExpressionAst,
         schema: FieldSchema
     ): CompiledExpression {
-        val left = ValueExpressionCompiler.compile(expr = expr.left, schema = schema)
-        val right = ValueExpressionCompiler.compile(expr = expr.right, schema = schema)
+        val left = ValueExpressionCompiler.compile(expr = expr.left, schema = schema, filterCompiler = ::compileFilterExpression)
+        val right = ValueExpressionCompiler.compile(expr = expr.right, schema = schema, filterCompiler = ::compileFilterExpression)
         val cost = maxOf(left.cost, right.cost)
         return ComparisonCompiledExpression(
             left = left,
