@@ -145,4 +145,131 @@ class AggregateFunctionTest {
             message = "Expected arity error, got: ${result.diagnostics}"
         )
     }
+
+    // --- subtract ---
+
+    @Test
+    fun `subtract - matches when result exceeds threshold`() {
+        // subtract([10, 20]) = 10 - 20 = -10 > -15
+        assertTrue(evaluate(makeRule("subtract(transactions.amount) > -15"), "transactions" to transactions))
+    }
+
+    @Test
+    fun `subtract - empty array returns zero`() {
+        // subtract([]) = 0, 0 > 5 = false
+        assertFalse(evaluate(makeRule("subtract(transactions.amount) > 5"), "transactions" to emptyList<Map<String, Any>>()))
+    }
+
+    @Test
+    fun `subtract - filtered array`() {
+        val data = listOf(
+            mapOf("label" to "a", "amount" to 100),
+            mapOf("label" to "b", "amount" to 30),
+            mapOf("label" to "a", "amount" to 20)
+        )
+        // subtract(a amounts) = 100 - 20 = 80 > 50
+        assertTrue(evaluate(makeRule("""subtract(transactions[label == "a"].amount) > 50"""), "transactions" to data))
+    }
+
+    // --- avg ---
+
+    @Test
+    fun `avg - matches when average exceeds threshold`() {
+        // avg([10, 20]) = 15 > 12
+        assertTrue(evaluate(makeRule("avg(transactions.amount) > 12"), "transactions" to transactions))
+    }
+
+    @Test
+    fun `avg - empty array returns missing, comparison is false`() {
+        assertFalse(evaluate(makeRule("avg(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+    }
+
+    @Test
+    fun `avg - filtered array`() {
+        val data = listOf(
+            mapOf("label" to "risk", "amount" to 100),
+            mapOf("label" to "safe", "amount" to 900),
+            mapOf("label" to "risk", "amount" to 200)
+        )
+        // avg(risk amounts) = avg([100, 200]) = 150 > 100
+        assertTrue(evaluate(makeRule("""avg(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+    }
+
+    // --- median ---
+
+    @Test
+    fun `median - odd count returns middle element`() {
+        val data = listOf(
+            mapOf("amount" to 1),
+            mapOf("amount" to 5),
+            mapOf("amount" to 10)
+        )
+        // median([1, 5, 10]) = 5 > 4
+        assertTrue(evaluate(makeRule("median(transactions.amount) > 4"), "transactions" to data))
+    }
+
+    @Test
+    fun `median - even count returns average of two middle elements`() {
+        val data = listOf(
+            mapOf("amount" to 1),
+            mapOf("amount" to 5),
+            mapOf("amount" to 10),
+            mapOf("amount" to 20)
+        )
+        // median([1, 5, 10, 20]) = 7.5 > 7
+        assertTrue(evaluate(makeRule("median(transactions.amount) > 7"), "transactions" to data))
+    }
+
+    @Test
+    fun `median - empty array returns missing, comparison is false`() {
+        assertFalse(evaluate(makeRule("median(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+    }
+
+    // --- max ---
+
+    @Test
+    fun `max - matches when max exceeds threshold`() {
+        // max([10, 20]) = 20 > 15
+        assertTrue(evaluate(makeRule("max(transactions.amount) > 15"), "transactions" to transactions))
+    }
+
+    @Test
+    fun `max - empty array returns missing, comparison is false`() {
+        assertFalse(evaluate(makeRule("max(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+    }
+
+    @Test
+    fun `max - filtered array`() {
+        val data = listOf(
+            mapOf("label" to "risk", "amount" to 50),
+            mapOf("label" to "safe", "amount" to 900),
+            mapOf("label" to "risk", "amount" to 200)
+        )
+        // max(risk amounts) = 200 > 100
+        assertTrue(evaluate(makeRule("""max(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+    }
+
+    // --- min ---
+
+    @Test
+    fun `min - matches when min exceeds threshold`() {
+        // min([10, 20]) = 10 > 5
+        assertTrue(evaluate(makeRule("min(transactions.amount) > 5"), "transactions" to transactions))
+    }
+
+    @Test
+    fun `min - empty array returns missing, comparison is false`() {
+        assertFalse(evaluate(makeRule("min(transactions.amount) > 0"), "transactions" to emptyList<Map<String, Any>>()))
+    }
+
+    @Test
+    fun `min - filtered array`() {
+        val data = listOf(
+            mapOf("label" to "risk", "amount" to 50),
+            mapOf("label" to "safe", "amount" to 900),
+            mapOf("label" to "risk", "amount" to 200)
+        )
+        // min(risk amounts) = 50 < 100
+        assertFalse(evaluate(makeRule("""min(transactions[label == "risk"].amount) > 100"""), "transactions" to data))
+    }
 }
