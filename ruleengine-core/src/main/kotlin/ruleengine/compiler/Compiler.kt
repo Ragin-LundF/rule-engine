@@ -18,6 +18,7 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ExtractionAst
@@ -34,6 +35,8 @@ import ruleengine.evaluator.compiled.AndExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.NotExpression
+import ruleengine.evaluator.compiled.ComparisonCompiledExpression
+import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.OrExpression
 import ruleengine.evaluator.compiled.RegexExtractExpression
 import ruleengine.evaluator.compiled.StringSetContainsAllExpression
@@ -148,11 +151,23 @@ object Compiler {
 
             is ConditionAst -> compileCondition(cond = expr, schema = schema, normalizerRegistry = normalizerRegistry)
 
-            is ComparisonExpressionAst -> throw CompilationException(
-                ruleId = null,
-                details = "ComparisonExpressionAst compilation is not yet implemented"
-            )
+            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema)
         }
+    }
+
+    private fun compileComparisonExpression(
+        expr: ComparisonExpressionAst,
+        schema: FieldSchema
+    ): CompiledExpression {
+        val left = ValueExpressionCompiler.compile(expr = expr.left, schema = schema)
+        val right = ValueExpressionCompiler.compile(expr = expr.right, schema = schema)
+        val cost = maxOf(left.cost, right.cost)
+        return ComparisonCompiledExpression(
+            left = left,
+            operator = expr.operator,
+            right = right,
+            cost = cost
+        )
     }
 
     private fun compileCondition(

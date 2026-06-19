@@ -227,10 +227,10 @@ class Parser(private val input: String) {
             val op = parseComparisonOperator()
             if (op != null) {
                 val right = parseValueExpression()
-                if (isModernExpression(left) || isModernExpression(right)) {
+                if (isModernExpression(left) || isModernExpression(right) || isModernOnlyOperator(op)) {
                     ComparisonExpressionAst(left = left, operator = op, right = right)
                 } else {
-                    // Both sides are plain field/literal — keep as legacy ConditionAst
+                    // Both sides are plain field/literal with a legacy-compatible operator — keep as legacy ConditionAst
                     pos = savedPos
                     parseCondition()
                 }
@@ -256,6 +256,14 @@ class Parser(private val input: String) {
             is FieldAccessAst -> expr.path.any { it is FilterSegmentAst }
             is LiteralValueAst -> false
         }
+    }
+
+    /**
+     * Returns true for operators that have no equivalent in the legacy named-operator DSL
+     * and must always be routed through the modern [ComparisonExpressionAst] path.
+     */
+    private fun isModernOnlyOperator(op: ComparisonOperatorAst): Boolean {
+        return op == ComparisonOperatorAst.EQ || op == ComparisonOperatorAst.NEQ
     }
 
     private fun parseComparisonOperator(): ComparisonOperatorAst? {

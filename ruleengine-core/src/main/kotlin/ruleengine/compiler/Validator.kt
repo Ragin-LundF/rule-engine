@@ -101,9 +101,11 @@ object Validator {
             is NotAst -> validateExpression(expr = expr.child, schema = schema, diagnostics = diagnostics)
             is ConditionAst -> validateCondition(cond = expr, schema = schema, diagnostics = diagnostics)
 
-            is ComparisonExpressionAst -> {
-                // Validation for ComparisonExpressionAst will be implemented in a later iteration.
-            }
+            is ComparisonExpressionAst -> ValueExpressionValidator.validate(
+                expr = expr,
+                schema = schema,
+                diagnostics = diagnostics
+            )
         }
     }
 
