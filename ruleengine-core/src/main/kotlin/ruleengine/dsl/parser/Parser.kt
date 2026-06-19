@@ -232,7 +232,12 @@ class Parser(private val input: String) {
 
     private fun parseConditionOperator(): String {
         val opTok = current()
-        if (opTok.type != TokenType.IDENT) {
+        val isSymbolicOperator = opTok.type in setOf(
+            TokenType.EQEQ, TokenType.BANGEQ,
+            TokenType.GT, TokenType.GTE,
+            TokenType.LT, TokenType.LTE
+        )
+        if (opTok.type != TokenType.IDENT && !isSymbolicOperator) {
             throw ParseException(
                 line = opTok.line,
                 column = opTok.col,
