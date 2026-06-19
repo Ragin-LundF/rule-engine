@@ -53,22 +53,17 @@ internal object ValueExpressionCompiler {
                 details = "Filter segments in field paths are not yet supported in this iteration"
             )
         }
-        if (expr.path.size != 1 || expr.path[0] !is FieldSegmentAst) {
+        if (expr.path.any { it !is FieldSegmentAst }) {
             throw CompilationException(
                 ruleId = null,
-                details = "Multi-segment field paths are not yet supported in this iteration"
+                details = "Non-field segments in field paths are not yet supported in this iteration"
             )
         }
-        val name = (expr.path[0] as FieldSegmentAst).name
-        val resolvedId = resolveIdentifier(identifier = name, schema = schema)
-        val fieldId = FieldId(value = resolvedId)
-        if (schema.fields[fieldId] == null) {
-            throw CompilationException(
-                ruleId = null,
-                details = "Unknown field '$name'"
-            )
-        }
-        return FieldAccessCompiledValueExpression(fieldId = fieldId)
+        val segments = expr.path.map { (it as FieldSegmentAst).name }
+        val firstSegment = segments[0]
+        val resolvedFirst = resolveIdentifier(identifier = firstSegment, schema = schema)
+        val fieldPath = listOf(resolvedFirst) + segments.drop(1)
+        return FieldAccessCompiledValueExpression(fieldPath = fieldPath)
     }
 
     private fun compileArithmetic(expr: ArithmeticValueAst, schema: FieldSchema): CompiledValueExpression {

@@ -16,4 +16,33 @@ class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
         }
         return current
     }
+
+    override fun getRaw(fieldPath: List<String>): Any? {
+        return resolveRaw(current = map, path = fieldPath, index = 0)
+    }
+
+    private fun resolveRaw(current: Any?, path: List<String>, index: Int): Any? {
+        if (index >= path.size) {
+            return current
+        }
+        val key = path[index]
+        return when (current) {
+            is Map<*, *> -> resolveRaw(current = current[key], path = path, index = index + 1)
+            is Collection<*> -> {
+                val results = current.mapNotNull { element ->
+                    val resolved = resolveRaw(current = element, path = path, index = index)
+                    if (resolved == null) null else resolved
+                }
+                if (results.isEmpty()) null else results
+            }
+            is Array<*> -> {
+                val results = current.mapNotNull { element ->
+                    val resolved = resolveRaw(current = element, path = path, index = index)
+                    if (resolved == null) null else resolved
+                }
+                if (results.isEmpty()) null else results
+            }
+            else -> null
+        }
+    }
 }

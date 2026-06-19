@@ -12,7 +12,10 @@ import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.context.dto.PreparedValue
 import java.math.BigDecimal
 
-class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
+class PreparedRuleContext(
+    private val values: Map<FieldId, PreparedValue>,
+    val rawContext: RuleContext
+) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
     }
@@ -52,7 +55,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                 }
             }
 
-            return PreparedRuleContext(values = map)
+            return PreparedRuleContext(values = map, rawContext = ctx)
         }
 
         private fun prepareText(
