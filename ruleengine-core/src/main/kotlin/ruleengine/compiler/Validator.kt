@@ -12,6 +12,7 @@ import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ExtractionAst
@@ -99,6 +100,12 @@ object Validator {
 
             is NotAst -> validateExpression(expr = expr.child, schema = schema, diagnostics = diagnostics)
             is ConditionAst -> validateCondition(cond = expr, schema = schema, diagnostics = diagnostics)
+
+            is ComparisonExpressionAst -> ValueExpressionValidator.validate(
+                expr = expr,
+                schema = schema,
+                diagnostics = diagnostics
+            )
         }
     }
 

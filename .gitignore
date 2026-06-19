@@ -8,6 +8,8 @@
 !.idea/detekt.xml
 !.run/
 .vscode/*
+.hermes
+.agentbridge
 .kotlin
 
 # Build targets
@@ -15,6 +17,7 @@
 **/build/*
 **/target/*
 **/.openapi-generator*
+**/kls*
 
 # Java
 **/src/generated/*

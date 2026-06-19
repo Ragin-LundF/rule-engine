@@ -9,12 +9,21 @@ import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedStringSet
 import ruleengine.evaluator.context.dto.PreparedText
+import ruleengine.evaluator.compiled.EvaluationCache
 import ruleengine.evaluator.context.dto.PreparedValue
 import java.math.BigDecimal
 
-class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
+class PreparedRuleContext(
+    private val values: Map<FieldId, PreparedValue>,
+    val rawContext: RuleContext,
+    val cache: EvaluationCache = EvaluationCache()
+) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
+    }
+
+    fun child(element: Map<*, *>): PreparedRuleContext {
+        return PreparedRuleContext(values = emptyMap(), rawContext = ElementRuleContext(element = element), cache = cache)
     }
 
     companion object {
@@ -52,7 +61,7 @@ class PreparedRuleContext(private val values: Map<FieldId, PreparedValue>) {
                 }
             }
 
-            return PreparedRuleContext(values = map)
+            return PreparedRuleContext(values = map, rawContext = ctx)
         }
 
         private fun prepareText(

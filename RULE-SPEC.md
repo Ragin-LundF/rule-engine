@@ -540,6 +540,97 @@ rule "premium-customer-transfer" {
 }
 ```
 
+### 5.8 Value expressions — aggregate functions and arithmetic
+
+Value expressions allow conditions to aggregate data from **nested lists of objects**.
+Use them when a rule must reason about a collection (e.g. all transactions on an account) rather than a single field.
+
+#### Syntax
+
+```
+aggregateFunction(fieldPath) comparisonOperator valueExpression
+```
+
+Both sides of the comparison can be aggregate function calls, arithmetic expressions, or numeric literals.
+
+#### Comparison operators for value expressions
+
+| Operator | Meaning |
+|---|---|
+| `==` | Equal |
+| `!=` | Not equal |
+| `>` | Greater than |
+| `>=` | Greater than or equal |
+| `<` | Less than |
+| `<=` | Less than or equal |
+
+> **Important:** Use symbolic operators (`==`, `>`, etc.) for value expression comparisons.
+> The legacy named operators (`equals`, `gt`, etc.) are only valid for plain field comparisons.
+
+#### Aggregate functions
+
+All functions take exactly **one argument** — a field path that resolves to a collection.
+
+| Function | Description |
+|---|---|
+| `count(path)` | Number of elements |
+| `sum(path)` | Sum of numeric values |
+| `subtract(path)` | First element minus all subsequent elements |
+| `avg(path)` | Arithmetic mean |
+| `median(path)` | Median value |
+| `max(path)` | Maximum value |
+| `min(path)` | Minimum value |
+
+#### Field paths
+
+A dot-separated path projects a field from each element of a list:
+
+```
+transactions.amount   →  [100.00, 90.00, ...]
+```
+
+A filter in `[...]` selects only matching elements before aggregation:
+
+```
+transactions[label == "risk"].amount
+transactions[amount > 0]
+```
+
+#### Examples
+
+```
+count(transactions) > 2
+sum(transactions.amount) > 1000
+avg(transactions.amount) >= 25
+max(transactions[label == "risk"].amount) > 500
+sum(transactions[label == "risk"].amount) > sum(transactions[amount > 0].amount) * 0.03
+```
+
+#### Empty array behavior
+
+- `count`, `sum`, `subtract` return `0` for an empty array — comparisons work normally.
+- `avg`, `median`, `max`, `min` return a missing value for an empty array — the comparison always evaluates to `false`.
+
+#### Arithmetic operators
+
+Arithmetic can be applied to any value expression: `+`, `-`, `*`, `/`.
+Standard precedence applies (`*`/`/` before `+`/`-`); use parentheses to override.
+
+```
+sum(transactions.amount) * 0.03
+(sum(a.amount) + sum(b.amount)) / count(transactions)
+```
+
+#### Validation rules (what the engine rejects)
+
+- Unknown function name → error.
+- Wrong argument count (not exactly 1) → error.
+- Argument that cannot resolve to a collection → error.
+- Numeric aggregate compared with a text literal → error.
+- `contains`, `startsWith`, etc. used with a value expression → error.
+
+> For the full reference including all edge cases see [docs/expressions.md](docs/expressions.md).
+
 ---
 
 ## 6. Manifest — Complete Reference
