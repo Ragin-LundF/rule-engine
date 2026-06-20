@@ -19,10 +19,14 @@ import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
-import ui.editor.rules.sections.LeftPanelSection
 import ui.editor.rules.sections.RightPanelSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
+import ui.workbench.CatalogAction
+import ui.workbench.CatalogField
+import ui.workbench.CatalogRule
+import ui.workbench.CatalogRuleStatus
+import ui.workbench.LeftCatalogPanel
 import ui.workbench.RuleWorkbenchScreen
 
 // ── Main composable ───────────────────────────────────────────────────────────
@@ -98,6 +102,40 @@ actual fun RuleEditor() {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
 
+    // ── Catalog data derived from parsed schema/actions/rules ─────────────────
+    val catalogFields = remember(key1 = state.parsedSchema.value) {
+        state.parsedSchema.value?.fields?.values?.map { def ->
+            CatalogField(
+                id = def.id.value,
+                type = def.type.name.lowercase(),
+                operators = def.operators.map { it.value },
+                normalizers = def.normalizers.map { it.value },
+                alias = def.alias,
+            )
+        } ?: emptyList()
+    }
+    val catalogActions = remember(key1 = state.parsedActionSchema.value) {
+        state.parsedActionSchema.value?.actions?.values?.map { def ->
+            CatalogAction(
+                name = def.name,
+                argType = def.argTypes.joinToString { it.name.lowercase() },
+            )
+        } ?: emptyList()
+    }
+    val hasErrors = state.diagnosticsList.value.any { it.severity == ruleengine.core.errors.Severity.ERROR }
+    val catalogRules = remember(key1 = diagramRulesForWindow, key2 = hasErrors) {
+        diagramRulesForWindow.map { ast ->
+            CatalogRule(
+                id = ast.id,
+                status = when {
+                    hasErrors -> CatalogRuleStatus.INVALID
+                    state.diagnosticsList.value.isEmpty() && state.ruleValue.value.text.isNotBlank() -> CatalogRuleStatus.VALID
+                    else -> CatalogRuleStatus.DRAFT
+                },
+            )
+        }
+    }
+
     RuleWorkbenchScreen(
         topBar = { TopBarSection(state = state, scope = scope) },
         bottomBar = {
@@ -105,9 +143,15 @@ actual fun RuleEditor() {
             StatusBarSection(state = state)
         },
         leftPanel = {
-            LeftPanelSection(
-                state = state,
-                scope = scope,
+            LeftCatalogPanel(
+                rules = catalogRules,
+                fields = catalogFields,
+                actions = catalogActions,
+                selectedRuleId = state.selectedManifestEntry.value,
+                selectedInspectorItem = null,
+                onRuleClick = {},
+                onFieldClick = {},
+                onActionClick = {},
                 modifier = Modifier.fillMaxSize(),
             )
         },
