@@ -44,7 +44,13 @@ import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
 
-enum class ViewMode { CODE, DIAGRAM, BUILDER }
+enum class ViewMode {
+    BUILDER,
+    CODE,
+    DIAGRAM,
+    TEST,
+    TABLE,
+}
 
 fun dslLineOpensBlock(trimmedLine: String): Boolean {
     return trimmedLine.endsWith(char = '{') || trimmedLine == "when" || trimmedLine == "then"
@@ -92,6 +98,13 @@ fun ViewModeToggle(
             .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 6.dp)),
     ) {
         ViewModeTab(
+            label = "Builder",
+            icon = "⊞",
+            selected = current == ViewMode.BUILDER,
+            onClick = { onChange(ViewMode.BUILDER) },
+        )
+        Box(Modifier.width(1.dp).height(28.dp).background(BorderColor))
+        ViewModeTab(
             label = "Code",
             icon = "{ }",
             selected = current == ViewMode.CODE,
@@ -106,10 +119,17 @@ fun ViewModeToggle(
         )
         Box(Modifier.width(1.dp).height(28.dp).background(BorderColor))
         ViewModeTab(
-            label = "Builder",
-            icon = "⊞",
-            selected = current == ViewMode.BUILDER,
-            onClick = { onChange(ViewMode.BUILDER) },
+            label = "Test",
+            icon = "▷",
+            selected = current == ViewMode.TEST,
+            onClick = { onChange(ViewMode.TEST) },
+        )
+        Box(Modifier.width(1.dp).height(28.dp).background(BorderColor))
+        ViewModeTab(
+            label = "Table",
+            icon = "▦",
+            selected = current == ViewMode.TABLE,
+            onClick = { onChange(ViewMode.TABLE) },
         )
     }
 }
