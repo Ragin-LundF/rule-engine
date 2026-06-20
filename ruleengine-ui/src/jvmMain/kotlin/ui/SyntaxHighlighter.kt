@@ -1,6 +1,5 @@
 package ui
 
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -14,14 +13,8 @@ import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.TokenType
 
-// ── Syntax token colours ──────────────────────────────────────────────────────
-val ColorKeyword = Color(0xFF58A6FF)   // PrimaryBlue – rule / when / then
-val ColorLogic = Color(0xFFD29922)   // AccentOrange – and / or / not
-val ColorField = Color(0xFFE3B341)   // amber – schema field identifiers
-val ColorAction = Color(0xFFA78BFA)   // AccentPurple – action names
-val ColorString = Color(0xFF3FB950)   // AccentGreen – string literals
-val ColorNumber = Color(0xFF79C0FF)   // cyan-blue – numeric literals
-val ColorOp = Color(0xFFFF7B72)   // red-orange – comparison operators
+// Syntax token colours are defined centrally in ui.Theme so the whole workbench
+// shares the same palette; they are imported here from the ui package.
 
 private val DSL_STRUCTURE = setOf("rule", "when", "then", "description")
 private val DSL_LOGIC = setOf("and", "or", "not")

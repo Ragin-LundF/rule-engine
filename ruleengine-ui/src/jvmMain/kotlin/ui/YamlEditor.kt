@@ -27,6 +27,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
+import ui.autocompletion.AutoCompleteDropdown
+import ui.autocompletion.CompletionItem
+import ui.autocompletion.extractCurrentWord
 
 /**
  * A syntax-highlighted YAML editor composable that supports:

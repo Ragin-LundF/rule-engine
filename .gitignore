@@ -18,6 +18,7 @@
 **/target/*
 **/.openapi-generator*
 **/kls*
+.output.txt
 
 # Java
 **/src/generated/*
