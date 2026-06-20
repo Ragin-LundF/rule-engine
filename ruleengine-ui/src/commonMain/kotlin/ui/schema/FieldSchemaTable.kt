@@ -120,18 +120,66 @@ fun FieldSchemaTable(
         // ── add row button ────────────────────────────────────────────────────
         if (editable) {
             Spacer(Modifier.height(8.dp))
-            TextButton(
-                onClick = {
-                    onStateChange(state.copy(fields = state.fields + EditableField()))
+            AddFieldDropdown(
+                onAdd = { template ->
+                    onStateChange(state.copy(fields = state.fields + template))
                 },
-            ) {
-                Text("+ Add field", color = PrimaryBlue)
-            }
+            )
         }
     }
 }
 
 // ── private helpers ───────────────────────────────────────────────────────────
+
+@Suppress("FunctionNaming")
+@Composable
+private fun AddFieldDropdown(
+    onAdd: (EditableField) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text("+ Add field", color = PrimaryBlue)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            val templates = listOf(
+                "Blank field" to EditableField(),
+                "Text field" to EditableField(
+                    path = "field",
+                    type = SchemaFieldType.TEXT,
+                    operators = listOf("equals", "contains"),
+                ),
+                "Integer field" to EditableField(
+                    path = "count",
+                    type = SchemaFieldType.INTEGER,
+                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
+                ),
+                "Decimal field" to EditableField(
+                    path = "amount",
+                    type = SchemaFieldType.DECIMAL,
+                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
+                ),
+                "Boolean field" to EditableField(
+                    path = "flag",
+                    type = SchemaFieldType.BOOLEAN,
+                    operators = listOf("equals"),
+                ),
+            )
+            templates.forEach { (label, template) ->
+                DropdownMenuItem(onClick = {
+                    onAdd(template)
+                    expanded = false
+                }) {
+                    Text(text = label)
+                }
+            }
+        }
+    }
+}
 
 @Suppress("FunctionNaming")
 @Composable

@@ -2,9 +2,12 @@ package ui.workbench
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,8 +15,7 @@ import androidx.compose.ui.unit.dp
 import ui.components.SectionTitle
 
 /**
- * Read-only inspector panel for a selected action.
- * Shows argument type and an example snippet.
+ * Inspector for a selected action schema definition.
  */
 @Composable
 fun ActionInspector(
@@ -32,7 +34,8 @@ fun ActionInspector(
         )
         Divider()
 
-        InspectorRow(label = "Arg type", value = action.argType)
+        InspectorRow(label = "Argument type", value = action.argType)
+        InspectorRow(label = "Usages", value = "0 rules") // TODO compute usages in later phase
 
         Divider()
         SectionTitle(text = "EXAMPLE")
@@ -41,5 +44,17 @@ fun ActionInspector(
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.primary,
         )
+
+        Divider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedButton(
+                onClick = { /* TODO open actions editor for this action */ },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(text = "Edit action", style = MaterialTheme.typography.caption)
+            }
+        }
     }
 }

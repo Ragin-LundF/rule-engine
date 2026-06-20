@@ -1,5 +1,6 @@
 package ui.builder.components
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,7 @@ import ui.builder.OperatorOptions
 fun ConditionRowEditor(
     condition: MutableBuilderCondition,
     fields: List<CatalogFieldInfo>,
+    onSelected: () -> Unit,
     onChanged: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
@@ -35,7 +37,9 @@ fun ConditionRowEditor(
     )
 
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelected),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

@@ -21,12 +21,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
+import ruleengine.manifest.ManifestLoader
+import ruleengine.schema.FieldSchemaLoader
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.components.PlaceholderPanel
+import ui.schema.FieldSchemaYamlBridge
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
@@ -53,7 +56,9 @@ import ui.workbench.RuleMode
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchState
 import ui.workbench.RuleWorkbenchViewModel
-import ui.workbench.SchemaAreaPlaceholder
+import ui.workbench.SchemaAreaScreen
+import ui.workbench.UiDiagnostic
+import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
 import ui.workbench.toRuleMode
 import ui.workbench.toViewMode
@@ -204,6 +209,20 @@ actual fun RuleEditor() {
         } ?: emptyList()
     }
     val hasErrors = state.diagnosticsList.value.any { it.severity == ruleengine.core.errors.Severity.ERROR }
+    val uiDiagnostics = remember(key1 = state.diagnosticsList.value) {
+        state.diagnosticsList.value.map { diagnostic ->
+            UiDiagnostic(
+                severity = when (diagnostic.severity) {
+                    ruleengine.core.errors.Severity.ERROR -> UiDiagnosticSeverity.ERROR
+                    ruleengine.core.errors.Severity.WARNING -> UiDiagnosticSeverity.WARNING
+                    ruleengine.core.errors.Severity.INFO -> UiDiagnosticSeverity.INFO
+                },
+                message = diagnostic.message,
+                line = diagnostic.line,
+                column = diagnostic.column,
+            )
+        }
+    }
     val catalogRules = remember(key1 = diagramRulesForWindow, key2 = hasErrors) {
         diagramRulesForWindow.map { ast ->
             CatalogRule(
@@ -243,10 +262,34 @@ actual fun RuleEditor() {
                     onBuilderDslChange = { newDsl ->
                         state.ruleValue.value = TextFieldValue(text = newDsl)
                     },
+                    onConditionSelected = { conditionId ->
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectCondition(conditionId = conditionId),
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                AppArea.SCHEMA -> SchemaAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.SCHEMA -> SchemaAreaScreen(
+                    schemaYaml = state.schemaText.value,
+                    fromYaml = { yaml ->
+                        FieldSchemaYamlBridge.fromYaml(yaml = yaml)
+                    },
+                    toYaml = { editorState ->
+                        FieldSchemaYamlBridge.toYaml(state = editorState)
+                    },
+                    onSchemaYamlChange = { newYaml ->
+                        state.schemaText.value = newYaml
+                        state.schemaFieldValue.value = TextFieldValue(text = newYaml)
+                        state.parsedSchema.value = runCatching {
+                            FieldSchemaLoader.loadFromString(
+                                content = newYaml,
+                                nameHint = "schema",
+                            )
+                        }.getOrNull()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
                 AppArea.ACTIONS -> ActionsAreaPlaceholder(modifier = Modifier.fillMaxSize())
                 AppArea.MANIFEST -> ManifestAreaPlaceholder(modifier = Modifier.fillMaxSize())
                 AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
@@ -267,6 +310,8 @@ actual fun RuleEditor() {
                         fields = catalogFields,
                         actions = catalogActions,
                         rules = catalogRules,
+                        builderState = builderEditorState,
+                        diagnostics = uiDiagnostics,
                         modifier = Modifier.fillMaxSize(),
                     )
                 },

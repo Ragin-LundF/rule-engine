@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 
 /**
  * Mutable editor state for a single condition row in Builder mode.
@@ -14,14 +16,16 @@ class MutableBuilderCondition(
     field: String,
     operator: String,
     value: String,
+    valueTo: String = "",
+    listItems: List<String> = emptyList(),
 ) {
     var field by mutableStateOf(field)
     var operator by mutableStateOf(operator)
     var value by mutableStateOf(value)
     /** Second value used only when operator is "between". */
-    var valueTo by mutableStateOf("")
+    var valueTo by mutableStateOf(valueTo)
     /** List items used only when operator is "in" / "containsAny" / "containsAll". */
-    val listItems = mutableStateListOf<String>()
+    val listItems: SnapshotStateList<String> = listItems.toMutableStateList()
 
     fun toImmutable(): BuilderCondition = BuilderCondition(
         id = id,
@@ -39,10 +43,10 @@ class MutableBuilderCondition(
 class MutableBuilderAction(
     val id: String,
     name: String,
-    arguments: List<String>,
+    arguments: List<String> = emptyList(),
 ) {
     var name by mutableStateOf(name)
-    val arguments = mutableStateListOf<String>().also { it.addAll(arguments) }
+    val arguments: SnapshotStateList<String> = arguments.toMutableStateList()
 
     fun toImmutable(): BuilderAction = BuilderAction(
         id = id,
@@ -80,11 +84,9 @@ class BuilderEditorState private constructor(
                         field = it.field,
                         operator = it.operator,
                         value = it.value,
-                    ).apply {
-                        valueTo = it.valueTo
-                        listItems.clear()
-                        listItems.addAll(it.listItems)
-                    }
+                        valueTo = it.valueTo,
+                        listItems = it.listItems,
+                    )
                 }.toMutableList(),
                 actions = rule.actions.map {
                     MutableBuilderAction(

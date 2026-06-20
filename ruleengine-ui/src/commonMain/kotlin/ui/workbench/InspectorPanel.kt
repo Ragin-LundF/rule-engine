@@ -12,6 +12,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
 import ui.components.SectionTitle
+import ui.builder.BuilderAction
+import ui.builder.BuilderCondition
+import ui.builder.BuilderEditorState
 
 /**
  * Top-level inspector panel that delegates to the appropriate sub-inspector
@@ -24,6 +27,8 @@ fun InspectorPanel(
     fields: List<CatalogField>,
     actions: List<CatalogAction>,
     rules: List<CatalogRule>,
+    builderState: BuilderEditorState? = null,
+    diagnostics: List<UiDiagnostic> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     when (selectedItem) {
@@ -46,13 +51,28 @@ fun InspectorPanel(
         is InspectorItem.Rule -> {
             val rule = rules.firstOrNull { it.id == selectedItem.id }
             if (rule != null) {
-                RuleInspector(rule = rule, modifier = modifier)
+                RuleInspector(
+                    rule = rule,
+                    conditionCount = builderState?.conditions?.size ?: 0,
+                    actionCount = builderState?.actions?.size ?: 0,
+                    diagnostics = diagnostics,
+                    modifier = modifier,
+                )
             } else {
                 InspectorPlaceholder(modifier = modifier)
             }
         }
-        is InspectorItem.Condition -> InspectorPlaceholder(modifier = modifier)
-        is InspectorItem.Manifest -> InspectorPlaceholder(modifier = modifier)
+        is InspectorItem.Condition -> {
+            val condition = builderState?.conditions?.firstOrNull { it.id == selectedItem.conditionId }
+            if (condition != null) {
+                ConditionInspector(condition = condition.toImmutable(), modifier = modifier)
+            } else {
+                InspectorPlaceholder(modifier = modifier)
+            }
+        }
+        is InspectorItem.Manifest -> {
+            ManifestInspector(modifier = modifier)
+        }
         null -> InspectorPlaceholder(modifier = modifier)
     }
 }
@@ -65,7 +85,7 @@ private fun InspectorPlaceholder(modifier: Modifier = Modifier) {
     ) {
         SectionTitle(text = "INSPECTOR")
         Text(
-            text = "Select a field, action, or rule to see details.",
+            text = "Select a field, action, rule, or condition to see details.",
             style = MaterialTheme.typography.body2,
             color = TextSecondary,
         )

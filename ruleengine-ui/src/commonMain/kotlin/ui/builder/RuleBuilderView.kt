@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.Button
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
@@ -35,20 +33,16 @@ import ui.builder.components.RuleBuilderHeader
 /**
  * Editable visual representation of a single rule in Builder mode.
  *
- * Renders WHEN / AND / THEN blocks derived from [editorState].
+ * Renders WHEN / THEN blocks derived from [editorState].
  * On every change, calls [onDslChange] with freshly generated DSL text so the
  * Code editor stays in sync. Falls back to a friendly message for locked rules.
- *
- * @param editorState  mutable builder state; created via [BuilderEditorState.fromBuilderRule].
- * @param catalogFields field catalog used to populate field dropdowns (id → type/operators).
- * @param catalogActions action catalog used to populate action dropdowns.
- * @param onDslChange  called with new DSL text whenever the user edits a condition or action.
  */
 @Composable
 fun RuleBuilderView(
     editorState: BuilderEditorState,
     catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
+    onConditionSelected: (String) -> Unit = {},
     onDslChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -70,6 +64,7 @@ fun RuleBuilderView(
             WhenSection(
                 editorState = editorState,
                 catalogFields = catalogFields,
+                onConditionSelected = onConditionSelected,
                 onDslChange = onDslChange,
             )
         }
@@ -102,6 +97,7 @@ private fun BuilderCard(content: @Composable () -> Unit) {
 private fun WhenSection(
     editorState: BuilderEditorState,
     catalogFields: List<CatalogFieldInfo>,
+    onConditionSelected: (String) -> Unit,
     onDslChange: (String) -> Unit,
 ) {
     SectionHeader(
@@ -136,6 +132,7 @@ private fun WhenSection(
         ConditionRowEditor(
             condition = condition,
             fields = catalogFields,
+            onSelected = { onConditionSelected(condition.id) },
             onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
             onRemove = {
                 editorState.removeCondition(id = condition.id)

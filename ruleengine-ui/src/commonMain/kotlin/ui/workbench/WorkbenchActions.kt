@@ -46,6 +46,9 @@ sealed interface WorkbenchAction {
     /** Select an action by its name. */
     data class SelectAction(val actionName: String?) : WorkbenchAction
 
+    /** Select a condition row by its identifier in Builder mode. */
+    data class SelectCondition(val conditionId: String) : WorkbenchAction
+
     /** Select an item in the inspector panel (field, action, rule, condition, or manifest). */
     data class SelectInspectorItem(val item: InspectorItem?) : WorkbenchAction
 

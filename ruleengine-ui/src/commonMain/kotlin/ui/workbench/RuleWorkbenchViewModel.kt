@@ -51,6 +51,12 @@ class RuleWorkbenchViewModel(
                     selectedInspectorItem = action.actionName?.let { name -> InspectorItem.Action(name = name) },
                 )
             }
+            is WorkbenchAction.SelectCondition -> updateState {
+                it.copy(
+                    selectedConditionId = action.conditionId,
+                    selectedInspectorItem = InspectorItem.Condition(conditionId = action.conditionId),
+                )
+            }
             is WorkbenchAction.SelectInspectorItem -> updateState { it.copy(selectedInspectorItem = action.item) }
             is WorkbenchAction.RequestValidation -> requestValidation()
             is WorkbenchAction.ApplyValidationResult -> updateState {

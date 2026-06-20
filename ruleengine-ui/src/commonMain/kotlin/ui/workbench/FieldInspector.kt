@@ -2,9 +2,12 @@ package ui.workbench
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -12,8 +15,7 @@ import androidx.compose.ui.unit.dp
 import ui.components.SectionTitle
 
 /**
- * Read-only inspector panel for a selected field.
- * Shows type, alias, normalizers, allowed operators, and an example snippet.
+ * Inspector for a selected field schema definition.
  */
 @Composable
 fun FieldInspector(
@@ -33,25 +35,44 @@ fun FieldInspector(
         Divider()
 
         InspectorRow(label = "Type", value = field.type)
-
-        if (field.alias != null) {
+        InspectorRow(label = "Path", value = field.id)
+        if (!field.alias.isNullOrBlank()) {
             InspectorRow(label = "Alias", value = field.alias)
         }
+        InspectorRow(label = "Operators", value = chipSummary(items = field.operators))
+        InspectorRow(label = "Normalizers", value = chipSummary(items = field.normalizers))
+        InspectorRow(label = "Usages", value = "0 rules") // TODO compute usages in later phase
 
-        if (field.normalizers.isNotEmpty()) {
-            InspectorRow(label = "Normalizers", value = field.normalizers.joinToString(", "))
-        }
+        Divider()
+        SectionTitle(text = "EXAMPLE")
+        val exampleOp = field.operators.firstOrNull() ?: "equals"
+        Text(
+            text = "${field.id} $exampleOp <value>",
+            style = MaterialTheme.typography.body2,
+            color = MaterialTheme.colors.primary,
+        )
 
-        if (field.operators.isNotEmpty()) {
-            InspectorRow(label = "Operators", value = field.operators.joinToString(", "))
-            Divider()
-            SectionTitle(text = "EXAMPLE")
-            val exampleOp = field.operators.firstOrNull() ?: "equals"
-            Text(
-                text = "${field.id} $exampleOp <value>",
-                style = MaterialTheme.typography.body2,
-                color = MaterialTheme.colors.primary,
-            )
+        Divider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            OutlinedButton(
+                onClick = { /* TODO open schema editor for this field */ },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(text = "Edit field", style = MaterialTheme.typography.caption)
+            }
         }
+    }
+}
+
+private fun chipSummary(items: List<String>, maxVisible: Int = 2): String {
+    if (items.isEmpty()) return "none"
+    val visible = items.take(maxVisible)
+    val remaining = items.size - visible.size
+    return if (remaining > 0) {
+        visible.joinToString(", ") + ", +$remaining"
+    } else {
+        visible.joinToString(", ")
     }
 }

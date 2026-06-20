@@ -13,6 +13,7 @@ data class RuleWorkbenchState(
     val selectedRuleId: String? = null,
     val selectedFieldId: String? = null,
     val selectedActionName: String? = null,
+    val selectedConditionId: String? = null,
     val selectedInspectorItem: InspectorItem? = null,
     val rightPanelTab: RightPanelTab = RightPanelTab.INSPECTOR,
     val ruleText: String = "",

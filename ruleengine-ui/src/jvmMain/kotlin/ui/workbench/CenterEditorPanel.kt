@@ -61,6 +61,7 @@ fun CenterEditorPanel(
     catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
+    onConditionSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val viewMode = ruleMode.toViewMode()
@@ -90,6 +91,7 @@ fun CenterEditorPanel(
                     editorState = builderEditorState,
                     catalogFields = catalogFields,
                     catalogActions = catalogActions,
+                    onConditionSelected = onConditionSelected,
                     onDslChange = onBuilderDslChange,
                     modifier = Modifier.fillMaxSize(),
                 )
