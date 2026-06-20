@@ -29,6 +29,8 @@ import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
 import ui.workbench.InspectorItem
 import ui.workbench.InspectorPanel
+import ui.builder.BuilderRule
+import ui.builder.RuleAstToBuilderMapper
 import ui.workbench.CenterEditorPanel
 import ui.workbench.LeftCatalogPanel
 import ui.workbench.RuleWorkbenchScreen
@@ -108,6 +110,17 @@ actual fun RuleEditor() {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
 
+    // ── Builder rule derived from the first parsed rule AST ─────────────────────
+    val builderRule = remember(key1 = diagramRulesForWindow, key2 = state.selectedManifestEntry.value) {
+        val selectedId = state.selectedManifestEntry.value
+        val ast = if (selectedId != null) {
+            diagramRulesForWindow.firstOrNull { it.id == selectedId } ?: diagramRulesForWindow.firstOrNull()
+        } else {
+            diagramRulesForWindow.firstOrNull()
+        }
+        if (ast != null) RuleAstToBuilderMapper.map(ast) else BuilderRule.None
+    }
+
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     val catalogFields = remember(key1 = state.parsedSchema.value) {
         state.parsedSchema.value?.fields?.values?.map { def ->
@@ -165,6 +178,7 @@ actual fun RuleEditor() {
             CenterEditorPanel(
                 state = state,
                 scope = scope,
+                builderRule = builderRule,
                 modifier = Modifier.fillMaxSize(),
             )
         },
