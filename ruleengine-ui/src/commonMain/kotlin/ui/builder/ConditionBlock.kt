@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ui.AccentGreen
+import ui.BgElevated
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
@@ -36,14 +38,19 @@ private enum class ChipStyle { FIELD, OPERATOR, VALUE }
 @Composable
 private fun ConditionChip(text: String, style: ChipStyle) {
     val bg = when (style) {
-        ChipStyle.FIELD -> MaterialTheme.colors.surface
-        ChipStyle.OPERATOR -> MaterialTheme.colors.surface
-        ChipStyle.VALUE -> MaterialTheme.colors.surface
+        ChipStyle.FIELD -> BgElevated
+        ChipStyle.OPERATOR -> AccentGreen
+        ChipStyle.VALUE -> BgElevated
     }
     val textColor = when (style) {
         ChipStyle.FIELD -> PrimaryBlue
-        ChipStyle.OPERATOR -> TextSecondary
+        ChipStyle.OPERATOR -> MaterialTheme.colors.onSecondary
         ChipStyle.VALUE -> TextPrimary
+    }
+    val borderColor = when (style) {
+        ChipStyle.FIELD -> BorderColor
+        ChipStyle.OPERATOR -> AccentGreen
+        ChipStyle.VALUE -> BorderColor
     }
     Text(
         text = text,
@@ -51,7 +58,7 @@ private fun ConditionChip(text: String, style: ChipStyle) {
         color = textColor,
         modifier = Modifier
             .background(color = bg, shape = RoundedCornerShape(4.dp))
-            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(4.dp))
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 4.dp),
     )
 }

@@ -44,6 +44,7 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.builder.components.DropdownSelector
 
 /**
  * Visual schema editor table.
@@ -360,44 +361,16 @@ private fun TypeDropdown(
     onSelect: (SchemaFieldType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Box(modifier = modifier) {
-        OutlinedTextField(
-            value = selected.displayName,
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            singleLine = true,
-            trailingIcon = {
-                if (enabled) {
-                    TextButton(onClick = { expanded = true }) {
-                        Text("▾", color = TextMuted)
-                    }
-                }
-            },
-            colors = TextFieldDefaults.outlinedTextFieldColors(
-                textColor = TextPrimary,
-                backgroundColor = BgSurface,
-                focusedBorderColor = PrimaryBlue,
-                unfocusedBorderColor = BorderColor,
-                cursorColor = Color.Transparent,
-                disabledTextColor = TextSecondary,
-                disabledBorderColor = BorderColor,
-            ),
-        )
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            SchemaFieldType.entries.forEach { type ->
-                DropdownMenuItem(onClick = {
-                    onSelect(type)
-                    expanded = false
-                }) {
-                    Text(text = type.displayName, color = TextPrimary)
-                }
-            }
-        }
-    }
+    val options = SchemaFieldType.entries.map { it.displayName }
+    DropdownSelector(
+        selected = selected.displayName,
+        options = options,
+        onSelected = { displayName ->
+            SchemaFieldType.entries
+                .firstOrNull { it.displayName == displayName }
+                ?.let { onSelect(it) }
+        },
+        modifier = modifier,
+        placeholder = "type",
+    )
 }

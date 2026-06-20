@@ -21,8 +21,6 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.FilterChip
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
@@ -46,6 +44,7 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.components.ToggleChip
 
 /**
  * Visual action-schema editor table.
@@ -56,7 +55,6 @@ import ui.TextSecondary
  * - purpose (text field)
  * - delete button
  */
-@OptIn(ExperimentalMaterialApi::class)
 @Suppress("FunctionNaming", "LongMethod")
 @Composable
 fun ActionSchemaTable(
@@ -154,7 +152,6 @@ fun ActionSchemaTable(
     }
 }
 
-@OptIn(ExperimentalMaterialApi::class)
 @Suppress("FunctionNaming", "LongMethod")
 @Composable
 private fun ActionRow(
@@ -204,7 +201,8 @@ private fun ActionRow(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 KnownActionArgTypes.forEach { type ->
-                    FilterChip(
+                    ToggleChip(
+                        label = type,
                         selected = type in action.argTypes,
                         onClick = {
                             if (editable) {
@@ -216,9 +214,8 @@ private fun ActionRow(
                                 onActionChange(action.copy(argTypes = updated))
                             }
                         },
-                    ) {
-                        Text(text = type)
-                    }
+                        enabled = editable,
+                    )
                 }
             }
             OutlinedTextField(
