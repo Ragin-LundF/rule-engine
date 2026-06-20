@@ -44,7 +44,7 @@ import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
 
-enum class ViewMode { CODE, DIAGRAM }
+enum class ViewMode { CODE, DIAGRAM, BUILDER }
 
 fun dslLineOpensBlock(trimmedLine: String): Boolean {
     return trimmedLine.endsWith(char = '{') || trimmedLine == "when" || trimmedLine == "then"
@@ -103,6 +103,13 @@ fun ViewModeToggle(
             icon = "⬡",
             selected = current == ViewMode.DIAGRAM,
             onClick = { onChange(ViewMode.DIAGRAM) },
+        )
+        Box(Modifier.width(1.dp).height(28.dp).background(BorderColor))
+        ViewModeTab(
+            label = "Builder",
+            icon = "⊞",
+            selected = current == ViewMode.BUILDER,
+            onClick = { onChange(ViewMode.BUILDER) },
         )
     }
 }

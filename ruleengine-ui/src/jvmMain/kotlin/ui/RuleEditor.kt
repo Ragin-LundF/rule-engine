@@ -21,7 +21,6 @@ import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
-import ui.editor.rules.sections.RightPanelSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.workbench.CatalogAction
@@ -30,6 +29,7 @@ import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
 import ui.workbench.InspectorItem
 import ui.workbench.InspectorPanel
+import ui.workbench.CenterEditorPanel
 import ui.workbench.LeftCatalogPanel
 import ui.workbench.RuleWorkbenchScreen
 
@@ -162,7 +162,7 @@ actual fun RuleEditor() {
             )
         },
         centerContent = {
-            RightPanelSection(
+            CenterEditorPanel(
                 state = state,
                 scope = scope,
                 modifier = Modifier.fillMaxSize(),
