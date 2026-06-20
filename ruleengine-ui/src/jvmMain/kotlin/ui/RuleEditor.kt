@@ -4,8 +4,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -14,7 +17,6 @@ import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
-import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
@@ -26,6 +28,8 @@ import ui.workbench.CatalogAction
 import ui.workbench.CatalogField
 import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
+import ui.workbench.InspectorItem
+import ui.workbench.InspectorPanel
 import ui.workbench.LeftCatalogPanel
 import ui.workbench.RuleWorkbenchScreen
 
@@ -98,6 +102,8 @@ actual fun RuleEditor() {
     }
 
     // ── Parsed rules for the expanded diagram window ───────────────────────────
+    var selectedInspectorItem by remember { mutableStateOf<InspectorItem?>(null) }
+
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
@@ -148,10 +154,10 @@ actual fun RuleEditor() {
                 fields = catalogFields,
                 actions = catalogActions,
                 selectedRuleId = state.selectedManifestEntry.value,
-                selectedInspectorItem = null,
-                onRuleClick = {},
-                onFieldClick = {},
-                onActionClick = {},
+                selectedInspectorItem = selectedInspectorItem,
+                onRuleClick = { id -> selectedInspectorItem = InspectorItem.Rule(id) },
+                onFieldClick = { id -> selectedInspectorItem = InspectorItem.Field(id) },
+                onActionClick = { name -> selectedInspectorItem = InspectorItem.Action(name) },
                 modifier = Modifier.fillMaxSize(),
             )
         },
@@ -162,7 +168,15 @@ actual fun RuleEditor() {
                 modifier = Modifier.fillMaxSize(),
             )
         },
-        rightPanel = { PlaceholderPanel(label = "Inspector") },
+        rightPanel = {
+            InspectorPanel(
+                selectedItem = selectedInspectorItem,
+                fields = catalogFields,
+                actions = catalogActions,
+                rules = catalogRules,
+                modifier = Modifier.fillMaxSize(),
+            )
+        },
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
