@@ -16,14 +16,14 @@ class DiagnosticMapperTest {
             line = 3,
             column = 5,
         )
-        assertIs<QuickFix.ReplaceToken>(result.quickFix)
-        val fix = result.quickFix as QuickFix.ReplaceToken
-        assertEquals("purpse", fix.oldToken)
-        assertEquals("purpose", fix.newToken)
-        assertEquals("""Did you mean "purpose"?""", result.hint)
-        assertEquals("error", result.severity)
-        assertEquals(3, result.line)
-        assertEquals(5, result.column)
+        assertIs<QuickFix.ReplaceToken>(value = result.quickFix)
+        val fix = result.quickFix
+        assertEquals(expected = "purpse", actual = fix.oldToken)
+        assertEquals(expected = "purpose", actual = fix.newToken)
+        assertEquals(expected = """Did you mean "purpose"?""", actual = result.hint)
+        assertEquals(expected = "error", actual = result.severity)
+        assertEquals(expected = 3, actual = result.line)
+        assertEquals(expected = 5, actual = result.column)
     }
 
     @Test
@@ -35,8 +35,8 @@ class DiagnosticMapperTest {
             line = 1,
             column = null,
         )
-        assertIs<QuickFix.None>(result.quickFix)
-        assertNull(result.hint)
+        assertIs<QuickFix.None>(value = result.quickFix)
+        assertNull(actual = result.hint)
     }
 
     @Test
@@ -49,9 +49,9 @@ class DiagnosticMapperTest {
             column = null,
         )
         // No quoted token in message → cannot build ReplaceToken
-        assertIs<QuickFix.None>(result.quickFix)
+        assertIs<QuickFix.None>(value = result.quickFix)
         // Hint still shows the suggestion directly
-        assertEquals(">=", result.hint)
+        assertEquals(expected = ">=", actual = result.hint)
     }
 
     @Test
@@ -63,8 +63,8 @@ class DiagnosticMapperTest {
             line = null,
             column = null,
         )
-        assertEquals("warning", result.severity)
-        assertIs<QuickFix.ReplaceToken>(result.quickFix)
+        assertEquals(expected = "warning", actual = result.severity)
+        assertIs<QuickFix.ReplaceToken>(value = result.quickFix)
     }
 
     @Test
@@ -76,7 +76,7 @@ class DiagnosticMapperTest {
             line = null,
             column = null,
         )
-        assertIs<QuickFix.None>(result.quickFix)
-        assertNull(result.hint)
+        assertIs<QuickFix.None>(value = result.quickFix)
+        assertNull(actual = result.hint)
     }
 }

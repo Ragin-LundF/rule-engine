@@ -59,9 +59,9 @@ class JvmRuleSimulationServiceTest {
             ruleId = "rent-payment",
             inputJson = POSITIVE_INPUT,
         )
-        assertIs<SimulationOutcome.Matched>(result.outcome)
-        val matched = result.outcome as SimulationOutcome.Matched
-        assertTrue(matched.actions.any { it.contains("rent") })
+        assertIs<SimulationOutcome.Matched>(value = result.outcome)
+        val matched = result.outcome
+        assertTrue(actual = matched.actions.any { it.contains(other = "rent") })
     }
 
     @Test
@@ -73,7 +73,7 @@ class JvmRuleSimulationServiceTest {
             ruleId = "rent-payment",
             inputJson = NEGATIVE_INPUT,
         )
-        assertIs<SimulationOutcome.NotMatched>(result.outcome)
+        assertIs<SimulationOutcome.NotMatched>(value = result.outcome)
     }
 
     @Test
@@ -85,7 +85,7 @@ class JvmRuleSimulationServiceTest {
             ruleId = "rent-payment",
             inputJson = "not valid json {{{",
         )
-        assertIs<SimulationOutcome.InvalidJson>(result.outcome)
+        assertIs<SimulationOutcome.InvalidJson>(value = result.outcome)
     }
 
     @Test
@@ -104,7 +104,7 @@ class JvmRuleSimulationServiceTest {
             ruleId = "bad",
             inputJson = POSITIVE_INPUT,
         )
-        assertIs<SimulationOutcome.ValidationFailed>(result.outcome)
+        assertIs<SimulationOutcome.ValidationFailed>(value = result.outcome)
     }
 
     @Test
@@ -116,7 +116,7 @@ class JvmRuleSimulationServiceTest {
             ruleId = "rent-payment",
             inputJson = POSITIVE_INPUT,
         )
-        assertTrue(result.traceRows.isNotEmpty(), "Expected trace rows for a matched rule")
+        assertTrue(actual = result.traceRows.isNotEmpty(), message = "Expected trace rows for a matched rule")
     }
 
     @Test
@@ -128,6 +128,6 @@ class JvmRuleSimulationServiceTest {
             ruleId = "rent-payment",
             inputJson = POSITIVE_INPUT,
         )
-        assertIs<SimulationOutcome.ValidationFailed>(result.outcome)
+        assertIs<SimulationOutcome.ValidationFailed>(value = result.outcome)
     }
 }
