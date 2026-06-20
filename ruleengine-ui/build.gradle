@@ -34,7 +34,7 @@ kotlin {
         jvmTest {
             dependencies {
                 implementation(project(":ruleengine-core"))
-                runtimeOnly(project(":ruleengine-core"))
+                implementation(libs.bundles.jackson)
                 implementation(kotlin("test"))
             }
         }
