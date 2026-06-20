@@ -39,10 +39,11 @@ fun RightPanelSection(state: RuleEditorState, scope: CoroutineScope, modifier: M
 
         PanelDivider()
 
-        // ── Code Editor or Diagram view ───────────────────────────
+        // ── Code Editor or Diagram view ───────────────────────────────
         MainEditorContentSection(
             state = state,
             diagramGraphicsLayer = diagramGraphicsLayer,
+            isDiagram = state.viewMode.value == ui.editor.rules.ViewMode.DIAGRAM,
         )
     }
 }

@@ -38,7 +38,9 @@ class RuleAstToBuilderMapperTest {
 
         assertIs<BuilderRule.Supported>(result)
         assertEquals(1, result.conditions.size)
-        assertEquals(BuilderCondition(field = "purpose", operator = "contains", value = "\"rent\""), result.conditions[0])
+        assertEquals("purpose", result.conditions[0].field)
+        assertEquals("contains", result.conditions[0].operator)
+        assertEquals("\"rent\"", result.conditions[0].value)
         assertEquals(ConditionJoin.SINGLE, result.conditionJoin)
     }
 
@@ -48,7 +50,7 @@ class RuleAstToBuilderMapperTest {
             condition = AndAst(
                 children = listOf(
                     cond("purpose", "contains", "rent"),
-                    numCond("amount", "gte", "500"),
+                    numCond("amount", ">=", "500"),
                 )
             )
         )
@@ -57,8 +59,11 @@ class RuleAstToBuilderMapperTest {
         assertIs<BuilderRule.Supported>(result)
         assertEquals(2, result.conditions.size)
         assertEquals(ConditionJoin.AND, result.conditionJoin)
-        assertEquals(BuilderCondition("purpose", "contains", "\"rent\""), result.conditions[0])
-        assertEquals(BuilderCondition("amount", "gte", "500"), result.conditions[1])
+        assertEquals("purpose", result.conditions[0].field)
+        assertEquals("contains", result.conditions[0].operator)
+        assertEquals("amount", result.conditions[1].field)
+        assertEquals(">=", result.conditions[1].operator)
+        assertEquals("500", result.conditions[1].value)
     }
 
     @Test
@@ -71,7 +76,8 @@ class RuleAstToBuilderMapperTest {
 
         assertIs<BuilderRule.Supported>(result)
         assertEquals(1, result.actions.size)
-        assertEquals(BuilderAction(name = "label", arguments = listOf("\"rent\"")), result.actions[0])
+        assertEquals("label", result.actions[0].name)
+        assertEquals(listOf("\"rent\""), result.actions[0].arguments)
     }
 
     @Test
@@ -80,7 +86,7 @@ class RuleAstToBuilderMapperTest {
             condition = OrAst(
                 children = listOf(
                     cond("purpose", "contains", "rent"),
-                    numCond("amount", "gte", "500"),
+                    numCond("amount", ">=", "500"),
                 )
             )
         )
@@ -91,7 +97,7 @@ class RuleAstToBuilderMapperTest {
     }
 
     @Test
-    fun `ListLiteral in condition maps to bracket notation`() {
+    fun `ListLiteral in condition maps to list items`() {
         val ast = rule(
             condition = ConditionAst(
                 field = "category",
@@ -102,7 +108,7 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals("[\"food\", \"rent\"]", result.conditions[0].value)
+        assertEquals(listOf("\"food\"", "\"rent\""), result.conditions[0].listItems)
     }
 
     @Test

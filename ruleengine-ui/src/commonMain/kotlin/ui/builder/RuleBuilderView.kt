@@ -1,29 +1,36 @@
 package ui.builder
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Button
+import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ui.BorderColor
+import ui.BgSurface
+import ui.PrimaryBlue
 import ui.TextSecondary
+import ui.builder.components.ActionRowEditor
+import ui.builder.components.ConditionRowEditor
+import ui.builder.components.RuleBuilderHeader
 
 /**
  * Editable visual representation of a single rule in Builder mode.
@@ -34,12 +41,14 @@ import ui.TextSecondary
  *
  * @param editorState  mutable builder state; created via [BuilderEditorState.fromBuilderRule].
  * @param catalogFields field catalog used to populate field dropdowns (id → type/operators).
+ * @param catalogActions action catalog used to populate action dropdowns.
  * @param onDslChange  called with new DSL text whenever the user edits a condition or action.
  */
 @Composable
 fun RuleBuilderView(
     editorState: BuilderEditorState,
     catalogFields: List<CatalogFieldInfo> = emptyList(),
+    catalogActions: List<CatalogActionInfo> = emptyList(),
     onDslChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
@@ -52,184 +61,190 @@ fun RuleBuilderView(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        val whenLabel = when (editorState.conditionJoin) {
-            ConditionJoin.AND, ConditionJoin.SINGLE -> "WHEN  All conditions are met"
-            ConditionJoin.OR -> "WHEN  Any condition is met"
-        }
-        Text(
-            text = whenLabel,
-            style = MaterialTheme.typography.subtitle2,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colors.onSurface,
-        )
+        RuleBuilderHeader(ruleId = editorState.ruleId)
 
-        editorState.conditions.forEachIndexed { index, condition ->
-            if (index > 0) {
-                Text(
-                    text = "AND",
-                    style = MaterialTheme.typography.caption,
-                    fontWeight = FontWeight.SemiBold,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                )
-            }
-            EditableConditionRow(
-                condition = condition,
+        BuilderCard {
+            WhenSection(
+                editorState = editorState,
                 catalogFields = catalogFields,
-                onChanged = {
-                    val dsl = BuilderToRuleDsl.generate(editorState)
-                    if (dsl != null) onDslChange(dsl)
-                },
+                onDslChange = onDslChange,
             )
         }
 
-        Text(
-            text = "THEN",
-            style = MaterialTheme.typography.subtitle2,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colors.onSurface,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-
-        if (editorState.actions.isEmpty()) {
-            Text(
-                text = "(no actions)",
-                style = MaterialTheme.typography.body2,
-                color = TextSecondary,
+        BuilderCard {
+            ThenSection(
+                editorState = editorState,
+                catalogActions = catalogActions,
+                onDslChange = onDslChange,
             )
-        } else {
-            editorState.actions.forEach { action ->
-                EditableActionRow(
-                    action = action,
-                    onChanged = {
-                        val dsl = BuilderToRuleDsl.generate(editorState)
-                        if (dsl != null) onDslChange(dsl)
-                    },
-                )
-            }
         }
     }
 }
 
-// ── Editable condition row ────────────────────────────────────────────────────
+@Composable
+private fun BuilderCard(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = BgSurface)
+            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp))
+            .padding(16.dp),
+    ) {
+        content()
+    }
+}
 
 @Composable
-private fun EditableConditionRow(
-    condition: MutableBuilderCondition,
+private fun WhenSection(
+    editorState: BuilderEditorState,
     catalogFields: List<CatalogFieldInfo>,
-    onChanged: () -> Unit,
+    onDslChange: (String) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Field dropdown
-        val fieldInfo = catalogFields.firstOrNull { it.id == condition.field }
-        DropdownChip(
-            label = condition.field,
-            options = catalogFields.map { it.id },
-            onSelect = { selected ->
-                condition.field = selected
-                // Reset operator to first valid option for new field type
-                val newFieldInfo = catalogFields.firstOrNull { it.id == selected }
-                val ops = OperatorOptions.forField(
-                    fieldType = newFieldInfo?.type ?: "text",
-                    schemaOperators = newFieldInfo?.operators ?: emptyList(),
-                )
-                if (condition.operator !in ops) condition.operator = ops.firstOrNull() ?: condition.operator
-                onChanged()
-            },
-        )
+    SectionHeader(
+        title = "WHEN",
+        subtitle = when (editorState.conditionJoin) {
+            ConditionJoin.AND, ConditionJoin.SINGLE -> "All conditions are met"
+            ConditionJoin.OR -> "Any condition is met"
+        },
+        actionLabel = "+ Condition",
+        onAction = {
+            val defaultField = catalogFields.firstOrNull()?.id ?: ""
+            val defaultOperator = catalogFields.firstOrNull()?.let { field ->
+                OperatorOptions.forField(
+                    fieldType = field.type,
+                    schemaOperators = field.operators,
+                ).firstOrNull()
+            } ?: "equals"
+            editorState.addCondition(
+                defaultField = defaultField,
+                defaultOperator = defaultOperator,
+            )
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+    )
 
-        // Operator dropdown
-        val operators = OperatorOptions.forField(
-            fieldType = fieldInfo?.type ?: "text",
-            schemaOperators = fieldInfo?.operators ?: emptyList(),
-        )
-        DropdownChip(
-            label = condition.operator,
-            options = operators,
-            onSelect = { selected ->
-                condition.operator = selected
-                onChanged()
-            },
-        )
+    Spacer(modifier = Modifier.height(height = 8.dp))
 
-        // Value editor
-        ConditionValueEditor(
+    editorState.conditions.forEachIndexed { index, condition ->
+        if (index > 0) {
+            JoinLabel(text = "AND")
+        }
+        ConditionRowEditor(
             condition = condition,
-            modifier = Modifier,
+            fields = catalogFields,
+            onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
+            onRemove = {
+                editorState.removeCondition(id = condition.id)
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+    }
+
+    if (editorState.conditions.isEmpty()) {
+        Text(
+            text = "(no conditions)",
+            style = MaterialTheme.typography.body2,
+            color = TextSecondary,
         )
     }
 }
 
-// ── Editable action row ───────────────────────────────────────────────────────
-
 @Composable
-private fun EditableActionRow(
-    action: MutableBuilderAction,
-    onChanged: () -> Unit,
+private fun ThenSection(
+    editorState: BuilderEditorState,
+    catalogActions: List<CatalogActionInfo>,
+    onDslChange: (String) -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    SectionHeader(
+        title = "THEN",
+        subtitle = null,
+        actionLabel = "+ Action",
+        onAction = {
+            val defaultName = catalogActions.firstOrNull()?.name ?: ""
+            editorState.addAction(defaultName = defaultName)
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+    )
+
+    Spacer(modifier = Modifier.height(height = 8.dp))
+
+    if (editorState.actions.isEmpty()) {
         Text(
-            text = action.name,
+            text = "(no actions)",
             style = MaterialTheme.typography.body2,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colors.onSurface,
+            color = TextSecondary,
         )
-        action.arguments.forEachIndexed { idx, arg ->
-            OutlinedTextField(
-                value = arg,
-                onValueChange = { newVal ->
-                    action.arguments[idx] = newVal
-                    onChanged()
+    } else {
+        editorState.actions.forEach { action ->
+            ActionRowEditor(
+                action = action,
+                actions = catalogActions,
+                onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
+                onRemove = {
+                    editorState.removeAction(id = action.id)
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
                 },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
-// ── Shared dropdown chip ──────────────────────────────────────────────────────
-
 @Composable
-private fun DropdownChip(
-    label: String,
-    options: List<String>,
-    onSelect: (String) -> Unit,
+private fun SectionHeader(
+    title: String,
+    subtitle: String?,
+    actionLabel: String,
+    onAction: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    OutlinedButton(onClick = { expanded = true }) {
-        Text(text = label, style = MaterialTheme.typography.body2)
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(onClick = {
-                    expanded = false
-                    onSelect(option)
-                }) {
-                    Text(option)
-                }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.subtitle1,
+                fontWeight = FontWeight.Bold,
+                color = PrimaryBlue,
+            )
+            subtitle?.let {
+                Text(
+                    text = "  $it",
+                    style = MaterialTheme.typography.caption,
+                    color = TextSecondary,
+                )
             }
+        }
+        OutlinedButton(onClick = onAction) {
+            Text(text = actionLabel, style = MaterialTheme.typography.caption)
         }
     }
 }
 
-// ── Locked state message ──────────────────────────────────────────────────────
+@Composable
+private fun JoinLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption,
+        fontWeight = FontWeight.SemiBold,
+        color = TextSecondary,
+        modifier = Modifier.padding(vertical = 2.dp),
+    )
+}
 
 @Composable
 private fun LockedBuilderMessage(reason: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier = modifier.padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text(
-            text = if (reason == "No rule selected.") "Select a rule from the left panel to preview it here."
+            text = if (reason == "No rule selected.") "Select a rule from the manifest to edit it here."
             else "⚠  Advanced syntax detected",
             style = MaterialTheme.typography.subtitle1,
             fontWeight = FontWeight.SemiBold,
@@ -246,9 +261,12 @@ private fun LockedBuilderMessage(reason: String, modifier: Modifier = Modifier) 
     }
 }
 
-/** Lightweight field info passed from the platform layer to avoid JVM-only types in commonMain. */
-data class CatalogFieldInfo(
-    val id: String,
-    val type: String,
-    val operators: List<String> = emptyList(),
-)
+private fun emitDslChange(
+    editorState: BuilderEditorState,
+    onDslChange: (String) -> Unit,
+) {
+    val dsl = BuilderToRuleDsl.generate(state = editorState)
+    if (dsl != null) {
+        onDslChange(dsl)
+    }
+}

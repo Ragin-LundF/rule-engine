@@ -1,19 +1,24 @@
 package ui.builder
 
 /**
- * Platform-agnostic view models for the read-only visual Builder view (Step 9).
- * These are derived from the parsed AST and never mutate rule text directly.
+ * A single condition row rendered in the WHEN block.
  */
-
-/** A single condition row rendered in the WHEN block. */
 data class BuilderCondition(
+    val id: String,
     val field: String,
     val operator: String,
     val value: String,
+    /** Second bound for the `between` operator. */
+    val valueTo: String = "",
+    /** Items for list operators (`in`, `containsAny`, `containsAll`). */
+    val listItems: List<String> = emptyList(),
 )
 
-/** A single action row rendered in the THEN block. */
+/**
+ * A single action row rendered in the THEN block.
+ */
 data class BuilderAction(
+    val id: String,
     val name: String,
     val arguments: List<String>,
 )

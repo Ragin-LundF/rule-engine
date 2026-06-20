@@ -1,56 +1,87 @@
 package ui
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
+import ui.builder.BuilderEditorState
+import ui.builder.BuilderRule
+import ui.builder.CatalogActionInfo
+import ui.builder.CatalogFieldInfo
+import ui.builder.RuleAstToBuilderMapper
+import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
-import androidx.compose.ui.text.input.TextFieldValue
-import ui.builder.BuilderEditorState
-import ui.builder.BuilderRule
-import ui.builder.CatalogFieldInfo
-import ui.builder.RuleAstToBuilderMapper
+import ui.tester.JvmRuleSimulationService
+import ui.tester.RuleTestPanel
+import ui.tester.TestInputState
+import ui.workbench.ActionsAreaPlaceholder
+import ui.workbench.AppArea
+import ui.workbench.AppAreaIconRail
 import ui.workbench.CatalogAction
 import ui.workbench.CatalogField
 import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
 import ui.workbench.CenterEditorPanel
-import ui.workbench.InspectorItem
 import ui.workbench.InspectorPanel
-import ui.workbench.LeftCatalogPanel
+import ui.workbench.JvmWorkbenchValidator
+import ui.workbench.ManifestAreaPlaceholder
+import ui.workbench.RightPanelTab
 import ui.workbench.RightPanelWithTabs
+import ui.workbench.RuleMode
 import ui.workbench.RuleWorkbenchScreen
-import ui.tester.JvmRuleSimulationService
-import ui.tester.RuleTestPanel
-import ui.tester.SimulationOutcome
-import ui.tester.TestInputState
-import kotlinx.coroutines.launch
+import ui.workbench.RuleWorkbenchState
+import ui.workbench.RuleWorkbenchViewModel
+import ui.workbench.SchemaAreaPlaceholder
+import ui.workbench.WorkbenchAction
+import ui.workbench.toRuleMode
+import ui.workbench.toViewMode
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
 @Composable
 actual fun RuleEditor() {
     val scope = rememberCoroutineScope()
-    // Centralized state container for the editor
+
+    // Root workbench state (navigation, selection, panel tabs).
+    val validator = remember { JvmWorkbenchValidator() }
+    val workbenchViewModel = remember {
+        RuleWorkbenchViewModel(
+            validator = validator,
+            scope = scope,
+            initialState = RuleWorkbenchState.Empty,
+        )
+    }
+    val workbenchState by workbenchViewModel.state.collectAsState()
+
+    // Centralized state container for the editor content (text, parsed schema, diagnostics).
     val state = remember { RuleEditorState(scope = scope) }
+
+    // Keep the legacy editor view mode in sync with the workbench rule mode.
+    LaunchedEffect(key1 = workbenchState.ruleMode) {
+        state.viewMode.value = workbenchState.ruleMode.toViewMode()
+    }
 
     // ── Auto-load first manifest entry when manifest is newly set ─────────────
     LaunchedEffect(key1 = state.parsedManifest.value) {
@@ -77,7 +108,7 @@ actual fun RuleEditor() {
         val ctx = analyzeDslContext(
             text = state.ruleValue.value.text,
             cursorPos = cursor,
-            schema = state.parsedSchema.value
+            schema = state.parsedSchema.value,
         )
         state.dslContext.value = ctx
 
@@ -101,7 +132,7 @@ actual fun RuleEditor() {
             val result = Validator.validate(
                 asts = asts,
                 schema = state.parsedSchema.value!!,
-                actions = state.parsedActionSchema.value
+                actions = state.parsedActionSchema.value,
             )
             state.diagnosticsList.value = result.diagnostics
             state.diagnosticsText.value = if (result.isValid) "No issues found" else ""
@@ -112,14 +143,11 @@ actual fun RuleEditor() {
         }
     }
 
-    // ── Parsed rules for the expanded diagram window ───────────────────────────
-    var selectedInspectorItem by remember { mutableStateOf<InspectorItem?>(null) }
-
     // ── Test panel state ──────────────────────────────────────────────────────
     var testInputState by remember { mutableStateOf(TestInputState.Empty) }
     val simulationService = remember { JvmRuleSimulationService() }
-    var rightPanelTab by remember { mutableStateOf(0) } // 0 = Inspector, 1 = Simulate
 
+    // ── Parsed rules for the expanded diagram window ───────────────────────────
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
@@ -167,6 +195,14 @@ actual fun RuleEditor() {
             )
         } ?: emptyList()
     }
+    val builderCatalogActions = remember(key1 = state.parsedActionSchema.value) {
+        state.parsedActionSchema.value?.actions?.values?.map { def ->
+            CatalogActionInfo(
+                name = def.name,
+                argType = def.argTypes.firstOrNull()?.name?.lowercase() ?: "string",
+            )
+        } ?: emptyList()
+    }
     val hasErrors = state.diagnosticsList.value.any { it.severity == ruleengine.core.errors.Severity.ERROR }
     val catalogRules = remember(key1 = diagramRulesForWindow, key2 = hasErrors) {
         diagramRulesForWindow.map { ast ->
@@ -183,42 +219,51 @@ actual fun RuleEditor() {
 
     RuleWorkbenchScreen(
         topBar = { TopBarSection(state = state, scope = scope) },
-        bottomBar = {
-            DiagnosticsSection(state = state)
-            StatusBarSection(state = state)
-        },
-        leftPanel = {
-            LeftCatalogPanel(
-                rules = catalogRules,
-                fields = catalogFields,
-                actions = catalogActions,
-                selectedRuleId = state.selectedManifestEntry.value,
-                selectedInspectorItem = selectedInspectorItem,
-                onRuleClick = { id -> selectedInspectorItem = InspectorItem.Rule(id) },
-                onFieldClick = { id -> selectedInspectorItem = InspectorItem.Field(id) },
-                onActionClick = { name -> selectedInspectorItem = InspectorItem.Action(name) },
-                modifier = Modifier.fillMaxSize(),
+        iconRail = {
+            AppAreaIconRail(
+                selectedArea = workbenchState.appArea,
+                onAreaSelected = { area ->
+                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectAppArea(area = area))
+                },
+                modifier = Modifier.fillMaxHeight(),
             )
         },
         centerContent = {
-            CenterEditorPanel(
-                state = state,
-                scope = scope,
-                builderEditorState = builderEditorState,
-                catalogFields = builderCatalogFields,
-                onBuilderDslChange = { newDsl ->
-                    state.ruleValue.value = TextFieldValue(text = newDsl)
-                },
-                modifier = Modifier.fillMaxSize(),
-            )
+            when (workbenchState.appArea) {
+                AppArea.RULES -> CenterEditorPanel(
+                    state = state,
+                    scope = scope,
+                    ruleMode = workbenchState.ruleMode,
+                    onRuleModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectRuleMode(mode = mode))
+                    },
+                    builderEditorState = builderEditorState,
+                    catalogFields = builderCatalogFields,
+                    catalogActions = builderCatalogActions,
+                    onBuilderDslChange = { newDsl ->
+                        state.ruleValue.value = TextFieldValue(text = newDsl)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.SCHEMA -> SchemaAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.ACTIONS -> ActionsAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.MANIFEST -> ManifestAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
+                    label = workbenchState.appArea.name,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         },
         rightPanel = {
             RightPanelWithTabs(
-                tab = rightPanelTab,
-                onTabChange = { rightPanelTab = it },
+                tab = workbenchState.rightPanelTab,
+                onTabChange = { tab ->
+                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
+                },
                 inspectorContent = {
                     InspectorPanel(
-                        selectedItem = selectedInspectorItem,
+                        selectedItem = workbenchState.selectedInspectorItem,
                         fields = catalogFields,
                         actions = catalogActions,
                         rules = catalogRules,
@@ -251,6 +296,10 @@ actual fun RuleEditor() {
                 },
             )
         },
+        bottomBar = {
+            DiagnosticsSection(state = state)
+            StatusBarSection(state = state)
+        },
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
@@ -273,4 +322,3 @@ actual fun RuleEditor() {
         }
     }
 }
-

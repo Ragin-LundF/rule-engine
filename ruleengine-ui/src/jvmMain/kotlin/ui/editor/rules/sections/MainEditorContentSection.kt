@@ -62,7 +62,11 @@ import ui.editor.rules.dslLineOpensBlock
 /** Main editor content: the code editor with line numbers and autocomplete, or the diagram view. */
 @Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod")
 @Composable
-fun ColumnScope.MainEditorContentSection(state: RuleEditorState, diagramGraphicsLayer: GraphicsLayer) {
+fun ColumnScope.MainEditorContentSection(
+    state: RuleEditorState,
+    diagramGraphicsLayer: GraphicsLayer,
+    isDiagram: Boolean,
+) {
     var ruleValue by state.ruleValue
     var parsedSchema by state.parsedSchema
     var parsedActionSchema by state.parsedActionSchema
@@ -72,7 +76,6 @@ fun ColumnScope.MainEditorContentSection(state: RuleEditorState, diagramGraphics
     var autoCompleteWord by state.autoCompleteWord
     var dslContext by state.dslContext
     var cursorRect by state.cursorRect
-    val viewMode by state.viewMode
 
     // ── Local editor state ─────────────────────────────────────────────────────
     val editorScrollState = rememberScrollState()
@@ -123,8 +126,8 @@ fun ColumnScope.MainEditorContentSection(state: RuleEditorState, diagramGraphics
         }
     }
 
-    // ── Code Editor or Diagram view ───────────────────────────
-    if (viewMode == ViewMode.DIAGRAM) {
+    // ── Code Editor or Diagram view ───────────────────────────────
+    if (isDiagram) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()

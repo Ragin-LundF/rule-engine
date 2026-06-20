@@ -11,17 +11,17 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.BgSurface
 import ui.TextMuted
 
-private val TABS = listOf("Inspector", "Simulate")
+private val TABS = RightPanelTab.entries.map { it.displayName() }
 
 /**
  * Right panel with two tabs: Inspector and Simulate.
  *
- * @param tab               Currently selected tab index (0 = Inspector, 1 = Simulate).
+ * @param tab               Currently selected tab.
  * @param onTabChange       Called when the user selects a different tab.
  * @param inspectorContent  Content shown in the Inspector tab.
  * @param simulateContent   Content shown in the Simulate tab.
@@ -29,15 +29,17 @@ private val TABS = listOf("Inspector", "Simulate")
 @Suppress("FunctionNaming")
 @Composable
 fun RightPanelWithTabs(
-    tab: Int,
-    onTabChange: (Int) -> Unit,
+    tab: RightPanelTab,
+    onTabChange: (RightPanelTab) -> Unit,
     inspectorContent: @Composable () -> Unit,
     simulateContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val selectedIndex = tab.ordinal
+
     Column(modifier = modifier.fillMaxSize()) {
         ScrollableTabRow(
-            selectedTabIndex = tab,
+            selectedTabIndex = selectedIndex,
             modifier = Modifier.fillMaxWidth(),
             backgroundColor = BgSurface,
             contentColor = PrimaryBlue,
@@ -45,20 +47,20 @@ fun RightPanelWithTabs(
             divider = { TabRowDefaults.Divider(color = BorderColor, thickness = 1.dp) },
             indicator = { tabPositions ->
                 TabRowDefaults.Indicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[tab]),
+                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedIndex]),
                     color = PrimaryBlue,
                     height = 2.dp,
                 )
             },
         ) {
-            TABS.forEachIndexed { index, title ->
+            RightPanelTab.entries.forEachIndexed { index, tabEntry ->
                 Tab(
-                    selected = tab == index,
-                    onClick = { onTabChange(index) },
+                    selected = selectedIndex == index,
+                    onClick = { onTabChange(tabEntry) },
                     text = {
                         Text(
-                            text = title,
-                            color = if (tab == index) PrimaryBlue else TextMuted,
+                            text = tabEntry.displayName(),
+                            color = if (selectedIndex == index) PrimaryBlue else TextMuted,
                         )
                     },
                 )
@@ -66,8 +68,13 @@ fun RightPanelWithTabs(
         }
 
         when (tab) {
-            0 -> inspectorContent()
-            1 -> simulateContent()
+            RightPanelTab.INSPECTOR -> inspectorContent()
+            RightPanelTab.SIMULATE -> simulateContent()
         }
     }
+}
+
+private fun RightPanelTab.displayName(): String = when (this) {
+    RightPanelTab.INSPECTOR -> "Inspector"
+    RightPanelTab.SIMULATE -> "Simulate"
 }

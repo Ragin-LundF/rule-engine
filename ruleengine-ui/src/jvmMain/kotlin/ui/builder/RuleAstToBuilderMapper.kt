@@ -12,12 +12,14 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 
 /**
- * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the read-only visual Builder view.
+ * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
  *
  * Supported constructs:
  * - Single [ConditionAst] (field / operator / literal value)
  * - Flat [AndAst] whose children are all [ConditionAst]
  * - [ActionAst] with [StringLiteral] or [NumberLiteral] arguments
+ * - [BetweenLiteral] values
+ * - [ListLiteral] values
  *
  * Everything else produces [BuilderRule.Unsupported].
  */
@@ -49,8 +51,7 @@ object RuleAstToBuilderMapper {
 
     private fun extractConditions(expr: ExpressionAst): List<BuilderCondition>? = when (expr) {
         is ConditionAst -> {
-            val value = literalToString(expr.value) ?: return null
-            listOf(BuilderCondition(field = expr.field, operator = expr.operator, value = value))
+            mapConditionAst(expr)?.let { listOf(it) }
         }
         is AndAst -> {
             val rows = mutableListOf<BuilderCondition>()
@@ -63,16 +64,52 @@ object RuleAstToBuilderMapper {
         else -> null // OrAst, NotAst, ComparisonExpressionAst, etc. → unsupported
     }
 
-    private fun literalToString(lit: LiteralAst): String? = when (lit) {
-        is StringLiteral -> "\"${lit.value}\""
-        is NumberLiteral -> lit.value
-        is ListLiteral -> lit.items.joinToString(prefix = "[", postfix = "]") { literalToString(it) ?: "?" }
-        is BetweenLiteral -> "${lit.low} .. ${lit.high}"
+    private fun mapConditionAst(condition: ConditionAst): BuilderCondition? {
+        val literalValue = literalToValue(condition.value) ?: return null
+        return BuilderCondition(
+            id = generateId(),
+            field = condition.field,
+            operator = normalizeOperator(condition.operator),
+            value = literalValue.value,
+            valueTo = literalValue.valueTo,
+            listItems = literalValue.listItems,
+        )
+    }
+
+    private fun literalToValue(lit: LiteralAst): LiteralValue? = when (lit) {
+        is StringLiteral -> LiteralValue(value = "\"${lit.value}\"")
+        is NumberLiteral -> LiteralValue(value = lit.value)
+        is ListLiteral -> {
+            val items = lit.items.map { item ->
+                when (item) {
+                    is StringLiteral -> "\"${item.value}\""
+                    is NumberLiteral -> item.value
+                    else -> return null
+                }
+            }
+            LiteralValue(value = "", listItems = items)
+        }
+        is BetweenLiteral -> LiteralValue(value = lit.low, valueTo = lit.high)
         else -> null
     }
 
     private fun mapAction(action: ActionAst): BuilderAction {
-        val args = action.arguments.map { literalToString(it) ?: "?" }
-        return BuilderAction(name = action.name, arguments = args)
+        val args = action.arguments.map { literalToValue(it)?.value ?: "?" }
+        return BuilderAction(
+            id = generateId(),
+            name = action.name,
+            arguments = args,
+        )
     }
+
+    private fun normalizeOperator(operator: String): String = operator
+
+    private fun generateId(): String = java.util.UUID.randomUUID().toString()
 }
+
+/** Internal holder for a decomposed literal value. */
+private data class LiteralValue(
+    val value: String = "",
+    val valueTo: String = "",
+    val listItems: List<String> = emptyList(),
+)

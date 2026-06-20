@@ -33,6 +33,7 @@ import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderEditorState
+import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleBuilderView
 import ui.copyToClipboard
@@ -40,25 +41,29 @@ import ui.editor.rules.AppButton
 import ui.editor.rules.PanelDivider
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
-import ui.editor.rules.ViewMode
 import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.sections.MainEditorContentSection
 import ui.saveDiagramAsPng
 import ui.saveRuleToFile
 import ui.pickRuleFile
 
-/** Center panel that dispatches to the correct mode view based on [RuleEditorState.viewMode]. */
+/**
+ * Center panel that dispatches to the correct mode view based on [ruleMode].
+ */
 @Suppress("FunctionNaming")
 @Composable
 fun CenterEditorPanel(
     state: RuleEditorState,
     scope: CoroutineScope,
+    ruleMode: RuleMode,
+    onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(ui.builder.BuilderRule.None),
     catalogFields: List<CatalogFieldInfo> = emptyList(),
+    catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val viewMode = state.viewMode.value
+    val viewMode = ruleMode.toViewMode()
     val diagramGraphicsLayer = rememberGraphicsLayer()
 
     Column(
@@ -73,6 +78,7 @@ fun CenterEditorPanel(
             state = state,
             scope = scope,
             viewMode = viewMode,
+            onRuleModeChange = onRuleModeChange,
             diagramGraphicsLayer = diagramGraphicsLayer,
         )
 
@@ -80,22 +86,24 @@ fun CenterEditorPanel(
 
         Box(modifier = Modifier.weight(weight = 1f)) {
             when (viewMode) {
-                ViewMode.BUILDER -> RuleBuilderView(
+                ui.editor.rules.ViewMode.BUILDER -> RuleBuilderView(
                     editorState = builderEditorState,
                     catalogFields = catalogFields,
+                    catalogActions = catalogActions,
                     onDslChange = onBuilderDslChange,
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                ViewMode.CODE, ViewMode.DIAGRAM -> Column(modifier = Modifier.fillMaxSize()) {
+                ui.editor.rules.ViewMode.CODE, ui.editor.rules.ViewMode.DIAGRAM -> Column(modifier = Modifier.fillMaxSize()) {
                     MainEditorContentSection(
                         state = state,
                         diagramGraphicsLayer = diagramGraphicsLayer,
+                        isDiagram = viewMode == ui.editor.rules.ViewMode.DIAGRAM,
                     )
                 }
 
-                ViewMode.TEST -> TestModePlaceholder(modifier = Modifier.fillMaxSize())
-                ViewMode.TABLE -> TableModePlaceholder(modifier = Modifier.fillMaxSize())
+                ui.editor.rules.ViewMode.TEST -> TestModePlaceholder(modifier = Modifier.fillMaxSize())
+                ui.editor.rules.ViewMode.TABLE -> TableModePlaceholder(modifier = Modifier.fillMaxSize())
             }
         }
     }
@@ -107,7 +115,8 @@ fun CenterEditorPanel(
 private fun CenterPanelHeader(
     state: RuleEditorState,
     scope: CoroutineScope,
-    viewMode: ViewMode,
+    viewMode: ui.editor.rules.ViewMode,
+    onRuleModeChange: (RuleMode) -> Unit,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -115,7 +124,7 @@ private fun CenterPanelHeader(
         Spacer(Modifier.width(width = 14.dp))
         ViewModeToggle(
             current = viewMode,
-            onChange = { state.viewMode.value = it },
+            onChange = { onRuleModeChange(it.toRuleMode()) },
         )
         Spacer(modifier = Modifier.weight(1f))
         CenterPanelActions(
@@ -131,26 +140,26 @@ private fun CenterPanelHeader(
 private fun CenterPanelActions(
     state: RuleEditorState,
     scope: CoroutineScope,
-    viewMode: ViewMode,
+    viewMode: ui.editor.rules.ViewMode,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
     var ruleValue by state.ruleValue
 
     when (viewMode) {
-        ViewMode.CODE -> CodeModeActions(
+        ui.editor.rules.ViewMode.CODE -> CodeModeActions(
             state = state,
             scope = scope,
             ruleValue = ruleValue,
             onRuleValueChange = { ruleValue = it },
         )
 
-        ViewMode.DIAGRAM -> DiagramModeActions(
+        ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
             state = state,
             scope = scope,
             diagramGraphicsLayer = diagramGraphicsLayer,
         )
 
-        ViewMode.BUILDER, ViewMode.TEST, ViewMode.TABLE -> {
+        ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {
             // No global actions for these modes yet.
         }
     }
@@ -167,7 +176,7 @@ private fun CodeModeActions(
     var diagnosticsText by state.diagnosticsText
 
     Row(
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppButton(label = "Load Rule") {
@@ -247,7 +256,7 @@ private fun DiagramModeActions(
     var showExpandedDiagram by state.showExpandedDiagram
 
     Row(
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         AppButton(label = "Export PNG") {

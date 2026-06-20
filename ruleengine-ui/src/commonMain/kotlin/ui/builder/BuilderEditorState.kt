@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
  * Changes here are reflected back to DSL text via [BuilderToRuleDsl].
  */
 class MutableBuilderCondition(
+    val id: String,
     field: String,
     operator: String,
     value: String,
@@ -23,9 +24,12 @@ class MutableBuilderCondition(
     val listItems = mutableStateListOf<String>()
 
     fun toImmutable(): BuilderCondition = BuilderCondition(
+        id = id,
         field = field,
         operator = operator,
         value = value,
+        valueTo = valueTo,
+        listItems = listItems.toList(),
     )
 }
 
@@ -33,13 +37,18 @@ class MutableBuilderCondition(
  * Mutable editor state for a single action row in Builder mode.
  */
 class MutableBuilderAction(
+    val id: String,
     name: String,
     arguments: List<String>,
 ) {
     var name by mutableStateOf(name)
     val arguments = mutableStateListOf<String>().also { it.addAll(arguments) }
 
-    fun toImmutable(): BuilderAction = BuilderAction(name = name, arguments = arguments.toList())
+    fun toImmutable(): BuilderAction = BuilderAction(
+        id = id,
+        name = name,
+        arguments = arguments.toList(),
+    )
 }
 
 /**
@@ -58,19 +67,31 @@ class BuilderEditorState private constructor(
     val isLocked: Boolean,
     val lockReason: String,
 ) {
+    private var nextConditionId = conditions.size + 1
+    private var nextActionId = actions.size + 1
+
     companion object {
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
             is BuilderRule.Supported -> BuilderEditorState(
                 ruleId = rule.id,
                 conditions = rule.conditions.map {
                     MutableBuilderCondition(
+                        id = it.id,
                         field = it.field,
                         operator = it.operator,
                         value = it.value,
-                    )
+                    ).apply {
+                        valueTo = it.valueTo
+                        listItems.clear()
+                        listItems.addAll(it.listItems)
+                    }
                 }.toMutableList(),
                 actions = rule.actions.map {
-                    MutableBuilderAction(name = it.name, arguments = it.arguments)
+                    MutableBuilderAction(
+                        id = it.id,
+                        name = it.name,
+                        arguments = it.arguments,
+                    )
                 }.toMutableList(),
                 conditionJoin = rule.conditionJoin,
                 isLocked = false,
@@ -92,6 +113,52 @@ class BuilderEditorState private constructor(
                 isLocked = true,
                 lockReason = "No rule selected.",
             )
+        }
+    }
+
+    /** Adds a new empty condition after the existing ones. */
+    fun addCondition(defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition {
+        val condition = MutableBuilderCondition(
+            id = "cond-${nextConditionId++}",
+            field = defaultField,
+            operator = defaultOperator,
+            value = "",
+        )
+        conditions.add(condition)
+        return condition
+    }
+
+    /** Removes the condition with the given [id]. */
+    fun removeCondition(id: String) {
+        conditions.removeAll { it.id == id }
+    }
+
+    /** Adds a new empty action. */
+    fun addAction(defaultName: String = ""): MutableBuilderAction {
+        val action = MutableBuilderAction(
+            id = "act-${nextActionId++}",
+            name = defaultName,
+            arguments = emptyList(),
+        )
+        actions.add(action)
+        return action
+    }
+
+    /** Removes the action with the given [id]. */
+    fun removeAction(id: String) {
+        actions.removeAll { it.id == id }
+    }
+
+    /**
+     * Ensures an action has exactly [count] arguments, padding with empty strings
+     * or trimming extras.
+     */
+    fun resizeActionArguments(action: MutableBuilderAction, count: Int) {
+        while (action.arguments.size < count) {
+            action.arguments.add("")
+        }
+        while (action.arguments.size > count) {
+            action.arguments.removeAt(index = action.arguments.lastIndex)
         }
     }
 }

@@ -52,8 +52,8 @@ object BuilderToRuleDsl {
         val op = cond.operator
         return when {
             OperatorOptions.isBetween(op) -> {
-                val low = cond.value.trim()
-                val high = cond.valueTo.trim()
+                val low = quoteIfNeeded(cond.value.trim())
+                val high = quoteIfNeeded(cond.valueTo.trim())
                 "${cond.field} between $low $high"
             }
             OperatorOptions.isList(op) -> {

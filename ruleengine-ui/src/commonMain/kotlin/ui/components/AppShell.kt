@@ -77,7 +77,7 @@ fun IconRail(
 
 /**
  * Full workbench shell layout:
- * TopToolbar / (IconRail | leftPanel | centerContent | rightPanel) / BottomStatusBar
+ * TopToolbar / (IconRail | centerContent | rightPanel) / BottomStatusBar
  *
  * All panel slots are optional — pass empty composables for unused slots.
  */
@@ -86,7 +86,6 @@ fun WorkbenchShell(
     topBar: @Composable () -> Unit,
     bottomBar: @Composable () -> Unit,
     iconRail: @Composable () -> Unit,
-    leftPanel: @Composable () -> Unit,
     centerContent: @Composable () -> Unit,
     rightPanel: @Composable () -> Unit,
     modifier: Modifier = Modifier,
@@ -103,9 +102,8 @@ fun WorkbenchShell(
                 .fillMaxWidth(),
         ) {
             iconRail()
-            Box(modifier = Modifier.weight(weight = 0.22f).fillMaxHeight()) { leftPanel() }
             Box(modifier = Modifier.weight(weight = 1f).fillMaxHeight()) { centerContent() }
-            Box(modifier = Modifier.weight(weight = 0.25f).fillMaxHeight()) { rightPanel() }
+            Box(modifier = Modifier.weight(weight = 0.28f).fillMaxHeight()) { rightPanel() }
         }
         bottomBar()
     }

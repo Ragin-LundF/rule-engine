@@ -154,9 +154,22 @@ class BuilderRoundTripTest {
         val state = BuilderEditorState.fromBuilderRule(
             BuilderRule.Supported(
                 id = "mid-range",
-                conditions = listOf(BuilderCondition(field = "amount", operator = "between", value = "100")),
+                conditions = listOf(
+                    BuilderCondition(
+                        id = "c1",
+                        field = "amount",
+                        operator = "between",
+                        value = "100",
+                    ),
+                ),
                 conditionJoin = ConditionJoin.SINGLE,
-                actions = listOf(BuilderAction(name = "flag", arguments = listOf("mid"))),
+                actions = listOf(
+                    BuilderAction(
+                        id = "a1",
+                        name = "flag",
+                        arguments = listOf("mid"),
+                    ),
+                ),
             )
         )
         // Populate valueTo for the between editor
