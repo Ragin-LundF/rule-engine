@@ -37,21 +37,24 @@ import ui.components.TinyButton
  * Renders WHEN / THEN blocks derived from [editorState].
  * On every change, calls [onDslChange] with freshly generated DSL text so the
  * Code editor stays in sync. Falls back to a friendly message for locked rules.
+ *
+ * [allRuleIds] is the full list of rule IDs available for selection.
+ * [onRuleSelected] is called when the user picks a different rule from the dropdown.
+ * [onAddRule] is called when the user clicks "+ Add rule".
  */
 @Composable
 fun RuleBuilderView(
     editorState: BuilderEditorState,
+    allRuleIds: List<String> = emptyList(),
+    onRuleSelected: (String) -> Unit = {},
+    onAddRule: () -> Unit = {},
+    onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
     catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onConditionSelected: (String) -> Unit = {},
     onDslChange: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    if (editorState.isLocked) {
-        LockedBuilderMessage(reason = editorState.lockReason, modifier = modifier)
-        return
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -59,7 +62,18 @@ fun RuleBuilderView(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        RuleBuilderHeader(ruleId = editorState.ruleId)
+        RuleBuilderHeader(
+            ruleIds = allRuleIds,
+            selectedRuleId = editorState.ruleId,
+            onRuleSelected = onRuleSelected,
+            onAddRule = onAddRule,
+            onRenameRule = onRenameRule,
+        )
+
+        if (editorState.isLocked) {
+            LockedBuilderMessage(reason = editorState.lockReason)
+            return@Column
+        }
 
         BuilderCard {
             WhenSection(

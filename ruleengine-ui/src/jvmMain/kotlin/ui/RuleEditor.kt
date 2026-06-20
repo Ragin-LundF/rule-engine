@@ -165,33 +165,65 @@ actual fun RuleEditor() {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
 
-    // ── Builder rule derived from the first parsed rule AST ─────────────────────
-    val builderRule = remember(key1 = diagramRulesForWindow, key2 = state.selectedManifestEntry.value) {
-        val selectedId = state.selectedManifestEntry.value
-        val ast = if (selectedId != null) {
-            diagramRulesForWindow.firstOrNull { it.id == selectedId } ?: diagramRulesForWindow.firstOrNull()
+    // ── All builder rules derived from all parsed rule ASTs ──────────────────────
+    val allBuilderRules = remember(key1 = diagramRulesForWindow) {
+        if (diagramRulesForWindow.isEmpty()) {
+            listOf(BuilderRule.None)
         } else {
-            diagramRulesForWindow.firstOrNull()
+            diagramRulesForWindow.map { ast -> RuleAstToBuilderMapper.map(ast) }
         }
-        if (ast != null) RuleAstToBuilderMapper.map(ast) else BuilderRule.None
     }
-    // ── Builder state: keep local editor state stable while in Builder mode ─────
-    var builderEditorState by remember { mutableStateOf<BuilderEditorState?>(null) }
 
-    LaunchedEffect(key1 = workbenchState.ruleMode, key2 = builderRule) {
-        when (workbenchState.ruleMode) {
-            RuleMode.BUILDER -> {
-                val current = builderEditorState
-                val shouldReset = current == null ||
-                    current.ruleId != builderRule.ruleId() ||
-                    current.isLocked != builderRule.isLocked()
-                if (shouldReset) {
-                    builderEditorState = BuilderEditorState.fromBuilderRule(builderRule)
-                }
+    // ── Selected builder rule ID: default to manifest selection or first rule ───
+    var selectedBuilderRuleId by remember { mutableStateOf("") }
+    // When a new rule is added via onAddRule, we store the pending ID here so the
+    // LaunchedEffect sync does not override it before the DSL re-parse completes.
+    var pendingBuilderRuleId by remember { mutableStateOf("") }
+
+    // Sync selected rule ID when parsed rules change or manifest selection changes
+    LaunchedEffect(key1 = allBuilderRules, key2 = state.selectedManifestEntry.value) {
+        val preferredId = state.selectedManifestEntry.value
+        val available = allBuilderRules.mapNotNull { it.ruleId().takeIf { id -> id.isNotBlank() } }
+        selectedBuilderRuleId = when {
+            pendingBuilderRuleId.isNotBlank() && pendingBuilderRuleId in available -> {
+                val id = pendingBuilderRuleId
+                pendingBuilderRuleId = ""
+                id
             }
-            else -> builderEditorState = null
+            pendingBuilderRuleId.isNotBlank() -> pendingBuilderRuleId // not yet parsed, keep waiting
+            preferredId != null && preferredId in available -> preferredId
+            selectedBuilderRuleId in available -> selectedBuilderRuleId
+            available.isNotEmpty() -> available.first()
+            else -> ""
         }
     }
+
+    // ── Builder state map: one BuilderEditorState per rule ID ─────────────────
+    // The map is never cleared on tab switch so the rule list survives navigation.
+    var builderStateMap by remember { mutableStateOf<Map<String, BuilderEditorState>>(emptyMap()) }
+
+    LaunchedEffect(key1 = allBuilderRules) {
+        val newMap = mutableMapOf<String, BuilderEditorState>()
+        allBuilderRules.forEach { rule ->
+            val ruleId = rule.ruleId()
+            val existing = builderStateMap[ruleId]
+            val shouldReset = existing == null ||
+                existing.isLocked != rule.isLocked()
+            newMap[ruleId] = if (shouldReset) {
+                BuilderEditorState.fromBuilderRule(rule = rule)
+            } else {
+                existing
+            }
+        }
+        // Preserve any newly added rules that are not yet in allBuilderRules
+        builderStateMap.forEach { (id, existingState) ->
+            if (id !in newMap) newMap[id] = existingState
+        }
+        builderStateMap = newMap
+    }
+
+    val activeBuilderEditorState = builderStateMap[selectedBuilderRuleId]
+        ?: BuilderEditorState.fromBuilderRule(rule = BuilderRule.None)
 
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     val catalogFields = remember(key1 = state.parsedSchema.value) {
@@ -278,11 +310,69 @@ actual fun RuleEditor() {
                     onRuleModeChange = { mode ->
                         workbenchViewModel.dispatch(action = WorkbenchAction.SelectRuleMode(mode = mode))
                     },
-                    builderEditorState = builderEditorState ?: BuilderEditorState.fromBuilderRule(builderRule),
+                    builderEditorState = activeBuilderEditorState,
+                    allRuleIds = builderStateMap.keys.toList(),
+                    onRuleSelected = { ruleId -> selectedBuilderRuleId = ruleId },
+                    onRenameRule = { oldId, newId ->
+                        if (newId !in builderStateMap && newId.isNotBlank()) {
+                            val oldState = builderStateMap[oldId]
+                            if (oldState != null) {
+                                // Rebuild state with new ID
+                                val renamedState = BuilderEditorState.fromBuilderRule(
+                                    rule = BuilderRule.Supported(
+                                        id = newId,
+                                        conditions = emptyList(),
+                                        actions = emptyList(),
+                                    ),
+                                ).also { newState ->
+                                    // Copy conditions and actions from old state
+                                    oldState.conditions.forEach { newState.conditions.add(it) }
+                                    oldState.actions.forEach { newState.actions.add(it) }
+                                }
+                                val newMap = builderStateMap.toMutableMap()
+                                newMap.remove(oldId)
+                                newMap[newId] = renamedState
+                                builderStateMap = newMap
+                                selectedBuilderRuleId = newId
+                                pendingBuilderRuleId = newId
+                                // Replace rule ID in DSL text
+                                val updatedText = state.ruleValue.value.text.replace(
+                                    oldValue = "rule \"$oldId\"",
+                                    newValue = "rule \"$newId\"",
+                                )
+                                state.ruleValue.value = TextFieldValue(text = updatedText)
+                            }
+                        }
+                    },
+                    onAddRule = {
+                        val existingIds = builderStateMap.keys
+                        val newId = generateUniqueRuleId(existingIds = existingIds)
+                        val newState = BuilderEditorState.fromBuilderRule(
+                            rule = BuilderRule.Supported(
+                                id = newId,
+                                conditions = emptyList(),
+                                actions = emptyList(),
+                            ),
+                        )
+                        builderStateMap = builderStateMap + mapOf(newId to newState)
+                        selectedBuilderRuleId = newId
+                        pendingBuilderRuleId = newId
+                        val skeletonDsl = "\nrule \"$newId\" {\n  when\n  then\n}"
+                        val currentText = state.ruleValue.value.text
+                        state.ruleValue.value = TextFieldValue(
+                            text = if (currentText.isBlank()) skeletonDsl.trimStart() else currentText + skeletonDsl,
+                        )
+                    },
                     catalogFields = builderCatalogFields,
                     catalogActions = builderCatalogActions,
                     onBuilderDslChange = { newDsl ->
-                        state.ruleValue.value = TextFieldValue(text = newDsl)
+                        // Replace only the DSL block for the active rule; keep other rules intact
+                        val updatedText = replaceRuleDslBlock(
+                            fullText = state.ruleValue.value.text,
+                            ruleId = activeBuilderEditorState.ruleId,
+                            newRuleDsl = newDsl,
+                        )
+                        state.ruleValue.value = TextFieldValue(text = updatedText)
                     },
                     onConditionSelected = { conditionId ->
                         workbenchViewModel.dispatch(
@@ -436,7 +526,7 @@ actual fun RuleEditor() {
                         fields = catalogFields,
                         actions = catalogActions,
                         rules = catalogRules,
-                        builderState = builderEditorState,
+                        builderState = activeBuilderEditorState,
                         diagnostics = uiDiagnostics,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -491,6 +581,33 @@ actual fun RuleEditor() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Generates a unique rule ID that does not clash with any of the [existingIds].
+ */
+private fun generateUniqueRuleId(existingIds: Set<String>): String {
+    var counter = existingIds.size + 1
+    var candidate = "rule-$counter"
+    while (candidate in existingIds) {
+        counter++
+        candidate = "rule-$counter"
+    }
+    return candidate
+}
+
+/**
+ * Replaces the DSL block for [ruleId] inside [fullText] with [newRuleDsl].
+ * If the rule block is not found, appends [newRuleDsl] at the end.
+ */
+private fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
+    val escapedId = Regex.escape(ruleId)
+    val pattern = Regex("""rule\s+\"$escapedId\"\s*\{[^}]*\}""")
+    return if (pattern.containsMatchIn(input = fullText)) {
+        pattern.replace(input = fullText, replacement = newRuleDsl)
+    } else {
+        if (fullText.isBlank()) newRuleDsl else "$fullText\n$newRuleDsl"
     }
 }
 

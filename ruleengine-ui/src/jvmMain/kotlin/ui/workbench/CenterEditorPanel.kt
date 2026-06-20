@@ -59,6 +59,10 @@ fun CenterEditorPanel(
     ruleMode: RuleMode,
     onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(ui.builder.BuilderRule.None),
+    allRuleIds: List<String> = emptyList(),
+    onRuleSelected: (String) -> Unit = {},
+    onAddRule: () -> Unit = {},
+    onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
     catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
@@ -92,6 +96,10 @@ fun CenterEditorPanel(
             when (viewMode) {
                 ui.editor.rules.ViewMode.BUILDER -> RuleBuilderView(
                     editorState = builderEditorState,
+                    allRuleIds = allRuleIds,
+                    onRuleSelected = onRuleSelected,
+                    onAddRule = onAddRule,
+                    onRenameRule = onRenameRule,
                     catalogFields = catalogFields,
                     catalogActions = catalogActions,
                     onConditionSelected = onConditionSelected,
