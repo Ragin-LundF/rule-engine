@@ -2,17 +2,22 @@ package ui.schema
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -96,25 +101,55 @@ fun FieldSchemaTable(
 
         Spacer(Modifier.height(2.dp))
 
+        val duplicatePaths = state.fields
+            .map { it.path.trim() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .filter { it.value > 1 }
+            .keys
+
         // ── rows ──────────────────────────────────────────────────────────────
-        LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+        val listState = rememberLazyListState()
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
         ) {
-            itemsIndexed(state.fields) { index, field ->
-                FieldRow(
-                    field = field,
-                    editable = editable,
-                    onFieldChange = { updated ->
-                        val newFields = state.fields.toMutableList().also { it[index] = updated }
-                        onStateChange(state.copy(fields = newFields))
-                    },
-                    onDelete = {
-                        val newFields = state.fields.toMutableList().also { it.removeAt(index) }
-                        onStateChange(state.copy(fields = newFields))
-                    },
-                )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                itemsIndexed(state.fields) { index, field ->
+                    FieldRow(
+                        field = field,
+                        editable = editable,
+                        isDuplicate = field.path.isNotBlank() && field.path in duplicatePaths,
+                        onFieldChange = { updated ->
+                            val newFields = state.fields.toMutableList().also { it[index] = updated }
+                            onStateChange(state.copy(fields = newFields))
+                        },
+                        onDelete = {
+                            val newFields = state.fields.toMutableList().also { it.removeAt(index) }
+                            onStateChange(state.copy(fields = newFields))
+                        },
+                    )
+                }
             }
+            VerticalScrollbar(
+                adapter = rememberScrollbarAdapter(scrollState = listState),
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+            )
+        }
+
+        if (duplicatePaths.isNotEmpty()) {
+            Text(
+                text = "Error: duplicate paths found — ${duplicatePaths.joinToString()}",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.error,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
         }
 
         // ── add row button ────────────────────────────────────────────────────
@@ -199,24 +234,27 @@ private fun HeaderCell(text: String, modifier: Modifier = Modifier) {
 private fun FieldRow(
     field: EditableField,
     editable: Boolean,
+    isDuplicate: Boolean,
     onFieldChange: (EditableField) -> Unit,
     onDelete: () -> Unit,
 ) {
     val fieldColors = TextFieldDefaults.outlinedTextFieldColors(
         textColor = TextPrimary,
         backgroundColor = BgSurface,
-        focusedBorderColor = PrimaryBlue,
-        unfocusedBorderColor = BorderColor,
+        focusedBorderColor = if (isDuplicate) MaterialTheme.colors.error else PrimaryBlue,
+        unfocusedBorderColor = if (isDuplicate) MaterialTheme.colors.error else BorderColor,
         cursorColor = PrimaryBlue,
         placeholderColor = TextMuted,
         disabledTextColor = TextSecondary,
         disabledBorderColor = BorderColor,
     )
 
+    val borderColor = if (isDuplicate) MaterialTheme.colors.error else BorderColor
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(4.dp))
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(4.dp))
             .background(BgSurface, shape = RoundedCornerShape(4.dp))
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),

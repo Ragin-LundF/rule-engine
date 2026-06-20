@@ -1,4 +1,4 @@
-package ui.schema
+package ui.actions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,23 +23,22 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
-import ui.workbench.SchemaMode
+import ui.workbench.ActionMode
 
 /**
- * Visual field-schema editor with Visual / YAML / Usages tabs.
+ * Visual action-schema editor with Visual / YAML / Usages tabs.
  *
- * The editor keeps its own [editorState] while the user edits. It only pushes YAML
- * upstream when the local state is valid (no blank or duplicate paths). This
- * prevents blank rows from disappearing while typing and avoids duplicate-key
- * round-trip losses.
+ * The editor keeps its own [editorState] while the user edits. YAML is only pushed
+ * upstream when the local model is valid (no blank or duplicate names). This avoids
+ * blanks disappearing and prevents duplicate-key round-trip losses.
  */
 @Composable
-fun SchemaEditorPanel(
+fun ActionEditorPanel(
     yaml: String,
-    fromYaml: (String) -> SchemaEditorState,
-    toYaml: (SchemaEditorState) -> String,
+    fromYaml: (String) -> ActionEditorState,
+    toYaml: (ActionEditorState) -> String,
     onYamlChange: (String) -> Unit,
-    initialMode: SchemaMode = SchemaMode.VISUAL,
+    initialMode: ActionMode = ActionMode.VISUAL,
     modifier: Modifier = Modifier,
 ) {
     var mode by remember { mutableStateOf(initialMode) }
@@ -58,7 +57,7 @@ fun SchemaEditorPanel(
 
     // Visual/editor changes push to YAML only when the model is valid.
     LaunchedEffect(key1 = editorState, key2 = mode) {
-        if (mode == SchemaMode.YAML) return@LaunchedEffect
+        if (mode == ActionMode.YAML) return@LaunchedEffect
         if (editorState.hasValidationIssues()) return@LaunchedEffect
         val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
         if (generated != yamlText) {
@@ -69,14 +68,14 @@ fun SchemaEditorPanel(
 
     // YAML edits parse back to the visual model when valid (debounced).
     LaunchedEffect(key1 = yamlText, key2 = mode) {
-        if (mode != SchemaMode.YAML) return@LaunchedEffect
+        if (mode != ActionMode.YAML) return@LaunchedEffect
         delay(timeMillis = 500)
         val parsed = runCatching { fromYaml(yamlText) }.getOrNull()
         if (parsed != null && !parsed.isReadOnly) {
             editorState = parsed
             yamlError = null
         } else {
-            yamlError = "Invalid YAML: could not parse field schema"
+            yamlError = "Invalid YAML: could not parse action schema"
         }
     }
 
@@ -84,16 +83,16 @@ fun SchemaEditorPanel(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SchemaModeTabs(
+        ActionModeTabs(
             current = mode,
             onSelect = { newMode ->
-                if (newMode == SchemaMode.YAML && mode != SchemaMode.YAML) {
+                if (newMode == ActionMode.YAML && mode != ActionMode.YAML) {
                     if (!editorState.hasValidationIssues()) {
                         yamlText = runCatching { toYaml(editorState) }.getOrNull() ?: yamlText
                         onYamlChange(yamlText)
                     }
                 }
-                if (newMode != SchemaMode.YAML && mode == SchemaMode.YAML) {
+                if (newMode != ActionMode.YAML && mode == ActionMode.YAML) {
                     val generated = runCatching { toYaml(editorState) }.getOrNull()
                     if (generated != null) {
                         yamlText = generated
@@ -105,11 +104,11 @@ fun SchemaEditorPanel(
         )
 
         when (mode) {
-            SchemaMode.VISUAL -> VisualSchemaEditor(
+            ActionMode.VISUAL -> VisualActionEditor(
                 state = editorState,
                 onStateChange = { editorState = it },
             )
-            SchemaMode.YAML -> YamlSchemaEditor(
+            ActionMode.YAML -> YamlActionEditor(
                 yaml = yamlText,
                 error = yamlError,
                 validationIssues = editorState.hasValidationIssues(),
@@ -118,29 +117,29 @@ fun SchemaEditorPanel(
                     yamlError = null
                 },
             )
-            SchemaMode.USAGES -> FieldUsagesPanel()
+            ActionMode.USAGES -> ActionUsagesPanel()
         }
     }
 }
 
-private fun SchemaEditorState.hasValidationIssues(): Boolean {
-    val paths = fields.map { it.path.trim() }.filter { it.isNotBlank() }
-    val hasBlank = fields.any { it.path.isBlank() }
-    val hasDuplicate = paths.size != paths.toSet().size
+private fun ActionEditorState.hasValidationIssues(): Boolean {
+    val names = actions.map { it.name.trim() }.filter { it.isNotBlank() }
+    val hasBlank = actions.any { it.name.isBlank() }
+    val hasDuplicate = names.size != names.toSet().size
     return hasBlank || hasDuplicate
 }
 
 @Composable
-private fun VisualSchemaEditor(
-    state: SchemaEditorState,
-    onStateChange: (SchemaEditorState) -> Unit,
+private fun VisualActionEditor(
+    state: ActionEditorState,
+    onStateChange: (ActionEditorState) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        SectionTitle(text = "FIELDS")
-        FieldSchemaTable(
+        SectionTitle(text = "ACTIONS")
+        ActionSchemaTable(
             state = state,
             onStateChange = onStateChange,
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -149,7 +148,7 @@ private fun VisualSchemaEditor(
 }
 
 @Composable
-private fun YamlSchemaEditor(
+private fun YamlActionEditor(
     yaml: String,
     error: String?,
     validationIssues: Boolean,
@@ -180,7 +179,7 @@ private fun YamlSchemaEditor(
         }
         if (validationIssues) {
             Text(
-                text = "Visual editor contains blank or duplicate paths. These rows are hidden in YAML until resolved.",
+                text = "Visual editor contains blank or duplicate names. These rows are hidden in YAML until resolved.",
                 style = MaterialTheme.typography.body2,
                 color = MaterialTheme.colors.error,
             )
@@ -195,7 +194,7 @@ private fun YamlSchemaEditor(
 }
 
 @Composable
-private fun FieldUsagesPanel() {
+private fun ActionUsagesPanel() {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -204,7 +203,7 @@ private fun FieldUsagesPanel() {
     ) {
         SectionTitle(text = "USAGE")
         Text(
-            text = "Field usage across conditions will be shown here in a later phase.",
+            text = "Action usage across rules will be shown here in a later phase.",
             style = MaterialTheme.typography.body2,
             color = TextSecondary,
         )

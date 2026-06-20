@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestLoader
+import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
@@ -29,6 +30,7 @@ import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.components.PlaceholderPanel
+import ui.actions.ActionSchemaYamlBridge
 import ui.schema.FieldSchemaYamlBridge
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
@@ -57,6 +59,7 @@ import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchState
 import ui.workbench.RuleWorkbenchViewModel
 import ui.workbench.SchemaAreaScreen
+import ui.workbench.ActionsAreaScreen
 import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
@@ -290,7 +293,22 @@ actual fun RuleEditor() {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                AppArea.ACTIONS -> ActionsAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.ACTIONS -> ActionsAreaScreen(
+                    actionsYaml = state.actionSchemaText.value,
+                    fromYaml = { yaml ->
+                        ActionSchemaYamlBridge.fromYaml(yaml = yaml)
+                    },
+                    toYaml = { editorState ->
+                        ActionSchemaYamlBridge.toYaml(state = editorState)
+                    },
+                    onActionsYamlChange = { newYaml ->
+                        state.actionSchemaText.value = newYaml
+                        state.parsedActionSchema.value = runCatching {
+                            ActionSchemaLoader.loadFromString(content = newYaml)
+                        }.getOrNull()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
                 AppArea.MANIFEST -> ManifestAreaPlaceholder(modifier = Modifier.fillMaxSize())
                 AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
                     label = workbenchState.appArea.name,
