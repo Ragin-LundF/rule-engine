@@ -1,20 +1,30 @@
 package ui.workbench
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentRed
+import ui.BgElevated
+import ui.BorderColor
+import ui.PrimaryBlue
+import ui.TextPrimary
+import ui.TextSecondary
 import ui.components.SectionTitle
 import ui.components.StatusBadge
 
@@ -29,7 +39,7 @@ fun RuleListSection(
     onRuleClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(space = 6.dp)) {
         SectionTitle(text = "RULES")
         rules.forEach { rule ->
             RuleRow(
@@ -47,19 +57,32 @@ private fun RuleRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val bg = if (selected) PrimaryBlue.copy(alpha = 0.12f) else BgElevated
+    val border = if (selected) PrimaryBlue.copy(alpha = 0.45f) else BorderColor
+    val nameColor = if (selected) PrimaryBlue else TextPrimary
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = bg)
+            .border(
+                width = 1.dp,
+                color = border,
+                shape = RoundedCornerShape(size = 8.dp),
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 4.dp, horizontal = 2.dp),
+            .padding(vertical = 8.dp, horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(
             text = rule.id,
-            style = MaterialTheme.typography.body2,
-            color = if (selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
-            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.body2.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            ),
+            color = nameColor,
+            modifier = Modifier.weight(weight = 1f),
         )
         StatusBadge(
             label = rule.status.label,

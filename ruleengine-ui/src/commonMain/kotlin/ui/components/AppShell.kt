@@ -1,27 +1,26 @@
 package ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import ui.Bg
 import ui.BgSurface
-import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
 
@@ -37,10 +36,9 @@ fun TopToolbar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(height = 52.dp)
             .background(color = BgSurface)
-            .border(width = 1.dp, color = BorderColor)
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -48,7 +46,7 @@ fun TopToolbar(
             style = MaterialTheme.typography.h6,
             color = PrimaryBlue,
         )
-        Spacer(modifier = Modifier.weight(weight = 1f))
+        Box(modifier = Modifier.weight(weight = 1f))
         actions()
     }
 }
@@ -65,10 +63,8 @@ fun IconRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(48.dp)
-            .background(color = BgSurface)
-            .border(width = 1.dp, color = BorderColor)
-            .padding(vertical = 8.dp),
+            .width(width = 56.dp)
+            .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         content()
@@ -80,6 +76,8 @@ fun IconRail(
  * TopToolbar / (IconRail | centerContent | rightPanel) / BottomStatusBar
  *
  * All panel slots are optional — pass empty composables for unused slots.
+ * The shell wraps each side panel in a rounded surface card with a small gap
+ * so the background colour creates clean visual separation.
  */
 @Composable
 fun WorkbenchShell(
@@ -99,13 +97,50 @@ fun WorkbenchShell(
         Row(
             modifier = Modifier
                 .weight(weight = 1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            iconRail()
-            Box(modifier = Modifier.weight(weight = 1f).fillMaxHeight()) { centerContent() }
-            Box(modifier = Modifier.weight(weight = 0.28f).fillMaxHeight()) { rightPanel() }
+            PanelContainer(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(width = 56.dp),
+            ) {
+                IconRail(content = iconRail)
+            }
+            Box(modifier = Modifier.width(width = 12.dp))
+            PanelContainer(
+                modifier = Modifier
+                    .weight(weight = 1f)
+                    .fillMaxHeight(),
+            ) {
+                centerContent()
+            }
+            Box(modifier = Modifier.width(width = 12.dp))
+            PanelContainer(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(width = 320.dp),
+            ) {
+                rightPanel()
+            }
         }
         bottomBar()
+    }
+}
+
+@Composable
+private fun PanelContainer(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 14.dp))
+            .background(color = BgSurface)
+            .padding(all = 14.dp),
+    ) {
+        content()
     }
 }
 
@@ -121,7 +156,9 @@ fun PlaceholderPanel(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .border(width = 1.dp, color = BorderColor),
+            .clip(shape = MaterialTheme.shapes.large)
+            .background(color = Bg)
+            .padding(all = 1.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(

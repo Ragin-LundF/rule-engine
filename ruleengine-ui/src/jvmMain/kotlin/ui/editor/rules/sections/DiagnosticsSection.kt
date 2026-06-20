@@ -1,11 +1,15 @@
 package ui.editor.rules.sections
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -14,18 +18,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import ruleengine.core.errors.Severity
+import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentRed
+import ui.BgElevated
+import ui.BorderColor
 import ui.TextPrimary
+import ui.TextSecondary
+import ui.components.StatusBadge
 import ui.diagnostics.DiagnosticMapper
 import ui.diagnostics.DiagnosticsPanel
 import ui.diagnostics.QuickFix
 import ui.diagnostics.QuickFixes
-import ui.editor.rules.Chip
 import ui.editor.rules.RuleEditorState
 
 /** Diagnostics section: displays validation errors and warnings below the editor panels. */
@@ -53,39 +62,55 @@ fun DiagnosticsSection(state: RuleEditorState) {
         }
     }
 
-    Spacer(Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(height = 12.dp))
 
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-
-        // ── Header row ────────────────────────────────────────────
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape = RoundedCornerShape(size = 12.dp))
+            .background(color = BgElevated)
+            .border(
+                width = 1.dp,
+                color = BorderColor,
+                shape = RoundedCornerShape(size = 12.dp),
+            )
+            .padding(all = 14.dp),
+    ) {
+        // Header row
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         ) {
-            Text("Diagnostics", style = MaterialTheme.typography.h6, color = TextPrimary)
-            Spacer(Modifier.weight(1f))
+            Text(
+                text = "Diagnostics",
+                style = MaterialTheme.typography.subtitle1,
+                color = TextPrimary,
+            )
+            Spacer(modifier = Modifier.weight(weight = 1f))
             if (diagnosticsList.isNotEmpty()) {
                 val errors = diagnosticsList.count { it.severity == Severity.ERROR }
                 val warnings = diagnosticsList.count { it.severity == Severity.WARNING }
                 if (errors > 0) {
-                    Chip(
+                    StatusBadge(
                         label = "$errors error${if (errors > 1) "s" else ""}",
-                        bg = AccentRed.copy(alpha = 0.15f),
-                        textColor = AccentRed,
+                        color = AccentRed,
                     )
                 }
                 if (warnings > 0) {
-                    Chip(
+                    StatusBadge(
                         label = "$warnings warning${if (warnings > 1) "s" else ""}",
-                        bg = AccentOrange.copy(alpha = 0.15f),
-                        textColor = AccentOrange,
+                        color = AccentOrange,
                     )
                 }
             }
+            if (diagnosticsList.isEmpty() && diagnosticsText.isNotBlank()) {
+                StatusBadge(label = "No issues", color = AccentGreen)
+            }
         }
-        Spacer(modifier = Modifier.height(6.dp))
 
-        // ── Diagnostics panel ─────────────────────────────────────
+        Spacer(modifier = Modifier.height(height = 10.dp))
+
+        // Diagnostics panel
         DiagnosticsPanel(
             diagnostics = enriched,
             emptyText = diagnosticsText.ifBlank {

@@ -1,6 +1,7 @@
 package ui.workbench
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,9 +18,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ui.BgElevated
 import ui.BgHover
-import ui.BgSurface
 import ui.PrimaryBlue
 import ui.TextSecondary
 
@@ -36,10 +38,10 @@ fun AppAreaIconRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(width = 48.dp)
+            .width(width = 56.dp)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 8.dp),
     ) {
         AppArea.entries.forEach { area ->
             RailItem(
@@ -59,38 +61,48 @@ private fun RailItem(
 ) {
     val label = area.label()
     val symbol = area.symbol()
-    val bg = if (selected) BgHover else BgSurface
+    val bg = if (selected) PrimaryBlue.copy(alpha = 0.12f) else BgElevated
     val textColor = if (selected) PrimaryBlue else TextSecondary
+    val borderColor = if (selected) PrimaryBlue.copy(alpha = 0.45f) else BgHover
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape = RoundedCornerShape(size = 4.dp))
+            .clip(shape = RoundedCornerShape(size = 10.dp))
             .background(color = bg)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(size = 10.dp),
+            )
             .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = symbol,
-            style = MaterialTheme.typography.subtitle2,
+            style = MaterialTheme.typography.subtitle1.copy(
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            ),
             color = textColor,
         )
-        Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(height = 2.dp))
         Text(
             text = label,
-            style = MaterialTheme.typography.caption,
+            style = MaterialTheme.typography.caption.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            ),
             color = textColor,
         )
     }
 }
 
 private fun AppArea.symbol(): String = when (this) {
-    AppArea.RULES -> "☑"
-    AppArea.SCHEMA -> "☷"
-    AppArea.ACTIONS -> "⚒"
-    AppArea.MANIFEST -> "☰"
-    AppArea.SAMPLES -> "▶"
+    AppArea.RULES -> "☰"
+    AppArea.SCHEMA -> "⊞"
+    AppArea.ACTIONS -> "◇"
+    AppArea.MANIFEST -> "▣"
+    AppArea.SAMPLES -> "▷"
     AppArea.SETTINGS -> "⚙"
 }
 

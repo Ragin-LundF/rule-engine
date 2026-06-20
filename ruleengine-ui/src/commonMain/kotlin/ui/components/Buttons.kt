@@ -1,7 +1,14 @@
 package ui.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Icon
@@ -10,14 +17,22 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ui.BorderColor
+import ui.BgElevated
+import ui.BgHover
+import ui.PrimaryBlue
+import ui.PrimaryGlow
+import ui.TextOnPrimary
 import ui.TextSecondary
 
 /**
- * Primary action button using the theme primary color.
+ * Primary action button: filled pill shape, high emphasis.
  */
 @Composable
 fun PrimaryButton(
@@ -28,12 +43,15 @@ fun PrimaryButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 8.dp)),
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
         colors = ButtonDefaults.buttonColors(
-            backgroundColor = MaterialTheme.colors.primary,
-            contentColor = MaterialTheme.colors.onPrimary,
+            backgroundColor = PrimaryBlue,
+            contentColor = TextOnPrimary,
+            disabledBackgroundColor = BgElevated,
+            disabledContentColor = TextSecondary,
         ),
     ) {
         Text(text = text, style = MaterialTheme.typography.button)
@@ -41,7 +59,7 @@ fun PrimaryButton(
 }
 
 /**
- * Secondary outlined button.
+ * Secondary outlined button: medium emphasis, subtle border.
  */
 @Composable
 fun SecondaryButton(
@@ -52,15 +70,76 @@ fun SecondaryButton(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 8.dp)),
         enabled = enabled,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = MaterialTheme.colors.primary,
+            contentColor = PrimaryBlue,
+            disabledContentColor = TextSecondary,
         ),
-        border = androidx.compose.foundation.BorderStroke(width = 1.dp, color = BorderColor),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (enabled) BorderColor else BorderColor.copy(alpha = 0.5f),
+        ),
     ) {
         Text(text = text, style = MaterialTheme.typography.button)
+    }
+}
+
+/**
+ * Ghost button: lowest emphasis, no border, hover background only.
+ */
+@Composable
+fun GhostButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val bg = if (enabled) BgHover.copy(alpha = 0.5f) else BgElevated.copy(alpha = 0.3f)
+    Row(
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.button,
+            color = if (enabled) PrimaryBlue else TextSecondary,
+        )
+    }
+}
+
+/**
+ * Compact pill button for toolbars (equivalent to the legacy AppButton).
+ */
+@Composable
+fun ToolbarButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+    enabled: Boolean = true,
+) {
+    if (primary) {
+        PrimaryButton(
+            text = label,
+            onClick = onClick,
+            modifier = modifier,
+            enabled = enabled,
+        )
+    } else {
+        SecondaryButton(
+            text = label,
+            onClick = onClick,
+            modifier = modifier,
+            enabled = enabled,
+        )
     }
 }
 
@@ -77,14 +156,53 @@ fun ToolbarIconButton(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = if (enabled) BgHover.copy(alpha = 0.5f) else BgElevated.copy(alpha = 0.3f))
+            .size(size = 34.dp),
         enabled = enabled,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (enabled) MaterialTheme.colors.onSurface else TextSecondary,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(size = 18.dp),
+        )
+    }
+}
+
+/**
+ * Small add/remove/action chip that behaves like a button.
+ */
+@Composable
+fun TinyButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    primary: Boolean = false,
+) {
+    val bg = if (primary) PrimaryGlow else Color.Transparent
+    val borderColor = if (primary) PrimaryBlue.copy(alpha = 0.5f) else BorderColor
+    val textColor = if (primary) PrimaryBlue else TextSecondary
+
+    Row(
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 6.dp))
+            .background(color = bg)
+            .border(
+                width = 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(size = 6.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.caption,
+            color = textColor,
         )
     }
 }

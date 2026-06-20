@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -16,14 +17,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import ui.AccentPurple
+import ui.AccentPurpleSoft
+import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
+import ui.PrimaryGlow
+import ui.TextPrimary
 import ui.TextSecondary
 
 /**
  * A compact chip representing a field from the schema catalog.
- * Shows the field id and its type label.
  */
 @Composable
 fun FieldChip(
@@ -33,22 +37,26 @@ fun FieldChip(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
 ) {
-    val bg = if (selected) PrimaryBlue.copy(alpha = 0.15f) else BgHover
-    val border = if (selected) PrimaryBlue else BorderColor
+    val bg = if (selected) PrimaryGlow else BgElevated
+    val border = if (selected) PrimaryBlue.copy(alpha = 0.5f) else BorderColor
 
     Row(
         modifier = modifier
-            .clip(shape = MaterialTheme.shapes.small)
+            .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = bg)
-            .border(width = 1.dp, color = border, shape = MaterialTheme.shapes.small)
+            .border(
+                width = 1.dp,
+                color = border,
+                shape = RoundedCornerShape(size = 8.dp),
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = fieldId,
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onSurface,
+            style = MaterialTheme.typography.body2,
+            color = if (selected) PrimaryBlue else TextPrimary,
         )
         Box(modifier = Modifier.size(width = 6.dp, height = 1.dp))
         Text(
@@ -70,22 +78,26 @@ fun ActionChip(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
 ) {
-    val bg = if (selected) AccentPurple.copy(alpha = 0.15f) else BgHover
-    val border = if (selected) AccentPurple else BorderColor
+    val bg = if (selected) AccentPurpleSoft else BgElevated
+    val border = if (selected) AccentPurple.copy(alpha = 0.5f) else BorderColor
 
     Row(
         modifier = modifier
-            .clip(shape = MaterialTheme.shapes.small)
+            .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = bg)
-            .border(width = 1.dp, color = border, shape = MaterialTheme.shapes.small)
+            .border(
+                width = 1.dp,
+                color = border,
+                shape = RoundedCornerShape(size = 8.dp),
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = actionName,
-            style = MaterialTheme.typography.caption,
-            color = MaterialTheme.colors.onSurface,
+            style = MaterialTheme.typography.body2,
+            color = if (selected) AccentPurple else TextPrimary,
         )
         Box(modifier = Modifier.size(width = 6.dp, height = 1.dp))
         Text(
@@ -107,15 +119,41 @@ fun StatusBadge(
 ) {
     Box(
         modifier = modifier
-            .clip(shape = MaterialTheme.shapes.small)
-            .background(color = color.copy(alpha = 0.15f))
-            .border(width = 1.dp, color = color.copy(alpha = 0.4f), shape = MaterialTheme.shapes.small)
-            .padding(horizontal = 6.dp, vertical = 2.dp),
+            .clip(shape = RoundedCornerShape(size = 6.dp))
+            .background(color = color.copy(alpha = 0.12f))
+            .border(
+                width = 1.dp,
+                color = color.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(size = 6.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.caption,
             color = color,
+        )
+    }
+}
+
+/**
+ * A tiny read-only info chip for tables and lists.
+ */
+@Composable
+fun InfoChip(
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 6.dp))
+            .background(color = BgHover)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.caption,
+            color = TextSecondary,
         )
     }
 }

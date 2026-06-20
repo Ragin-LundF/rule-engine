@@ -1,16 +1,18 @@
 package ui.workbench
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -27,25 +29,24 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
+import ui.BgElevated
 import ui.BorderColor
-import ui.BgSurface
-import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderEditorState
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleBuilderView
+import ui.components.SecondaryButton
+import ui.components.ToolbarButton
 import ui.copyToClipboard
-import ui.editor.rules.AppButton
-import ui.editor.rules.PanelDivider
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.sections.MainEditorContentSection
+import ui.pickRuleFile
 import ui.saveDiagramAsPng
 import ui.saveRuleToFile
-import ui.pickRuleFile
 
 /**
  * Center panel that dispatches to the correct mode view based on [ruleMode].
@@ -70,12 +71,11 @@ fun CenterEditorPanel(
 
     Column(
         modifier = modifier
-            .clip(shape = RoundedCornerShape(size = 8.dp))
-            .background(color = BgSurface)
-            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp))
-            .padding(all = 14.dp),
+            .fillMaxSize()
+            .clip(shape = RoundedCornerShape(size = 12.dp))
+            .background(color = BgElevated)
+            .padding(all = 16.dp),
     ) {
-        // Mode tabs are always visible so Builder/Test/Table are never dead-ends.
         CenterPanelHeader(
             state = state,
             scope = scope,
@@ -84,7 +84,9 @@ fun CenterEditorPanel(
             diagramGraphicsLayer = diagramGraphicsLayer,
         )
 
-        PanelDivider()
+        Spacer(modifier = Modifier.height(height = 12.dp))
+        Divider(color = BorderColor, thickness = 1.dp)
+        Spacer(modifier = Modifier.height(height = 12.dp))
 
         Box(modifier = Modifier.weight(weight = 1f)) {
             when (viewMode) {
@@ -123,7 +125,11 @@ private fun CenterPanelHeader(
     diagramGraphicsLayer: GraphicsLayer,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Rule Editor", style = MaterialTheme.typography.h6, color = TextPrimary)
+        Text(
+            text = "Rule Editor",
+            style = MaterialTheme.typography.subtitle1,
+            color = TextPrimary,
+        )
         Spacer(Modifier.width(width = 14.dp))
         ViewModeToggle(
             current = viewMode,
@@ -179,74 +185,87 @@ private fun CodeModeActions(
     var diagnosticsText by state.diagnosticsText
 
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppButton(label = "Load Rule") {
-            scope.launch {
-                val c = pickRuleFile()
-                if (c != null) {
-                    onRuleValueChange(TextFieldValue(text = c))
-                    state.setStatus(msg = "Rule loaded", kind = StatusKind.SUCCESS)
-                } else {
-                    state.setStatus(msg = "Load cancelled", kind = StatusKind.IDLE)
-                }
-            }
-        }
-        AppButton(label = "Save Rule") {
-            if (ruleValue.text.isNotBlank()) {
-                saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
-                state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
-            } else {
-                state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
-            }
-        }
-        AppButton(label = "Copy Rule") {
-            if (ruleValue.text.isNotBlank()) {
-                copyToClipboard(ruleValue.text)
-                state.setStatus(msg = "Rule copied to clipboard", kind = StatusKind.SUCCESS)
-            } else {
-                state.setStatus(msg = "Nothing to copy", kind = StatusKind.IDLE)
-            }
-        }
-        AppButton(label = "Validate", primary = true) {
-            scope.launch {
-                runCatching {
-                    if (state.parsedSchema.value == null) {
-                        state.setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
-                        return@launch
-                    }
-                    if (ruleValue.text.isBlank()) {
-                        state.setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
-                        return@launch
-                    }
-                    val asts = Parser(input = ruleValue.text).parseRules()
-                    val result = Validator.validate(
-                        asts = asts,
-                        schema = state.parsedSchema.value!!,
-                        actions = state.parsedActionSchema.value,
-                    )
-                    if (result.isValid) {
-                        state.setStatus(msg = "✓ Validation passed", kind = StatusKind.SUCCESS)
-                        diagnosticsText = "No issues found"
-                        diagnosticsList = emptyList()
+        ToolbarButton(
+            label = "Load Rule",
+            onClick = {
+                scope.launch {
+                    val c = pickRuleFile()
+                    if (c != null) {
+                        onRuleValueChange(TextFieldValue(text = c))
+                        state.setStatus(msg = "Rule loaded", kind = StatusKind.SUCCESS)
                     } else {
-                        state.setStatus(
-                            msg = "✗ ${result.diagnostics.size} issue(s) found",
-                            kind = StatusKind.ERROR,
-                        )
-                        diagnosticsList = result.diagnostics
-                        diagnosticsText = result.diagnostics.joinToString(separator = "\n") { d ->
-                            "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
-                        }
+                        state.setStatus(msg = "Load cancelled", kind = StatusKind.IDLE)
                     }
-                }.onFailure { e ->
-                    state.setStatus(msg = "Parse error: ${e.message}", kind = StatusKind.ERROR)
-                    diagnosticsText = e.toString()
-                    diagnosticsList = emptyList()
                 }
-            }
-        }
+            },
+        )
+        ToolbarButton(
+            label = "Save Rule",
+            onClick = {
+                if (ruleValue.text.isNotBlank()) {
+                    saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
+                    state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
+                } else {
+                    state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
+                }
+            },
+        )
+        ToolbarButton(
+            label = "Copy Rule",
+            onClick = {
+                if (ruleValue.text.isNotBlank()) {
+                    copyToClipboard(ruleValue.text)
+                    state.setStatus(msg = "Rule copied to clipboard", kind = StatusKind.SUCCESS)
+                } else {
+                    state.setStatus(msg = "Nothing to copy", kind = StatusKind.IDLE)
+                }
+            },
+        )
+        ToolbarButton(
+            label = "Validate",
+            primary = true,
+            onClick = {
+                scope.launch {
+                    runCatching {
+                        if (state.parsedSchema.value == null) {
+                            state.setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
+                            return@launch
+                        }
+                        if (ruleValue.text.isBlank()) {
+                            state.setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
+                            return@launch
+                        }
+                        val asts = Parser(input = ruleValue.text).parseRules()
+                        val result = Validator.validate(
+                            asts = asts,
+                            schema = state.parsedSchema.value!!,
+                            actions = state.parsedActionSchema.value,
+                        )
+                        if (result.isValid) {
+                            state.setStatus(msg = "Validation passed", kind = StatusKind.SUCCESS)
+                            diagnosticsText = "No issues found"
+                            diagnosticsList = emptyList()
+                        } else {
+                            state.setStatus(
+                                msg = "${result.diagnostics.size} issue(s) found",
+                                kind = StatusKind.ERROR,
+                            )
+                            diagnosticsList = result.diagnostics
+                            diagnosticsText = result.diagnostics.joinToString(separator = "\n") { d ->
+                                "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
+                            }
+                        }
+                    }.onFailure { e ->
+                        state.setStatus(msg = "Parse error: ${e.message}", kind = StatusKind.ERROR)
+                        diagnosticsText = e.toString()
+                        diagnosticsList = emptyList()
+                    }
+                }
+            },
+        )
     }
 }
 
@@ -259,23 +278,27 @@ private fun DiagramModeActions(
     var showExpandedDiagram by state.showExpandedDiagram
 
     Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AppButton(label = "Export PNG") {
-            scope.launch {
-                runCatching {
-                    val bitmap = diagramGraphicsLayer.toImageBitmap()
-                    saveDiagramAsPng(bitmap = bitmap)
-                    state.setStatus(msg = "Diagram exported as PNG", kind = StatusKind.SUCCESS)
-                }.onFailure {
-                    state.setStatus(msg = "Export failed: ${it.message}", kind = StatusKind.ERROR)
+        ToolbarButton(
+            label = "Export PNG",
+            onClick = {
+                scope.launch {
+                    runCatching {
+                        val bitmap = diagramGraphicsLayer.toImageBitmap()
+                        saveDiagramAsPng(bitmap = bitmap)
+                        state.setStatus(msg = "Diagram exported as PNG", kind = StatusKind.SUCCESS)
+                    }.onFailure {
+                        state.setStatus(msg = "Export failed: ${it.message}", kind = StatusKind.ERROR)
+                    }
                 }
-            }
-        }
-        AppButton(label = "⤢ Expand") {
-            showExpandedDiagram = true
-        }
+            },
+        )
+        SecondaryButton(
+            text = "Expand",
+            onClick = { showExpandedDiagram = true },
+        )
     }
 }
 

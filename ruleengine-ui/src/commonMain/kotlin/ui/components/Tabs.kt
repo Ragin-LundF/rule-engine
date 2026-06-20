@@ -6,26 +6,29 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ui.BgElevated
-import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
+import ui.TextPrimary
 import ui.TextSecondary
 import ui.workbench.RuleMode
 
 /**
- * Horizontal tab bar for switching between rule-center modes.
- * Renders one tab per [RuleMode] value.
+ * Modern segmented/pill tab bar for switching between rule-center modes.
  */
 @Composable
 fun WorkbenchTabs(
@@ -36,10 +39,16 @@ fun WorkbenchTabs(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(36.dp)
-            .background(color = BgSurface)
-            .border(width = 1.dp, color = BorderColor),
-        horizontalArrangement = Arrangement.Start,
+            .height(height = 40.dp)
+            .clip(shape = RoundedCornerShape(size = 10.dp))
+            .background(color = BgElevated)
+            .border(
+                width = 1.dp,
+                color = BorderColor,
+                shape = RoundedCornerShape(size = 10.dp),
+            )
+            .padding(all = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RuleMode.entries.forEach { mode ->
@@ -47,6 +56,9 @@ fun WorkbenchTabs(
                 label = mode.displayName(),
                 selected = mode == selectedMode,
                 onClick = { onModeSelected(mode) },
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(weight = 1f),
             )
         }
     }
@@ -57,21 +69,23 @@ private fun WorkbenchTab(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val bg = if (selected) BgElevated else BgSurface
-    val textColor = if (selected) PrimaryBlue else TextSecondary
+    val bg = if (selected) PrimaryBlue else Color.Transparent
+    val textColor = if (selected) TextPrimary else TextSecondary
 
     Box(
-        modifier = Modifier
-            .clip(shape = MaterialTheme.shapes.small)
+        modifier = modifier
+            .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = bg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.button,
+            style = MaterialTheme.typography.button.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+            ),
             color = textColor,
         )
     }
