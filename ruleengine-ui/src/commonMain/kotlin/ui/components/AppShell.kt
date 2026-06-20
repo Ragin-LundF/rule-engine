@@ -63,7 +63,7 @@ fun IconRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(width = 56.dp)
+            .width(width = 76.dp)
             .padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -104,7 +104,7 @@ fun WorkbenchShell(
             PanelContainer(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(width = 56.dp),
+                    .width(width = 92.dp),
             ) {
                 IconRail(content = iconRail)
             }

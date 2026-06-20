@@ -27,6 +27,10 @@ import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
 import ui.manifest.ManifestYamlBridge
 import ui.schema.FieldSchemaYamlBridge
+import ui.YamlEditor
+import ui.YamlEditorType
+import ui.annotateYaml
+import ui.buildYamlCompletions
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
@@ -326,6 +330,26 @@ actual fun RuleEditor() {
                         }.getOrNull()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    yamlEditor = { value, onValueChange, editorModifier ->
+                        YamlEditor(
+                            value = value,
+                            onValueChange = onValueChange,
+                            modifier = editorModifier,
+                            editorType = YamlEditorType.FIELD_SCHEMA,
+                            annotate = { text ->
+                                annotateYaml(
+                                    text = text,
+                                    editorType = YamlEditorType.FIELD_SCHEMA,
+                                )
+                            },
+                            buildCompletions = { context ->
+                                buildYamlCompletions(
+                                    context = context,
+                                    editorType = YamlEditorType.FIELD_SCHEMA,
+                                )
+                            },
+                        )
+                    },
                 )
                 AppArea.ACTIONS -> ActionsAreaScreen(
                     actionsYaml = state.actionSchemaText.value,
@@ -342,6 +366,26 @@ actual fun RuleEditor() {
                         }.getOrNull()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    yamlEditor = { value, onValueChange, editorModifier ->
+                        YamlEditor(
+                            value = value,
+                            onValueChange = onValueChange,
+                            modifier = editorModifier,
+                            editorType = YamlEditorType.ACTION_SCHEMA,
+                            annotate = { text ->
+                                annotateYaml(
+                                    text = text,
+                                    editorType = YamlEditorType.ACTION_SCHEMA,
+                                )
+                            },
+                            buildCompletions = { context ->
+                                buildYamlCompletions(
+                                    context = context,
+                                    editorType = YamlEditorType.ACTION_SCHEMA,
+                                )
+                            },
+                        )
+                    },
                 )
                 AppArea.MANIFEST -> ManifestAreaScreen(
                     manifestYaml = state.manifestText.value,

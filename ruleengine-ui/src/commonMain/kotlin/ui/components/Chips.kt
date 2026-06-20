@@ -37,8 +37,9 @@ fun FieldChip(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
 ) {
-    val bg = if (selected) PrimaryGlow else BgElevated
-    val border = if (selected) PrimaryBlue.copy(alpha = 0.5f) else BorderColor
+    val bg = if (selected) PrimaryBlue else BgElevated
+    val border = if (selected) PrimaryBlue.copy(alpha = 0.7f) else BorderColor
+    val contentColor = if (selected) MaterialTheme.colors.onPrimary else TextPrimary
 
     Row(
         modifier = modifier
@@ -56,13 +57,13 @@ fun FieldChip(
         Text(
             text = fieldId,
             style = MaterialTheme.typography.body2,
-            color = if (selected) PrimaryBlue else TextPrimary,
+            color = contentColor,
         )
         Box(modifier = Modifier.size(width = 6.dp, height = 1.dp))
         Text(
             text = typeLabel,
             style = MaterialTheme.typography.caption,
-            color = TextSecondary,
+            color = if (selected) contentColor.copy(alpha = 0.8f) else TextSecondary,
         )
     }
 }
@@ -78,8 +79,9 @@ fun ActionChip(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
 ) {
-    val bg = if (selected) AccentPurpleSoft else BgElevated
-    val border = if (selected) AccentPurple.copy(alpha = 0.5f) else BorderColor
+    val bg = if (selected) AccentPurple else BgElevated
+    val border = if (selected) AccentPurple.copy(alpha = 0.7f) else BorderColor
+    val contentColor = if (selected) MaterialTheme.colors.onPrimary else TextPrimary
 
     Row(
         modifier = modifier
@@ -97,13 +99,13 @@ fun ActionChip(
         Text(
             text = actionName,
             style = MaterialTheme.typography.body2,
-            color = if (selected) AccentPurple else TextPrimary,
+            color = contentColor,
         )
         Box(modifier = Modifier.size(width = 6.dp, height = 1.dp))
         Text(
             text = argTypeLabel,
             style = MaterialTheme.typography.caption,
-            color = TextSecondary,
+            color = if (selected) contentColor.copy(alpha = 0.8f) else TextSecondary,
         )
     }
 }

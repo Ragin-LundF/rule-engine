@@ -38,7 +38,7 @@ fun AppAreaIconRail(
     Column(
         modifier = modifier
             .fillMaxHeight()
-            .width(width = 56.dp)
+            .width(width = 76.dp)
             .padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(space = 8.dp),
@@ -61,9 +61,9 @@ private fun RailItem(
 ) {
     val label = area.label()
     val symbol = area.symbol()
-    val bg = if (selected) PrimaryBlue.copy(alpha = 0.12f) else BgElevated
-    val textColor = if (selected) PrimaryBlue else TextSecondary
-    val borderColor = if (selected) PrimaryBlue.copy(alpha = 0.45f) else BgHover
+    val bg = if (selected) PrimaryBlue else BgElevated
+    val textColor = if (selected) MaterialTheme.colors.onPrimary else TextSecondary
+    val borderColor = if (selected) PrimaryBlue.copy(alpha = 0.7f) else BgHover
 
     Column(
         modifier = Modifier
@@ -76,7 +76,7 @@ private fun RailItem(
                 shape = RoundedCornerShape(size = 10.dp),
             )
             .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
+            .padding(vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(

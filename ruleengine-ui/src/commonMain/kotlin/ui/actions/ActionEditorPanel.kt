@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ui.TextSecondary
@@ -40,6 +41,18 @@ fun ActionEditorPanel(
     onYamlChange: (String) -> Unit,
     initialMode: ActionMode = ActionMode.VISUAL,
     modifier: Modifier = Modifier,
+    yamlEditor: @Composable (
+        value: TextFieldValue,
+        onValueChange: (TextFieldValue) -> Unit,
+        modifier: Modifier,
+    ) -> Unit = { value, onValueChange, fieldModifier ->
+        OutlinedTextField(
+            value = value.text,
+            onValueChange = { onValueChange(TextFieldValue(text = it)) },
+            modifier = fieldModifier,
+            textStyle = MaterialTheme.typography.body2,
+        )
+    },
 ) {
     var mode by remember { mutableStateOf(initialMode) }
     var editorState by remember { mutableStateOf(fromYaml(yaml)) }
@@ -116,6 +129,7 @@ fun ActionEditorPanel(
                     yamlText = newText
                     yamlError = null
                 },
+                yamlEditor = yamlEditor,
             )
             ActionMode.USAGES -> ActionUsagesPanel()
         }
@@ -153,6 +167,11 @@ private fun YamlActionEditor(
     error: String?,
     validationIssues: Boolean,
     onYamlChange: (String) -> Unit,
+    yamlEditor: @Composable (
+        value: TextFieldValue,
+        onValueChange: (TextFieldValue) -> Unit,
+        modifier: Modifier,
+    ) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -184,11 +203,12 @@ private fun YamlActionEditor(
                 color = MaterialTheme.colors.error,
             )
         }
-        OutlinedTextField(
-            value = yaml,
-            onValueChange = onYamlChange,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            textStyle = MaterialTheme.typography.body2,
+        yamlEditor(
+            TextFieldValue(text = yaml),
+            { newValue ->
+                onYamlChange(newValue.text)
+            },
+            Modifier.fillMaxWidth().weight(1f),
         )
     }
 }
