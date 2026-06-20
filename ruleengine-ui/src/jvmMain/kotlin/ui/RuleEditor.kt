@@ -23,15 +23,18 @@ import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
+import androidx.compose.ui.text.input.TextFieldValue
+import ui.builder.BuilderEditorState
+import ui.builder.BuilderRule
+import ui.builder.CatalogFieldInfo
+import ui.builder.RuleAstToBuilderMapper
 import ui.workbench.CatalogAction
 import ui.workbench.CatalogField
 import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
+import ui.workbench.CenterEditorPanel
 import ui.workbench.InspectorItem
 import ui.workbench.InspectorPanel
-import ui.builder.BuilderRule
-import ui.builder.RuleAstToBuilderMapper
-import ui.workbench.CenterEditorPanel
 import ui.workbench.LeftCatalogPanel
 import ui.workbench.RuleWorkbenchScreen
 
@@ -120,6 +123,9 @@ actual fun RuleEditor() {
         }
         if (ast != null) RuleAstToBuilderMapper.map(ast) else BuilderRule.None
     }
+    val builderEditorState = remember(key1 = builderRule) {
+        BuilderEditorState.fromBuilderRule(builderRule)
+    }
 
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     val catalogFields = remember(key1 = state.parsedSchema.value) {
@@ -130,6 +136,15 @@ actual fun RuleEditor() {
                 operators = def.operators.map { it.value },
                 normalizers = def.normalizers.map { it.value },
                 alias = def.alias,
+            )
+        } ?: emptyList()
+    }
+    val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
+        state.parsedSchema.value?.fields?.values?.map { def ->
+            CatalogFieldInfo(
+                id = def.id.value,
+                type = def.type.name.lowercase(),
+                operators = def.operators.map { it.value },
             )
         } ?: emptyList()
     }
@@ -178,7 +193,11 @@ actual fun RuleEditor() {
             CenterEditorPanel(
                 state = state,
                 scope = scope,
-                builderRule = builderRule,
+                builderEditorState = builderEditorState,
+                catalogFields = builderCatalogFields,
+                onBuilderDslChange = { newDsl ->
+                    state.ruleValue.value = TextFieldValue(text = newDsl)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         },
