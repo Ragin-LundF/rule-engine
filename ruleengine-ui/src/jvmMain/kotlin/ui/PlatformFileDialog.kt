@@ -55,6 +55,9 @@ actual suspend fun pickSchemaFile(): String? =
 actual suspend fun pickRuleFile(): String? =
     nativeOpen(title = "Open Rule File", filter = ruleFilter)?.readText()
 
+actual suspend fun pickActionsFile(): String? =
+    nativeOpen(title = "Open Actions YAML", filter = yamlFilter)?.readText()
+
 actual suspend fun pickManifestFile(): Pair<String, String>? {
     val file = nativeOpen(title = "Open Manifest YAML", filter = yamlFilter) ?: return null
     return Pair(file.readText(), file.parent ?: ".")

@@ -24,6 +24,7 @@ kotlin {
             dependencies {
                 implementation(project(":ruleengine-core"))
                 implementation(compose.desktop.currentOs)
+                implementation(libs.bundles.jackson)
             }
         }
         jsMain {
@@ -34,7 +35,7 @@ kotlin {
         jvmTest {
             dependencies {
                 implementation(project(":ruleengine-core"))
-                runtimeOnly(project(":ruleengine-core"))
+                implementation(libs.bundles.jackson)
                 implementation(kotlin("test"))
             }
         }
