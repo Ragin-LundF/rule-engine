@@ -36,7 +36,13 @@ import ui.workbench.CenterEditorPanel
 import ui.workbench.InspectorItem
 import ui.workbench.InspectorPanel
 import ui.workbench.LeftCatalogPanel
+import ui.workbench.RightPanelWithTabs
 import ui.workbench.RuleWorkbenchScreen
+import ui.tester.JvmRuleSimulationService
+import ui.tester.RuleTestPanel
+import ui.tester.SimulationOutcome
+import ui.tester.TestInputState
+import kotlinx.coroutines.launch
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -108,6 +114,11 @@ actual fun RuleEditor() {
 
     // ── Parsed rules for the expanded diagram window ───────────────────────────
     var selectedInspectorItem by remember { mutableStateOf<InspectorItem?>(null) }
+
+    // ── Test panel state ──────────────────────────────────────────────────────
+    var testInputState by remember { mutableStateOf(TestInputState.Empty) }
+    val simulationService = remember { JvmRuleSimulationService() }
+    var rightPanelTab by remember { mutableStateOf(0) } // 0 = Inspector, 1 = Simulate
 
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
@@ -202,12 +213,42 @@ actual fun RuleEditor() {
             )
         },
         rightPanel = {
-            InspectorPanel(
-                selectedItem = selectedInspectorItem,
-                fields = catalogFields,
-                actions = catalogActions,
-                rules = catalogRules,
-                modifier = Modifier.fillMaxSize(),
+            RightPanelWithTabs(
+                tab = rightPanelTab,
+                onTabChange = { rightPanelTab = it },
+                inspectorContent = {
+                    InspectorPanel(
+                        selectedItem = selectedInspectorItem,
+                        fields = catalogFields,
+                        actions = catalogActions,
+                        rules = catalogRules,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
+                simulateContent = {
+                    RuleTestPanel(
+                        state = testInputState,
+                        onJsonChange = { testInputState = testInputState.copy(inputJson = it) },
+                        onRunTest = {
+                            scope.launch {
+                                testInputState = testInputState.copy(isRunning = true)
+                                val result = simulationService.simulate(
+                                    schemaText = state.schemaText.value,
+                                    actionsText = state.actionSchemaText.value,
+                                    ruleText = state.ruleValue.value.text,
+                                    ruleId = state.selectedManifestEntry.value ?: "",
+                                    inputJson = testInputState.inputJson,
+                                )
+                                testInputState = testInputState.copy(
+                                    isRunning = false,
+                                    outcome = result.outcome,
+                                    traceRows = result.traceRows,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                },
             )
         },
     )
