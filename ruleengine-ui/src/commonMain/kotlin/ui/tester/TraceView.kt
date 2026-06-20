@@ -2,14 +2,13 @@ package ui.tester
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
@@ -30,6 +29,10 @@ import ui.TextPrimary
 /**
  * Renders a list of [TraceRow] items produced by the evaluator.
  * Each row shows a coloured dot (green = true, red = false) and the condition label.
+ *
+ * The implementation is a simple [Column] rather than a [LazyColumn] so that it can be
+ * safely embedded inside another scrolling container without creating nested scrollable
+ * constraints.
  */
 @Suppress("FunctionNaming")
 @Composable
@@ -39,21 +42,20 @@ fun TraceView(
 ) {
     if (rows.isEmpty()) return
 
-    LazyColumn(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Bg),
+            .background(Bg)
+            .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        item {
-            Text(
-                text = "Trace",
-                style = MaterialTheme.typography.caption,
-                color = TextMuted,
-                modifier = Modifier.padding(bottom = 4.dp),
-            )
-        }
-        items(rows) { row ->
+        Text(
+            text = "Trace",
+            style = MaterialTheme.typography.caption,
+            color = TextMuted,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        rows.forEach { row ->
             val dotColor = if (row.result) AccentGreen else AccentRed
             Row(
                 verticalAlignment = Alignment.CenterVertically,

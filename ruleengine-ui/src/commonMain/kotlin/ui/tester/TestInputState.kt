@@ -41,6 +41,7 @@ data class TraceRow(
  */
 data class TestInputState(
     val inputJson: String = "",
+    val selectedRuleId: String = "",
     val isRunning: Boolean = false,
     val outcome: SimulationOutcome = SimulationOutcome.Idle,
     val traceRows: List<TraceRow> = emptyList(),

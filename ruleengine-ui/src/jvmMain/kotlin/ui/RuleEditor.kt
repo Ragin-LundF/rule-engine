@@ -41,6 +41,7 @@ import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
+import ui.tester.TestCenterPanel
 import ui.tester.TestInputState
 import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppArea
@@ -270,6 +271,39 @@ actual fun RuleEditor() {
                             action = WorkbenchAction.SelectCondition(conditionId = conditionId),
                         )
                     },
+                    testContent = {
+                        TestCenterPanel(
+                            state = testInputState,
+                            onStateChange = { testInputState = it },
+                            onRunTest = {
+                                scope.launch {
+                                    testInputState = testInputState.copy(isRunning = true)
+                                    val result = simulationService.simulate(
+                                        schemaText = state.schemaText.value,
+                                        actionsText = state.actionSchemaText.value,
+                                        ruleText = state.ruleValue.value.text,
+                                        ruleId = testInputState.selectedRuleId,
+                                        inputJson = testInputState.inputJson,
+                                    )
+                                    testInputState = testInputState.copy(
+                                        isRunning = false,
+                                        outcome = result.outcome,
+                                        traceRows = result.traceRows,
+                                    )
+                                }
+                            },
+                            ruleIds = catalogRules.map { it.id },
+                            runEnabled = state.parsedSchema.value != null
+                                && state.ruleValue.value.text.isNotBlank()
+                                && !hasErrors,
+                            runReason = when {
+                                state.parsedSchema.value == null -> "Load a field schema first"
+                                state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
+                                hasErrors -> "Fix rule validation errors before running"
+                                else -> null
+                            },
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -360,7 +394,7 @@ actual fun RuleEditor() {
                                     schemaText = state.schemaText.value,
                                     actionsText = state.actionSchemaText.value,
                                     ruleText = state.ruleValue.value.text,
-                                    ruleId = state.selectedManifestEntry.value ?: "",
+                                    ruleId = testInputState.selectedRuleId,
                                     inputJson = testInputState.inputJson,
                                 )
                                 testInputState = testInputState.copy(

@@ -62,6 +62,7 @@ fun CenterEditorPanel(
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
     onConditionSelected: (String) -> Unit = {},
+    testContent: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val viewMode = ruleMode.toViewMode()
@@ -104,7 +105,7 @@ fun CenterEditorPanel(
                     )
                 }
 
-                ui.editor.rules.ViewMode.TEST -> TestModePlaceholder(modifier = Modifier.fillMaxSize())
+                ui.editor.rules.ViewMode.TEST -> testContent()
                 ui.editor.rules.ViewMode.TABLE -> TableModePlaceholder(modifier = Modifier.fillMaxSize())
             }
         }

@@ -3,6 +3,7 @@ package ui.workbench
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material.ScrollableTabRow
 import androidx.compose.material.Tab
 import androidx.compose.material.TabRowDefaults
@@ -67,9 +68,11 @@ fun RightPanelWithTabs(
             }
         }
 
-        when (tab) {
-            RightPanelTab.INSPECTOR -> inspectorContent()
-            RightPanelTab.SIMULATE -> simulateContent()
+        Box(modifier = Modifier.weight(weight = 1f)) {
+            when (tab) {
+                RightPanelTab.INSPECTOR -> inspectorContent()
+                RightPanelTab.SIMULATE -> simulateContent()
+            }
         }
     }
 }
