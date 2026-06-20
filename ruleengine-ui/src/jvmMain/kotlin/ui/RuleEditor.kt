@@ -1,15 +1,6 @@
 package ui
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +14,7 @@ import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
+import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
@@ -31,6 +23,7 @@ import ui.editor.rules.sections.LeftPanelSection
 import ui.editor.rules.sections.RightPanelSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
+import ui.workbench.RuleWorkbenchScreen
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -105,43 +98,28 @@ actual fun RuleEditor() {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(color = Bg)) {
-
-        // ── Top Bar ───────────────────────────────────────────────────────────
-        TopBarSection(state = state, scope = scope)
-
-        // ── Main layout ───────────────────────────────────────────────────────
-        BoxWithConstraints(
-            modifier = Modifier.weight(weight = 1f).fillMaxWidth().padding(all = 12.dp),
-        ) {
-            val leftWidthDp = maxWidth * state.splitFraction.value
-
-            Row(modifier = Modifier.fillMaxSize()) {
-
-                // ── Left panel ────────────────────────────────────────────────
-                LeftPanelSection(
-                    state = state,
-                    scope = scope,
-                    modifier = Modifier.width(width = leftWidthDp).fillMaxHeight(),
-                )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                // ── Right panel ───────────────────────────────────────────────
-                RightPanelSection(
-                    state = state,
-                    scope = scope,
-                    modifier = Modifier.weight(weight = 0.67f).fillMaxHeight(),
-                )
-            }
-        }
-
-        // ── Diagnostics ───────────────────────────────────────────────────────
-        DiagnosticsSection(state = state)
-
-        // ── Status Bar ────────────────────────────────────────────────────────
-        StatusBarSection(state = state)
-    }
+    RuleWorkbenchScreen(
+        topBar = { TopBarSection(state = state, scope = scope) },
+        bottomBar = {
+            DiagnosticsSection(state = state)
+            StatusBarSection(state = state)
+        },
+        leftPanel = {
+            LeftPanelSection(
+                state = state,
+                scope = scope,
+                modifier = Modifier.fillMaxSize(),
+            )
+        },
+        centerContent = {
+            RightPanelSection(
+                state = state,
+                scope = scope,
+                modifier = Modifier.fillMaxSize(),
+            )
+        },
+        rightPanel = { PlaceholderPanel(label = "Inspector") },
+    )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
     // Opened via the "⤢ Expand" button in diagram mode.
