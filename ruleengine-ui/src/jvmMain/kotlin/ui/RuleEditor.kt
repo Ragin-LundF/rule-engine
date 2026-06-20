@@ -191,10 +191,10 @@ actual fun RuleEditor() {
                 id
             }
             pendingBuilderRuleId.isNotBlank() -> pendingBuilderRuleId // not yet parsed, keep waiting
+            selectedBuilderRuleId in available -> selectedBuilderRuleId // keep current selection
             preferredId != null && preferredId in available -> preferredId
-            selectedBuilderRuleId in available -> selectedBuilderRuleId
             available.isNotEmpty() -> available.first()
-            else -> ""
+            else -> selectedBuilderRuleId // don't clear when parse temporarily fails
         }
     }
 
@@ -603,7 +603,7 @@ private fun generateUniqueRuleId(existingIds: Set<String>): String {
  */
 private fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
     val escapedId = Regex.escape(ruleId)
-    val pattern = Regex("""rule\s+\"$escapedId\"\s*\{[^}]*\}""")
+    val pattern = Regex(pattern = """rule\s+\"$escapedId\"\s*\{[^}]*\}""", option = RegexOption.DOT_MATCHES_ALL)
     return if (pattern.containsMatchIn(input = fullText)) {
         pattern.replace(input = fullText, replacement = newRuleDsl)
     } else {
