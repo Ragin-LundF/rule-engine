@@ -18,6 +18,7 @@ class MutableBuilderCondition(
     value: String,
     valueTo: String = "",
     listItems: List<String> = emptyList(),
+    joinToPrevious: String = "",
 ) {
     var field by mutableStateOf(field)
     var operator by mutableStateOf(operator)
@@ -26,6 +27,8 @@ class MutableBuilderCondition(
     var valueTo by mutableStateOf(valueTo)
     /** List items used only when operator is "in" / "containsAny" / "containsAll". */
     val listItems: SnapshotStateList<String> = listItems.toMutableStateList()
+    /** Join word (`and` or `or`) placed before this condition in the generated DSL. */
+    var joinToPrevious by mutableStateOf(joinToPrevious)
 
     fun toImmutable(): BuilderCondition = BuilderCondition(
         id = id,
@@ -34,6 +37,7 @@ class MutableBuilderCondition(
         value = value,
         valueTo = valueTo,
         listItems = listItems.toList(),
+        joinToPrevious = joinToPrevious,
     )
 }
 
@@ -65,9 +69,8 @@ class MutableBuilderAction(
  */
 class BuilderEditorState private constructor(
     val ruleId: String,
-    val conditions: MutableList<MutableBuilderCondition>,
-    val actions: MutableList<MutableBuilderAction>,
-    val conditionJoin: ConditionJoin,
+    val conditions: SnapshotStateList<MutableBuilderCondition>,
+    val actions: SnapshotStateList<MutableBuilderAction>,
     val isLocked: Boolean,
     val lockReason: String,
 ) {
@@ -86,32 +89,30 @@ class BuilderEditorState private constructor(
                         value = it.value,
                         valueTo = it.valueTo,
                         listItems = it.listItems,
+                        joinToPrevious = it.joinToPrevious,
                     )
-                }.toMutableList(),
+                }.toMutableStateList(),
                 actions = rule.actions.map {
                     MutableBuilderAction(
                         id = it.id,
                         name = it.name,
                         arguments = it.arguments,
                     )
-                }.toMutableList(),
-                conditionJoin = rule.conditionJoin,
+                }.toMutableStateList(),
                 isLocked = false,
                 lockReason = "",
             )
             is BuilderRule.Unsupported -> BuilderEditorState(
                 ruleId = rule.id,
-                conditions = mutableListOf(),
-                actions = mutableListOf(),
-                conditionJoin = ConditionJoin.SINGLE,
+                conditions = mutableStateListOf(),
+                actions = mutableStateListOf(),
                 isLocked = true,
                 lockReason = rule.reason,
             )
             BuilderRule.None -> BuilderEditorState(
                 ruleId = "",
-                conditions = mutableListOf(),
-                actions = mutableListOf(),
-                conditionJoin = ConditionJoin.SINGLE,
+                conditions = mutableStateListOf(),
+                actions = mutableStateListOf(),
                 isLocked = true,
                 lockReason = "No rule selected.",
             )
@@ -125,6 +126,7 @@ class BuilderEditorState private constructor(
             field = defaultField,
             operator = defaultOperator,
             value = "",
+            joinToPrevious = conditions.lastOrNull()?.let { "and" } ?: "",
         )
         conditions.add(condition)
         return condition
@@ -135,12 +137,12 @@ class BuilderEditorState private constructor(
         conditions.removeAll { it.id == id }
     }
 
-    /** Adds a new empty action. */
-    fun addAction(defaultName: String = ""): MutableBuilderAction {
+    /** Adds a new empty action with the given number of default arguments. */
+    fun addAction(defaultName: String = "", defaultArgCount: Int = 0): MutableBuilderAction {
         val action = MutableBuilderAction(
             id = "act-${nextActionId++}",
             name = defaultName,
-            arguments = emptyList(),
+            arguments = List(defaultArgCount) { "" }.toMutableList(),
         )
         actions.add(action)
         return action

@@ -14,8 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +29,7 @@ import ui.TextSecondary
 import ui.builder.components.ActionRowEditor
 import ui.builder.components.ConditionRowEditor
 import ui.builder.components.RuleBuilderHeader
+import ui.components.TinyButton
 
 /**
  * Editable visual representation of a single rule in Builder mode.
@@ -102,32 +103,20 @@ private fun WhenSection(
 ) {
     SectionHeader(
         title = "WHEN",
-        subtitle = when (editorState.conditionJoin) {
-            ConditionJoin.AND, ConditionJoin.SINGLE -> "All conditions are met"
-            ConditionJoin.OR -> "Any condition is met"
-        },
-        actionLabel = "+ Condition",
-        onAction = {
-            val defaultField = catalogFields.firstOrNull()?.id ?: ""
-            val defaultOperator = catalogFields.firstOrNull()?.let { field ->
-                OperatorOptions.forField(
-                    fieldType = field.type,
-                    schemaOperators = field.operators,
-                ).firstOrNull()
-            } ?: "equals"
-            editorState.addCondition(
-                defaultField = defaultField,
-                defaultOperator = defaultOperator,
-            )
-            emitDslChange(editorState = editorState, onDslChange = onDslChange)
-        },
+        subtitle = "Conditions are evaluated top to bottom",
     )
 
     Spacer(modifier = Modifier.height(height = 8.dp))
 
     editorState.conditions.forEachIndexed { index, condition ->
         if (index > 0) {
-            JoinLabel(text = "AND")
+            JoinSelectorRow(
+                join = condition.joinToPrevious,
+                onJoinSelected = { selectedJoin ->
+                    condition.joinToPrevious = selectedJoin
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
+            )
         }
         ConditionRowEditor(
             condition = condition,
@@ -148,6 +137,25 @@ private fun WhenSection(
             color = TextSecondary,
         )
     }
+
+    Spacer(modifier = Modifier.height(height = 8.dp))
+    AddButton(
+        label = "+ Condition",
+        onClick = {
+            val defaultField = catalogFields.firstOrNull()?.id ?: ""
+            val defaultOperator = catalogFields.firstOrNull()?.let { field ->
+                OperatorOptions.forField(
+                    fieldType = field.type,
+                    schemaOperators = field.operators,
+                ).firstOrNull()
+            } ?: "equals"
+            editorState.addCondition(
+                defaultField = defaultField,
+                defaultOperator = defaultOperator,
+            )
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+    )
 }
 
 @Composable
@@ -159,12 +167,6 @@ private fun ThenSection(
     SectionHeader(
         title = "THEN",
         subtitle = null,
-        actionLabel = "+ Action",
-        onAction = {
-            val defaultName = catalogActions.firstOrNull()?.name ?: ""
-            editorState.addAction(defaultName = defaultName)
-            emitDslChange(editorState = editorState, onDslChange = onDslChange)
-        },
     )
 
     Spacer(modifier = Modifier.height(height = 8.dp))
@@ -188,50 +190,92 @@ private fun ThenSection(
             )
         }
     }
+
+    Spacer(modifier = Modifier.height(height = 8.dp))
+    AddButton(
+        label = "+ Action",
+        onClick = {
+            val defaultAction = catalogActions.firstOrNull()
+            val defaultName = defaultAction?.name ?: ""
+            val defaultArgCount = if (defaultAction?.argType == "none") 0 else 1
+            editorState.addAction(
+                defaultName = defaultName,
+                defaultArgCount = defaultArgCount,
+            )
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+    )
 }
 
 @Composable
 private fun SectionHeader(
     title: String,
     subtitle: String?,
-    actionLabel: String,
-    onAction: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.subtitle1,
+            fontWeight = FontWeight.Bold,
+            color = PrimaryBlue,
+        )
+        subtitle?.let {
             Text(
-                text = title,
-                style = MaterialTheme.typography.subtitle1,
-                fontWeight = FontWeight.Bold,
-                color = PrimaryBlue,
+                text = "  $it",
+                style = MaterialTheme.typography.caption,
+                color = TextSecondary,
             )
-            subtitle?.let {
-                Text(
-                    text = "  $it",
-                    style = MaterialTheme.typography.caption,
-                    color = TextSecondary,
-                )
-            }
-        }
-        OutlinedButton(onClick = onAction) {
-            Text(text = actionLabel, style = MaterialTheme.typography.caption)
         }
     }
 }
 
 @Composable
-private fun JoinLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.caption,
-        fontWeight = FontWeight.SemiBold,
-        color = TextSecondary,
-        modifier = Modifier.padding(vertical = 2.dp),
-    )
+private fun JoinSelectorRow(
+    join: String,
+    onJoinSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp, alignment = Alignment.Start),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TinyButton(
+            text = "AND",
+            primary = join != "or",
+            onClick = { onJoinSelected("and") },
+        )
+        TinyButton(
+            text = "OR",
+            primary = join == "or",
+            onClick = { onJoinSelected("or") },
+        )
+    }
+}
+
+@Composable
+private fun AddButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = modifier,
+    ) {
+        Text(
+            text = label,
+            color = PrimaryBlue,
+            style = MaterialTheme.typography.button,
+        )
+    }
 }
 
 @Composable

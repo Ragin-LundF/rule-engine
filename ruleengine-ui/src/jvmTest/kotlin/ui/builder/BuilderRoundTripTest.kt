@@ -162,7 +162,6 @@ class BuilderRoundTripTest {
                         value = "100",
                     ),
                 ),
-                conditionJoin = ConditionJoin.SINGLE,
                 actions = listOf(
                     BuilderAction(
                         id = "a1",
@@ -186,7 +185,7 @@ class BuilderRoundTripTest {
     }
 
     @Test
-    fun `unsupported OrAst rule produces locked BuilderEditorState`() {
+    fun `OrAst rule round-trips with per-link joins`() {
         val original = """
             rule "or-rule" {
               when
@@ -198,8 +197,39 @@ class BuilderRoundTripTest {
         """.trimIndent()
 
         val state = builderStateFromDsl(original)
-        assertTrue(state.isLocked, "OrAst rule should produce a locked BuilderEditorState")
-        assertEquals(null, BuilderToRuleDsl.generate(state), "Locked state must not generate DSL")
+        assertTrue(!state.isLocked, "OrAst rule should be editable in BuilderEditorState")
+        assertEquals("", state.conditions[0].joinToPrevious)
+        assertEquals("or", state.conditions[1].joinToPrevious)
+        val generated = BuilderToRuleDsl.generate(state)
+        assertNotNull(generated)
+
+        val result = parseAndValidate(generated)
+        assertTrue(result.isValid, "Generated Or DSL should be valid; diagnostics: ${result.diagnostics}")
+    }
+
+    @Test
+    fun `mixed AND OR rule round-trips to valid DSL`() {
+        val original = """
+            rule "mixed-rule" {
+              when
+                purpose contains "rent"
+                and amount >= 500
+                or purpose equals "misc"
+              then
+                label "misc"
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(original)
+        assertTrue(!state.isLocked, "Mixed join rule should be editable in BuilderEditorState")
+        val joins = state.conditions.map { it.joinToPrevious }
+        assertEquals(listOf("", "and", "or"), joins)
+
+        val generated = BuilderToRuleDsl.generate(state)
+        assertNotNull(generated)
+
+        val result = parseAndValidate(generated)
+        assertTrue(result.isValid, "Generated mixed join DSL should be valid; diagnostics: ${result.diagnostics}")
     }
 
     @Test

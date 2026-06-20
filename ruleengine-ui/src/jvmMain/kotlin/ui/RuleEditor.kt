@@ -175,8 +175,22 @@ actual fun RuleEditor() {
         }
         if (ast != null) RuleAstToBuilderMapper.map(ast) else BuilderRule.None
     }
-    val builderEditorState = remember(key1 = builderRule) {
-        BuilderEditorState.fromBuilderRule(builderRule)
+    // ── Builder state: keep local editor state stable while in Builder mode ─────
+    var builderEditorState by remember { mutableStateOf<BuilderEditorState?>(null) }
+
+    LaunchedEffect(key1 = workbenchState.ruleMode, key2 = builderRule) {
+        when (workbenchState.ruleMode) {
+            RuleMode.BUILDER -> {
+                val current = builderEditorState
+                val shouldReset = current == null ||
+                    current.ruleId != builderRule.ruleId() ||
+                    current.isLocked != builderRule.isLocked()
+                if (shouldReset) {
+                    builderEditorState = BuilderEditorState.fromBuilderRule(builderRule)
+                }
+            }
+            else -> builderEditorState = null
+        }
     }
 
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
@@ -264,7 +278,7 @@ actual fun RuleEditor() {
                     onRuleModeChange = { mode ->
                         workbenchViewModel.dispatch(action = WorkbenchAction.SelectRuleMode(mode = mode))
                     },
-                    builderEditorState = builderEditorState,
+                    builderEditorState = builderEditorState ?: BuilderEditorState.fromBuilderRule(builderRule),
                     catalogFields = builderCatalogFields,
                     catalogActions = builderCatalogActions,
                     onBuilderDslChange = { newDsl ->
@@ -478,4 +492,16 @@ actual fun RuleEditor() {
             }
         }
     }
+}
+
+private fun BuilderRule.isLocked(): Boolean = when (this) {
+    is BuilderRule.Supported -> false
+    is BuilderRule.Unsupported -> true
+    BuilderRule.None -> true
+}
+
+private fun BuilderRule.ruleId(): String = when (this) {
+    is BuilderRule.Supported -> id
+    is BuilderRule.Unsupported -> id
+    BuilderRule.None -> ""
 }

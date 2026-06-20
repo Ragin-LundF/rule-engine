@@ -2,6 +2,9 @@ package ui.builder
 
 /**
  * A single condition row rendered in the WHEN block.
+ *
+ * [joinToPrevious] is the boolean word (`and` or `or`) placed before this condition
+ * when rendering DSL text. The first condition in a rule has an empty value.
  */
 data class BuilderCondition(
     val id: String,
@@ -12,6 +15,8 @@ data class BuilderCondition(
     val valueTo: String = "",
     /** Items for list operators (`in`, `containsAny`, `containsAll`). */
     val listItems: List<String> = emptyList(),
+    /** Join word that precedes this condition in a top-to-bottom rule. */
+    val joinToPrevious: String = "",
 )
 
 /**
@@ -29,7 +34,6 @@ sealed interface BuilderRule {
     data class Supported(
         val id: String,
         val conditions: List<BuilderCondition>,
-        val conditionJoin: ConditionJoin,
         val actions: List<BuilderAction>,
     ) : BuilderRule
 
@@ -39,5 +43,3 @@ sealed interface BuilderRule {
     /** No rule is currently selected. */
     data object None : BuilderRule
 }
-
-enum class ConditionJoin { AND, OR, SINGLE }

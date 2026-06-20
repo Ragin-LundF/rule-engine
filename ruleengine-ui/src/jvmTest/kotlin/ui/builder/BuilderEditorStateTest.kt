@@ -14,7 +14,6 @@ class BuilderEditorStateTest {
             BuilderRule.Supported(
                 id = "r1",
                 conditions = emptyList(),
-                conditionJoin = ConditionJoin.SINGLE,
                 actions = emptyList(),
             )
         )
@@ -25,6 +24,7 @@ class BuilderEditorStateTest {
         assertEquals(2, state.conditions.size)
         assertEquals("amount", first.field)
         assertEquals("purpose", second.field)
+        assertEquals("and", second.joinToPrevious)
     }
 
     @Test
@@ -34,9 +34,8 @@ class BuilderEditorStateTest {
                 id = "r1",
                 conditions = listOf(
                     BuilderCondition(id = "c1", field = "amount", operator = ">=", value = "100"),
-                    BuilderCondition(id = "c2", field = "purpose", operator = "equals", value = "\"rent\""),
+                    BuilderCondition(id = "c2", field = "purpose", operator = "equals", value = "rent"),
                 ),
-                conditionJoin = ConditionJoin.AND,
                 actions = emptyList(),
             )
         )
@@ -53,7 +52,6 @@ class BuilderEditorStateTest {
             BuilderRule.Supported(
                 id = "r1",
                 conditions = emptyList(),
-                conditionJoin = ConditionJoin.SINGLE,
                 actions = emptyList(),
             )
         )

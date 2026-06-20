@@ -33,7 +33,7 @@ object BuilderToRuleDsl {
         sb.append("  when\n")
 
         state.conditions.forEachIndexed { index, cond ->
-            val prefix = if (index == 0) "    " else "    and "
+            val prefix = if (index == 0) "    " else "    ${cond.joinToPrevious.ifBlank { "and" }} "
             sb.append("$prefix${renderCondition(cond)}\n")
         }
 

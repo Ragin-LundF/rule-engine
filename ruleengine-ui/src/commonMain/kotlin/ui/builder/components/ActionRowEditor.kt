@@ -3,17 +3,15 @@ package ui.builder.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material.IconButton
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ui.builder.CatalogActionInfo
 import ui.builder.MutableBuilderAction
+import ui.components.TinyButton
 
 /**
  * A single editable action row: action dropdown, argument editor, and remove button.
@@ -64,12 +62,9 @@ fun ActionRowEditor(
             )
         }
 
-        IconButton(onClick = onRemove) {
-            Text(
-                text = "×",
-                style = MaterialTheme.typography.body1,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        TinyButton(
+            text = "×",
+            onClick = onRemove,
+        )
     }
 }
