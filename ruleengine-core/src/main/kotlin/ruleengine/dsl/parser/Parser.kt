@@ -2,18 +2,29 @@ package ruleengine.dsl.parser
 
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.ArithmeticOperatorAst
+import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ExtractionAst
 import ruleengine.dsl.ast.ExtractionRefLiteral
+import ruleengine.dsl.ast.FieldAccessAst
+import ruleengine.dsl.ast.FieldSegmentAst
+import ruleengine.dsl.ast.FilterSegmentAst
+import ruleengine.dsl.ast.FunctionCallValueAst
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
+import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
@@ -169,11 +180,200 @@ class Parser(private val input: String) {
     }
 
     private fun parsePrimary(): ExpressionAst {
-        return if (current().type == TokenType.LPAREN) {
+        return if (current().type == TokenType.LPAREN && !isParenthesizedValueExpression()) {
             parseParenthesizedExpression()
         } else {
+            parseComparisonOrLegacyCondition()
+        }
+    }
+
+    /**
+     * Peeks ahead to determine whether a `(` starts a parenthesized value expression
+     * (i.e. arithmetic like `(amount + fee) * 2 <= 100`) rather than a parenthesized
+     * boolean expression. Returns true when the content inside the parens looks like
+     * a value expression followed by an arithmetic or comparison operator.
+     */
+    private fun isParenthesizedValueExpression(): Boolean {
+        val savedPos = pos
+        return try {
+            advance() // consume '('
+            parseValueExpression()
+            val afterInner = current().type
+            pos = savedPos
+            afterInner in setOf(
+                TokenType.RPAREN,
+                TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH
+            )
+        } catch (_: ParseException) {
+            pos = savedPos
+            false
+        }
+    }
+
+    /**
+     * Decides between a modern symbolic comparison (producing [ComparisonExpressionAst])
+     * and a legacy named-operator condition (producing [ConditionAst]).
+     *
+     * Produces [ComparisonExpressionAst] only when the expression is non-trivial:
+     * the left side is a function call or arithmetic, or the right side is a function
+     * call or arithmetic. Plain `field op literal` patterns continue to produce
+     * [ConditionAst] for backward compatibility until the compiler supports the full
+     * value expression model.
+     */
+    private fun parseComparisonOrLegacyCondition(): ExpressionAst {
+        val savedPos = pos
+        return try {
+            val left = parseValueExpression()
+            val op = parseComparisonOperator()
+            if (op != null) {
+                val right = parseValueExpression()
+                if (isModernExpression(left) || isModernExpression(right) || isModernOnlyOperator(op)) {
+                    ComparisonExpressionAst(left = left, operator = op, right = right)
+                } else {
+                    // Both sides are plain field/literal with a legacy-compatible operator
+                    // — keep as legacy ConditionAst
+                    pos = savedPos
+                    parseCondition()
+                }
+            } else {
+                // No symbolic operator found — restore and fall back to legacy
+                pos = savedPos
+                parseCondition()
+            }
+        } catch (_: ParseException) {
+            pos = savedPos
             parseCondition()
         }
+    }
+
+    /**
+     * Returns true when a value expression requires the modern evaluation path:
+     * function calls, arithmetic, or field paths with filter segments.
+     */
+    private fun isModernExpression(expr: ValueExpressionAst): Boolean {
+        return when (expr) {
+            is FunctionCallValueAst -> true
+            is ArithmeticValueAst -> true
+            is FieldAccessAst -> expr.path.any { it is FilterSegmentAst }
+            is LiteralValueAst -> false
+        }
+    }
+
+    /**
+     * Returns true for operators that have no equivalent in the legacy named-operator DSL
+     * and must always be routed through the modern [ComparisonExpressionAst] path.
+     */
+    private fun isModernOnlyOperator(op: ComparisonOperatorAst): Boolean {
+        return op == ComparisonOperatorAst.EQ || op == ComparisonOperatorAst.NEQ
+    }
+
+    private fun parseComparisonOperator(): ComparisonOperatorAst? {
+        return when (current().type) {
+            TokenType.EQEQ -> { advance(); ComparisonOperatorAst.EQ }
+            TokenType.BANGEQ -> { advance(); ComparisonOperatorAst.NEQ }
+            TokenType.GT -> { advance(); ComparisonOperatorAst.GT }
+            TokenType.GTE -> { advance(); ComparisonOperatorAst.GTE }
+            TokenType.LT -> { advance(); ComparisonOperatorAst.LT }
+            TokenType.LTE -> { advance(); ComparisonOperatorAst.LTE }
+            else -> null
+        }
+    }
+
+    private fun parseValueExpression(): ValueExpressionAst {
+        return parseAdditiveValue()
+    }
+
+    private fun parseAdditiveValue(): ValueExpressionAst {
+        var left = parseMultiplicativeValue()
+        while (current().type == TokenType.PLUS || current().type == TokenType.MINUS) {
+            val op = if (current().type == TokenType.PLUS) ArithmeticOperatorAst.ADD else ArithmeticOperatorAst.SUBTRACT
+            advance()
+            val right = parseMultiplicativeValue()
+            left = ArithmeticValueAst(left = left, operator = op, right = right)
+        }
+        return left
+    }
+
+    private fun parseMultiplicativeValue(): ValueExpressionAst {
+        var left = parsePrimaryValue()
+        while (current().type == TokenType.STAR || current().type == TokenType.SLASH) {
+            val op = if (current().type == TokenType.STAR) {
+                ArithmeticOperatorAst.MULTIPLY
+            } else {
+                ArithmeticOperatorAst.DIVIDE
+            }
+            advance()
+            val right = parsePrimaryValue()
+            left = ArithmeticValueAst(left = left, operator = op, right = right)
+        }
+        return left
+    }
+
+    private fun parsePrimaryValue(): ValueExpressionAst {
+        val token = current()
+        return when (token.type) {
+            TokenType.LPAREN -> {
+                advance()
+                val inner = parseValueExpression()
+                expect(type = TokenType.RPAREN)
+                inner
+            }
+            TokenType.NUMBER -> {
+                advance()
+                LiteralValueAst(literal = NumberLiteral(value = token.text))
+            }
+            TokenType.STRING -> {
+                advance()
+                LiteralValueAst(literal = StringLiteral(value = token.text))
+            }
+            TokenType.IDENT -> parseFunctionCallOrFieldAccess()
+            else -> throw ParseException(
+                line = token.line,
+                column = token.col,
+                messageText = "Expected value expression but found ${token.type} (${token.text})"
+            )
+        }
+    }
+
+    private fun parseFunctionCallOrFieldAccess(): ValueExpressionAst {
+        val nameTok = expect(type = TokenType.IDENT)
+        return if (current().type == TokenType.LPAREN) {
+            advance()
+            val args = mutableListOf<ValueExpressionAst>()
+            while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
+                args += parseValueExpression()
+                if (current().type == TokenType.COMMA) advance()
+            }
+            expect(type = TokenType.RPAREN)
+            FunctionCallValueAst(name = nameTok.text, arguments = args)
+        } else {
+            parseFieldPath(firstIdentifier = nameTok.text)
+        }
+    }
+
+    private fun parseFieldPath(firstIdentifier: String): FieldAccessAst {
+        val segments = mutableListOf<PathSegmentAst>(FieldSegmentAst(name = firstIdentifier))
+        while (current().type == TokenType.LBRACKET || current().type == TokenType.DOT) {
+            when (current().type) {
+                TokenType.LBRACKET -> {
+                    advance()
+                    val filterExpr = parseFilterExpression()
+                    expect(type = TokenType.RBRACKET)
+                    segments += FilterSegmentAst(expression = filterExpr)
+                }
+                TokenType.DOT -> {
+                    advance()
+                    val fieldTok = expect(type = TokenType.IDENT)
+                    segments += FieldSegmentAst(name = fieldTok.text)
+                }
+                else -> break
+            }
+        }
+        return FieldAccessAst(path = segments)
+    }
+
+    private fun parseFilterExpression(): ExpressionAst {
+        return parseExpression()
     }
 
     private fun parseParenthesizedExpression(): ExpressionAst {
@@ -232,7 +432,12 @@ class Parser(private val input: String) {
 
     private fun parseConditionOperator(): String {
         val opTok = current()
-        if (opTok.type != TokenType.IDENT) {
+        val isSymbolicOperator = opTok.type in setOf(
+            TokenType.EQEQ, TokenType.BANGEQ,
+            TokenType.GT, TokenType.GTE,
+            TokenType.LT, TokenType.LTE
+        )
+        if (opTok.type != TokenType.IDENT && !isSymbolicOperator) {
             throw ParseException(
                 line = opTok.line,
                 column = opTok.col,

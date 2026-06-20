@@ -121,6 +121,18 @@ private fun buildThenCompletions(
     }
 }
 
+private fun buildAggregateFunctionCompletions(): List<CompletionItem> {
+    return listOf(
+        CompletionItem(label = "count(...)", insertText = "count(transactions)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "sum(...)", insertText = "sum(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "subtract(...)", insertText = "subtract(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "avg(...)", insertText = "avg(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "median(...)", insertText = "median(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "max(...)", insertText = "max(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(label = "min(...)", insertText = "min(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+    )
+}
+
 private fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionItem> {
     return buildList {
         add(CompletionItem(label = "and", insertText = "and", kind = CompletionKind.LOGIC, hint = "logic"))
@@ -128,6 +140,7 @@ private fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionIt
         add(CompletionItem(label = "not", insertText = "not", kind = CompletionKind.LOGIC, hint = "logic"))
         add(CompletionItem(label = "true", insertText = "true", kind = CompletionKind.LITERAL, hint = "boolean"))
         add(CompletionItem(label = "false", insertText = "false", kind = CompletionKind.LITERAL, hint = "boolean"))
+        addAll(buildAggregateFunctionCompletions())
         schema?.fields?.forEach { (id, def) ->
             add(
                 CompletionItem(
@@ -247,6 +260,7 @@ public fun buildAllCompletions(
         add(CompletionItem(label = "not", insertText = "not", kind = CompletionKind.LOGIC, hint = "logic"))
         add(CompletionItem(label = "true", insertText = "true", kind = CompletionKind.LITERAL, hint = "boolean"))
         add(CompletionItem(label = "false", insertText = "false", kind = CompletionKind.LITERAL, hint = "boolean"))
+        addAll(buildAggregateFunctionCompletions())
         schema?.fields?.forEach { (id, def) ->
             add(
                 CompletionItem(

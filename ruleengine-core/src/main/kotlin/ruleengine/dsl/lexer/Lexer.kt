@@ -51,7 +51,8 @@ class Lexer(private val input: String) {
                 '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
                 '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
                 '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
-                ',' to TokenType.COMMA, '.' to TokenType.DOT
+                ',' to TokenType.COMMA, '.' to TokenType.DOT,
+                '+' to TokenType.PLUS, '*' to TokenType.STAR, '/' to TokenType.SLASH
             )
 
             if (singleCharTokens.containsKey(c)) {
@@ -62,7 +63,7 @@ class Lexer(private val input: String) {
 
             when (c) {
                 '"' -> tokens += readString()
-                '>', '<', '=', '!' -> tokens += readOperator()
+                '>', '<', '=', '!', '-' -> tokens += readOperatorOrMinus()
                 '#' -> {
                     // Single-line comment — skip everything up to (but not including) the newline.
                     // The newline itself is left for skipWhitespace() so line tracking stays correct.
@@ -74,7 +75,7 @@ class Lexer(private val input: String) {
                 else -> {
                     tokens += if (c.isLetter() || c == '_') {
                         readIdentOrKeyword()
-                    } else if (c.isDigit() || c == '-') {
+                    } else if (c.isDigit()) {
                         readNumber()
                     } else if (c == '$') {
                         // Extraction reference: $1, $2, … – tokenised as IDENT "$N"
@@ -145,20 +146,60 @@ class Lexer(private val input: String) {
         return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
     }
 
-    private fun readOperator(): Token {
+    @Suppress("CyclomaticComplexMethod")
+    private fun readOperatorOrMinus(): Token {
         val startLine = line
         val startCol = col
-        val sb = StringBuilder()
         val first = current()!!
-        sb.append(first)
         advance()
         val next = current()
-        if (next != null && next == '=') {
-            sb.append(next)
-            advance()
+
+        // '-' followed by a digit is a negative number literal
+        if (first == '-' && next != null && next.isDigit()) {
+            val sb = StringBuilder()
+            sb.append('-')
+            while (current()?.let { it.isDigit() || it == '.' } == true) {
+                sb.append(current())
+                advance()
+            }
+            return Token(type = TokenType.NUMBER, text = sb.toString(), line = startLine, col = startCol)
         }
 
-        return Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
+        if (first == '-') {
+            return Token(type = TokenType.MINUS, text = "-", line = startLine, col = startCol)
+        }
+
+        val twoChar = next == '='
+        return when (first) {
+            '=' if next == '=' -> {
+                advance()
+                Token(type = TokenType.EQEQ, text = "==", line = startLine, col = startCol)
+            }
+            '!' if twoChar -> {
+                advance()
+                Token(type = TokenType.BANGEQ, text = "!=", line = startLine, col = startCol)
+            }
+            '>' if twoChar -> {
+                advance()
+                Token(type = TokenType.GTE, text = ">=", line = startLine, col = startCol)
+            }
+            '>' -> Token(type = TokenType.GT, text = ">", line = startLine, col = startCol)
+            '<' if twoChar -> {
+                advance()
+                Token(type = TokenType.LTE, text = "<=", line = startLine, col = startCol)
+            }
+            '<' -> Token(type = TokenType.LT, text = "<", line = startLine, col = startCol)
+            else -> {
+                // fallback: emit as IDENT for legacy named operators that start with these chars
+                val sb = StringBuilder()
+                sb.append(first)
+                if (twoChar) {
+                    sb.append(next)
+                    advance()
+                }
+                Token(type = TokenType.IDENT, text = sb.toString(), line = startLine, col = startCol)
+            }
+        }
     }
 
     /**
@@ -191,11 +232,6 @@ class Lexer(private val input: String) {
         val startLine = line
         val startCol = col
         val sb = StringBuilder()
-        if (current() == '-') {
-            sb.append('-')
-            advance()
-        }
-
         while (true) {
             val c = current() ?: break
             if (c.isDigit() || c == '.') {

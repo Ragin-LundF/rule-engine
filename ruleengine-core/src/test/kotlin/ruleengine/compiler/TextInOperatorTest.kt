@@ -10,7 +10,7 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.context.PreparedText
+import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.context.RuleContext
 import kotlin.test.Test
 import kotlin.test.assertEquals

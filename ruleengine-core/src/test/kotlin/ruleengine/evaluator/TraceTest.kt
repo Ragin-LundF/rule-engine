@@ -11,7 +11,7 @@ import ruleengine.core.domain.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.context.RuleContext
-import ruleengine.evaluator.trace.DecisionTree
+import ruleengine.evaluator.trace.dto.DecisionTree
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
