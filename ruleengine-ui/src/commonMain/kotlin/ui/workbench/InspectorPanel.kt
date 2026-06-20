@@ -51,6 +51,8 @@ fun InspectorPanel(
                 InspectorPlaceholder(modifier = modifier)
             }
         }
+        is InspectorItem.Condition -> InspectorPlaceholder(modifier = modifier)
+        is InspectorItem.Manifest -> InspectorPlaceholder(modifier = modifier)
         null -> InspectorPlaceholder(modifier = modifier)
     }
 }

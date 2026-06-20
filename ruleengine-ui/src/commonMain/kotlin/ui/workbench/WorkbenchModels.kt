@@ -1,16 +1,61 @@
 package ui.workbench
 
 /**
- * Authoring modes available in the rule workbench.
- * DIAGRAM is intentionally omitted here because it is a view-only mode
- * managed separately; it is not a primary editing mode.
+ * High-level application area selected in the left icon rail.
  */
-enum class WorkbenchMode {
+enum class AppArea {
+    RULES,
+    SCHEMA,
+    ACTIONS,
+    MANIFEST,
+    SAMPLES,
+    SETTINGS,
+}
+
+/**
+ * Center-panel modes available inside the [AppArea.RULES] area.
+ */
+enum class RuleMode {
     BUILDER,
     CODE,
     DIAGRAM,
-    TABLE,
     TEST,
+    TABLE,
+}
+
+/**
+ * Center-panel modes available inside the [AppArea.SCHEMA] area.
+ */
+enum class SchemaMode {
+    VISUAL,
+    YAML,
+    USAGES,
+}
+
+/**
+ * Center-panel modes available inside the [AppArea.ACTIONS] area.
+ */
+enum class ActionMode {
+    VISUAL,
+    YAML,
+    USAGES,
+}
+
+/**
+ * Center-panel modes available inside the [AppArea.MANIFEST] area.
+ */
+enum class ManifestMode {
+    BUILDER,
+    YAML,
+    CHECKS,
+}
+
+/**
+ * Tab displayed in the right inspector/simulate panel.
+ */
+enum class RightPanelTab {
+    INSPECTOR,
+    SIMULATE,
 }
 
 /**
@@ -53,7 +98,18 @@ enum class ValidationState {
  * An item selected in the inspector panel.
  */
 sealed interface InspectorItem {
+    /** A field definition from the field schema. */
     data class Field(val id: String) : InspectorItem
+
+    /** An action definition from the action schema. */
     data class Action(val name: String) : InspectorItem
+
+    /** A parsed rule. */
     data class Rule(val id: String) : InspectorItem
+
+    /** A single condition row inside Builder mode. */
+    data class Condition(val conditionId: String) : InspectorItem
+
+    /** A manifest project. */
+    data class Manifest(val name: String) : InspectorItem
 }

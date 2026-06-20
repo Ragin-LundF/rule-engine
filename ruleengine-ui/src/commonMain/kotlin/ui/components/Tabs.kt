@@ -21,16 +21,16 @@ import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
-import ui.workbench.WorkbenchMode
+import ui.workbench.RuleMode
 
 /**
- * Horizontal tab bar for switching between workbench modes.
- * Renders one tab per [WorkbenchMode] value.
+ * Horizontal tab bar for switching between rule-center modes.
+ * Renders one tab per [RuleMode] value.
  */
 @Composable
 fun WorkbenchTabs(
-    selectedMode: WorkbenchMode,
-    onModeSelected: (WorkbenchMode) -> Unit,
+    selectedMode: RuleMode,
+    onModeSelected: (RuleMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -42,7 +42,7 @@ fun WorkbenchTabs(
         horizontalArrangement = Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WorkbenchMode.entries.forEach { mode ->
+        RuleMode.entries.forEach { mode ->
             WorkbenchTab(
                 label = mode.displayName(),
                 selected = mode == selectedMode,
@@ -77,10 +77,10 @@ private fun WorkbenchTab(
     }
 }
 
-private fun WorkbenchMode.displayName(): String = when (this) {
-    WorkbenchMode.BUILDER -> "Builder"
-    WorkbenchMode.CODE -> "Code"
-    WorkbenchMode.DIAGRAM -> "Diagram"
-    WorkbenchMode.TEST -> "Test"
-    WorkbenchMode.TABLE -> "Table"
+private fun RuleMode.displayName(): String = when (this) {
+    RuleMode.BUILDER -> "Builder"
+    RuleMode.CODE -> "Code"
+    RuleMode.DIAGRAM -> "Diagram"
+    RuleMode.TEST -> "Test"
+    RuleMode.TABLE -> "Table"
 }

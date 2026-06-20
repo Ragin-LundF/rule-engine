@@ -4,17 +4,26 @@ package ui.workbench
  * Immutable snapshot of the entire rule workbench UI state.
  * All fields are plain Kotlin types safe for commonMain.
  */
-data class WorkbenchState(
-    val selectedMode: WorkbenchMode = WorkbenchMode.CODE,
+data class RuleWorkbenchState(
+    val appArea: AppArea = AppArea.RULES,
+    val ruleMode: RuleMode = RuleMode.CODE,
+    val schemaMode: SchemaMode = SchemaMode.VISUAL,
+    val actionMode: ActionMode = ActionMode.VISUAL,
+    val manifestMode: ManifestMode = ManifestMode.BUILDER,
+    val selectedRuleId: String? = null,
+    val selectedFieldId: String? = null,
+    val selectedActionName: String? = null,
+    val selectedInspectorItem: InspectorItem? = null,
+    val rightPanelTab: RightPanelTab = RightPanelTab.INSPECTOR,
+    val ruleText: String = "",
     val schemaText: String = "",
     val actionsText: String = "",
-    val ruleText: String = "",
-    val selectedRuleId: String? = null,
-    val selectedInspectorItem: InspectorItem? = null,
+    val manifestText: String = "",
     val diagnostics: List<UiDiagnostic> = emptyList(),
     val validationState: ValidationState = ValidationState.IDLE,
 ) {
     companion object {
-        val Empty: WorkbenchState = WorkbenchState()
+        /** Empty initial state. */
+        val Empty: RuleWorkbenchState = RuleWorkbenchState()
     }
 }
