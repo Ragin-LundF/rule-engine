@@ -311,7 +311,7 @@ actual fun RuleEditor() {
                         workbenchViewModel.dispatch(action = WorkbenchAction.SelectRuleMode(mode = mode))
                     },
                     builderEditorState = activeBuilderEditorState,
-                    allRuleIds = builderStateMap.keys.toList(),
+                    allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     onRuleSelected = { ruleId -> selectedBuilderRuleId = ruleId },
                     onRenameRule = { oldId, newId ->
                         if (newId !in builderStateMap && newId.isNotBlank()) {

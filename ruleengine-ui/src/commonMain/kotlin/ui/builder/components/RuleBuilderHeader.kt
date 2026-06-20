@@ -70,11 +70,14 @@ fun RuleBuilderHeader(
                 )
             }
         } else {
+            val selectPlaceholder = "-- select --"
             DropdownSelector(
-                selected = selectedRuleId,
-                options = ruleIds,
-                onSelected = onRuleSelected,
-                placeholder = "— select rule —",
+                selected = selectedRuleId.ifBlank { selectPlaceholder },
+                options = listOf(selectPlaceholder) + ruleIds,
+                onSelected = { option ->
+                    onRuleSelected(if (option == selectPlaceholder) "" else option)
+                },
+                placeholder = selectPlaceholder,
                 modifier = Modifier.weight(weight = 1f),
             )
             if (selectedRuleId.isNotBlank()) {

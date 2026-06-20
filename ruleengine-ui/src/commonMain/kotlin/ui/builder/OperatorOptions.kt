@@ -14,6 +14,21 @@ object OperatorOptions {
     val DATE: List<String> = listOf("equals", ">", ">=", "<", "<=", "between")
 
     /**
+     * Maps schema/DSL operator names (e.g. "gt", "gte") to the display symbols used in
+     * [INTEGER], [DECIMAL], and [DATE] default lists (e.g. ">", ">=").
+     * This allows the intersection logic to work even when the schema uses word-form names.
+     */
+    private val SCHEMA_NAME_TO_SYMBOL: Map<String, String> = mapOf(
+        "gt" to ">",
+        "gte" to ">=",
+        "lt" to "<",
+        "lte" to "<=",
+        "ne" to "!=",
+        "neq" to "!=",
+        "not_equals" to "!=",
+    )
+
+    /**
      * Returns the effective operator list for a field.
      *
      * @param fieldType lowercase field type string (e.g. "text", "integer").
@@ -32,7 +47,9 @@ object OperatorOptions {
         return if (schemaOperators.isEmpty()) {
             defaults
         } else {
-            defaults.filter { it in schemaOperators }
+            // Normalize schema operator names to display symbols before intersecting
+            val normalizedSchema = schemaOperators.map { op -> SCHEMA_NAME_TO_SYMBOL[op] ?: op }.toSet()
+            defaults.filter { it in normalizedSchema }
                 .ifEmpty { schemaOperators }
         }
     }
