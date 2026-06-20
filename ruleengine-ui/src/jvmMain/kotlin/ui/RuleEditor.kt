@@ -24,14 +24,15 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.actions.ActionSchemaYamlBridge
+import ui.manifest.ManifestYamlBridge
+import ui.schema.FieldSchemaYamlBridge
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.components.PlaceholderPanel
-import ui.actions.ActionSchemaYamlBridge
-import ui.schema.FieldSchemaYamlBridge
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
@@ -41,7 +42,7 @@ import ui.editor.rules.sections.TopBarSection
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
 import ui.tester.TestInputState
-import ui.workbench.ActionsAreaPlaceholder
+import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppArea
 import ui.workbench.AppAreaIconRail
 import ui.workbench.CatalogAction
@@ -51,7 +52,7 @@ import ui.workbench.CatalogRuleStatus
 import ui.workbench.CenterEditorPanel
 import ui.workbench.InspectorPanel
 import ui.workbench.JvmWorkbenchValidator
-import ui.workbench.ManifestAreaPlaceholder
+import ui.workbench.ManifestAreaScreen
 import ui.workbench.RightPanelTab
 import ui.workbench.RightPanelWithTabs
 import ui.workbench.RuleMode
@@ -59,7 +60,6 @@ import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchState
 import ui.workbench.RuleWorkbenchViewModel
 import ui.workbench.SchemaAreaScreen
-import ui.workbench.ActionsAreaScreen
 import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
@@ -309,7 +309,23 @@ actual fun RuleEditor() {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                AppArea.MANIFEST -> ManifestAreaPlaceholder(modifier = Modifier.fillMaxSize())
+                AppArea.MANIFEST -> ManifestAreaScreen(
+                    manifestYaml = state.manifestText.value,
+                    fromYaml = { yaml ->
+                        ManifestYamlBridge.fromYaml(yaml = yaml)
+                    },
+                    toYaml = { editorState ->
+                        ManifestYamlBridge.toYaml(state = editorState)
+                    },
+                    onManifestYamlChange = { newYaml ->
+                        state.manifestText.value = newYaml
+                        state.manifestFieldValue.value = TextFieldValue(text = newYaml)
+                        state.parsedManifest.value = runCatching {
+                            ManifestLoader.loadFromString(content = newYaml)
+                        }.getOrNull()
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
                 AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
                     label = workbenchState.appArea.name,
                     modifier = Modifier.fillMaxSize(),
