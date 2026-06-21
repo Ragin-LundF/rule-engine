@@ -210,7 +210,7 @@ actual fun RuleEditor() {
             val existing = builderStateMap[ruleId]
             val shouldReset = existing == null ||
                     existing.isLocked != rule.isLocked() ||
-                    isBuilderStateStale(existing = existing, ruleId = ruleId, currentFullText = currentFullText)
+                    isBuilderStateStale(existing = existing, currentFullText = currentFullText)
             newMap[ruleId] = if (shouldReset) {
                 BuilderEditorState.fromBuilderRule(rule = rule)
             } else {
@@ -636,13 +636,12 @@ private fun BuilderRule.ruleId(): String = when (this) {
  */
 private fun isBuilderStateStale(
     existing: BuilderEditorState?,
-    ruleId: String,
     currentFullText: String,
 ): Boolean {
     if (existing == null || existing.isLocked) return false
     val generated = BuilderToRuleDsl.generate(state = existing) ?: return true
     // Normalize both to compare: trim whitespace, unify line endings
-    val generatedNorm = generated.trim().replace("\r\n", "\n")
-    val fullNorm = currentFullText.trim().replace("\r\n", "\n")
-    return !fullNorm.contains(generatedNorm)
+    val generatedNorm = generated.trim().replace(oldValue = "\r\n", newValue = "\n")
+    val fullNorm = currentFullText.trim().replace(oldValue = "\r\n", newValue = "\n")
+    return !fullNorm.contains(other = generatedNorm)
 }
