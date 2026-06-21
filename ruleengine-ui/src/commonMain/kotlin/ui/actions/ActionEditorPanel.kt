@@ -27,11 +27,17 @@ import ui.components.SectionTitle
 import ui.workbench.ActionMode
 
 /**
- * Visual action-schema editor with Visual / YAML / Usages tabs.
+ * A composable function representing the Action Editor Panel. It allows users
+ * to edit an action schema either visually, in YAML format, or explore its usages.
  *
- * The editor keeps its own [editorState] while the user edits. YAML is only pushed
- * upstream when the local model is valid (no blank or duplicate names). This avoids
- * blanks disappearing and prevents duplicate-key round-trip losses.
+ * @param yaml The initial YAML input representing the action schema.
+ * @param fromYaml A function to convert the given YAML string into an [ActionEditorState].
+ * @param toYaml A function to serialize an [ActionEditorState] back into a YAML string.
+ * @param onYamlChange A callback invoked whenever the YAML content changes.
+ * @param initialMode The default mode for the editor panel, either VISUAL, YAML, or USAGES.
+ * @param modifier The Modifier to be applied to the layout of the editor panel.
+ * @param yamlEditor A custom composable for rendering the YAML editor. It takes the current
+ *                   YAML [TextFieldValue], a callback for changes, and a modifier.
  */
 @Composable
 fun ActionEditorPanel(
@@ -54,10 +60,10 @@ fun ActionEditorPanel(
         )
     },
 ) {
-    var mode by remember { mutableStateOf(initialMode) }
-    var editorState by remember { mutableStateOf(fromYaml(yaml)) }
-    var yamlText by remember { mutableStateOf(yaml) }
-    var yamlError by remember { mutableStateOf<String?>(null) }
+    var mode by remember { mutableStateOf(value = initialMode) }
+    var editorState by remember { mutableStateOf(value = fromYaml(yaml)) }
+    var yamlText by remember { mutableStateOf(value = yaml) }
+    var yamlError by remember { mutableStateOf<String?>(value = null) }
 
     // External YAML changes (e.g. manifest load) should pull into the local model.
     LaunchedEffect(key1 = yaml) {

@@ -1,25 +1,23 @@
 package ui.diagnostics
 
 /**
- * Maps raw diagnostic data (message + optional suggestion) to [UiDiagnosticWithFix].
+ * Utility object for mapping diagnostic information into a format suitable for UI display.
  *
- * Quick-fix rules (MVP):
- * - If the message contains a quoted unknown token AND a suggestion is present,
- *   produce a [QuickFix.ReplaceToken] that swaps the bad token for the suggestion.
- * - Otherwise produce [QuickFix.None].
- *
- * This object is commonMain-safe: it operates only on strings.
+ * Provides functionality to generate diagnostics with optional quick-fix suggestions
+ * and human-readable hints based on the given diagnostic message, severity, and related data.
  */
 object DiagnosticMapper {
 
     /**
-     * Converts a flat diagnostic into a [UiDiagnosticWithFix].
+     * Maps diagnostic information to a [UiDiagnosticWithFix] object by building a quick fix
+     * and a hint based on the given parameters.
      *
-     * @param severity   "error" or "warning" string.
-     * @param message    Raw diagnostic message from the core validator.
-     * @param suggestion Optional suggestion from [ValidationDiagnostic.suggestion].
-     * @param line       1-based line number, or null.
-     * @param column     1-based column number, or null.
+     * @param severity The severity of the diagnostic, typically "error" or "warning".
+     * @param message The main human-readable diagnostic message.
+     * @param suggestion An optional suggestion for resolving the diagnostic, or null if not available.
+     * @param line The 1-based line number where the diagnostic occurred, or null if not applicable.
+     * @param column The 1-based column number where the diagnostic occurred, or null if not applicable.
+     * @return A [UiDiagnosticWithFix] object encapsulating the diagnostic message, quick fix, and optional hint.
      */
     fun map(
         severity: String,
