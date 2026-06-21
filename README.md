@@ -1,5 +1,7 @@
 # Rule Engine
 
+![logo.png](docs/assets/logo.png)
+
 A lightweight, pluggable rule engine written in Kotlin.
 Write business logic as plain-text rules — no code required for rule authors.
 

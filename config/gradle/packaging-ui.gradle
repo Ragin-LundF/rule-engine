@@ -1,0 +1,32 @@
+compose.desktop {
+    application {
+        mainClass = "ui.DesktopMainKt"
+
+        nativeDistributions {
+            targetFormats = [
+                    TargetFormat.Msi,
+                    TargetFormat.Dmg,
+                    TargetFormat.Deb
+            ]
+
+            packageName = "ruleengine-ui"
+            packageVersion = project.version.toString()
+
+            windows {
+                shortcut = true
+                menu = true
+                iconFile.set(project.file("src/jvmMain/resources/packaging/app.ico"))
+            }
+
+            macOS {
+                bundleID = "io.github.ragin-lundf.ruleengine"
+                iconFile.set(project.file("src/jvmMain/resources/packaging/app.icns"))
+            }
+
+            linux {
+                packageName = "ruleengine-ui"
+                iconFile.set(project.file("src/jvmMain/resources/packaging/app.png"))
+            }
+        }
+    }
+}

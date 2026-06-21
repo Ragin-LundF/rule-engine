@@ -7,7 +7,6 @@ jackson3 = "3.2.0"
 [libraries]
 # Kotlin test libraries
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 
 # --- Jackson
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson2" }
@@ -28,6 +27,7 @@ jackson = [
 ]
 
 [plugins]
+jreleaser = { id = "org.jreleaser", version = "1.24.0" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 jetbrains-compose = { id = "org.jetbrains.compose", version = "1.11.1" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
