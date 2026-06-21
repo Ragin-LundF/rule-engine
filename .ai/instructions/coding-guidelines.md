@@ -37,3 +37,8 @@ Use these rules for all Kotlin code unless a more specific instruction file says
 - Use named arguments for assertions, for example `assertEquals(expected = expectedValue, actual = actualValue)`.
 - Cover relevant code paths, edge cases, and error paths.
 - Add or update tests for behavior changes.
+
+## Common rules
+- Never commit code. Everything must be reviewed and commited by the user.
+- When executing plans, follow the instructions provided in the plan. Ask after every step if the result is correct before continuing, unless it is explicitly unwanted by user prompt.
+- Ask always for clarification if needed.
