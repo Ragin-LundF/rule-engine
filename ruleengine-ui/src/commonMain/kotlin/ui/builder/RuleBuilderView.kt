@@ -10,26 +10,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ui.BorderColor
 import ui.BgSurface
+import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.components.ActionRowEditor
 import ui.builder.components.ConditionRowEditor
 import ui.builder.components.RuleBuilderHeader
 import ui.components.TinyButton
+import kotlin.random.Random
 
 /**
  * Editable visual representation of a single rule in Builder mode.
@@ -115,6 +121,8 @@ private fun WhenSection(
     onConditionSelected: (String) -> Unit,
     onDslChange: (String) -> Unit,
 ) {
+    val selectedGroupIds = remember { mutableStateListOf<String>() }
+
     SectionHeader(
         title = "WHEN",
         subtitle = "Conditions are evaluated top to bottom",
@@ -122,29 +130,31 @@ private fun WhenSection(
 
     Spacer(modifier = Modifier.height(height = 8.dp))
 
-    editorState.conditions.forEachIndexed { index, condition ->
-        if (index > 0) {
-            JoinSelectorRow(
-                join = condition.joinToPrevious,
-                onJoinSelected = { selectedJoin ->
-                    condition.joinToPrevious = selectedJoin
-                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
-                },
-            )
-        }
-        ConditionRowEditor(
-            condition = condition,
-            fields = catalogFields,
-            onSelected = { onConditionSelected(condition.id) },
-            onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
-            onRemove = {
-                editorState.removeCondition(id = condition.id)
+    // Group selection bar (appears when 2+ top-level conditions are selected)
+    if (selectedGroupIds.size >= 2) {
+        GroupSelectionBar(
+            selectedCount = selectedGroupIds.size,
+            onGroup = {
+                editorState.groupConditions(ids = selectedGroupIds.toSet())
+                selectedGroupIds.clear()
                 emitDslChange(editorState = editorState, onDslChange = onDslChange)
             },
+            onClearSelection = { selectedGroupIds.clear() },
         )
+        Spacer(modifier = Modifier.height(height = 4.dp))
     }
 
-    if (editorState.conditions.isEmpty()) {
+    renderNodes(
+        nodes = editorState.conditionNodes,
+        catalogFields = catalogFields,
+        onConditionSelected = onConditionSelected,
+        onDslChange = onDslChange,
+        editorState = editorState,
+        isFirstLevel = true,
+        selectedGroupIds = selectedGroupIds,
+    )
+
+    if (editorState.conditionNodes.isEmpty()) {
         Text(
             text = "(no conditions)",
             style = MaterialTheme.typography.body2,
@@ -153,22 +163,278 @@ private fun WhenSection(
     }
 
     Spacer(modifier = Modifier.height(height = 8.dp))
-    AddButton(
-        label = "+ Condition",
-        onClick = {
-            val defaultField = catalogFields.firstOrNull()?.id ?: ""
-            val defaultOperator = catalogFields.firstOrNull()?.let { field ->
-                OperatorOptions.forField(
-                    fieldType = field.type,
-                    schemaOperators = field.operators,
-                ).firstOrNull()
-            } ?: "equals"
-            editorState.addCondition(
-                defaultField = defaultField,
-                defaultOperator = defaultOperator,
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        AddButton(
+            label = "+ Condition",
+            onClick = {
+                val defaultField = catalogFields.firstOrNull()?.id ?: ""
+                val defaultOperator = catalogFields.firstOrNull()?.let { field ->
+                    OperatorOptions.forField(
+                        fieldType = field.type,
+                        schemaOperators = field.operators,
+                    ).firstOrNull()
+                } ?: "equals"
+                editorState.addCondition(
+                    defaultField = defaultField,
+                    defaultOperator = defaultOperator,
+                )
+                selectedGroupIds.clear()
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+        AddButton(
+            label = "+ Group",
+            onClick = {
+                val joinToPrevious = editorState.conditionNodes.lastOrNull()?.let { "and" } ?: ""
+                val group = MutableConditionNode.Group(
+                    id = "grp-${Random.nextInt(until = 4)}",
+                    nodes = mutableStateListOf(),
+                    joinToPrevious = joinToPrevious,
+                )
+                editorState.conditionNodes.add(group)
+                selectedGroupIds.clear()
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+    }
+}
+
+/**
+ * Recursively renders [MutableConditionNode] entries with join selectors
+ * and condition editors / group containers between them.
+ *
+ * At the first level, leaf nodes show a checkbox for multi-select grouping.
+ */
+@Composable
+@Suppress("LongMethod", "LongParameterList")
+private fun renderNodes(
+    nodes: List<MutableConditionNode>,
+    catalogFields: List<CatalogFieldInfo>,
+    onConditionSelected: (String) -> Unit,
+    onDslChange: (String) -> Unit,
+    editorState: BuilderEditorState,
+    isFirstLevel: Boolean,
+    selectedGroupIds: MutableList<String>? = null,
+) {
+    nodes.forEachIndexed { index, node ->
+        if (index > 0 && isFirstLevel) {
+            JoinSelectorRow(
+                join = node.joinToPrevious,
+                onJoinSelected = { selectedJoin ->
+                    node.joinToPrevious = selectedJoin
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
             )
-            emitDslChange(editorState = editorState, onDslChange = onDslChange)
-        },
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Show checkbox only for first-level leaf nodes (for grouping)
+            if (isFirstLevel && node is MutableConditionNode.Leaf && selectedGroupIds != null) {
+                ConditionCheckbox(
+                    checked = node.id in selectedGroupIds,
+                    onCheckedChange = { checked ->
+                        if (checked) {
+                            if (node.id !in selectedGroupIds) selectedGroupIds.add(node.id)
+                        } else {
+                            selectedGroupIds.remove(node.id)
+                        }
+                    },
+                )
+            }
+
+            when (node) {
+                is MutableConditionNode.Leaf -> {
+                    ConditionRowEditor(
+                        condition = node.inner,
+                        fields = catalogFields,
+                        onSelected = { onConditionSelected(node.inner.id) },
+                        onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
+                        onRemove = {
+                            editorState.removeCondition(id = node.id)
+                            selectedGroupIds?.remove(node.id)
+                            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                        },
+                    )
+                }
+                is MutableConditionNode.Group -> {
+                    GroupContainer(
+                        group = node,
+                        catalogFields = catalogFields,
+                        onConditionSelected = onConditionSelected,
+                        onDslChange = onDslChange,
+                        editorState = editorState,
+                    )
+                }
+            }
+        }
+
+        // Non-first-level nodes have join selectors rendered inside group containers
+        if (index > 0 && !isFirstLevel) {
+            JoinSelectorRow(
+                join = node.joinToPrevious,
+                onJoinSelected = { selectedJoin ->
+                    node.joinToPrevious = selectedJoin
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A visually distinct container for a parenthesized group of conditions.
+ * Renders child nodes with controls for ungrouping, removing, and adding
+ * conditions inside the group.
+ */
+@Composable
+private fun GroupContainer(
+    group: MutableConditionNode.Group,
+    catalogFields: List<CatalogFieldInfo>,
+    onConditionSelected: (String) -> Unit,
+    onDslChange: (String) -> Unit,
+    editorState: BuilderEditorState,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = PrimaryBlue.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(size = 6.dp),
+            )
+            .padding(8.dp),
+    ) {
+        // Header: bracket label + Ungroup + Remove buttons
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "(   )",
+                style = MaterialTheme.typography.caption,
+                color = PrimaryBlue,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TinyButton(
+                    text = "Ungroup",
+                    onClick = {
+                        editorState.ungroup(id = group.id)
+                        emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                    },
+                )
+                TinyButton(
+                    text = "×",
+                    onClick = {
+                        editorState.removeCondition(id = group.id)
+                        emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                    },
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(height = 4.dp))
+
+        renderNodes(
+            nodes = group.nodes.toList(),
+            catalogFields = catalogFields,
+            onConditionSelected = onConditionSelected,
+            onDslChange = onDslChange,
+            editorState = editorState,
+            isFirstLevel = false,
+        )
+
+        if (group.nodes.isEmpty()) {
+            Text(
+                text = "(empty group)",
+                style = MaterialTheme.typography.body2,
+                color = TextSecondary,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(height = 4.dp))
+
+        // Add condition inside the group
+        AddButton(
+            label = "+ Condition",
+            onClick = {
+                val defaultField = catalogFields.firstOrNull()?.id ?: ""
+                val defaultOperator = catalogFields.firstOrNull()?.let { field ->
+                    OperatorOptions.forField(
+                        fieldType = field.type,
+                        schemaOperators = field.operators,
+                    ).firstOrNull()
+                } ?: "equals"
+                editorState.addConditionInside(
+                    groupId = group.id,
+                    defaultField = defaultField,
+                    defaultOperator = defaultOperator,
+                )
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+    }
+}
+
+/**
+ * A floating bar that appears when 2+ conditions are selected for grouping.
+ */
+@Composable
+private fun GroupSelectionBar(
+    selectedCount: Int,
+    onGroup: () -> Unit,
+    onClearSelection: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                color = PrimaryBlue.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(size = 6.dp),
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "$selectedCount conditions selected",
+            style = MaterialTheme.typography.caption,
+            color = PrimaryBlue,
+        )
+        TinyButton(
+            text = "Group",
+            primary = true,
+            onClick = onGroup,
+        )
+        TinyButton(
+            text = "Clear",
+            onClick = onClearSelection,
+        )
+    }
+}
+
+/**
+ * A small checkbox used for selecting top-level conditions before grouping.
+ */
+@Composable
+private fun ConditionCheckbox(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Checkbox(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        modifier = modifier.size(size = 20.dp),
+        colors = CheckboxDefaults.colors(checkedColor = PrimaryBlue),
     )
 }
 

@@ -33,9 +33,11 @@ import ui.annotateYaml
 import ui.buildYamlCompletions
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
+import ui.builder.BuilderToRuleDsl
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
+import ui.builder.toImmutable
 import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
@@ -199,16 +201,21 @@ actual fun RuleEditor() {
     }
 
     // ── Builder state map: one BuilderEditorState per rule ID ─────────────────
-    // The map is never cleared on tab switch so the rule list survives navigation.
+    // The map survives tab switches so the rule list survives navigation, but is
+    // rebuilt when the DSL text is externally modified (e.g., by editing in code
+    // mode) so the builder always reflects the current rule text.
     var builderStateMap by remember { mutableStateOf<Map<String, BuilderEditorState>>(emptyMap()) }
 
     LaunchedEffect(key1 = allBuilderRules) {
         val newMap = mutableMapOf<String, BuilderEditorState>()
+        val currentFullText = state.ruleValue.value.text
+
         allBuilderRules.forEach { rule ->
             val ruleId = rule.ruleId()
             val existing = builderStateMap[ruleId]
             val shouldReset = existing == null ||
-                existing.isLocked != rule.isLocked()
+                existing.isLocked != rule.isLocked() ||
+                isBuilderStateStale(existing = existing, ruleId = ruleId, currentFullText = currentFullText)
             newMap[ruleId] = if (shouldReset) {
                 BuilderEditorState.fromBuilderRule(rule = rule)
             } else {
@@ -317,18 +324,14 @@ actual fun RuleEditor() {
                         if (newId !in builderStateMap && newId.isNotBlank()) {
                             val oldState = builderStateMap[oldId]
                             if (oldState != null) {
-                                // Rebuild state with new ID
+                                // Rebuild state with new ID, deep-copying conditions and actions
                                 val renamedState = BuilderEditorState.fromBuilderRule(
                                     rule = BuilderRule.Supported(
                                         id = newId,
-                                        conditions = emptyList(),
-                                        actions = emptyList(),
+                                        conditionNodes = oldState.conditionNodes.map { it.toImmutable() },
+                                        actions = oldState.actions.map { it.toImmutable() },
                                     ),
-                                ).also { newState ->
-                                    // Copy conditions and actions from old state
-                                    oldState.conditions.forEach { newState.conditions.add(it) }
-                                    oldState.actions.forEach { newState.actions.add(it) }
-                                }
+                                )
                                 val newMap = builderStateMap.toMutableMap()
                                 newMap.remove(oldId)
                                 newMap[newId] = renamedState
@@ -350,7 +353,7 @@ actual fun RuleEditor() {
                         val newState = BuilderEditorState.fromBuilderRule(
                             rule = BuilderRule.Supported(
                                 id = newId,
-                                conditions = emptyList(),
+                                conditionNodes = emptyList(),
                                 actions = emptyList(),
                             ),
                         )
@@ -621,4 +624,26 @@ private fun BuilderRule.ruleId(): String = when (this) {
     is BuilderRule.Supported -> id
     is BuilderRule.Unsupported -> id
     BuilderRule.None -> ""
+}
+
+/**
+ * Returns true when the existing [BuilderEditorState] no longer matches the
+ * current DSL text for its rule. This detects externally-applied edits (e.g.,
+ * modifications in code mode) so the builder state is rebuilt from the current
+ * parse rather than showing stale conditions.
+ *
+ * The check compares what [BuilderToRuleDsl.generate] would produce from the
+ * cached state against the actual rule text. If they differ, the state is stale.
+ */
+private fun isBuilderStateStale(
+    existing: BuilderEditorState?,
+    ruleId: String,
+    currentFullText: String,
+): Boolean {
+    if (existing == null || existing.isLocked) return false
+    val generated = BuilderToRuleDsl.generate(state = existing) ?: return true
+    // Normalize both to compare: trim whitespace, unify line endings
+    val generatedNorm = generated.trim().replace("\r\n", "\n")
+    val fullNorm = currentFullText.trim().replace("\r\n", "\n")
+    return !fullNorm.contains(generatedNorm)
 }

@@ -16,10 +16,6 @@ data class RuleWorkbenchState(
     val selectedConditionId: String? = null,
     val selectedInspectorItem: InspectorItem? = null,
     val rightPanelTab: RightPanelTab = RightPanelTab.INSPECTOR,
-    val ruleText: String = "",
-    val schemaText: String = "",
-    val actionsText: String = "",
-    val manifestText: String = "",
     val diagnostics: List<UiDiagnostic> = emptyList(),
     val validationState: ValidationState = ValidationState.IDLE,
 ) {

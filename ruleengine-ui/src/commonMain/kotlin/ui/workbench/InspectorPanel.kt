@@ -15,6 +15,8 @@ import ui.components.SectionTitle
 import ui.builder.BuilderAction
 import ui.builder.BuilderCondition
 import ui.builder.BuilderEditorState
+import ui.builder.MutableBuilderCondition
+import ui.builder.MutableConditionNode
 
 /**
  * Top-level inspector panel that delegates to the appropriate sub-inspector
@@ -53,7 +55,7 @@ fun InspectorPanel(
             if (rule != null) {
                 RuleInspector(
                     rule = rule,
-                    conditionCount = builderState?.conditions?.size ?: 0,
+                    conditionCount = builderState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
                     actionCount = builderState?.actions?.size ?: 0,
                     diagnostics = diagnostics,
                     modifier = modifier,
@@ -63,7 +65,7 @@ fun InspectorPanel(
             }
         }
         is InspectorItem.Condition -> {
-            val condition = builderState?.conditions?.firstOrNull { it.id == selectedItem.conditionId }
+            val condition = builderState?.let { findLeafCondition(it.conditionNodes, selectedItem.conditionId) }
             if (condition != null) {
                 ConditionInspector(condition = condition.toImmutable(), modifier = modifier)
             } else {
@@ -75,6 +77,39 @@ fun InspectorPanel(
         }
         null -> InspectorPlaceholder(modifier = modifier)
     }
+}
+
+/**
+ * Recursively counts all leaf conditions in the node tree.
+ */
+private fun countLeafConditions(nodes: List<MutableConditionNode>): Int {
+    return nodes.sumOf { node ->
+        when (node) {
+            is MutableConditionNode.Leaf -> 1
+            is MutableConditionNode.Group -> countLeafConditions(node.nodes)
+        }
+    }
+}
+
+/**
+ * Recursively finds a leaf condition by id in the node tree.
+ */
+private fun findLeafCondition(
+    nodes: List<MutableConditionNode>,
+    id: String,
+): MutableBuilderCondition? {
+    for (node in nodes) {
+        when (node) {
+            is MutableConditionNode.Leaf -> {
+                if (node.inner.id == id) return node.inner
+            }
+            is MutableConditionNode.Group -> {
+                val found = findLeafCondition(node.nodes, id)
+                if (found != null) return found
+            }
+        }
+    }
+    return null
 }
 
 @Composable
