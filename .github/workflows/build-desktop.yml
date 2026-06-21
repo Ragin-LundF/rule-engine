@@ -54,3 +54,10 @@ jobs:
         with:
           name: ${{ matrix.artifact_name }}
           path: ${{ matrix.artifact_path }}
+
+      - name: Upload release asset(s)
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ${{ matrix.artifact_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
