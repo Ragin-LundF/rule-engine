@@ -12,6 +12,7 @@ plugins {
     alias(libs.plugins.jetbrains.compose.kotlin.plugin) apply false
     alias(libs.plugins.detekt) apply false
     alias(libs.plugins.jreleaser) apply false
+    alias(libs.plugins.kotlin.dokka) apply false
 }
 
 apply from: "${rootDir}/config/gradle/wrapper.gradle"
@@ -24,10 +25,12 @@ subprojects {
     ext.DetektCreateBaselineTask = DetektCreateBaselineTask
 
     apply plugin: "maven-publish"
+    apply plugin: "org.jetbrains.dokka"
     apply plugin: "org.jreleaser"
     apply from: "${rootDir}/config/gradle/publishing.gradle"
 
     apply from: "${rootDir}/config/gradle/java.gradle"
+    apply from: "${rootDir}/config/gradle/dokka.gradle"
     apply from: "${rootDir}/config/gradle/testing.gradle"
     apply from: "${rootDir}/config/gradle/static_analysis.gradle"
 }
