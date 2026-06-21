@@ -4,12 +4,17 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
+    id "signing"
+    id "maven-publish"
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.jetbrains.compose) apply false
     alias(libs.plugins.jetbrains.compose.kotlin.plugin) apply false
     alias(libs.plugins.detekt) apply false
+    alias(libs.plugins.jreleaser) apply false
 }
+
+apply from: "${rootDir}/config/gradle/wrapper.gradle"
 
 subprojects {
     // export of classes for subscripts
@@ -17,6 +22,10 @@ subprojects {
     ext.JvmTarget = JvmTarget
     ext.Detekt = Detekt
     ext.DetektCreateBaselineTask = DetektCreateBaselineTask
+
+    apply plugin: "maven-publish"
+    apply plugin: "org.jreleaser"
+    apply from: "${rootDir}/config/gradle/publishing.gradle"
 
     apply from: "${rootDir}/config/gradle/java.gradle"
     apply from: "${rootDir}/config/gradle/testing.gradle"

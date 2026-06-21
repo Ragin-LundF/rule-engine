@@ -25,12 +25,6 @@ import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
-import ui.manifest.ManifestYamlBridge
-import ui.schema.FieldSchemaYamlBridge
-import ui.YamlEditor
-import ui.YamlEditorType
-import ui.annotateYaml
-import ui.buildYamlCompletions
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.BuilderToRuleDsl
@@ -45,6 +39,8 @@ import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
+import ui.manifest.ManifestYamlBridge
+import ui.schema.FieldSchemaYamlBridge
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
 import ui.tester.TestCenterPanel
@@ -60,9 +56,7 @@ import ui.workbench.CenterEditorPanel
 import ui.workbench.InspectorPanel
 import ui.workbench.JvmWorkbenchValidator
 import ui.workbench.ManifestAreaScreen
-import ui.workbench.RightPanelTab
 import ui.workbench.RightPanelWithTabs
-import ui.workbench.RuleMode
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchState
 import ui.workbench.RuleWorkbenchViewModel
@@ -70,12 +64,12 @@ import ui.workbench.SchemaAreaScreen
 import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
-import ui.workbench.toRuleMode
 import ui.workbench.toViewMode
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
 @Composable
+@Suppress("CyclomaticComplexMethod", "LongMethod")
 actual fun RuleEditor() {
     val scope = rememberCoroutineScope()
 
@@ -192,6 +186,7 @@ actual fun RuleEditor() {
                 pendingBuilderRuleId = ""
                 id
             }
+
             pendingBuilderRuleId.isNotBlank() -> pendingBuilderRuleId // not yet parsed, keep waiting
             selectedBuilderRuleId in available -> selectedBuilderRuleId // keep current selection
             preferredId != null && preferredId in available -> preferredId
@@ -214,8 +209,8 @@ actual fun RuleEditor() {
             val ruleId = rule.ruleId()
             val existing = builderStateMap[ruleId]
             val shouldReset = existing == null ||
-                existing.isLocked != rule.isLocked() ||
-                isBuilderStateStale(existing = existing, ruleId = ruleId, currentFullText = currentFullText)
+                    existing.isLocked != rule.isLocked() ||
+                    isBuilderStateStale(existing = existing, currentFullText = currentFullText)
             newMap[ruleId] = if (shouldReset) {
                 BuilderEditorState.fromBuilderRule(rule = rule)
             } else {
@@ -290,7 +285,8 @@ actual fun RuleEditor() {
                 id = ast.id,
                 status = when {
                     hasErrors -> CatalogRuleStatus.INVALID
-                    state.diagnosticsList.value.isEmpty() && state.ruleValue.value.text.isNotBlank() -> CatalogRuleStatus.VALID
+                    state.diagnosticsList.value.isEmpty() &&
+                            state.ruleValue.value.text.isNotBlank() -> CatalogRuleStatus.VALID
                     else -> CatalogRuleStatus.DRAFT
                 },
             )
@@ -405,8 +401,8 @@ actual fun RuleEditor() {
                             },
                             ruleIds = catalogRules.map { it.id },
                             runEnabled = state.parsedSchema.value != null
-                                && state.ruleValue.value.text.isNotBlank()
-                                && !hasErrors,
+                                    && state.ruleValue.value.text.isNotBlank()
+                                    && !hasErrors,
                             runReason = when {
                                 state.parsedSchema.value == null -> "Load a field schema first"
                                 state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
@@ -458,6 +454,7 @@ actual fun RuleEditor() {
                         )
                     },
                 )
+
                 AppArea.ACTIONS -> ActionsAreaScreen(
                     actionsYaml = state.actionSchemaText.value,
                     fromYaml = { yaml ->
@@ -494,6 +491,7 @@ actual fun RuleEditor() {
                         )
                     },
                 )
+
                 AppArea.MANIFEST -> ManifestAreaScreen(
                     manifestYaml = state.manifestText.value,
                     fromYaml = { yaml ->
@@ -511,6 +509,7 @@ actual fun RuleEditor() {
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+
                 AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
                     label = workbenchState.appArea.name,
                     modifier = Modifier.fillMaxSize(),
@@ -605,7 +604,7 @@ private fun generateUniqueRuleId(existingIds: Set<String>): String {
  * If the rule block is not found, appends [newRuleDsl] at the end.
  */
 private fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
-    val escapedId = Regex.escape(ruleId)
+    val escapedId = Regex.escape(literal = ruleId)
     val pattern = Regex(pattern = """rule\s+\"$escapedId\"\s*\{[^}]*\}""", option = RegexOption.DOT_MATCHES_ALL)
     return if (pattern.containsMatchIn(input = fullText)) {
         pattern.replace(input = fullText, replacement = newRuleDsl)
@@ -637,13 +636,12 @@ private fun BuilderRule.ruleId(): String = when (this) {
  */
 private fun isBuilderStateStale(
     existing: BuilderEditorState?,
-    ruleId: String,
     currentFullText: String,
 ): Boolean {
     if (existing == null || existing.isLocked) return false
     val generated = BuilderToRuleDsl.generate(state = existing) ?: return true
     // Normalize both to compare: trim whitespace, unify line endings
-    val generatedNorm = generated.trim().replace("\r\n", "\n")
-    val fullNorm = currentFullText.trim().replace("\r\n", "\n")
-    return !fullNorm.contains(generatedNorm)
+    val generatedNorm = generated.trim().replace(oldValue = "\r\n", newValue = "\n")
+    val fullNorm = currentFullText.trim().replace(oldValue = "\r\n", newValue = "\n")
+    return !fullNorm.contains(other = generatedNorm)
 }

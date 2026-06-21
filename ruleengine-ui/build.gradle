@@ -6,10 +6,6 @@ plugins {
 
 kotlin {
     jvm()
-    js(IR) {
-        browser()
-        binaries.executable()
-    }
 
     sourceSets {
         commonMain {
@@ -18,6 +14,7 @@ kotlin {
                 implementation(compose.foundation)
                 implementation(compose.material)
                 implementation(compose.ui)
+                implementation(compose.components.resources)
             }
         }
         jvmMain {
@@ -25,11 +22,6 @@ kotlin {
                 implementation(project(":ruleengine-core"))
                 implementation(compose.desktop.currentOs)
                 implementation(libs.bundles.jackson)
-            }
-        }
-        jsMain {
-            dependencies {
-                // keep JS main independent from core
             }
         }
         jvmTest {
@@ -42,11 +34,9 @@ kotlin {
     }
 }
 
-compose.desktop {
-    application {
-        mainClass = 'ui.DesktopMainKt'
-    }
-}
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+ext.TargetFormat = TargetFormat
+apply from: "${project.rootDir}/config/gradle/packaging-ui.gradle"
 
 
 
