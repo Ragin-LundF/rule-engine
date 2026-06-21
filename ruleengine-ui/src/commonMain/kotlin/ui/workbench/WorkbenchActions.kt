@@ -25,18 +25,6 @@ sealed interface WorkbenchAction {
     /** Switch the active tab in the right panel. */
     data class SelectRightPanelTab(val tab: RightPanelTab) : WorkbenchAction
 
-    /** Replace the full rule DSL text in the editor. */
-    data class UpdateRuleText(val text: String) : WorkbenchAction
-
-    /** Replace the field schema YAML/JSON text. */
-    data class UpdateSchemaText(val text: String) : WorkbenchAction
-
-    /** Replace the action schema YAML/JSON text. */
-    data class UpdateActionsText(val text: String) : WorkbenchAction
-
-    /** Replace the manifest YAML/JSON text. */
-    data class UpdateManifestText(val text: String) : WorkbenchAction
-
     /** Select a rule by its identifier in the rule list panel. */
     data class SelectRule(val ruleId: String?) : WorkbenchAction
 

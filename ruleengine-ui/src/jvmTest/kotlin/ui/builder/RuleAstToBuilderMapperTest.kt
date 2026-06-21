@@ -29,6 +29,14 @@ class RuleAstToBuilderMapperTest {
     private fun numCond(field: String, op: String, value: String) =
         ConditionAst(field = field, operator = op, value = NumberLiteral(value))
 
+    /** Unwrap a node as a leaf [BuilderConditionNode.Condition]. */
+    private fun leaf(node: BuilderConditionNode): BuilderConditionNode.Condition =
+        node as BuilderConditionNode.Condition
+
+    /** Unwrap a node as a [BuilderConditionNode.Group]. */
+    private fun group(node: BuilderConditionNode): BuilderConditionNode.Group =
+        node as BuilderConditionNode.Group
+
     // ── tests ─────────────────────────────────────────────────────────────────
 
     @Test
@@ -37,11 +45,13 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals(1, result.conditions.size)
-        assertEquals("purpose", result.conditions[0].field)
-        assertEquals("contains", result.conditions[0].operator)
-        assertEquals("rent", result.conditions[0].value)
-        assertEquals("", result.conditions[0].joinToPrevious)
+        assertEquals(expected = 1, actual = result.conditionNodes.size)
+
+        val c = leaf(result.conditionNodes[0])
+        assertEquals(expected = "purpose", actual = c.field)
+        assertEquals(expected = "contains", actual = c.operator)
+        assertEquals(expected = "rent", actual = c.value)
+        assertEquals(expected = "", actual = c.joinToPrevious)
     }
 
     @Test
@@ -57,14 +67,18 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals(2, result.conditions.size)
-        assertEquals("purpose", result.conditions[0].field)
-        assertEquals("contains", result.conditions[0].operator)
-        assertEquals("", result.conditions[0].joinToPrevious)
-        assertEquals("amount", result.conditions[1].field)
-        assertEquals(">=", result.conditions[1].operator)
-        assertEquals("500", result.conditions[1].value)
-        assertEquals("and", result.conditions[1].joinToPrevious)
+        assertEquals(expected = 2, actual = result.conditionNodes.size)
+
+        val c0 = leaf(result.conditionNodes[0])
+        assertEquals(expected = "purpose", actual = c0.field)
+        assertEquals(expected = "contains", actual = c0.operator)
+        assertEquals(expected = "", actual = c0.joinToPrevious)
+
+        val c1 = leaf(result.conditionNodes[1])
+        assertEquals(expected = "amount", actual = c1.field)
+        assertEquals(expected = ">=", actual = c1.operator)
+        assertEquals(expected = "500", actual = c1.value)
+        assertEquals(expected = "and", actual = c1.joinToPrevious)
     }
 
     @Test
@@ -76,9 +90,9 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals(1, result.actions.size)
-        assertEquals("label", result.actions[0].name)
-        assertEquals(listOf("rent"), result.actions[0].arguments)
+        assertEquals(expected = 1, actual = result.actions.size)
+        assertEquals(expected = "label", actual = result.actions[0].name)
+        assertEquals(expected = listOf("rent"), actual = result.actions[0].arguments)
     }
 
     @Test
@@ -94,12 +108,13 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals("", result.conditions[0].joinToPrevious)
-        assertEquals("or", result.conditions[1].joinToPrevious)
+        assertEquals(expected = "", actual = leaf(result.conditionNodes[0]).joinToPrevious)
+        assertEquals(expected = "or", actual = leaf(result.conditionNodes[1]).joinToPrevious)
     }
 
     @Test
-    fun `mixed AND OR preserves per-link joins`() {
+    fun `mixed AND OR preserves groups`() {
+        // OrAst(AndAst(A, B), C) -> Group(A,B) with inner join "and", outer join "or"
         val ast = rule(
             condition = OrAst(
                 children = listOf(
@@ -116,9 +131,17 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals(3, result.conditions.size)
-        val joins = result.conditions.map { it.joinToPrevious }
-        assertEquals(listOf("", "and", "or"), joins)
+        // Top-level: 1 Group + 1 leaf
+        assertEquals(expected = 2, actual = result.conditionNodes.size)
+
+        val g = group(result.conditionNodes[0])
+        assertEquals(expected = "", actual = g.joinToPrevious)
+        assertEquals(expected = 2, actual = g.nodes.size)
+        assertEquals(expected = "", actual = leaf(g.nodes[0]).joinToPrevious)
+        assertEquals(expected = "and", actual = leaf(g.nodes[1]).joinToPrevious)
+
+        val c = leaf(result.conditionNodes[1])
+        assertEquals(expected = "or", actual = c.joinToPrevious)
     }
 
     @Test
@@ -133,7 +156,7 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals(listOf("food", "rent"), result.conditions[0].listItems)
+        assertEquals(expected = listOf("food", "rent"), actual = leaf(result.conditionNodes[0]).listItems)
     }
 
     @Test
@@ -142,6 +165,6 @@ class RuleAstToBuilderMapperTest {
         val result = RuleAstToBuilderMapper.map(ast)
 
         assertIs<BuilderRule.Supported>(result)
-        assertEquals("my-rule", result.id)
+        assertEquals(expected = "my-rule", actual = result.id)
     }
 }
