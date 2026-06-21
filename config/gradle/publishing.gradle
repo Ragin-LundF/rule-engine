@@ -1,0 +1,81 @@
+def configurePublication = { publicationComponent ->
+    publishing {
+        publications {
+            maven(MavenPublication) {
+                from publicationComponent
+
+                artifactId = project.ext.has("publishArtifactId") ? project.ext.publishArtifactId : project.name
+                version = "${version}"
+                pom {
+                    name = project.ext.has("publishName") ? project.ext.publishName : project.name
+                    description = project.ext.has("publishDescription") ? project.ext.publishDescription : "Cucumber BDD library for simpler e2e tests"
+                    url = "https://github.com/Ragin-LundF/rule-engine"
+                    scm {
+                        connection = "scm:git:git@github.com:Ragin-LundF/rule-engine.git"
+                        developerConnection = "scm:git:ssh://github.com/Ragin-LundF/rule-engine.git"
+                        url = "https://github.com/Ragin-LundF/rule-engine"
+                    }
+                    licenses {
+                        license {
+                            name = "MIT"
+                            url = "https://github.com/Ragin-LundF/rule-engine/blob/main/LICENSE"
+                        }
+                    }
+                    developers {
+                        developer {
+                            id = "Ragin-LundF"
+                            name = "Ragin-LundF"
+                            organizationUrl = "https://github.com/Ragin-LundF/rule-engine"
+                        }
+                    }
+                }
+            }
+        }
+
+        repositories {
+            maven {
+                url = layout.buildDirectory.dir('staging-deploy')
+            }
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Ragin-LundF/rule-engine")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR")
+                    password = System.getenv("GITHUB_TOKEN")
+                }
+            }
+        }
+    }
+}
+
+// BOM/Platform module
+pluginManager.withPlugin('java-platform') {
+    configurePublication(components.javaPlatform)
+}
+
+// java-library modules
+pluginManager.withPlugin('java') {
+    configurePublication(components.java)
+}
+
+jreleaser {
+    signing {
+        active = 'ALWAYS'
+        verify = false
+        armored = true
+        mode = 'FILE'
+        publicKey = "${rootDir}/ragin_public.pgp"
+        secretKey = "${rootDir}/ragin_secret.pgp"
+    }
+    deploy {
+        maven {
+            mavenCentral {
+                sonatype {
+                    active = 'ALWAYS'
+                    url = 'https://central.sonatype.com/api/v1/publisher'
+                    stagingRepository('build/staging-deploy')
+                }
+            }
+        }
+    }
+}
