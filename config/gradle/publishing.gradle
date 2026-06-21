@@ -42,19 +42,19 @@ def configurePublication = { publicationComponent ->
                 }
             }
         }
-    }
-}
 
-repositories {
-    maven {
-        url = layout.buildDirectory.dir('staging-deploy')
-    }
-    maven {
-        name = "GitHubPackages"
-        url = uri("https://maven.pkg.github.com/Ragin-LundF/rule-engine")
-        credentials {
-            username = System.getenv("GITHUB_ACTOR")
-            password = System.getenv("GITHUB_TOKEN")
+        repositories {
+            maven {
+                url = layout.buildDirectory.dir('staging-deploy')
+            }
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Ragin-LundF/rule-engine")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR")
+                    password = System.getenv("GITHUB_TOKEN")
+                }
+            }
         }
     }
 }
@@ -94,6 +94,21 @@ if (project.name == "ruleengine-ui") {
                             organizationUrl = "https://github.com/Ragin-LundF/rule-engine"
                         }
                     }
+                }
+            }
+        }
+    }
+    publishing {
+        repositories {
+            maven {
+                url = layout.buildDirectory.dir('staging-deploy')
+            }
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Ragin-LundF/rule-engine")
+                credentials {
+                    username = System.getenv("GITHUB_ACTOR")
+                    password = System.getenv("GITHUB_TOKEN")
                 }
             }
         }
