@@ -27,12 +27,20 @@ import ui.components.SectionTitle
 import ui.workbench.SchemaMode
 
 /**
- * Visual field-schema editor with Visual / YAML / Usages tabs.
+ * A composable panel for editing schemas, supporting both a visual editor and a YAML-based editor
+ * with seamless synchronization between the two modes.
  *
- * The editor keeps its own [editorState] while the user edits. It only pushes YAML
- * upstream when the local state is valid (no blank or duplicate paths). This
- * prevents blank rows from disappearing while typing and avoids duplicate-key
- * round-trip losses.
+ * @param yaml The initial YAML content to be displayed and edited in the panel.
+ * @param fromYaml A function to parse the YAML content and convert it into an instance
+ * of SchemaEditorState, representing the state of the schema editor.
+ * @param toYaml A function to serialize the SchemaEditorState into a YAML string.
+ * @param onYamlChange A callback invoked whenever the YAML content changes within the editor,
+ * either due to user action or programmatic updates.
+ * @param initialMode The starting mode of the editor, either visual or YAML-based. The default is
+ * SchemaMode.VISUAL.
+ * @param modifier A [Modifier] instance for styling and layout customization of the panel.
+ * @param yamlEditor A customizable composable function for rendering the YAML editor. By default,
+ * it provides a basic text field implementation for editing YAML content.
  */
 @Composable
 fun SchemaEditorPanel(
@@ -55,10 +63,10 @@ fun SchemaEditorPanel(
         )
     },
 ) {
-    var mode by remember { mutableStateOf(initialMode) }
-    var editorState by remember { mutableStateOf(fromYaml(yaml)) }
-    var yamlText by remember { mutableStateOf(yaml) }
-    var yamlError by remember { mutableStateOf<String?>(null) }
+    var mode by remember { mutableStateOf(value = initialMode) }
+    var editorState by remember { mutableStateOf(value = fromYaml(yaml)) }
+    var yamlText by remember { mutableStateOf(value = yaml) }
+    var yamlError by remember { mutableStateOf<String?>(value = null) }
 
     // External YAML changes (e.g. manifest load) should pull into the local model.
     LaunchedEffect(key1 = yaml) {
@@ -137,6 +145,12 @@ fun SchemaEditorPanel(
     }
 }
 
+/**
+ * Determines if the current schema editor state contains validation issues.
+ * Validation issues include blank field paths or duplicate field paths.
+ *
+ * @return True if there are any blank or duplicate field paths in the editor state, false otherwise.
+ */
 private fun SchemaEditorState.hasValidationIssues(): Boolean {
     val paths = fields.map { it.path.trim() }.filter { it.isNotBlank() }
     val hasBlank = fields.any { it.path.isBlank() }
@@ -144,6 +158,16 @@ private fun SchemaEditorState.hasValidationIssues(): Boolean {
     return hasBlank || hasDuplicate
 }
 
+/**
+ * A composable function for editing a visual schema, including its fields and properties,
+ * within an arranged layout. Displays field definitions inside an editable table,
+ * along with a title section.
+ *
+ * @param state The current state of the schema editor, including the schema name,
+ *              fields, and read-only status.
+ * @param onStateChange A callback function invoked with the updated schema state
+ *                      when changes occur in the editor.
+ */
 @Composable
 private fun VisualSchemaEditor(
     state: SchemaEditorState,
@@ -162,6 +186,17 @@ private fun VisualSchemaEditor(
     }
 }
 
+/**
+ * A composable function for editing and validating YAML schema. It includes features
+ * for displaying errors, validation issues, and a custom YAML editor component.
+ *
+ * @param yaml The YAML content to be displayed and edited.
+ * @param error An optional error message to be displayed if there are issues with the YAML.
+ * @param validationIssues A flag indicating whether validation issues (e.g., blank or duplicate paths) exist.
+ * @param onYamlChange Callback to handle changes to the YAML content.
+ * @param yamlEditor A composable lambda for rendering the YAML editor. Provides the current text content,
+ *        a callback for handling text changes, and a modifier for styling.
+ */
 @Composable
 private fun YamlSchemaEditor(
     yaml: String,

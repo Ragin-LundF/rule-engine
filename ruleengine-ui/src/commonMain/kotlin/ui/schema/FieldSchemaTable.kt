@@ -1,8 +1,8 @@
 package ui.schema
 
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,21 +46,15 @@ import ui.TextSecondary
 import ui.builder.components.DropdownSelector
 
 /**
- * Visual schema editor table.
+ * Renders a composable table for editing a schema, displaying fields with their respective
+ * properties such as path, alias, type, normalizers, and operators. Includes features like
+ * duplicate path detection, row addition, and read-only mode.
  *
- * Displays [state] as an editable list of field rows. Each row exposes:
- * - path (text field)
- * - alias (text field)
- * - type (dropdown)
- * - normalizers (toggle chips via [NormalizerSelector])
- * - operators (toggle chips via [OperatorSelector])
- * - delete button
- *
- * When [state.isReadOnly] is true the table is rendered in preview mode with
- * no editing controls.
- *
- * @param state       Current [SchemaEditorState].
- * @param onStateChange  Called with the updated state on every edit.
+ * @param state The current state of the schema editor, including schema name, field definitions,
+ *              and read-only status.
+ * @param onStateChange A callback function invoked when the schema editor's state is updated.
+ *                      Provides the updated state as a parameter.
+ * @param modifier Modifier for customizing the layout or appearance of the table.
  */
 @Suppress("FunctionNaming", "LongMethod")
 @Composable
@@ -87,20 +80,20 @@ fun FieldSchemaTable(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(BgElevated)
+                .background(color = BgElevated)
                 .padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            HeaderCell("Path", Modifier.weight(2f))
-            HeaderCell("Alias", Modifier.weight(1.5f))
-            HeaderCell("Type", Modifier.weight(1.5f))
-            HeaderCell("Normalizers", Modifier.weight(3f))
-            HeaderCell("Operators", Modifier.weight(3f))
-            if (editable) Spacer(Modifier.width(36.dp))
+            HeaderCell(text = "Path", modifier = Modifier.weight(weight = 2f))
+            HeaderCell(text = "Alias", modifier = Modifier.weight(weight = 1.5f))
+            HeaderCell(text = "Type", modifier = Modifier.weight(weight = 1.5f))
+            HeaderCell(text = "Normalizers", modifier = Modifier.weight(weight = 3f))
+            HeaderCell(text = "Operators", modifier = Modifier.weight(weight = 3f))
+            if (editable) Spacer(modifier = Modifier.width(width = 36.dp))
         }
 
-        Spacer(Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(height = 2.dp))
 
         val duplicatePaths = state.fields
             .map { it.path.trim() }
@@ -120,7 +113,7 @@ fun FieldSchemaTable(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(space = 4.dp),
             ) {
                 itemsIndexed(state.fields) { index, field ->
                     FieldRow(
@@ -255,21 +248,21 @@ private fun FieldRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(4.dp))
-            .background(BgSurface, shape = RoundedCornerShape(4.dp))
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .border(width = 1.dp, color = borderColor, shape = RoundedCornerShape(size = 4.dp))
+            .background(color = BgSurface, shape = RoundedCornerShape(size = 4.dp))
+            .padding(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 6.dp),
     ) {
         // ── top row: path / alias / type / delete ─────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             OutlinedTextField(
                 value = field.path,
                 onValueChange = { onFieldChange(field.copy(path = it)) },
-                modifier = Modifier.weight(2f),
+                modifier = Modifier.weight(weight = 2f),
                 enabled = editable,
                 singleLine = true,
                 placeholder = { Text("field.path", color = TextMuted) },
@@ -278,7 +271,7 @@ private fun FieldRow(
             OutlinedTextField(
                 value = field.alias,
                 onValueChange = { onFieldChange(field.copy(alias = it)) },
-                modifier = Modifier.weight(1.5f),
+                modifier = Modifier.weight(weight = 1.5f),
                 enabled = editable,
                 singleLine = true,
                 placeholder = { Text("alias", color = TextMuted) },
@@ -286,9 +279,8 @@ private fun FieldRow(
             )
             TypeDropdown(
                 selected = field.type,
-                enabled = editable,
                 onSelect = { onFieldChange(field.copy(type = it)) },
-                modifier = Modifier.weight(1.5f),
+                modifier = Modifier.weight(weight = 1.5f),
             )
             if (editable) {
                 TextButton(onClick = onDelete) {
@@ -357,7 +349,6 @@ private fun FieldRow(
 @Composable
 private fun TypeDropdown(
     selected: SchemaFieldType,
-    enabled: Boolean,
     onSelect: (SchemaFieldType) -> Unit,
     modifier: Modifier = Modifier,
 ) {

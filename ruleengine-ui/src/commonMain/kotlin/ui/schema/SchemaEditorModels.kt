@@ -4,7 +4,7 @@ package ui.schema
  * Editable representation of a single field in the visual schema editor.
  *
  * All fields are plain strings so the composable layer stays in commonMain.
- * The bridge layer (jvmMain) converts between this model and [FieldSchema].
+ * The bridge layer (jvmMain) converts between this model and [ruleengine.core.domain.FieldSchema].
  */
 data class EditableField(
     val path: String = "",

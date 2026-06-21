@@ -19,7 +19,9 @@ sealed interface MutableConditionNode {
         override val id: String get() = inner.id
         override var joinToPrevious: String
             get() = inner.joinToPrevious
-            set(value) { inner.joinToPrevious = value }
+            set(value) {
+                inner.joinToPrevious = value
+            }
     }
 
     /** A parenthesized group of child nodes. */
@@ -29,7 +31,7 @@ sealed interface MutableConditionNode {
         joinToPrevious: String = "",
     ) : MutableConditionNode {
         val nodes: SnapshotStateList<MutableConditionNode> = nodes.toMutableStateList()
-        override var joinToPrevious by mutableStateOf(joinToPrevious)
+        override var joinToPrevious by mutableStateOf(value = joinToPrevious)
     }
 }
 
@@ -56,15 +58,18 @@ class MutableBuilderCondition(
     listItems: List<String> = emptyList(),
     joinToPrevious: String = "",
 ) {
-    var field by mutableStateOf(field)
-    var operator by mutableStateOf(operator)
-    var value by mutableStateOf(value)
+    var field by mutableStateOf(value = field)
+    var operator by mutableStateOf(value = operator)
+    var value by mutableStateOf(value = value)
+
     /** Second value used only when operator is "between". */
-    var valueTo by mutableStateOf(valueTo)
+    var valueTo by mutableStateOf(value = valueTo)
+
     /** List items used only when operator is "in" / "containsAny" / "containsAll". */
     val listItems: SnapshotStateList<String> = listItems.toMutableStateList()
+
     /** Join word (`and` or `or`) placed before this condition in the generated DSL. */
-    var joinToPrevious by mutableStateOf(joinToPrevious)
+    var joinToPrevious by mutableStateOf(value = joinToPrevious)
 
     fun toImmutable(): BuilderCondition = BuilderCondition(
         id = id,
@@ -85,7 +90,7 @@ class MutableBuilderAction(
     name: String,
     arguments: List<String> = emptyList(),
 ) {
-    var name by mutableStateOf(name)
+    var name by mutableStateOf(value = name)
     val arguments: SnapshotStateList<String> = arguments.toMutableStateList()
 
     fun toImmutable(): BuilderAction = BuilderAction(
@@ -128,6 +133,7 @@ class BuilderEditorState private constructor(
                 isLocked = false,
                 lockReason = "",
             )
+
             is BuilderRule.Unsupported -> BuilderEditorState(
                 ruleId = rule.id,
                 conditionNodes = mutableStateListOf(),
@@ -135,6 +141,7 @@ class BuilderEditorState private constructor(
                 isLocked = true,
                 lockReason = rule.reason,
             )
+
             BuilderRule.None -> BuilderEditorState(
                 ruleId = "",
                 conditionNodes = mutableStateListOf(),
@@ -156,6 +163,7 @@ class BuilderEditorState private constructor(
                     joinToPrevious = joinToPrevious,
                 )
             )
+
             is BuilderConditionNode.Condition -> MutableConditionNode.Leaf(
                 MutableBuilderCondition(
                     id = nodeId,
@@ -167,6 +175,7 @@ class BuilderEditorState private constructor(
                     joinToPrevious = joinToPrevious,
                 )
             )
+
             is BuilderConditionNode.Group -> MutableConditionNode.Group(
                 id = nodeId,
                 nodes = nodes.map { it.toMutable() },
@@ -192,11 +201,11 @@ class BuilderEditorState private constructor(
     }
 
     /**
-     * Wraps the top-level nodes whose [ids] are in the set into a single
-     * [MutableConditionNode.Group]. The first id in [ids] keeps its
-     * [joinToPrevious]; subsequent ids inside the group keep their existing join.
+     * Groups a set of condition nodes, identified by their IDs, into a single group node.
+     * If the set contains fewer than two valid condition nodes, no action is taken.
      *
-     * Requires at least 2 ids. Does nothing for fewer than 2 ids.
+     * @param ids A set of IDs representing the condition nodes to be grouped. Only IDs that can
+     *            be matched to existing condition nodes are considered.
      */
     fun groupConditions(ids: Set<String>) {
         if (ids.size < 2) return
@@ -223,7 +232,11 @@ class BuilderEditorState private constructor(
      * Adds a new empty condition inside the group with the given [groupId].
      * If the group doesn't exist, does nothing.
      */
-    fun addConditionInside(groupId: String, defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition? {
+    fun addConditionInside(
+        groupId: String,
+        defaultField: String = "",
+        defaultOperator: String = "equals"
+    ): MutableBuilderCondition? {
         val group = findGroupById(groupId) ?: return null
         val condition = MutableBuilderCondition(
             id = "cond-${nextConditionId++}",
@@ -275,18 +288,5 @@ class BuilderEditorState private constructor(
     /** Removes the action with the given [id]. */
     fun removeAction(id: String) {
         actions.removeAll { it.id == id }
-    }
-
-    /**
-     * Ensures an action has exactly [count] arguments, padding with empty strings
-     * or trimming extras.
-     */
-    fun resizeActionArguments(action: MutableBuilderAction, count: Int) {
-        while (action.arguments.size < count) {
-            action.arguments.add("")
-        }
-        while (action.arguments.size > count) {
-            action.arguments.removeAt(index = action.arguments.lastIndex)
-        }
     }
 }

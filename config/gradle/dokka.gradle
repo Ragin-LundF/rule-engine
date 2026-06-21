@@ -1,0 +1,19 @@
+dokka {
+    pluginsConfiguration {
+        html {
+            footerMessage.set("(c) Ragin https://github.com/Ragin-LundF/rule-engine")
+            separateInheritedMembers.set(false)
+            mergeImplicitExpectActualDeclarations.set(false)
+        }
+    }
+}
+
+if (!tasks.findByName("dokkaGenerateHtmlJar")) {
+    tasks.register("dokkaGenerateHtmlJar", Jar) {
+        group = "documentation"
+        description = "Assembles a Javadoc JAR from Dokka HTML output"
+        dependsOn(tasks.named("dokkaGenerateHtml"))
+        archiveClassifier.set("javadoc")
+        from(layout.buildDirectory.dir("dokka/html"))
+    }
+}
