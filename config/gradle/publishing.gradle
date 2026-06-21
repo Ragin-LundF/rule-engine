@@ -1,3 +1,12 @@
+afterEvaluate {
+    tasks.matching { it.name.startsWith("publish") }.configureEach {
+        dependsOn(tasks.named("dokkaGenerateHtmlJar"))
+    }
+    tasks.matching { it.name.contains("MetadataFileFor") || it.name.contains("PomFileFor") }.configureEach {
+        dependsOn(tasks.named("dokkaGenerateHtmlJar"))
+    }
+}
+
 def configurePublication = { publicationComponent ->
     publishing {
         publications {
@@ -6,6 +15,8 @@ def configurePublication = { publicationComponent ->
 
                 artifactId = project.ext.has("publishArtifactId") ? project.ext.publishArtifactId : project.name
                 version = "${version}"
+                // Add Dokka-generated Javadoc jar (lazy reference)
+                artifact(project.provider { tasks.named("dokkaGenerateHtmlJar").get() })
                 pom {
                     name = project.ext.has("publishName") ? project.ext.publishName : project.name
                     description = project.ext.has("publishDescription") ? project.ext.publishDescription : "Cucumber BDD library for simpler e2e tests"
@@ -61,6 +72,7 @@ if (project.name == "ruleengine-ui") {
             if (name == "jvm") {
                 artifactId = "ruleengine-ui"
                 version = "${project.version}"
+                artifact(project.provider { tasks.named("dokkaGenerateHtmlJar").get() })
                 pom {
                     name = project.ext.has("publishName") ? project.ext.publishName : "ruleengine-ui"
                     description = project.ext.has("publishDescription") ? project.ext.publishDescription : "Desktop UI for the rule engine"
