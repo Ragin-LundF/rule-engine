@@ -175,6 +175,74 @@ class BuilderEditorState private constructor(
         }
     }
 
+    /**
+     * Removes the group with the given [id] and inserts its children at the
+     * group's original position. The first child inherits the group's joinToPrevious.
+     * Does nothing if no group with that id exists.
+     */
+    fun ungroup(id: String) {
+        val groupIndex = conditionNodes.indexOfFirst { it.id == id && it is MutableConditionNode.Group }
+        if (groupIndex < 0) return
+        val group = conditionNodes[groupIndex] as MutableConditionNode.Group
+        if (group.nodes.isNotEmpty()) {
+            group.nodes.first().joinToPrevious = group.joinToPrevious
+        }
+        conditionNodes.removeAt(groupIndex)
+        conditionNodes.addAll(index = groupIndex, elements = group.nodes.toList())
+    }
+
+    /**
+     * Wraps the top-level nodes whose [ids] are in the set into a single
+     * [MutableConditionNode.Group]. The first id in [ids] keeps its
+     * [joinToPrevious]; subsequent ids inside the group keep their existing join.
+     *
+     * Requires at least 2 ids. Does nothing for fewer than 2 ids.
+     */
+    fun groupConditions(ids: Set<String>) {
+        if (ids.size < 2) return
+        val indices = ids.mapNotNull { id ->
+            conditionNodes.indexOfFirst { it.id == id }.takeIf { it >= 0 }
+        }.sorted()
+        if (indices.size < 2) return
+
+        val nodesToWrap = indices.map { conditionNodes[it] }
+        val groupJoin = nodesToWrap.first().joinToPrevious
+        val group = MutableConditionNode.Group(
+            id = "grp-${nextConditionId++}",
+            nodes = nodesToWrap,
+            joinToPrevious = groupJoin,
+        )
+
+        // Remove from back to front so indices stay valid
+        indices.sortedDescending().forEach { conditionNodes.removeAt(it) }
+        // Insert the group at the position of the first wrapped node
+        conditionNodes.add(index = indices.first(), element = group)
+    }
+
+    /**
+     * Adds a new empty condition inside the group with the given [groupId].
+     * If the group doesn't exist, does nothing.
+     */
+    fun addConditionInside(groupId: String, defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition? {
+        val group = findGroupById(groupId) ?: return null
+        val condition = MutableBuilderCondition(
+            id = "cond-${nextConditionId++}",
+            field = defaultField,
+            operator = defaultOperator,
+            value = "",
+            joinToPrevious = group.nodes.lastOrNull()?.let { "and" } ?: "",
+        )
+        group.nodes.add(MutableConditionNode.Leaf(condition))
+        return condition
+    }
+
+    private fun findGroupById(id: String): MutableConditionNode.Group? {
+        for (node in conditionNodes) {
+            if (node is MutableConditionNode.Group && node.id == id) return node
+        }
+        return null
+    }
+
     /** Adds a new empty condition after the existing ones, at the top level. */
     fun addCondition(defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition {
         val condition = MutableBuilderCondition(

@@ -392,4 +392,87 @@ class BuilderRoundTripTest {
         val result = parseAndValidate(generated)
         assertTrue(result.isValid, "Generated deeply nested DSL should be valid; diagnostics: ${result.diagnostics}")
     }
+
+    // ── group operation round-trip tests ──────────────────────────────────
+
+    @Test
+    fun `create group via state api and round-trip`() {
+        val original = """
+            rule "test" {
+              when
+                purpose contains "rent"
+                and amount >= 500
+                or purpose equals "misc"
+              then
+                label "test"
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(original)
+        // Group first two conditions
+        state.groupConditions(ids = setOf(state.conditionNodes[0].id, state.conditionNodes[1].id))
+
+        val generated = BuilderToRuleDsl.generate(state)
+        assertNotNull(generated)
+
+        val result = parseAndValidate(generated)
+        assertTrue(result.isValid, "Grouped DSL should be valid: ${result.diagnostics}")
+        assertTrue(generated.contains("("), "Generated DSL should contain '('")
+        assertTrue(generated.contains(")"), "Generated DSL should contain ')'")
+    }
+
+    @Test
+    fun `create empty group and add conditions inside via state api`() {
+        val state = BuilderEditorState.fromBuilderRule(
+            BuilderRule.Supported(
+                id = "test",
+                conditionNodes = listOf(
+                    BuilderConditionNode.Group(
+                        nodeId = "g1",
+                        nodes = emptyList(),
+                    ),
+                ),
+                actions = emptyList(),
+            )
+        )
+
+        state.addConditionInside(groupId = "g1", defaultField = "purpose", defaultOperator = "equals")
+        // Set value on the first condition inside the group
+        val group = state.conditionNodes[0] as MutableConditionNode.Group
+        (group.nodes[0] as MutableConditionNode.Leaf).inner.value = "rent"
+        state.addConditionInside(groupId = "g1", defaultField = "amount", defaultOperator = ">=")
+        (group.nodes[1] as MutableConditionNode.Leaf).inner.value = "500"
+
+        val generated = BuilderToRuleDsl.generate(state)
+        assertNotNull(generated)
+
+        val result = parseAndValidate(generated)
+        assertTrue(result.isValid, "DSL from empty-group creation should be valid: ${result.diagnostics}")
+    }
+
+    @Test
+    fun `ungroup via state api and round-trip`() {
+        val original = """
+            rule "test" {
+              when
+                (purpose contains "rent" or amount >= 500)
+                and purpose equals "misc"
+              then
+                label "test"
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(original)
+        assertEquals(expected = 2, actual = state.conditionNodes.size)
+
+        state.ungroup(id = state.conditionNodes[0].id)
+
+        val generated = BuilderToRuleDsl.generate(state)
+        assertNotNull(generated)
+        assertTrue(!generated.contains("("), "Ungrouped DSL should not contain parentheses")
+        assertTrue(!generated.contains(")"), "Ungrouped DSL should not contain parentheses")
+
+        val result = parseAndValidate(generated)
+        assertTrue(result.isValid, "Ungrouped DSL should be valid: ${result.diagnostics}")
+    }
 }
