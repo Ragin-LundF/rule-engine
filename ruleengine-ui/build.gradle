@@ -6,10 +6,6 @@ plugins {
 
 kotlin {
     jvm()
-    js(IR) {
-        browser()
-        binaries.executable()
-    }
 
     sourceSets {
         commonMain {
@@ -25,11 +21,6 @@ kotlin {
                 implementation(project(":ruleengine-core"))
                 implementation(compose.desktop.currentOs)
                 implementation(libs.bundles.jackson)
-            }
-        }
-        jsMain {
-            dependencies {
-                // keep JS main independent from core
             }
         }
         jvmTest {
