@@ -1,19 +1,16 @@
 package ui.builder
 
 /**
- * A single condition row rendered in the WHEN block.
+ * Represents a leaf node in a builder condition tree. This class encapsulates a single condition
+ * with its associated field, operator, value(s), and metadata for rendering and logical grouping.
  *
- * [joinToPrevious] is the boolean word (`and` or `or`) placed before this condition
- * when rendering DSL text. The first condition in a rule has an empty value.
- */
-/**
- * @param id Unique identifier for this node.
- * @param field The schema field name.
- * @param operator The comparison operator.
- * @param value The comparison value (or low bound for `between`).
- * @param valueTo The high bound for `between`.
- * @param listItems Items for list operators (`in`, `containsAny`, `containsAll`).
- * @param joinToPrevious Join word (`and`/`or`) that precedes this condition in the rule.
+ * @property id A unique identifier for this condition node.
+ * @property field The name of the field on which the condition is applied.
+ * @property operator The operator used for the condition (e.g., "equals", "between").
+ * @property value The primary value for the condition.
+ * @property valueTo An optional secondary value used for range conditions (e.g., "between").
+ * @property listItems A list of values used for conditions requiring multiple inputs (e.g., "in").
+ * @property joinToPrevious Logical connector to the previous node in the tree (e.g., "AND", "OR").
  */
 data class BuilderCondition(
     val id: String,

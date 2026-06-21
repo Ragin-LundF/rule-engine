@@ -30,7 +30,7 @@ import ui.TextPrimary
  * Renders a list of [TraceRow] items produced by the evaluator.
  * Each row shows a coloured dot (green = true, red = false) and the condition label.
  *
- * The implementation is a simple [Column] rather than a [LazyColumn] so that it can be
+ * The implementation is a simple [Column] rather than a [androidx.compose.foundation.lazy.LazyColumn] so that it can be
  * safely embedded inside another scrolling container without creating nested scrollable
  * constraints.
  */
@@ -45,9 +45,9 @@ fun TraceView(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Bg)
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .background(color = Bg)
+            .padding(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 2.dp),
     ) {
         Text(
             text = "Trace",

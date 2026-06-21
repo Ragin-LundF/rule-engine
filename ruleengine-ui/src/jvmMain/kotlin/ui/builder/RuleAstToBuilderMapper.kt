@@ -61,7 +61,7 @@ object RuleAstToBuilderMapper {
         joinToPrevious: String,
     ): List<BuilderConditionNode>? = when (expr) {
         is ConditionAst -> {
-            val condition = mapConditionAst(expr) ?: return null
+            val condition = mapConditionAst(condition = expr) ?: return null
             listOf(
                 BuilderConditionNode.Condition(
                     nodeId = condition.id,
@@ -95,7 +95,7 @@ object RuleAstToBuilderMapper {
      * Collects children of an And/Or container.
      *
      * Single-condition children are inlined. Multi-node children (from nested
-     * containers with a different join type) are wrapped in a [Group] so that
+     * containers with a different join type) are wrapped in a [ui.builder.BuilderConditionNode.Group] so that
      * parentheses are preserved in the DSL round-trip.
      */
     private fun collectGroupedChildren(
@@ -128,6 +128,13 @@ object RuleAstToBuilderMapper {
 
     // ── condition / action mapping ────────────────────────────────────────────
 
+    /**
+     * Maps a `ConditionAst` object to a `BuilderCondition` object or returns `null` if the mapping cannot be performed.
+     *
+     * @param condition The `ConditionAst` object to be transformed.
+     *  Contains the field, operator, and value representing a condition in the abstract syntax tree (AST).
+     * @return A `BuilderCondition` object if the mapping is successful, otherwise `null`.
+     */
     private fun mapConditionAst(condition: ConditionAst): BuilderCondition? {
         val literalValue = literalToValue(condition.value) ?: return null
         return BuilderCondition(
