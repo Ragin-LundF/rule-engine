@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,14 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import ui.BorderColor
 import ui.BgSurface
+import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.components.ActionRowEditor
 import ui.builder.components.ConditionRowEditor
 import ui.builder.components.RuleBuilderHeader
 import ui.components.TinyButton
+import kotlin.random.Random
 
 /**
  * Editable visual representation of a single rule in Builder mode.
@@ -190,7 +190,7 @@ private fun WhenSection(
             onClick = {
                 val joinToPrevious = editorState.conditionNodes.lastOrNull()?.let { "and" } ?: ""
                 val group = MutableConditionNode.Group(
-                    id = "grp-${System.currentTimeMillis().toString().takeLast(4)}",
+                    id = "grp-${Random.nextInt(until = 4)}",
                     nodes = mutableStateListOf(),
                     joinToPrevious = joinToPrevious,
                 )
@@ -209,6 +209,7 @@ private fun WhenSection(
  * At the first level, leaf nodes show a checkbox for multi-select grouping.
  */
 @Composable
+@Suppress("LongMethod", "LongParameterList")
 private fun renderNodes(
     nodes: List<MutableConditionNode>,
     catalogFields: List<CatalogFieldInfo>,
