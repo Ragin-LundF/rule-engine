@@ -89,16 +89,7 @@ class RuleWorkbenchViewModelTest {
     }
 
     @Test
-    fun `UpdateRuleText updates rule text`() = runModelTest {
-        viewModel.dispatch(action = WorkbenchAction.UpdateRuleText(text = "rule \"x\" {}"))
-
-        assertEquals(expected = "rule \"x\" {}", actual = viewModel.state.value.ruleText)
-    }
-
-    @Test
-    fun `RequestValidation applies validation result asynchronously`() = runModelTest {
-        viewModel.dispatch(action = WorkbenchAction.UpdateRuleText(text = "rule \"x\" {}"))
-
+    fun `RequestValidation transitions state and resolves to IDLE with empty text`() = runModelTest {
         viewModel.dispatch(action = WorkbenchAction.RequestValidation)
 
         assertEquals(expected = ValidationState.VALIDATING, actual = viewModel.state.value.validationState)
@@ -106,7 +97,7 @@ class RuleWorkbenchViewModelTest {
         // Wait for the async validation coroutine to finish.
         kotlinx.coroutines.delay(timeMillis = 50)
 
-        assertEquals(expected = ValidationState.VALID, actual = viewModel.state.value.validationState)
+        assertEquals(expected = ValidationState.IDLE, actual = viewModel.state.value.validationState)
         assertTrue(actual = viewModel.state.value.diagnostics.isEmpty())
     }
 

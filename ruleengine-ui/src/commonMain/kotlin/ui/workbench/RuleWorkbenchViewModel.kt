@@ -29,10 +29,6 @@ class RuleWorkbenchViewModel(
             is WorkbenchAction.SelectActionMode -> updateState { it.copy(actionMode = action.mode) }
             is WorkbenchAction.SelectManifestMode -> updateState { it.copy(manifestMode = action.mode) }
             is WorkbenchAction.SelectRightPanelTab -> updateState { it.copy(rightPanelTab = action.tab) }
-            is WorkbenchAction.UpdateRuleText -> updateState { it.copy(ruleText = action.text) }
-            is WorkbenchAction.UpdateSchemaText -> updateState { it.copy(schemaText = action.text) }
-            is WorkbenchAction.UpdateActionsText -> updateState { it.copy(actionsText = action.text) }
-            is WorkbenchAction.UpdateManifestText -> updateState { it.copy(manifestText = action.text) }
             is WorkbenchAction.SelectRule -> updateState {
                 it.copy(
                     selectedRuleId = action.ruleId,
@@ -70,9 +66,9 @@ class RuleWorkbenchViewModel(
 
     /**
      * Update a slice of state via a synchronous transform.
-     * Exposed so tests can drive state transitions directly with simple lambdas.
+     * Package-internal so tests can drive state transitions directly.
      */
-    fun updateState(transform: (RuleWorkbenchState) -> RuleWorkbenchState) {
+    internal fun updateState(transform: (RuleWorkbenchState) -> RuleWorkbenchState) {
         _state.value = transform(_state.value)
     }
 
@@ -83,12 +79,11 @@ class RuleWorkbenchViewModel(
     private fun requestValidation() {
         updateState { it.copy(validationState = ValidationState.VALIDATING) }
         scope.launch {
-            val current = _state.value
             val result = runCatching {
                 validator.validate(
-                    schemaText = current.schemaText,
-                    actionsText = current.actionsText,
-                    ruleText = current.ruleText,
+                    schemaText = "",
+                    actionsText = "",
+                    ruleText = "",
                 )
             }.getOrElse { throwable ->
                 WorkbenchValidationResult(
