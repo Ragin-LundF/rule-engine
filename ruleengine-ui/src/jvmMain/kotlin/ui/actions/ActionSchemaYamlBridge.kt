@@ -1,7 +1,5 @@
 package ui.actions
 
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionDefinition
 import ruleengine.core.domain.ActionSchema
 import ruleengine.schema.ActionSchemaLoader
 
@@ -11,8 +9,11 @@ import ruleengine.schema.ActionSchemaLoader
 object ActionSchemaYamlBridge {
 
     /**
-     * Parses [yaml] into an [ActionEditorState].
-     * Returns [ActionEditorState.Empty] with [isReadOnly] = false on blank input.
+     * Parses a YAML string into an instance of [ActionEditorState].
+     * If the YAML is invalid or cannot be parsed, a read-only empty state is returned.
+     *
+     * @param yaml The YAML string that represents an action schema.
+     * @return An [ActionEditorState] containing the parsed actions or a read-only empty state if parsing fails.
      */
     fun fromYaml(yaml: String): ActionEditorState {
         if (yaml.isBlank()) return ActionEditorState.Empty
@@ -36,46 +37,36 @@ object ActionSchemaYamlBridge {
     }
 
     /**
-     * Serialises [state] to YAML text that [ActionSchemaLoader.loadFromString] can reload.
+     * Converts the given [ActionEditorState] object to its YAML string representation.
+     *
+     * @param state The state of the action editor containing a list of actions.
+     * @return A YAML string representing the actions in the provided state. Returns an
+     * empty string if there are no actions.
      */
     fun toYaml(state: ActionEditorState): String {
         if (state.actions.isEmpty()) return ""
 
         val sb = StringBuilder()
-        sb.appendLine("actions:")
+        sb.appendLine(value = "actions:")
         state.actions.forEach { action ->
-            sb.appendLine("  ${action.name}:")
+            sb.appendLine(value = "  ${action.name}:")
             if (action.purpose.isNotBlank()) {
-                sb.appendLine("    purpose: \"${escape(action.purpose)}\"")
+                sb.appendLine(value = "    purpose: \"${escape(action.purpose)}\"")
             }
             if (action.argTypes.isNotEmpty()) {
-                sb.appendLine("    argTypes:")
+                sb.appendLine(value = "    argTypes:")
                 action.argTypes.forEach { argType ->
-                    sb.appendLine("      - $argType")
+                    sb.appendLine(value = "      - $argType")
                 }
             } else {
-                sb.appendLine("    argTypes: []")
+                sb.appendLine(value = "    argTypes: []")
             }
         }
         return sb.toString().trim()
     }
 
-    internal fun toActionSchema(state: ActionEditorState): ActionSchema {
-        val actions = state.actions.associate { action ->
-            action.name to ActionDefinition(
-                name = action.name,
-                argTypes = action.argTypes.mapNotNull { parseArgType(it) },
-            )
-        }
-        return ActionSchema(actions = actions)
+    private fun escape(s: String): String {
+        return s.replace(oldValue = "\\", newValue = "\\\\")
+            .replace(oldValue = "\"", newValue = "\\\"")
     }
-
-    private fun parseArgType(s: String): ActionArgType? = when (s.lowercase()) {
-        "string" -> ActionArgType.STRING
-        "integer", "int" -> ActionArgType.INTEGER
-        "decimal", "number" -> ActionArgType.DECIMAL
-        else -> null
-    }
-
-    private fun escape(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"")
 }
