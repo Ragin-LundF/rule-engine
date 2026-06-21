@@ -22,21 +22,19 @@ import ruleengine.dsl.ast.StringLiteral
  * - [BetweenLiteral] values
  * - [ListLiteral] values
  *
- * The join word (`and` / `or`) between two consecutive conditions is attached to the
- * second condition so the Builder can edit every link independently.
+ * Tree structure is preserved via [BuilderConditionNode.Group] nodes so that
+ * parenthesized grouping is maintained through the round-trip.
  * Everything else produces [BuilderRule.Unsupported].
  */
 object RuleAstToBuilderMapper {
 
     fun map(rule: RuleAst): BuilderRule {
-        val conditions = mutableListOf<BuilderCondition>()
-        val supported = collectConditions(
+        val conditionNodes = collectNodes(
             expr = rule.condition,
             joinToPrevious = "",
-            conditions = conditions,
         )
 
-        if (!supported) {
+        if (conditionNodes == null) {
             return BuilderRule.Unsupported(
                 id = rule.id,
                 reason = "Rule contains advanced syntax (nested not, extractions, arithmetic). Edit in Code mode.",
@@ -47,53 +45,88 @@ object RuleAstToBuilderMapper {
 
         return BuilderRule.Supported(
             id = rule.id,
-            conditions = conditions,
+            conditionNodes = conditionNodes,
             actions = actions,
         )
     }
 
-    // ── private helpers ──────────────────────────────────────────────────────
+    // ── recursive node collection ─────────────────────────────────────────────
 
-    private fun collectConditions(
+    /**
+     * Recursively collects [BuilderConditionNode] entries, preserving group structure.
+     * Returns null for unsupported expressions.
+     */
+    private fun collectNodes(
         expr: ExpressionAst,
         joinToPrevious: String,
-        conditions: MutableList<BuilderCondition>,
-    ): Boolean = when (expr) {
+    ): List<BuilderConditionNode>? = when (expr) {
         is ConditionAst -> {
-            val condition = mapConditionAst(expr) ?: return false
-            conditions.add(condition.copy(joinToPrevious = joinToPrevious))
-            true
+            val condition = mapConditionAst(expr) ?: return null
+            listOf(
+                BuilderConditionNode.Condition(
+                    nodeId = condition.id,
+                    field = condition.field,
+                    operator = condition.operator,
+                    value = condition.value,
+                    valueTo = condition.valueTo,
+                    listItems = condition.listItems,
+                    joinToPrevious = joinToPrevious,
+                )
+            )
         }
         is AndAst -> {
-            expr.children.forEachIndexed { index, child ->
-                val childJoin = if (index == 0) joinToPrevious else "and"
-                if (!collectConditions(
-                        expr = child,
-                        joinToPrevious = childJoin,
-                        conditions = conditions,
-                    )
-                ) {
-                    return false
-                }
-            }
-            true
+            collectGroupedChildren(
+                children = expr.children,
+                groupJoin = "and",
+                parentJoin = joinToPrevious,
+            )
         }
         is OrAst -> {
-            expr.children.forEachIndexed { index, child ->
-                val childJoin = if (index == 0) joinToPrevious else "or"
-                if (!collectConditions(
-                        expr = child,
-                        joinToPrevious = childJoin,
-                        conditions = conditions,
-                    )
-                ) {
-                    return false
-                }
-            }
-            true
+            collectGroupedChildren(
+                children = expr.children,
+                groupJoin = "or",
+                parentJoin = joinToPrevious,
+            )
         }
-        else -> false
+        else -> null
     }
+
+    /**
+     * Collects children of an And/Or container.
+     *
+     * Single-condition children are inlined. Multi-node children (from nested
+     * containers with a different join type) are wrapped in a [Group] so that
+     * parentheses are preserved in the DSL round-trip.
+     */
+    private fun collectGroupedChildren(
+        children: List<ExpressionAst>,
+        groupJoin: String,
+        parentJoin: String,
+    ): MutableList<BuilderConditionNode>? {
+        val result = mutableListOf<BuilderConditionNode>()
+
+        children.forEachIndexed { index, child ->
+            val childJoin = if (index == 0) parentJoin else groupJoin
+            val nodes = collectNodes(expr = child, joinToPrevious = childJoin) ?: return null
+
+            if (nodes.size == 1) {
+                result.add(nodes.single())
+            } else {
+                // Multiple nodes from a differently-joined sub-expression need a Group
+                result.add(
+                    BuilderConditionNode.Group(
+                        nodeId = "grp-${result.size}",
+                        nodes = nodes,
+                        joinToPrevious = childJoin,
+                    )
+                )
+            }
+        }
+
+        return result
+    }
+
+    // ── condition / action mapping ────────────────────────────────────────────
 
     private fun mapConditionAst(condition: ConditionAst): BuilderCondition? {
         val literalValue = literalToValue(condition.value) ?: return null
@@ -136,7 +169,11 @@ object RuleAstToBuilderMapper {
 
     private fun normalizeOperator(operator: String): String = operator
 
-    private fun generateId(): String = java.util.UUID.randomUUID().toString()
+    // Using a simple counter instead of java.util.UUID so this code can
+    // eventually move to commonMain without a JVM dependency.
+    private var idCounter = 0
+
+    private fun generateId(): String = "nid-${idCounter++}"
 }
 
 /** Internal holder for a decomposed literal value. */

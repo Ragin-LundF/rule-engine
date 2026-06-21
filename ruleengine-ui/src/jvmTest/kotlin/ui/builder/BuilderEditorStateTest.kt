@@ -13,7 +13,7 @@ class BuilderEditorStateTest {
         val state = BuilderEditorState.fromBuilderRule(
             BuilderRule.Supported(
                 id = "r1",
-                conditions = emptyList(),
+                conditionNodes = emptyList(),
                 actions = emptyList(),
             )
         )
@@ -21,10 +21,10 @@ class BuilderEditorStateTest {
         val first = state.addCondition(defaultField = "amount", defaultOperator = ">=")
         val second = state.addCondition(defaultField = "purpose", defaultOperator = "equals")
 
-        assertEquals(2, state.conditions.size)
-        assertEquals("amount", first.field)
-        assertEquals("purpose", second.field)
-        assertEquals("and", second.joinToPrevious)
+        assertEquals(expected = 2, actual = state.conditionNodes.size)
+        assertEquals(expected = "amount", actual = first.field)
+        assertEquals(expected = "purpose", actual = second.field)
+        assertEquals(expected = "and", actual = second.joinToPrevious)
     }
 
     @Test
@@ -32,9 +32,19 @@ class BuilderEditorStateTest {
         val state = BuilderEditorState.fromBuilderRule(
             BuilderRule.Supported(
                 id = "r1",
-                conditions = listOf(
-                    BuilderCondition(id = "c1", field = "amount", operator = ">=", value = "100"),
-                    BuilderCondition(id = "c2", field = "purpose", operator = "equals", value = "rent"),
+                conditionNodes = listOf(
+                    BuilderConditionNode.Condition(
+                        nodeId = "c1",
+                        field = "amount",
+                        operator = ">=",
+                        value = "100",
+                    ),
+                    BuilderConditionNode.Condition(
+                        nodeId = "c2",
+                        field = "purpose",
+                        operator = "equals",
+                        value = "rent",
+                    ),
                 ),
                 actions = emptyList(),
             )
@@ -42,8 +52,8 @@ class BuilderEditorStateTest {
 
         state.removeCondition(id = "c1")
 
-        assertEquals(1, state.conditions.size)
-        assertEquals("c2", state.conditions[0].id)
+        assertEquals(expected = 1, actual = state.conditionNodes.size)
+        assertEquals(expected = "c2", actual = state.conditionNodes[0].id)
     }
 
     @Test
@@ -51,14 +61,14 @@ class BuilderEditorStateTest {
         val state = BuilderEditorState.fromBuilderRule(
             BuilderRule.Supported(
                 id = "r1",
-                conditions = emptyList(),
+                conditionNodes = emptyList(),
                 actions = emptyList(),
             )
         )
 
         state.addAction(defaultName = "label")
 
-        assertEquals(1, state.actions.size)
-        assertEquals("label", state.actions[0].name)
+        assertEquals(expected = 1, actual = state.actions.size)
+        assertEquals(expected = "label", actual = state.actions[0].name)
     }
 }

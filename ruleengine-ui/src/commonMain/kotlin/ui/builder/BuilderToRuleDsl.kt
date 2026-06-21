@@ -29,26 +29,55 @@ object BuilderToRuleDsl {
         if (state.ruleId.isBlank()) return null
 
         val sb = StringBuilder()
-        sb.append("rule \"${state.ruleId}\" {\n")
-        sb.append("  when\n")
+        sb.appendLine("rule \"${state.ruleId}\" {")
+        sb.appendLine("  when")
 
-        state.conditions.forEachIndexed { index, cond ->
-            val prefix = if (index == 0) "    " else "    ${cond.joinToPrevious.ifBlank { "and" }} "
-            sb.append("$prefix${renderCondition(cond)}\n")
-        }
+        renderNodes(
+            nodes = state.conditionNodes,
+            sb = sb,
+            indent = 4,
+        )
 
-        sb.append("  then\n")
+        sb.appendLine("  then")
         state.actions.forEach { action ->
-            sb.append("    ${renderAction(action)}\n")
+            sb.appendLine("    ${renderAction(action)}")
         }
+        sb.appendLine("}")
 
-        sb.append("}")
         return sb.toString()
+    }
+
+    // ── recursive node rendering ──────────────────────────────────────────────
+
+    private fun renderNodes(
+        nodes: List<MutableConditionNode>,
+        sb: StringBuilder,
+        indent: Int,
+    ) {
+        val indentStr = " ".repeat(indent)
+
+        nodes.forEachIndexed { index, node ->
+            val joinStr = if (index == 0) "" else " ${node.joinToPrevious.ifBlank { "and" }} "
+            when (node) {
+                is MutableConditionNode.Leaf -> {
+                    sb.append("$indentStr$joinStr${renderConditionLine(node.inner)}\n")
+                }
+                is MutableConditionNode.Group -> {
+                    sb.append("$indentStr${joinStr}(\n")
+                    renderNodes(
+                        nodes = node.nodes.toList(),
+                        sb = sb,
+                        indent = indent + 4,
+                    )
+                    sb.appendLine("$indentStr)")
+                }
+            }
+        }
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
 
-    private fun renderCondition(cond: MutableBuilderCondition): String {
+    private fun renderConditionLine(cond: MutableBuilderCondition): String {
         val op = cond.operator
         return when {
             OperatorOptions.isBetween(op) -> {

@@ -36,6 +36,7 @@ import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
+import ui.builder.toImmutable
 import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
@@ -317,18 +318,14 @@ actual fun RuleEditor() {
                         if (newId !in builderStateMap && newId.isNotBlank()) {
                             val oldState = builderStateMap[oldId]
                             if (oldState != null) {
-                                // Rebuild state with new ID
+                                // Rebuild state with new ID, deep-copying conditions and actions
                                 val renamedState = BuilderEditorState.fromBuilderRule(
                                     rule = BuilderRule.Supported(
                                         id = newId,
-                                        conditions = emptyList(),
-                                        actions = emptyList(),
+                                        conditionNodes = oldState.conditionNodes.map { it.toImmutable() },
+                                        actions = oldState.actions.map { it.toImmutable() },
                                     ),
-                                ).also { newState ->
-                                    // Copy conditions and actions from old state
-                                    oldState.conditions.forEach { newState.conditions.add(it) }
-                                    oldState.actions.forEach { newState.actions.add(it) }
-                                }
+                                )
                                 val newMap = builderStateMap.toMutableMap()
                                 newMap.remove(oldId)
                                 newMap[newId] = renamedState
@@ -350,7 +347,7 @@ actual fun RuleEditor() {
                         val newState = BuilderEditorState.fromBuilderRule(
                             rule = BuilderRule.Supported(
                                 id = newId,
-                                conditions = emptyList(),
+                                conditionNodes = emptyList(),
                                 actions = emptyList(),
                             ),
                         )

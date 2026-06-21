@@ -122,29 +122,16 @@ private fun WhenSection(
 
     Spacer(modifier = Modifier.height(height = 8.dp))
 
-    editorState.conditions.forEachIndexed { index, condition ->
-        if (index > 0) {
-            JoinSelectorRow(
-                join = condition.joinToPrevious,
-                onJoinSelected = { selectedJoin ->
-                    condition.joinToPrevious = selectedJoin
-                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
-                },
-            )
-        }
-        ConditionRowEditor(
-            condition = condition,
-            fields = catalogFields,
-            onSelected = { onConditionSelected(condition.id) },
-            onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
-            onRemove = {
-                editorState.removeCondition(id = condition.id)
-                emitDslChange(editorState = editorState, onDslChange = onDslChange)
-            },
-        )
-    }
+    renderNodes(
+        nodes = editorState.conditionNodes,
+        catalogFields = catalogFields,
+        onConditionSelected = onConditionSelected,
+        onDslChange = onDslChange,
+        editorState = editorState,
+        isFirstLevel = true,
+    )
 
-    if (editorState.conditions.isEmpty()) {
+    if (editorState.conditionNodes.isEmpty()) {
         Text(
             text = "(no conditions)",
             style = MaterialTheme.typography.body2,
@@ -170,6 +157,119 @@ private fun WhenSection(
             emitDslChange(editorState = editorState, onDslChange = onDslChange)
         },
     )
+}
+
+/**
+ * Recursively renders [MutableConditionNode] entries with join selectors
+ * and condition editors / group containers between them.
+ */
+@Composable
+private fun renderNodes(
+    nodes: List<MutableConditionNode>,
+    catalogFields: List<CatalogFieldInfo>,
+    onConditionSelected: (String) -> Unit,
+    onDslChange: (String) -> Unit,
+    editorState: BuilderEditorState,
+    isFirstLevel: Boolean,
+) {
+    nodes.forEachIndexed { index, node ->
+        if (index > 0 && isFirstLevel) {
+            JoinSelectorRow(
+                join = node.joinToPrevious,
+                onJoinSelected = { selectedJoin ->
+                    node.joinToPrevious = selectedJoin
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
+            )
+        }
+
+        when (node) {
+            is MutableConditionNode.Leaf -> {
+                ConditionRowEditor(
+                    condition = node.inner,
+                    fields = catalogFields,
+                    onSelected = { onConditionSelected(node.inner.id) },
+                    onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
+                    onRemove = {
+                        editorState.removeCondition(id = node.id)
+                        emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                    },
+                )
+            }
+            is MutableConditionNode.Group -> {
+                GroupContainer(
+                    group = node,
+                    catalogFields = catalogFields,
+                    onConditionSelected = onConditionSelected,
+                    onDslChange = onDslChange,
+                    editorState = editorState,
+                )
+            }
+        }
+
+        // Non-first-level nodes have join selectors rendered inside group containers
+        if (index > 0 && !isFirstLevel) {
+            JoinSelectorRow(
+                join = node.joinToPrevious,
+                onJoinSelected = { selectedJoin ->
+                    node.joinToPrevious = selectedJoin
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A visually distinct container for a parenthesized group of conditions.
+ * Renders child nodes with an indication that they are grouped.
+ */
+@Composable
+private fun GroupContainer(
+    group: MutableConditionNode.Group,
+    catalogFields: List<CatalogFieldInfo>,
+    onConditionSelected: (String) -> Unit,
+    onDslChange: (String) -> Unit,
+    editorState: BuilderEditorState,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(
+                width = 1.dp,
+                color = BorderColor,
+                shape = RoundedCornerShape(size = 6.dp),
+            )
+            .padding(8.dp),
+    ) {
+        // Group bracket label
+        Text(
+            text = "(   )",
+            style = MaterialTheme.typography.caption,
+            color = PrimaryBlue,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+
+        renderNodes(
+            nodes = group.nodes.toList(),
+            catalogFields = catalogFields,
+            onConditionSelected = onConditionSelected,
+            onDslChange = onDslChange,
+            editorState = editorState,
+            isFirstLevel = false,
+        )
+
+        if (group.nodes.isEmpty()) {
+            Text(
+                text = "(empty group)",
+                style = MaterialTheme.typography.body2,
+                color = TextSecondary,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
+    }
 }
 
 @Composable

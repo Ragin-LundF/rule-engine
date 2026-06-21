@@ -8,6 +8,42 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 
 /**
+ * A mutable node in the builder condition tree.
+ */
+sealed interface MutableConditionNode {
+    val id: String
+    var joinToPrevious: String
+
+    /** Wraps an existing [MutableBuilderCondition] as a leaf node. */
+    class Leaf(val inner: MutableBuilderCondition) : MutableConditionNode {
+        override val id: String get() = inner.id
+        override var joinToPrevious: String
+            get() = inner.joinToPrevious
+            set(value) { inner.joinToPrevious = value }
+    }
+
+    /** A parenthesized group of child nodes. */
+    class Group(
+        override val id: String,
+        nodes: List<MutableConditionNode> = emptyList(),
+        joinToPrevious: String = "",
+    ) : MutableConditionNode {
+        val nodes: SnapshotStateList<MutableConditionNode> = nodes.toMutableStateList()
+        override var joinToPrevious by mutableStateOf(joinToPrevious)
+    }
+}
+
+/** Converts a [MutableConditionNode] tree to an immutable [BuilderConditionNode] tree. */
+fun MutableConditionNode.toImmutable(): BuilderConditionNode = when (this) {
+    is MutableConditionNode.Leaf -> inner.toImmutable()
+    is MutableConditionNode.Group -> BuilderConditionNode.Group(
+        nodeId = id,
+        nodes = nodes.map { it.toImmutable() },
+        joinToPrevious = joinToPrevious,
+    )
+}
+
+/**
  * Mutable editor state for a single condition row in Builder mode.
  * Changes here are reflected back to DSL text via [BuilderToRuleDsl].
  */
@@ -69,29 +105,19 @@ class MutableBuilderAction(
  */
 class BuilderEditorState private constructor(
     val ruleId: String,
-    val conditions: SnapshotStateList<MutableBuilderCondition>,
+    val conditionNodes: SnapshotStateList<MutableConditionNode>,
     val actions: SnapshotStateList<MutableBuilderAction>,
     val isLocked: Boolean,
     val lockReason: String,
 ) {
-    private var nextConditionId = conditions.size + 1
+    private var nextConditionId = conditionNodes.size + 1
     private var nextActionId = actions.size + 1
 
     companion object {
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
             is BuilderRule.Supported -> BuilderEditorState(
                 ruleId = rule.id,
-                conditions = rule.conditions.map {
-                    MutableBuilderCondition(
-                        id = it.id,
-                        field = it.field,
-                        operator = it.operator,
-                        value = it.value,
-                        valueTo = it.valueTo,
-                        listItems = it.listItems,
-                        joinToPrevious = it.joinToPrevious,
-                    )
-                }.toMutableStateList(),
+                conditionNodes = rule.conditionNodes.map { it.toMutable() }.toMutableStateList(),
                 actions = rule.actions.map {
                     MutableBuilderAction(
                         id = it.id,
@@ -104,37 +130,67 @@ class BuilderEditorState private constructor(
             )
             is BuilderRule.Unsupported -> BuilderEditorState(
                 ruleId = rule.id,
-                conditions = mutableStateListOf(),
+                conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 isLocked = true,
                 lockReason = rule.reason,
             )
             BuilderRule.None -> BuilderEditorState(
                 ruleId = "",
-                conditions = mutableStateListOf(),
+                conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 isLocked = true,
                 lockReason = "No rule selected.",
             )
         }
+
+        private fun BuilderConditionNode.toMutable(): MutableConditionNode = when (this) {
+            is BuilderCondition -> MutableConditionNode.Leaf(
+                MutableBuilderCondition(
+                    id = id,
+                    field = field,
+                    operator = operator,
+                    value = value,
+                    valueTo = valueTo,
+                    listItems = listItems,
+                    joinToPrevious = joinToPrevious,
+                )
+            )
+            is BuilderConditionNode.Condition -> MutableConditionNode.Leaf(
+                MutableBuilderCondition(
+                    id = nodeId,
+                    field = field,
+                    operator = operator,
+                    value = value,
+                    valueTo = valueTo,
+                    listItems = listItems,
+                    joinToPrevious = joinToPrevious,
+                )
+            )
+            is BuilderConditionNode.Group -> MutableConditionNode.Group(
+                id = nodeId,
+                nodes = nodes.map { it.toMutable() },
+                joinToPrevious = joinToPrevious,
+            )
+        }
     }
 
-    /** Adds a new empty condition after the existing ones. */
+    /** Adds a new empty condition after the existing ones, at the top level. */
     fun addCondition(defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition {
         val condition = MutableBuilderCondition(
             id = "cond-${nextConditionId++}",
             field = defaultField,
             operator = defaultOperator,
             value = "",
-            joinToPrevious = conditions.lastOrNull()?.let { "and" } ?: "",
+            joinToPrevious = conditionNodes.lastOrNull()?.let { "and" } ?: "",
         )
-        conditions.add(condition)
+        conditionNodes.add(MutableConditionNode.Leaf(condition))
         return condition
     }
 
-    /** Removes the condition with the given [id]. */
+    /** Removes the leaf or group with the given [id] from the top level. */
     fun removeCondition(id: String) {
-        conditions.removeAll { it.id == id }
+        conditionNodes.removeAll { it.id == id }
     }
 
     /** Adds a new empty action with the given number of default arguments. */
