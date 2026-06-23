@@ -56,7 +56,7 @@ jobs:
           path: ${{ matrix.artifact_path }}
 
       - name: Upload release asset(s)
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ matrix.artifact_path }}
         env:
