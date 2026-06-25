@@ -119,7 +119,7 @@ class JvmRuleSimulationService : RuleSimulationService {
         // 7. Prepare context and evaluate
         val ctx = MapRuleContext(map = factMap)
         val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
-        val engine = RuleEngine(compiledRules = compiledRules, schema = schema)
+        val engine = RuleEngine(compiledRules = compiledRules)
 
         val evalResult = runCatching {
             engine.evaluate(prepared = prepared, includeTrace = true)

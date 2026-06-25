@@ -37,7 +37,7 @@ class AggregateFunctionTest {
     private fun evaluate(rule: String, vararg fields: Pair<String, Any?>): Boolean {
         val asts = Parser(input = rule).parseRules()
         val compiled = Compiler.compileRules(asts = asts, schema = schema)
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
         val ctx = RuleContext.of(*fields)
         val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
         val result = engine.evaluate(prepared = prepared)

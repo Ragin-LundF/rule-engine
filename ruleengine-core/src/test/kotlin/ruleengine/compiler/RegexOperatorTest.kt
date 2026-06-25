@@ -53,7 +53,7 @@ class RegexOperatorTest {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun ctx(iban: String = "", purpose: String = ""): PreparedRuleContext {

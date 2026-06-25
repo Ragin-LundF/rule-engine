@@ -26,7 +26,7 @@ class AggregatePerformanceTest {
     private fun compile(ruleText: String): RuleEngine {
         val asts = Parser(input = ruleText).parseRules()
         val compiled = Compiler.compileRules(asts = asts, schema = schema)
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun evaluate(engine: RuleEngine, transactions: List<Map<String, Any>>): Boolean {
