@@ -65,7 +65,7 @@ object EvaluateCli {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        val engine = RuleEngine(compiledRules = compiledRules, schema = schema)
+        val engine = RuleEngine(compiledRules = compiledRules)
 
         val inputJson = FileInputSupport.readBoundedText(
             path = Path.of(cliOptions.inputFilePath),

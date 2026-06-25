@@ -62,7 +62,7 @@ object SampleRunner {
         }
 
         val compiled = Compiler.compileRules(asts = ruleAsts, schema = schema)
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         val inputRelative = if (args.isNotEmpty()) args[0] else "inputs/rent-input.json"
         val inputPath = baseDir.resolve(inputRelative)

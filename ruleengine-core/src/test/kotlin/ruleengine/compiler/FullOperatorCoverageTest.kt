@@ -225,7 +225,7 @@ class FullOperatorCoverageTest {
         assertTrue(actual = validation.isValid, message = "Validation failed: ${validation.diagnostics}")
         val compiled =
             Compiler.compileRules(asts = asts, schema = schema, normalizerRegistry = NormalizerRegistry.default)
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun ctx(vararg pairs: Pair<String, Any?>): PreparedRuleContext {
