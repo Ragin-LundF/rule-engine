@@ -39,7 +39,7 @@ class FullManifestIntegrationTest {
         assertTrue(actual = validationResult.isValid, message = "Validation failed: $diagnosticsSummary")
 
         val compiledRules = Compiler.compileRules(asts = ruleAsts, schema = schema)
-        val engine = RuleEngine(compiledRules = compiledRules, schema = schema)
+        val engine = RuleEngine(compiledRules = compiledRules)
 
         fun evaluateInputFile(relativeInputPath: String): List<String> {
             val inputPath = baseDir.resolve(relativeInputPath)

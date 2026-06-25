@@ -49,7 +49,7 @@ class NotOperatorTest {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         val ctx1 = RuleContext.of("purpose" to "important")
         val prepared1 = PreparedRuleContext.prepare(ctx = ctx1, schema = schema)

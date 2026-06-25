@@ -37,7 +37,7 @@ class TraceTest {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun preparedContext(): ruleengine.evaluator.context.PreparedRuleContext {

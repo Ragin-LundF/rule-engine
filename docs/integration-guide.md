@@ -138,7 +138,7 @@ fun buildEngine(manifestPath: Path): RuleEngine {
     }
 
     val compiled = Compiler.compileRules(asts = ruleAsts, schema = schema)
-    return RuleEngine(compiledRules = compiled, schema = schema)
+    return RuleEngine(compiledRules = compiled)
 }
 ```
 
@@ -315,11 +315,39 @@ Compilation:
 ```kotlin
 import ruleengine.evaluator.RuleEngine
 
-val engine = RuleEngine(compiledRules = compiledRules, schema = schema)
+val engine = RuleEngine(compiledRules = compiledRules)
 ```
 
 The `RuleEngine` instance is **immutable and thread-safe** after construction.
 Create it once and reuse it for all evaluations.
+
+#### Output-Based Short-Circuit (Optional Performance Optimisation)
+
+By default the engine evaluates **every** rule against every input. When a large ruleset
+contains many rules that produce the **same output** (e.g. hundreds of rules all assigning
+the same set of labels), you can skip redundant work by enabling `shortCircuitByOutput`:
+
+```kotlin
+val engine = RuleEngine(compiledRules = compiledRules, shortCircuitByOutput = true)
+```
+
+When enabled, the engine groups rules by every **static output** they declare
+(`actionName:value`, e.g. `label:rent`). Within each group, evaluation stops at the **first
+matching rule** — further rules in that group would only re-produce an output that is
+already settled. This is most effective when the heaviest conditions (e.g. `regex`) are the
+ones that get skipped.
+
+Behaviour notes:
+
+- A rule with multiple static outputs belongs to multiple groups and is reported **at most
+  once**.
+- Rules with **dynamic** outputs (e.g. a value extracted via `extract`) cannot be grouped
+  and are **always** evaluated.
+- With the flag enabled, `result.matches` is ordered by output group rather than by rule
+  declaration order.
+
+Leave the flag at its default (`false`) when you need every matching rule reported or must
+preserve declaration order — behaviour is then identical to previous versions.
 
 ### 4.7 Evaluating Input Data
 
@@ -398,7 +426,7 @@ for (match: RuleMatch in result.matches) {
 ```
 
 `EvaluationResult`:
-- `matches: List<RuleMatch>` — all rules that matched, in the order they were declared
+- `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.6)
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
 
 `RuleMatch`:
@@ -691,7 +719,7 @@ class RuleEngineConfig {
         check(validation.isValid) { "Rule validation failed: ${validation.diagnostics}" }
 
         val compiled = Compiler.compileRules(asts = ruleAsts, schema = schema)
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 }
 

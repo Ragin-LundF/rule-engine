@@ -52,7 +52,7 @@ class ExtractionIntegrationTest {
     ): List<ruleengine.core.domain.RuleAction> {
         val rules = Parser(input = dsl).parseRules()
         val compiled = Compiler.compileRules(asts = rules, schema = schema)
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         val pairs = contextEntries.entries.map { it.key to it.value }.toTypedArray()
         val ctx = RuleContext.of(entries = pairs)

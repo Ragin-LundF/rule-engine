@@ -90,7 +90,7 @@ class ParenthesizedExpressionTest {
         val compiled = Compiler.compileRules(
             asts = asts, schema = schema, normalizerRegistry = NormalizerRegistry.default
         )
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         // Matches: purpose contains "miete" → true, amount 850 ≥ 500 → true
         assertTrue(
@@ -182,8 +182,8 @@ class ParenthesizedExpressionTest {
             asts = bracketAsts, schema = schema, normalizerRegistry = NormalizerRegistry.default
         )
 
-        val flatEngine = RuleEngine(compiledRules = flatCompiled, schema = schema)
-        val bracketEngine = RuleEngine(compiledRules = bracketCompiled, schema = schema)
+        val flatEngine = RuleEngine(compiledRules = flatCompiled)
+        val bracketEngine = RuleEngine(compiledRules = bracketCompiled)
 
         // purpose contains "miete", amount = 100 (below threshold)
         // flat:    OR(contains-miete=true, AND(contains-rent=false, gte-500=false)) → true  (miete branch wins)

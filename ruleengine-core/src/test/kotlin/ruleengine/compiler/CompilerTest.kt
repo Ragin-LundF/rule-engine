@@ -56,7 +56,7 @@ class CompilerTest {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         val ctx = RuleContext.of("purpose" to "Miete Januar", "amount" to "850")
         val prepared = ruleengine.evaluator.context.PreparedRuleContext.prepare(ctx = ctx, schema = schema)

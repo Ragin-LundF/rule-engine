@@ -50,7 +50,7 @@ class TextInOperatorTest {
             schema = schema,
             normalizerRegistry = NormalizerRegistry.default
         )
-        val engine = RuleEngine(compiledRules = compiled, schema = schema)
+        val engine = RuleEngine(compiledRules = compiled)
 
         val ctx = RuleContext.of("sepaCode" to "PMNT")
         val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)

@@ -40,7 +40,7 @@ class BetweenOperatorTest {
         val validation = Validator.validate(asts, schema)
         assertTrue(actual = validation.isValid, message = "Validation failed: ${validation.diagnostics}")
         val compiled = Compiler.compileRules(asts, schema, NormalizerRegistry.default)
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun ctx(amount: String? = null, count: Int? = null): PreparedRuleContext {

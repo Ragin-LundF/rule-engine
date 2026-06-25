@@ -47,7 +47,7 @@ class IgnoreCaseOperatorTest {
         val compiled = Compiler.compileRules(
             asts = asts, schema = schema, normalizerRegistry = NormalizerRegistry.default
         )
-        return RuleEngine(compiledRules = compiled, schema = schema)
+        return RuleEngine(compiledRules = compiled)
     }
 
     private fun ctx(purpose: String): PreparedRuleContext {
