@@ -27,7 +27,7 @@ jackson = [
 ]
 
 [plugins]
-jreleaser = { id = "org.jreleaser", version = "1.24.0" }
+jreleaser = { id = "org.jreleaser", version = "1.25.0" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-dokka = { id = "org.jetbrains.dokka", version = "2.2.0" }
