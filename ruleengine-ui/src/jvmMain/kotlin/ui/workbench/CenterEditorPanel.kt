@@ -56,10 +56,62 @@ import ui.pickRuleFile
 import ui.saveDiagramAsPng
 import ui.saveRuleToFile
 
-/**
- * Center panel that dispatches to the correct mode view based on [ruleMode].
- */
 @Suppress("FunctionNaming")
+@Composable
+private fun ManifestFilePicker(state: RuleEditorState) {
+    val parsedManifest by state.parsedManifest
+    val selectedManifestEntry by state.selectedManifestEntry
+    val selectedManifestRuleFile by state.selectedManifestRuleFile
+
+    val currentEntryRuleFiles: List<String> = parsedManifest
+        ?.entries
+        ?.find { it.id == selectedManifestEntry }
+        ?.rules
+        .orEmpty()
+
+    if (currentEntryRuleFiles.isNotEmpty()) {
+        var expanded by remember { mutableStateOf(false) }
+        Box {
+            ToolbarButton(label = "☰", onClick = { expanded = true })
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .background(color = BgElevated)
+                    .border(
+                        width = 1.dp,
+                        color = BorderColor,
+                        shape = RoundedCornerShape(size = 8.dp),
+                    ),
+            ) {
+                currentEntryRuleFiles.forEach { relativePath ->
+                    val fileName = relativePath.substringAfterLast('/')
+                    val isSelected = relativePath == selectedManifestRuleFile
+                    DropdownMenuItem(
+                        onClick = {
+                            state.loadSingleManifestRuleFile(relativePath)
+                            expanded = false
+                        },
+                        modifier = Modifier.background(
+                            color = if (isSelected) BgHover else BgElevated,
+                            shape = RoundedCornerShape(size = 6.dp),
+                        ),
+                    ) {
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.body2,
+                            color = if (isSelected) PrimaryBlue else TextPrimary,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Center panel that dispatches to the correct mode view based on [ruleMode]. */
+@Suppress("FunctionNaming", "LongParameterList")
 @Composable
 fun CenterEditorPanel(
     state: RuleEditorState,
@@ -108,6 +160,7 @@ fun CenterEditorPanel(
                     onRuleSelected = onRuleSelected,
                     onAddRule = onAddRule,
                     onRenameRule = onRenameRule,
+                    headerLeadingContent = { ManifestFilePicker(state = state) },
                     catalogFields = catalogFields,
                     catalogActions = catalogActions,
                     onConditionSelected = onConditionSelected,
@@ -199,60 +252,12 @@ private fun CodeModeActions(
 ) {
     var diagnosticsList by state.diagnosticsList
     var diagnosticsText by state.diagnosticsText
-    val parsedManifest by state.parsedManifest
-    val selectedManifestEntry by state.selectedManifestEntry
-    val selectedManifestRuleFile by state.selectedManifestRuleFile
-
-    val currentEntryRuleFiles: List<String> = parsedManifest
-        ?.entries
-        ?.find { it.id == selectedManifestEntry }
-        ?.rules
-        .orEmpty()
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // ── Manifest rule-file picker ──────────────────────────────
-        if (currentEntryRuleFiles.isNotEmpty()) {
-            var expanded by remember { mutableStateOf(false) }
-            Box {
-                ToolbarButton(label = "☰", onClick = { expanded = true })
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier
-                        .background(color = BgElevated)
-                        .border(
-                            width = 1.dp,
-                            color = BorderColor,
-                            shape = RoundedCornerShape(size = 8.dp),
-                        ),
-                ) {
-                    currentEntryRuleFiles.forEach { relativePath ->
-                        val fileName = relativePath.substringAfterLast('/')
-                        val isSelected = relativePath == selectedManifestRuleFile
-                        DropdownMenuItem(
-                            onClick = {
-                                state.loadSingleManifestRuleFile(relativePath)
-                                expanded = false
-                            },
-                            modifier = Modifier.background(
-                                color = if (isSelected) BgHover else BgElevated,
-                                shape = RoundedCornerShape(size = 6.dp),
-                            ),
-                        ) {
-                            Text(
-                                text = fileName,
-                                style = MaterialTheme.typography.body2,
-                                color = if (isSelected) PrimaryBlue else TextPrimary,
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        ManifestFilePicker(state = state)
         ToolbarButton(
             label = "Load Rule",
             onClick = {
