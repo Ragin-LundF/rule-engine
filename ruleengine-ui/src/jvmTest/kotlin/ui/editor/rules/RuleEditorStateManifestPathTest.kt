@@ -31,7 +31,8 @@ class RuleEditorStateManifestPathTest {
         assertTrue(actual = state.status.value.contains(other = "schema"))
         assertTrue(actual = state.status.value.contains(other = "actions"))
         assertTrue(actual = state.status.value.contains(other = "1 rule file(s)"))
-        assertTrue(actual = state.ruleValue.value.text.contains(other = "nested.rule"))
+        assertEquals(expected = "rules/nested.rule", actual = state.selectedManifestRuleFile.value)
+        assertTrue(actual = state.ruleValue.value.text.isNotBlank())
         assertFalse(actual = state.diagnosticsText.value.contains(other = "escapes base directory"))
     }
 
