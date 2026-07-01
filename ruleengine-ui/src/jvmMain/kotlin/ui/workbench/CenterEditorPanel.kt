@@ -160,7 +160,6 @@ fun CenterEditorPanel(
                     onRuleSelected = onRuleSelected,
                     onAddRule = onAddRule,
                     onRenameRule = onRenameRule,
-                    headerLeadingContent = { ManifestFilePicker(state = state) },
                     catalogFields = catalogFields,
                     catalogActions = catalogActions,
                     onConditionSelected = onConditionSelected,
@@ -223,22 +222,26 @@ private fun CenterPanelActions(
 ) {
     var ruleValue by state.ruleValue
 
-    when (viewMode) {
-        ui.editor.rules.ViewMode.CODE -> CodeModeActions(
-            state = state,
-            scope = scope,
-            ruleValue = ruleValue,
-            onRuleValueChange = { ruleValue = it },
-        )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ManifestFilePicker(state = state)
+        when (viewMode) {
+            ui.editor.rules.ViewMode.CODE -> CodeModeActions(
+                state = state,
+                scope = scope,
+                ruleValue = ruleValue,
+                onRuleValueChange = { ruleValue = it },
+            )
 
-        ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
-            state = state,
-            scope = scope,
-            diagramGraphicsLayer = diagramGraphicsLayer,
-        )
+            ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
+                state = state,
+                scope = scope,
+                diagramGraphicsLayer = diagramGraphicsLayer,
+            )
 
-        ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {
-            // No global actions for these modes yet.
+            ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {}
         }
     }
 }
@@ -257,7 +260,6 @@ private fun CodeModeActions(
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ManifestFilePicker(state = state)
         ToolbarButton(
             label = "Load Rule",
             onClick = {

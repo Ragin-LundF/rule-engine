@@ -35,7 +35,6 @@ fun RuleBuilderHeader(
     onRuleSelected: (String) -> Unit,
     onAddRule: () -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
-    leadingContent: @Composable (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     var renaming by remember(key1 = selectedRuleId) { mutableStateOf(false) }
@@ -71,7 +70,6 @@ fun RuleBuilderHeader(
                 )
             }
         } else {
-            leadingContent?.invoke()
             val selectPlaceholder = "-- select --"
             DropdownSelector(
                 selected = selectedRuleId.ifBlank { selectPlaceholder },

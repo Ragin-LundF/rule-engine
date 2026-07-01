@@ -55,7 +55,6 @@ fun RuleBuilderView(
     onRuleSelected: (String) -> Unit = {},
     onAddRule: () -> Unit = {},
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
-    headerLeadingContent: @Composable (() -> Unit)? = null,
     catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onConditionSelected: (String) -> Unit = {},
@@ -75,7 +74,6 @@ fun RuleBuilderView(
             onRuleSelected = onRuleSelected,
             onAddRule = onAddRule,
             onRenameRule = onRenameRule,
-            leadingContent = headerLeadingContent,
         )
 
         if (editorState.isLocked) {
