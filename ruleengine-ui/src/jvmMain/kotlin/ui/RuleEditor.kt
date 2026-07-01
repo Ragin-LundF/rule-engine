@@ -65,6 +65,8 @@ import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
 import ui.workbench.toViewMode
+import ui.samples.SampleGalleryScreen
+import ui.samples.loadSample
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -315,6 +317,8 @@ actual fun RuleEditor() {
                     },
                     builderEditorState = activeBuilderEditorState,
                     allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
+                    allBuilderRules = allBuilderRules,
+                    catalogRules = catalogRules,
                     onRuleSelected = { ruleId -> selectedBuilderRuleId = ruleId },
                     onRenameRule = { oldId, newId ->
                         if (newId !in builderStateMap && newId.isNotBlank()) {
@@ -388,7 +392,7 @@ actual fun RuleEditor() {
                                     val result = simulationService.simulate(
                                         schemaText = state.schemaText.value,
                                         actionsText = state.actionSchemaText.value,
-                                        ruleText = state.ruleValue.value.text,
+                                        ruleText = if (state.showAllRules.value) state.allRulesText.value else state.ruleValue.value.text,
                                         ruleId = testInputState.selectedRuleId,
                                         inputJson = testInputState.inputJson,
                                     )
@@ -400,12 +404,13 @@ actual fun RuleEditor() {
                                 }
                             },
                             ruleIds = catalogRules.map { it.id },
+                            ruleSelectionEnabled = !state.showAllRules.value,
                             runEnabled = state.parsedSchema.value != null
-                                    && state.ruleValue.value.text.isNotBlank()
+                                    && (state.ruleValue.value.text.isNotBlank() || state.showAllRules.value && state.allRulesText.value.isNotBlank())
                                     && !hasErrors,
                             runReason = when {
                                 state.parsedSchema.value == null -> "Load a field schema first"
-                                state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
+                                !state.showAllRules.value && state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
                                 hasErrors -> "Fix rule validation errors before running"
                                 else -> null
                             },
@@ -510,7 +515,39 @@ actual fun RuleEditor() {
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                AppArea.SAMPLES, AppArea.SETTINGS -> PlaceholderPanel(
+                AppArea.SAMPLES -> SampleGalleryScreen(
+                    onSampleSelected = { descriptor ->
+                        scope.launch {
+                            val loaded = loadSample(descriptor)
+                            state.schemaText.value = loaded.schemaYaml
+                            state.schemaFieldValue.value = TextFieldValue(text = loaded.schemaYaml)
+                            state.parsedSchema.value = runCatching {
+                                FieldSchemaLoader.loadFromString(
+                                    content = loaded.schemaYaml,
+                                    nameHint = descriptor.id,
+                                )
+                            }.getOrNull()
+                            state.actionSchemaText.value = loaded.actionsYaml
+                            state.actionFieldValue.value = TextFieldValue(text = loaded.actionsYaml)
+                            state.parsedActionSchema.value = runCatching {
+                                ActionSchemaLoader.loadFromString(content = loaded.actionsYaml)
+                            }.getOrNull()
+                            state.ruleValue.value = TextFieldValue(text = loaded.rulesText)
+                            state.diagnosticsList.value = emptyList()
+                            state.diagnosticsText.value = ""
+                            state.setStatus(
+                                msg = "Loaded sample: ${descriptor.name}",
+                                kind = StatusKind.SUCCESS,
+                            )
+                            workbenchViewModel.dispatch(
+                                action = WorkbenchAction.SelectAppArea(area = AppArea.RULES),
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.SETTINGS -> PlaceholderPanel(
                     label = workbenchState.appArea.name,
                     modifier = Modifier.fillMaxSize(),
                 )

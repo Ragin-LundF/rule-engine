@@ -1,0 +1,14 @@
+name: log-filter
+
+# Sample: Log Filter
+# Route, suppress, and alert on application log events
+# based on severity level, response time, and service identity.
+
+entries:
+  - id: log-filter
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/error-severity.rule
+      - rules/slow-request.rule
+      - rules/service-alert.rule

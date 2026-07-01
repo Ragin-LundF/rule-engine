@@ -48,6 +48,7 @@ fun TestCenterPanel(
     ruleIds: List<String>,
     runEnabled: Boolean = true,
     runReason: String? = null,
+    ruleSelectionEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(
@@ -69,16 +70,24 @@ fun TestCenterPanel(
                     style = MaterialTheme.typography.body2,
                     color = TextPrimary,
                 )
-                val selectorOptions = listOf("All rules") + ruleIds
-                val displaySelection = state.selectedRuleId.ifBlank { "All rules" }
-                DropdownSelector(
-                    selected = displaySelection,
-                    options = selectorOptions,
-                    onSelected = { selected ->
-                        val newId = if (selected == "All rules") "" else selected
-                        onStateChange(state.copy(selectedRuleId = newId))
-                    },
-                )
+                if (ruleSelectionEnabled) {
+                    val selectorOptions = listOf("All rules") + ruleIds
+                    val displaySelection = state.selectedRuleId.ifBlank { "All rules" }
+                    DropdownSelector(
+                        selected = displaySelection,
+                        options = selectorOptions,
+                        onSelected = { selected ->
+                            val newId = if (selected == "All rules") "" else selected
+                            onStateChange(state.copy(selectedRuleId = newId))
+                        },
+                    )
+                } else {
+                    Text(
+                        text = "All rules",
+                        style = MaterialTheme.typography.body2,
+                        color = TextMuted,
+                    )
+                }
             }
         }
 

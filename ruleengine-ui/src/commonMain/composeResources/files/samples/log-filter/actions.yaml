@@ -1,0 +1,11 @@
+actions:
+  tag:
+    argTypes: [string]
+  alert:
+    argTypes: [string]
+  route:
+    argTypes: [string]
+  suppress:
+    argTypes: []
+  escalate:
+    argTypes: [string]

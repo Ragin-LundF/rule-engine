@@ -1,22 +1,35 @@
 package ui.editor.rules.sections
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
+import ui.BgElevated
+import ui.BgHover
+import ui.BorderColor
+import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.copyToClipboard
 import ui.editor.rules.AppButton
@@ -41,6 +54,15 @@ fun RightPanelHeaderSection(
     var showExpandedDiagram by state.showExpandedDiagram
     var diagnosticsList by state.diagnosticsList
     var diagnosticsText by state.diagnosticsText
+    val parsedManifest by state.parsedManifest
+    val selectedManifestEntry by state.selectedManifestEntry
+    val selectedManifestRuleFile by state.selectedManifestRuleFile
+
+    val currentEntryRuleFiles: List<String> = parsedManifest
+        ?.entries
+        ?.find { it.id == selectedManifestEntry }
+        ?.rules
+        .orEmpty()
 
     // ── Header: title + view-mode toggle + action buttons ─────
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -58,6 +80,42 @@ fun RightPanelHeaderSection(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // ── Manifest rule-file picker ─────────────────────
+                if (currentEntryRuleFiles.isNotEmpty()) {
+                    var expanded by remember { mutableStateOf(false) }
+                    Box {
+                        AppButton(label = "☰") { expanded = true }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier
+                                .background(color = BgElevated)
+                                .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
+                        ) {
+                            currentEntryRuleFiles.forEach { relativePath ->
+                                val fileName = relativePath.substringAfterLast('/')
+                                val isSelected = relativePath == selectedManifestRuleFile
+                                DropdownMenuItem(
+                                    onClick = {
+                                        state.loadSingleManifestRuleFile(relativePath)
+                                        expanded = false
+                                    },
+                                    modifier = Modifier.background(
+                                        color = if (isSelected) BgHover else BgElevated,
+                                        shape = RoundedCornerShape(size = 6.dp),
+                                    ),
+                                ) {
+                                    Text(
+                                        text = fileName,
+                                        style = MaterialTheme.typography.body2,
+                                        color = if (isSelected) PrimaryBlue else TextPrimary,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 AppButton(label = "Load Rule") {
                     scope.launch {
                         val c = pickRuleFile()
@@ -71,8 +129,10 @@ fun RightPanelHeaderSection(
                 }
                 AppButton(label = "Save Rule") {
                     if (ruleValue.text.isNotBlank()) {
-                        saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
-                        state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
+                        if (!state.saveCurrentManifestRuleFile()) {
+                            saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
+                            state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
+                        }
                     } else {
                         state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
                     }

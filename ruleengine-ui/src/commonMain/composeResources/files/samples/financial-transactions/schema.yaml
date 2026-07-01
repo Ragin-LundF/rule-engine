@@ -1,0 +1,84 @@
+schema: financial-transactions-v1
+
+fields:
+
+  purpose:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - contains
+      - startsWith
+      - endsWith
+      - in
+      - regex
+
+  counterparty:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - contains
+      - startsWith
+      - regex
+
+  iban:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - startsWith
+      - regex
+
+  amount:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  count:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  tags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll
+
+  country:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - in
+
+  score:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte

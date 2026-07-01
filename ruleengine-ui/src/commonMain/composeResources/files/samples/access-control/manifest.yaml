@@ -1,0 +1,14 @@
+name: access-control
+
+# Sample: Access Control
+# Enforce role-based permissions, IP allowlisting/blocklisting,
+# and time-based access restrictions on API routes.
+
+entries:
+  - id: access-control
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/role-check.rule
+      - rules/ip-filter.rule
+      - rules/time-restriction.rule

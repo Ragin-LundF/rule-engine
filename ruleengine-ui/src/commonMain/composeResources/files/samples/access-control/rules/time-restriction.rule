@@ -1,0 +1,29 @@
+rule "maintenance-window" {
+  when
+    hour between 2 and 4
+    and not role in ["admin", "service-account"]
+
+  then
+    deny "maintenance-window"
+    redirect "/maintenance"
+}
+
+rule "business-hours-only" {
+  when
+    tags containsAny ["business-hours-only"]
+    and (hour lt 8 or hour gte 18)
+    and not role equals "admin"
+
+  then
+    deny "outside-business-hours"
+}
+
+rule "off-hours-elevated-log" {
+  when
+    (hour lt 6 or hour gte 22)
+    and method in ["DELETE", "PUT", "PATCH"]
+
+  then
+    log "off-hours-write-operation"
+    rateLimit 5
+}

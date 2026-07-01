@@ -1,0 +1,29 @@
+rule "internal-network-allow" {
+  when
+    ip startsWith "10."
+    or ip startsWith "192.168."
+    or ip startsWith "172.16."
+
+  then
+    allow "internal-network"
+    rateLimit 10000
+}
+
+rule "blocklisted-ip" {
+  when
+    tags containsAny ["blocklisted", "abuse-reported"]
+
+  then
+    deny "ip-blocklist"
+    log "blocked-request"
+}
+
+rule "suspicious-ip-rate-limit" {
+  when
+    tags containsAny ["high-traffic", "tor-exit"]
+    and not role equals "admin"
+
+  then
+    rateLimit 10
+    log "suspicious-source"
+}

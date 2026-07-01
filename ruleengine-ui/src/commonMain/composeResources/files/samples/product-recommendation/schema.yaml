@@ -1,0 +1,69 @@
+schema: product-recommendation-v1
+
+fields:
+
+  category:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+      - startsWith
+
+  brand:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+      - contains
+
+  price:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  rating:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  reviewCount:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  stock:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  tags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll

@@ -1,0 +1,13 @@
+actions:
+  label:
+    argTypes: [string]
+  flag:
+    argTypes: [string]
+  alert:
+    argTypes: [string]
+  score:
+    argTypes: [integer]
+  reject:
+    argTypes: [string]
+  notify:
+    argTypes: [string]

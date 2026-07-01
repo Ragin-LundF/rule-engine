@@ -12,12 +12,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.border
 import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,10 +36,13 @@ import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.dsl.parser.Parser
 import ui.BgElevated
+import ui.BgHover
 import ui.BorderColor
+import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderEditorState
+import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleBuilderView
@@ -48,10 +57,86 @@ import ui.pickRuleFile
 import ui.saveDiagramAsPng
 import ui.saveRuleToFile
 
-/**
- * Center panel that dispatches to the correct mode view based on [ruleMode].
- */
 @Suppress("FunctionNaming")
+@Composable
+private fun ManifestFilePicker(state: RuleEditorState, viewMode: ui.editor.rules.ViewMode) {
+    val parsedManifest by state.parsedManifest
+    val selectedManifestEntry by state.selectedManifestEntry
+    val selectedManifestRuleFile by state.selectedManifestRuleFile
+    val showAllRules by state.showAllRules
+
+    val currentEntryRuleFiles: List<String> = parsedManifest
+        ?.entries
+        ?.find { it.id == selectedManifestEntry }
+        ?.rules
+        .orEmpty()
+
+    val showAllFilesOption = currentEntryRuleFiles.size >= 2 &&
+        (viewMode == ui.editor.rules.ViewMode.DIAGRAM || viewMode == ui.editor.rules.ViewMode.TEST)
+
+    if (currentEntryRuleFiles.isNotEmpty()) {
+        var expanded by remember { mutableStateOf(false) }
+        Box {
+            ToolbarButton(label = "☰", onClick = { expanded = true })
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier
+                    .background(color = BgElevated)
+                    .border(
+                        width = 1.dp,
+                        color = BorderColor,
+                        shape = RoundedCornerShape(size = 8.dp),
+                    ),
+            ) {
+                if (showAllFilesOption) {
+                    DropdownMenuItem(
+                        onClick = {
+                            state.loadAllRuleFilesForCurrentEntry()
+                            expanded = false
+                        },
+                        modifier = Modifier.background(
+                            color = if (showAllRules) BgHover else BgElevated,
+                            shape = RoundedCornerShape(size = 6.dp),
+                        ),
+                    ) {
+                        Text(
+                            text = "All files",
+                            style = MaterialTheme.typography.body2,
+                            color = if (showAllRules) PrimaryBlue else TextPrimary,
+                            fontWeight = if (showAllRules) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                    Divider(color = BorderColor, thickness = 1.dp)
+                }
+                currentEntryRuleFiles.forEach { relativePath ->
+                    val fileName = relativePath.substringAfterLast('/')
+                    val isSelected = !showAllRules && relativePath == selectedManifestRuleFile
+                    DropdownMenuItem(
+                        onClick = {
+                            state.loadSingleManifestRuleFile(relativePath)
+                            expanded = false
+                        },
+                        modifier = Modifier.background(
+                            color = if (isSelected) BgHover else BgElevated,
+                            shape = RoundedCornerShape(size = 6.dp),
+                        ),
+                    ) {
+                        Text(
+                            text = fileName,
+                            style = MaterialTheme.typography.body2,
+                            color = if (isSelected) PrimaryBlue else TextPrimary,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Center panel that dispatches to the correct mode view based on [ruleMode]. */
+@Suppress("FunctionNaming", "LongParameterList")
 @Composable
 fun CenterEditorPanel(
     state: RuleEditorState,
@@ -60,6 +145,8 @@ fun CenterEditorPanel(
     onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(ui.builder.BuilderRule.None),
     allRuleIds: List<String> = emptyList(),
+    allBuilderRules: List<BuilderRule> = emptyList(),
+    catalogRules: List<CatalogRule> = emptyList(),
     onRuleSelected: (String) -> Unit = {},
     onAddRule: () -> Unit = {},
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
@@ -116,7 +203,16 @@ fun CenterEditorPanel(
                 }
 
                 ui.editor.rules.ViewMode.TEST -> testContent()
-                ui.editor.rules.ViewMode.TABLE -> TableModePlaceholder(modifier = Modifier.fillMaxSize())
+                ui.editor.rules.ViewMode.TABLE -> RuleTablePanel(
+                    allBuilderRules = allBuilderRules,
+                    catalogRules = catalogRules,
+                    selectedRuleId = builderEditorState.ruleId,
+                    onRuleClick = { ruleId ->
+                        onRuleSelected(ruleId)
+                        onRuleModeChange(RuleMode.BUILDER)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }
@@ -162,22 +258,26 @@ private fun CenterPanelActions(
 ) {
     var ruleValue by state.ruleValue
 
-    when (viewMode) {
-        ui.editor.rules.ViewMode.CODE -> CodeModeActions(
-            state = state,
-            scope = scope,
-            ruleValue = ruleValue,
-            onRuleValueChange = { ruleValue = it },
-        )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ManifestFilePicker(state = state, viewMode = viewMode)
+        when (viewMode) {
+            ui.editor.rules.ViewMode.CODE -> CodeModeActions(
+                state = state,
+                scope = scope,
+                ruleValue = ruleValue,
+                onRuleValueChange = { ruleValue = it },
+            )
 
-        ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
-            state = state,
-            scope = scope,
-            diagramGraphicsLayer = diagramGraphicsLayer,
-        )
+            ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
+                state = state,
+                scope = scope,
+                diagramGraphicsLayer = diagramGraphicsLayer,
+            )
 
-        ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {
-            // No global actions for these modes yet.
+            ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {}
         }
     }
 }
@@ -214,8 +314,10 @@ private fun CodeModeActions(
             label = "Save Rule",
             onClick = {
                 if (ruleValue.text.isNotBlank()) {
-                    saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
-                    state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
+                    if (!state.saveCurrentManifestRuleFile()) {
+                        saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
+                        state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
+                    }
                 } else {
                     state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
                 }
@@ -324,16 +426,3 @@ private fun TestModePlaceholder(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun TableModePlaceholder(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Table mode will list all rules with status, conditions, and actions.",
-            style = MaterialTheme.typography.body2,
-            color = TextSecondary,
-        )
-    }
-}

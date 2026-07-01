@@ -1,0 +1,30 @@
+rule "critical-error" {
+  when
+    level equals "CRITICAL"
+    or level equals "FATAL"
+
+  then
+    tag "critical"
+    alert "ops-pagerduty"
+    route "dead-letter"
+}
+
+rule "error-log" {
+  when
+    level equals "ERROR"
+    and not tags containsAny ["suppressed", "test"]
+
+  then
+    tag "error"
+    route "error-channel"
+}
+
+rule "warning-production" {
+  when
+    level equals "WARN"
+    and environment equals "production"
+
+  then
+    tag "warning-prod"
+    route "monitoring-channel"
+}
