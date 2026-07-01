@@ -54,6 +54,8 @@ class RuleEditorState(
     val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(value = null)
     val selectedManifestEntry: MutableState<String?> = mutableStateOf(value = null)
     val selectedManifestRuleFile: MutableState<String?> = mutableStateOf(value = null)
+    val showAllRules: MutableState<Boolean> = mutableStateOf(value = false)
+    val allRulesText: MutableState<String> = mutableStateOf(value = "")
 
     // Diagnostics
     val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
@@ -178,6 +180,7 @@ class RuleEditorState(
     private fun loadManifestRules(baseDir: Path, entry: ManifestEntry): Int? {
         if (entry.rules.isEmpty()) return 0
         val firstRelPath = entry.rules.first()
+        showAllRules.value = false
         return runCatching {
             val path = resolveManifestPathOrThrow(baseDir = baseDir, relativePath = firstRelPath, label = "rule")
             val content = Files.readString(path)
@@ -192,8 +195,23 @@ class RuleEditorState(
         }
     }
 
+    /** Load all rule files for the current manifest entry and expose them via [allRulesText]. */
+    fun loadAllRuleFilesForCurrentEntry() {
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return
+        val entry = parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value } ?: return
+        val combined = entry.rules.mapNotNull { relativePath ->
+            runCatching {
+                val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+                Files.readString(path)
+            }.getOrNull()
+        }.joinToString(separator = "\n\n")
+        allRulesText.value = combined
+        showAllRules.value = true
+    }
+
     /** Load a single rule file from the current manifest entry into the editor. */
     fun loadSingleManifestRuleFile(relativePath: String) {
+        showAllRules.value = false
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
             reportManifestPathIssue(message = "Manifest base directory is not set")
             return

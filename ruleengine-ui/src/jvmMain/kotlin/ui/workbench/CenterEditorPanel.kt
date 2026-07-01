@@ -58,16 +58,20 @@ import ui.saveRuleToFile
 
 @Suppress("FunctionNaming")
 @Composable
-private fun ManifestFilePicker(state: RuleEditorState) {
+private fun ManifestFilePicker(state: RuleEditorState, viewMode: ui.editor.rules.ViewMode) {
     val parsedManifest by state.parsedManifest
     val selectedManifestEntry by state.selectedManifestEntry
     val selectedManifestRuleFile by state.selectedManifestRuleFile
+    val showAllRules by state.showAllRules
 
     val currentEntryRuleFiles: List<String> = parsedManifest
         ?.entries
         ?.find { it.id == selectedManifestEntry }
         ?.rules
         .orEmpty()
+
+    val showAllFilesOption = currentEntryRuleFiles.size >= 2 &&
+        (viewMode == ui.editor.rules.ViewMode.DIAGRAM || viewMode == ui.editor.rules.ViewMode.TEST)
 
     if (currentEntryRuleFiles.isNotEmpty()) {
         var expanded by remember { mutableStateOf(false) }
@@ -84,9 +88,29 @@ private fun ManifestFilePicker(state: RuleEditorState) {
                         shape = RoundedCornerShape(size = 8.dp),
                     ),
             ) {
+                if (showAllFilesOption) {
+                    DropdownMenuItem(
+                        onClick = {
+                            state.loadAllRuleFilesForCurrentEntry()
+                            expanded = false
+                        },
+                        modifier = Modifier.background(
+                            color = if (showAllRules) BgHover else BgElevated,
+                            shape = RoundedCornerShape(size = 6.dp),
+                        ),
+                    ) {
+                        Text(
+                            text = "All files",
+                            style = MaterialTheme.typography.body2,
+                            color = if (showAllRules) PrimaryBlue else TextPrimary,
+                            fontWeight = if (showAllRules) FontWeight.SemiBold else FontWeight.Normal,
+                        )
+                    }
+                    Divider(color = BorderColor, thickness = 1.dp)
+                }
                 currentEntryRuleFiles.forEach { relativePath ->
                     val fileName = relativePath.substringAfterLast('/')
-                    val isSelected = relativePath == selectedManifestRuleFile
+                    val isSelected = !showAllRules && relativePath == selectedManifestRuleFile
                     DropdownMenuItem(
                         onClick = {
                             state.loadSingleManifestRuleFile(relativePath)
@@ -226,7 +250,7 @@ private fun CenterPanelActions(
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ManifestFilePicker(state = state)
+        ManifestFilePicker(state = state, viewMode = viewMode)
         when (viewMode) {
             ui.editor.rules.ViewMode.CODE -> CodeModeActions(
                 state = state,

@@ -388,7 +388,7 @@ actual fun RuleEditor() {
                                     val result = simulationService.simulate(
                                         schemaText = state.schemaText.value,
                                         actionsText = state.actionSchemaText.value,
-                                        ruleText = state.ruleValue.value.text,
+                                        ruleText = if (state.showAllRules.value) state.allRulesText.value else state.ruleValue.value.text,
                                         ruleId = testInputState.selectedRuleId,
                                         inputJson = testInputState.inputJson,
                                     )
@@ -401,11 +401,11 @@ actual fun RuleEditor() {
                             },
                             ruleIds = catalogRules.map { it.id },
                             runEnabled = state.parsedSchema.value != null
-                                    && state.ruleValue.value.text.isNotBlank()
+                                    && (state.ruleValue.value.text.isNotBlank() || state.showAllRules.value && state.allRulesText.value.isNotBlank())
                                     && !hasErrors,
                             runReason = when {
                                 state.parsedSchema.value == null -> "Load a field schema first"
-                                state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
+                                !state.showAllRules.value && state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
                                 hasErrors -> "Fix rule validation errors before running"
                                 else -> null
                             },
