@@ -400,6 +400,7 @@ actual fun RuleEditor() {
                                 }
                             },
                             ruleIds = catalogRules.map { it.id },
+                            ruleSelectionEnabled = !state.showAllRules.value,
                             runEnabled = state.parsedSchema.value != null
                                     && (state.ruleValue.value.text.isNotBlank() || state.showAllRules.value && state.allRulesText.value.isNotBlank())
                                     && !hasErrors,
