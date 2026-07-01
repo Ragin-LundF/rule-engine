@@ -315,6 +315,8 @@ actual fun RuleEditor() {
                     },
                     builderEditorState = activeBuilderEditorState,
                     allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
+                    allBuilderRules = allBuilderRules,
+                    catalogRules = catalogRules,
                     onRuleSelected = { ruleId -> selectedBuilderRuleId = ruleId },
                     onRenameRule = { oldId, newId ->
                         if (newId !in builderStateMap && newId.isNotBlank()) {

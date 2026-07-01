@@ -42,6 +42,7 @@ import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderEditorState
+import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleBuilderView
@@ -144,6 +145,8 @@ fun CenterEditorPanel(
     onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(ui.builder.BuilderRule.None),
     allRuleIds: List<String> = emptyList(),
+    allBuilderRules: List<BuilderRule> = emptyList(),
+    catalogRules: List<CatalogRule> = emptyList(),
     onRuleSelected: (String) -> Unit = {},
     onAddRule: () -> Unit = {},
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
@@ -200,7 +203,16 @@ fun CenterEditorPanel(
                 }
 
                 ui.editor.rules.ViewMode.TEST -> testContent()
-                ui.editor.rules.ViewMode.TABLE -> TableModePlaceholder(modifier = Modifier.fillMaxSize())
+                ui.editor.rules.ViewMode.TABLE -> RuleTablePanel(
+                    allBuilderRules = allBuilderRules,
+                    catalogRules = catalogRules,
+                    selectedRuleId = builderEditorState.ruleId,
+                    onRuleClick = { ruleId ->
+                        onRuleSelected(ruleId)
+                        onRuleModeChange(RuleMode.BUILDER)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }
@@ -414,16 +426,3 @@ private fun TestModePlaceholder(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun TableModePlaceholder(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Table mode will list all rules with status, conditions, and actions.",
-            style = MaterialTheme.typography.body2,
-            color = TextSecondary,
-        )
-    }
-}

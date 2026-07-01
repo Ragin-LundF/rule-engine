@@ -15,6 +15,9 @@ kotlin {
                 implementation(compose.material)
                 implementation(compose.ui)
                 implementation(compose.components.resources)
+                // Force coroutines >= 1.11.0: Compose 1.11.1 pulls in 1.9.0 which is
+                // binary-incompatible with Kotlin 2.3.x (CompletedContinuation cast crash).
+                implementation(libs.kotlinx.coroutines.core)
             }
         }
         jvmMain {
