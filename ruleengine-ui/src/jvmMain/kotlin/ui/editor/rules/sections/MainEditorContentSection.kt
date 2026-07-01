@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -170,9 +169,8 @@ fun ColumnScope.MainEditorContentSection(
                 ) {
                     Column(
                         modifier = Modifier
-                            .wrapContentHeight(align = Alignment.Top, unbounded = true)
-                            .padding(top = editorPaddingDp, end = 8.dp, start = 4.dp)
-                            .offset { IntOffset(x = 0, y = -editorScrollState.value) },
+                            .verticalScroll(state = editorScrollState, enabled = false)
+                            .padding(top = editorPaddingDp, end = 8.dp, start = 4.dp),
                         horizontalAlignment = Alignment.End,
                     ) {
                         val currentLine = remember(
