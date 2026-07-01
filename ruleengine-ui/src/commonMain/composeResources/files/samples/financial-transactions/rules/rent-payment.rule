@@ -1,0 +1,24 @@
+rule "rent-payment" {
+  when
+    (purpose contains "rent"
+    or purpose contains "apartment")
+    and amount >= 300
+
+  then
+    label "rent"
+    score 10
+}
+
+rule "utility-bill" {
+  when
+    (purpose contains "strom"
+    or purpose contains "electricity"
+    or purpose contains "gas"
+    or purpose contains "water"
+    or purpose contains "internet")
+    and amount between 20 and 500
+
+  then
+    label "utility"
+    score 5
+}

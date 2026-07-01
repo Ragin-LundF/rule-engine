@@ -1,0 +1,28 @@
+rule "admin-full-access" {
+  when
+    role equals "admin"
+
+  then
+    allow "full-access"
+    log "admin-action"
+}
+
+rule "readonly-restriction" {
+  when
+    role equals "viewer"
+    and method in ["POST", "PUT", "PATCH", "DELETE"]
+
+  then
+    deny "read-only-role"
+    log "write-attempt-by-viewer"
+}
+
+rule "service-account-api" {
+  when
+    role equals "service-account"
+    and path startsWith "/api/internal/"
+
+  then
+    allow "internal-api"
+    rateLimit 1000
+}

@@ -1,0 +1,31 @@
+rule "payment-service-error" {
+  when
+    service equals "payment-service"
+    and level in ["ERROR", "CRITICAL", "FATAL"]
+
+  then
+    tag "payment-error"
+    alert "payments-oncall"
+    escalate "p1"
+}
+
+rule "auth-service-failure" {
+  when
+    service equals "auth-service"
+    and (message contains "unauthorized"
+    or message contains "token expired"
+    or statusCode equals 401)
+
+  then
+    tag "auth-failure"
+    alert "security-team"
+}
+
+rule "noisy-debug-suppression" {
+  when
+    level in ["DEBUG", "TRACE"]
+    and environment in ["production", "staging"]
+
+  then
+    suppress
+}

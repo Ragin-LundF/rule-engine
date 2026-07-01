@@ -1,0 +1,71 @@
+schema: log-filter-v1
+
+fields:
+
+  level:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - in
+
+  message:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - contains
+      - startsWith
+      - endsWith
+      - regex
+
+  service:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+      - startsWith
+
+  environment:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  responseTime:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  statusCode:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - in
+
+  tags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll

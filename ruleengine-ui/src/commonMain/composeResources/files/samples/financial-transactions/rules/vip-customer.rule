@@ -1,0 +1,29 @@
+rule "vip-high-volume" {
+  when
+    amount >= 10000
+    and tags containsAny ["verified", "premium"]
+
+  then
+    label "vip"
+    notify "relationship-manager"
+}
+
+rule "vip-frequent-trader" {
+  when
+    count >= 20
+    and tags containsAll ["active", "verified"]
+
+  then
+    label "frequent-trader"
+    score 90
+}
+
+rule "preferred-customer" {
+  when
+    score >= 75
+    and not tags containsAny ["blocked", "restricted"]
+
+  then
+    label "preferred"
+    notify "offers-team"
+}

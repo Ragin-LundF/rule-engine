@@ -1,0 +1,14 @@
+name: product-recommendation
+
+# Sample: Product Recommendation
+# Classify and boost products for recommendation engines
+# based on category, price, rating, and inventory status.
+
+entries:
+  - id: product-recommendation
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/premium-product.rule
+      - rules/category-boost.rule
+      - rules/discount-eligibility.rule

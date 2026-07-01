@@ -1,0 +1,14 @@
+name: financial-transactions
+
+# Sample: Financial Transactions
+# Demonstrates classification of bank payment transactions by purpose,
+# amount thresholds, counterparty data, and tag sets.
+
+entries:
+  - id: financial-transactions
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/rent-payment.rule
+      - rules/fraud-detection.rule
+      - rules/vip-customer.rule

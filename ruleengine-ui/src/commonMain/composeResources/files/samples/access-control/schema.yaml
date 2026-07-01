@@ -1,0 +1,61 @@
+schema: access-control-v1
+
+fields:
+
+  role:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  path:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - startsWith
+      - contains
+      - regex
+
+  method:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - in
+
+  ip:
+    type: text
+    normalizers:
+      - trim
+    operators:
+      - equals
+      - startsWith
+      - in
+      - regex
+
+  hour:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  tags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll

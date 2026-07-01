@@ -1,0 +1,29 @@
+rule "critically-slow-request" {
+  when
+    responseTime > 5000
+    and environment equals "production"
+
+  then
+    tag "performance-critical"
+    alert "sre-team"
+    escalate "p1"
+}
+
+rule "slow-request" {
+  when
+    responseTime between 2000 and 5000
+
+  then
+    tag "slow"
+    route "performance-channel"
+}
+
+rule "server-error-slow" {
+  when
+    statusCode >= 500
+    and responseTime > 1000
+
+  then
+    tag "error-and-slow"
+    alert "backend-team"
+}

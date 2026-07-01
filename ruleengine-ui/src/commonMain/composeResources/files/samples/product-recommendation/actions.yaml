@@ -1,0 +1,11 @@
+actions:
+  recommend:
+    argTypes: [string]
+  discount:
+    argTypes: [integer]
+  badge:
+    argTypes: [string]
+  exclude:
+    argTypes: [string]
+  boost:
+    argTypes: [integer]

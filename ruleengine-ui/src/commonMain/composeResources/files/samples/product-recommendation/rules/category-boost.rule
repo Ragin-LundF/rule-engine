@@ -1,0 +1,33 @@
+rule "electronics-featured" {
+  when
+    category equals "electronics"
+    and rating >= 4.0
+    and tags containsAny ["new-arrival", "trending"]
+
+  then
+    recommend "electronics-homepage"
+    badge "trending"
+    boost 70
+}
+
+rule "seasonal-promotion" {
+  when
+    tags containsAny ["seasonal", "holiday", "sale"]
+    and stock >= 10
+
+  then
+    recommend "promotional-banner"
+    badge "on-sale"
+}
+
+rule "books-staff-pick" {
+  when
+    category equals "books"
+    and rating >= 4.8
+    and reviewCount >= 200
+
+  then
+    badge "staff-pick"
+    recommend "featured-books"
+    boost 85
+}

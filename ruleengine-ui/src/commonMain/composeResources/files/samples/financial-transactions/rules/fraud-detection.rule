@@ -1,0 +1,35 @@
+rule "high-value-foreign-transfer" {
+  when
+    not iban startsWith "DE"
+    and amount > 5000
+
+  then
+    flag "foreign-high-value"
+    alert "manual-review-required"
+    score 80
+}
+
+rule "suspicious-round-amount" {
+  when
+    (amount equals 1000
+    or amount equals 2000
+    or amount equals 5000
+    or amount equals 9999)
+    and tags containsAny ["new-counterparty", "first-transfer"]
+
+  then
+    flag "round-amount-new-counterparty"
+    score 60
+}
+
+rule "rapid-transaction-burst" {
+  when
+    count >= 5
+    and amount < 100
+    and tags containsAny ["same-day"]
+
+  then
+    flag "micro-transaction-burst"
+    alert "potential-structuring"
+    score 70
+}

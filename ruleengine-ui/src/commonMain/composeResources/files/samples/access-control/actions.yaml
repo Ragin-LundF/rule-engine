@@ -1,0 +1,11 @@
+actions:
+  allow:
+    argTypes: [string]
+  deny:
+    argTypes: [string]
+  rateLimit:
+    argTypes: [integer]
+  log:
+    argTypes: [string]
+  redirect:
+    argTypes: [string]

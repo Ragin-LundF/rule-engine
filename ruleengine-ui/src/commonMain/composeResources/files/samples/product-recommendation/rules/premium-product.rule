@@ -1,0 +1,31 @@
+rule "luxury-item" {
+  when
+    price >= 500
+    and rating >= 4.5
+    and reviewCount >= 50
+
+  then
+    badge "luxury"
+    recommend "premium-shelf"
+    boost 90
+}
+
+rule "high-rated-affordable" {
+  when
+    rating >= 4.7
+    and price between 20 and 150
+    and reviewCount >= 100
+
+  then
+    badge "top-rated"
+    recommend "best-value"
+    boost 80
+}
+
+rule "out-of-stock-exclusion" {
+  when
+    stock equals 0
+
+  then
+    exclude "out-of-stock"
+}
