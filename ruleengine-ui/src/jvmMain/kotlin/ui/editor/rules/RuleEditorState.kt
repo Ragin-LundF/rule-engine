@@ -53,6 +53,7 @@ class RuleEditorState(
     val manifestBaseDir: MutableState<String?> = mutableStateOf(value = null)
     val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(value = null)
     val selectedManifestEntry: MutableState<String?> = mutableStateOf(value = null)
+    val selectedManifestRuleFile: MutableState<String?> = mutableStateOf(value = null)
 
     // Diagnostics
     val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
@@ -98,6 +99,7 @@ class RuleEditorState(
     /** Load all files referenced by a manifest entry into the editor state. */
     fun loadManifestEntry(entry: ManifestEntry) {
         selectedManifestEntry.value = entry.id
+        selectedManifestRuleFile.value = null
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
             reportManifestPathIssue(message = "Manifest base directory is not set")
             return
@@ -123,7 +125,7 @@ class RuleEditorState(
             msg = "Loaded '${entry.id}'" +
                     (if (entry.schema != null) ", schema" else "") +
                     (if (entry.actions != null) ", actions" else "") +
-                    (if (loadedRules > 0) ", $loadedRules rule file(s)" else ""),
+                    (if (entry.rules.isNotEmpty()) ", ${entry.rules.size} rule file(s) — showing first" else ""),
             kind = StatusKind.SUCCESS,
         )
     }
@@ -174,37 +176,58 @@ class RuleEditorState(
     }
 
     private fun loadManifestRules(baseDir: Path, entry: ManifestEntry): Int? {
-        if (entry.rules.isEmpty()) {
-            return 0
+        if (entry.rules.isEmpty()) return 0
+        val firstRelPath = entry.rules.first()
+        return runCatching {
+            val path = resolveManifestPathOrThrow(baseDir = baseDir, relativePath = firstRelPath, label = "rule")
+            val content = Files.readString(path)
+            ruleValue.value = TextFieldValue(text = content)
+            selectedManifestRuleFile.value = firstRelPath
+            diagnosticsText.value = ""
+            diagnosticsList.value = emptyList()
+            1
+        }.getOrElse { ex ->
+            reportManifestPathIssue(message = "Failed to load manifest rule: ${ex.message}")
+            null
         }
+    }
 
-        var loadedRules = 0
-        val combined = buildString {
-            entry.rules.forEachIndexed { index, relativePath ->
-                runCatching {
-                    val path = resolveManifestPathOrThrow(
-                        baseDir = baseDir,
-                        relativePath = relativePath,
-                        label = "rule",
-                    )
-                    val content = Files.readString(path)
-                    if (index > 0) {
-                        append("\n\n")
-                    }
-                    append("# --- ${path.fileName} ---\n")
-                    append(content)
-                    loadedRules++
-                }.getOrElse { ex ->
-                    reportManifestPathIssue(message = "Failed to load manifest rule: ${ex.message}")
-                    return null
-                }
-            }
+    /** Load a single rule file from the current manifest entry into the editor. */
+    fun loadSingleManifestRuleFile(relativePath: String) {
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
+            reportManifestPathIssue(message = "Manifest base directory is not set")
+            return
         }
+        runCatching {
+            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+            val content = Files.readString(path)
+            ruleValue.value = TextFieldValue(text = content)
+            selectedManifestRuleFile.value = relativePath
+            diagnosticsText.value = ""
+            diagnosticsList.value = emptyList()
+            setStatus(msg = "Loaded ${path.fileName}", kind = StatusKind.SUCCESS)
+        }.onFailure { ex ->
+            reportManifestPathIssue(message = "Failed to load rule file: ${ex.message}")
+        }
+    }
 
-        if (combined.isNotBlank()) {
-            ruleValue.value = TextFieldValue(text = combined)
+    /**
+     * Save the current editor content back to the manifest-referenced rule file.
+     * Returns true if the save was handled (manifest-backed), false if the caller
+     * should fall back to a generic save dialog.
+     */
+    fun saveCurrentManifestRuleFile(): Boolean {
+        val relativePath = selectedManifestRuleFile.value ?: return false
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return false
+        return runCatching {
+            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+            Files.writeString(path, ruleValue.value.text)
+            setStatus(msg = "Saved ${path.fileName}", kind = StatusKind.SUCCESS)
+            true
+        }.getOrElse { ex ->
+            reportManifestPathIssue(message = "Failed to save rule file: ${ex.message}")
+            false
         }
-        return loadedRules
     }
 
     private fun validateManifestEntryPaths(baseDir: Path, entry: ManifestEntry): String? {
