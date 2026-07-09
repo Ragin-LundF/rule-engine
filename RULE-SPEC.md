@@ -48,7 +48,7 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 ### Key Principles
 
 - The engine **validates everything at load time**. Typos, unknown fields, wrong operators, and wrong argument types are all caught before any rule runs.
-- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic.
+- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
 - The engine **never modifies** input data. It only reads it and returns results.
 
 ---
@@ -331,7 +331,7 @@ You may define any action names that fit the domain. These are widely used conve
 - Extension: **`.rule`**
 - A single `.rule` file may contain **one or more rules**.
 - Lines starting with `#` are **comments** and are ignored.
-- Rules are evaluated **independently** — all matching rules fire; there is no stop-first or priority mechanism.
+- Rules are evaluated **independently** — all matching rules fire; there is no stop-first or priority mechanism. Order is still deterministic: rules are evaluated in declaration order within a file (and across files in manifest `rules:` order), and matches are returned in that order.
 
 ### 5.2 Rule structure
 

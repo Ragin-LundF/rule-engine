@@ -12,8 +12,8 @@ The syntax is intentionally simple and close to natural language, so that busine
 
 - A `.rule` file can contain **one or more rules**.
 - Each rule has a unique **ID** (a string in double quotes).
-- Rules are evaluated **independently** — the engine checks every rule against the input and returns all that match.
-- The order of rules in a file does not affect results.
+- Rules are evaluated **independently** — the engine checks every rule against the input and returns *all* that match. There is no priority or stop-first logic; one rule matching never suppresses another.
+- Evaluation order **is deterministic**: rules run in the order they are declared in the file, and matches are returned in that same order. Across multiple files, the [manifest](./manifest.md) `rules:` list order applies first, then declaration order within each file. This does not change *which* rules match — only the order in which matches are returned.
 
 ---
 

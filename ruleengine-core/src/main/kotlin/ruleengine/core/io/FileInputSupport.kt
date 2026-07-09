@@ -25,7 +25,8 @@ object FileInputSupport {
         return Files.walk(root).use { stream ->
             stream.filter { path ->
                 Files.isRegularFile(path) && path.toString().endsWith(".rule")
-            }.toList()
+            }.sorted().toList()
+            // ponytail: alphabetical path order; manifest mode is the ordered-authoritative path
         }
     }
 }

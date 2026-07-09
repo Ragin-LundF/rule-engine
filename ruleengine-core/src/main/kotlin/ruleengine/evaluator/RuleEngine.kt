@@ -19,6 +19,12 @@ import ruleengine.evaluator.trace.dto.NodeType
  * group as soon as one of its rules matches, since further rules in that group would only
  * reproduce the same already-settled output. Rules without any static output are evaluated
  * unconditionally. When disabled the engine evaluates every rule in declaration order.
+ *
+ * Ordering guarantee: with [shortCircuitByOutput] disabled (the default) rules are evaluated
+ * and returned in `matches` in declaration order — the order of the [compiledRules] list, which
+ * reflects manifest file order followed by in-file source order. With [shortCircuitByOutput]
+ * enabled this guarantee does NOT hold: `matches` are ordered by output group, not declaration
+ * order. Enable it only when the consumer does not depend on match order.
  */
 class RuleEngine(
     private val compiledRules: List<CompiledRule>,

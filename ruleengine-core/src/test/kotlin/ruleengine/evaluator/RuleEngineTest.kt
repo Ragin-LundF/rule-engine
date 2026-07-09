@@ -157,6 +157,17 @@ class RuleEngineTest {
         return RuleEngine(compiledRules = rules, shortCircuitByOutput = shortCircuit)
     }
 
+    @Test
+    fun `matches are returned in declaration (list) order`() {
+        // Ids are deliberately not alphabetical to prove order follows the list, not id sorting.
+        val ids = listOf("gamma", "alpha", "beta")
+        val rules = ids.map { labelRule(id = it, label = it) }
+
+        val result = engineFor(rules = rules, shortCircuit = false).evaluate(prepared = preparedPurpose())
+
+        assertEquals(expected = ids, actual = result.matches.map { it.ruleId })
+    }
+
     private fun purposeSchema(): FieldSchema {
         return FieldSchema(
             name = "test",
