@@ -11,6 +11,7 @@ import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -19,6 +20,7 @@ import ui.TextSecondary
 import ui.builder.CatalogFieldInfo
 import ui.builder.MutableBuilderCondition
 import ui.builder.OperatorOptions
+import ui.builder.scalarPaths
 import ui.components.TinyButton
 
 /**
@@ -34,7 +36,10 @@ fun ConditionRowEditor(
     onSwitchToAdvanced: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val fieldInfo = fields.firstOrNull { it.id == condition.field }
+    // A condition names one comparable field, so it works over dotted scalar paths rather than the
+    // top-level fields: without this a nested schema resolves nothing and every row is marked unknown.
+    val fieldOptions = remember(fields) { fields.scalarPaths() }
+    val fieldInfo = fieldOptions.firstOrNull { it.id == condition.field }
     val operators = OperatorOptions.forField(
         fieldType = fieldInfo?.type ?: "text",
         schemaOperators = fieldInfo?.operators ?: emptyList(),
@@ -65,7 +70,7 @@ fun ConditionRowEditor(
 
             FieldDropdown(
                 selectedFieldId = condition.field,
-                fields = fields,
+                fields = fieldOptions,
                 onFieldSelected = { selectedField ->
                     condition.field = selectedField.id
                     val newOperators = OperatorOptions.forField(

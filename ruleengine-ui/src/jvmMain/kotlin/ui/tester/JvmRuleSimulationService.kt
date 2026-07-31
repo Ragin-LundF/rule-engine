@@ -1,6 +1,5 @@
 package ui.tester
 
-import ruleengine.jackson.JacksonUtil
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
 import ruleengine.core.errors.Severity
@@ -10,6 +9,7 @@ import ruleengine.evaluator.context.MapRuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.dto.DecisionNode
 import ruleengine.evaluator.trace.dto.NodeType
+import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 
@@ -32,10 +32,10 @@ class JvmRuleSimulationService : RuleSimulationService {
         inputJson: String,
     ): SimulationResult {
         // 1. Parse input JSON
-        val mapType = JacksonUtil.jsonMapper.typeFactory
-            .constructMapType(Map::class.java, String::class.java, Any::class.java)
         @Suppress("UNCHECKED_CAST")
         val factMap: Map<String, Any?> = runCatching {
+            val mapType = JacksonUtil.jsonMapper.typeFactory
+                .constructMapType(Map::class.java, String::class.java, Any::class.java)
             JacksonUtil.jsonMapper.readValue(inputJson, mapType) as Map<String, Any?>
         }.getOrElse { e ->
             return SimulationResult(
@@ -129,8 +129,8 @@ class JvmRuleSimulationService : RuleSimulationService {
             )
         }
 
-        // 8. Extract trace rows
-        val traceRows = extractTraceRows(evalResult.trace)
+        // 8. Extract trace rows — a trace we cannot read must not cost the caller its result.
+        val traceRows = runCatching { extractTraceRows(evalResult.trace) }.getOrElse { emptyList() }
 
         // 9. Build outcome
         val targetRuleId = targetAsts.first().id

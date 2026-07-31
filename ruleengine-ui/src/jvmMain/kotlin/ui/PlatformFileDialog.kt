@@ -46,6 +46,7 @@ private fun nativeSave(title: String, suggestedName: String): File? {
 
 private val yamlFilter = FilenameFilter { _, n -> n.endsWith(".yaml") || n.endsWith(".yml") }
 private val ruleFilter = FilenameFilter { _, n -> n.endsWith(".rule") }
+private val jsonFilter = FilenameFilter { _, n -> n.endsWith(".json") }
 
 // ── Platform implementations ──────────────────────────────────────────────────
 
@@ -57,6 +58,9 @@ actual suspend fun pickRuleFile(): String? =
 
 actual suspend fun pickActionsFile(): String? =
     nativeOpen(title = "Open Actions YAML", filter = yamlFilter)?.readText()
+
+actual suspend fun pickInputJsonFile(): String? =
+    nativeOpen(title = "Open Input JSON", filter = jsonFilter)?.readText()
 
 actual suspend fun pickManifestFile(): Pair<String, String>? {
     val file = nativeOpen(title = "Open Manifest YAML", filter = yamlFilter) ?: return null

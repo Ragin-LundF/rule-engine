@@ -2,6 +2,7 @@ package ui.editor.rules.sections
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,7 @@ fun DiagnosticsSection(state: RuleEditorState) {
     val diagnosticsList by state.diagnosticsList
     val diagnosticsText by state.diagnosticsText
     var ruleValue by state.ruleValue
+    var expanded by state.diagnosticsExpanded
 
     // Map raw ValidationDiagnostic list to enriched UiDiagnosticWithFix list
     val enriched = remember(diagnosticsList) {
@@ -76,11 +78,19 @@ fun DiagnosticsSection(state: RuleEditorState) {
             )
             .padding(all = 14.dp),
     ) {
-        // Header row
+        // Header row — the whole row toggles, so the panel can hand its height to the center panel.
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         ) {
+            Text(
+                text = if (expanded) "▼" else "▶",
+                style = MaterialTheme.typography.caption,
+                color = TextSecondary,
+            )
             Text(
                 text = "Diagnostics",
                 style = MaterialTheme.typography.subtitle1,
@@ -106,6 +116,10 @@ fun DiagnosticsSection(state: RuleEditorState) {
             if (diagnosticsList.isEmpty() && diagnosticsText.isNotBlank()) {
                 StatusBadge(label = "No issues", color = AccentGreen)
             }
+        }
+
+        if (!expanded) {
+            return@Column
         }
 
         Spacer(modifier = Modifier.height(height = 10.dp))

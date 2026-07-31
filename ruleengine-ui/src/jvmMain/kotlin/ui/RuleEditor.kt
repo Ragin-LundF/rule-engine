@@ -29,7 +29,6 @@ import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.BuilderToRuleDsl
 import ui.builder.CatalogActionInfo
-import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
@@ -41,11 +40,15 @@ import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.manifest.ManifestYamlBridge
+import ui.samples.SampleGalleryScreen
+import ui.samples.loadSample
 import ui.schema.FieldSchemaYamlBridge
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
+import ui.tester.SimulationOutcome
 import ui.tester.TestCenterPanel
 import ui.tester.TestInputState
+import ui.tester.simulateOrFailure
 import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppArea
 import ui.workbench.AppAreaIconRail
@@ -66,8 +69,6 @@ import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
 import ui.workbench.toViewMode
-import ui.samples.SampleGalleryScreen
-import ui.samples.loadSample
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -158,6 +159,43 @@ actual fun RuleEditor() {
     // ── Test panel state ──────────────────────────────────────────────────────
     var testInputState by remember { mutableStateOf(TestInputState.Empty) }
     val simulationService = remember { JvmRuleSimulationService() }
+
+    // One place for a run, shared by the center Test mode and the right-panel Simulate tab.
+    // The runCatching is what keeps a thrown simulation from stranding the button on "Running…", and the
+    // status message means a run always leaves a mark outside the panel's own scroll area.
+    fun runTest(ruleText: String) {
+        scope.launch {
+            testInputState = testInputState.copy(isRunning = true)
+            val result = simulationService.simulateOrFailure(
+                schemaText = state.schemaText.value,
+                actionsText = state.actionSchemaText.value,
+                ruleText = ruleText,
+                ruleId = testInputState.selectedRuleId,
+                inputJson = testInputState.inputJson,
+            )
+            testInputState = testInputState.copy(
+                isRunning = false,
+                outcome = result.outcome,
+                traceRows = result.traceRows,
+            )
+            state.setStatus(
+                msg = runStatusMessage(outcome = result.outcome),
+                kind = runStatusKind(outcome = result.outcome),
+            )
+        }
+    }
+
+    fun loadInputJson() {
+        scope.launch {
+            val content = pickInputJsonFile()
+            if (content == null) {
+                state.setStatus(msg = "Input JSON load cancelled", kind = StatusKind.IDLE)
+                return@launch
+            }
+            testInputState = testInputState.copy(inputJson = content)
+            state.setStatus(msg = "Input JSON loaded", kind = StatusKind.SUCCESS)
+        }
+    }
 
     // ── Parsed rules for the expanded diagram window ───────────────────────────
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
@@ -382,22 +420,15 @@ actual fun RuleEditor() {
                             state = testInputState,
                             onStateChange = { testInputState = it },
                             onRunTest = {
-                                scope.launch {
-                                    testInputState = testInputState.copy(isRunning = true)
-                                    val result = simulationService.simulate(
-                                        schemaText = state.schemaText.value,
-                                        actionsText = state.actionSchemaText.value,
-                                        ruleText = if (state.showAllRules.value) state.allRulesText.value else state.ruleValue.value.text,
-                                        ruleId = testInputState.selectedRuleId,
-                                        inputJson = testInputState.inputJson,
-                                    )
-                                    testInputState = testInputState.copy(
-                                        isRunning = false,
-                                        outcome = result.outcome,
-                                        traceRows = result.traceRows,
-                                    )
-                                }
+                                runTest(
+                                    ruleText = if (state.showAllRules.value) {
+                                        state.allRulesText.value
+                                    } else {
+                                        state.ruleValue.value.text
+                                    },
+                                )
                             },
+                            onLoadJson = { loadInputJson() },
                             ruleIds = catalogRules.map { it.id },
                             ruleSelectionEnabled = !state.showAllRules.value,
                             runEnabled = state.parsedSchema.value != null
@@ -569,23 +600,7 @@ actual fun RuleEditor() {
                     RuleTestPanel(
                         state = testInputState,
                         onJsonChange = { testInputState = testInputState.copy(inputJson = it) },
-                        onRunTest = {
-                            scope.launch {
-                                testInputState = testInputState.copy(isRunning = true)
-                                val result = simulationService.simulate(
-                                    schemaText = state.schemaText.value,
-                                    actionsText = state.actionSchemaText.value,
-                                    ruleText = state.ruleValue.value.text,
-                                    ruleId = testInputState.selectedRuleId,
-                                    inputJson = testInputState.inputJson,
-                                )
-                                testInputState = testInputState.copy(
-                                    isRunning = false,
-                                    outcome = result.outcome,
-                                    traceRows = result.traceRows,
-                                )
-                            }
-                        },
+                        onRunTest = { runTest(ruleText = state.ruleValue.value.text) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 },
@@ -615,6 +630,26 @@ actual fun RuleEditor() {
                 }
             }
         }
+    }
+}
+
+/** Status-bar text for a finished run, so the verdict is visible even with the panel scrolled away. */
+private fun runStatusMessage(outcome: SimulationOutcome): String {
+    return when (outcome) {
+        is SimulationOutcome.Matched -> "Test matched — ${outcome.actions.size} action(s)"
+        is SimulationOutcome.NotMatched -> "Test did not match"
+        is SimulationOutcome.ValidationFailed -> "Test not run: ${outcome.reason}"
+        is SimulationOutcome.InvalidJson -> "Test not run: invalid JSON — ${outcome.reason}"
+        is SimulationOutcome.Idle -> "Ready"
+    }
+}
+
+private fun runStatusKind(outcome: SimulationOutcome): StatusKind {
+    return when (outcome) {
+        is SimulationOutcome.Matched -> StatusKind.SUCCESS
+        is SimulationOutcome.NotMatched -> StatusKind.IDLE
+        is SimulationOutcome.ValidationFailed, is SimulationOutcome.InvalidJson -> StatusKind.ERROR
+        is SimulationOutcome.Idle -> StatusKind.IDLE
     }
 }
 

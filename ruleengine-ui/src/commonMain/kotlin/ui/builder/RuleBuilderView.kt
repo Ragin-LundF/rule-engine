@@ -171,16 +171,10 @@ private fun WhenSection(
         AddButton(
             label = "+ Condition",
             onClick = {
-                val defaultField = catalogFields.firstOrNull()?.id ?: ""
-                val defaultOperator = catalogFields.firstOrNull()?.let { field ->
-                    OperatorOptions.forField(
-                        fieldType = field.type,
-                        schemaOperators = field.operators,
-                    ).firstOrNull()
-                } ?: "equals"
+                val start = catalogFields.scalarPaths().firstOrNull()
                 editorState.addCondition(
-                    defaultField = defaultField,
-                    defaultOperator = defaultOperator,
+                    defaultField = start?.id ?: "",
+                    defaultOperator = defaultOperatorFor(field = start),
                 )
                 selectedGroupIds.clear()
                 emitDslChange(editorState = editorState, onDslChange = onDslChange)
@@ -411,17 +405,11 @@ private fun GroupContainer(
         AddButton(
             label = "+ Condition",
             onClick = {
-                val defaultField = catalogFields.firstOrNull()?.id ?: ""
-                val defaultOperator = catalogFields.firstOrNull()?.let { field ->
-                    OperatorOptions.forField(
-                        fieldType = field.type,
-                        schemaOperators = field.operators,
-                    ).firstOrNull()
-                } ?: "equals"
+                val start = catalogFields.scalarPaths().firstOrNull()
                 editorState.addConditionInside(
                     groupId = group.id,
-                    defaultField = defaultField,
-                    defaultOperator = defaultOperator,
+                    defaultField = start?.id ?: "",
+                    defaultOperator = defaultOperatorFor(field = start),
                 )
                 emitDslChange(editorState = editorState, onDslChange = onDslChange)
             },
@@ -646,6 +634,17 @@ private fun NotToggle(
         onClick = { onToggle(!negated) },
         modifier = modifier,
     )
+}
+
+/**
+ * Operator a freshly added condition starts on: the first one [field] actually allows, so a new row is
+ * usable without touching the dropdown. Falls back to `equals`, which every scalar type supports.
+ */
+private fun defaultOperatorFor(field: CatalogFieldInfo?): String {
+    val allowed = field?.let {
+        OperatorOptions.forField(fieldType = it.type, schemaOperators = it.operators)
+    }
+    return allowed?.firstOrNull() ?: "equals"
 }
 
 private fun emitDslChange(

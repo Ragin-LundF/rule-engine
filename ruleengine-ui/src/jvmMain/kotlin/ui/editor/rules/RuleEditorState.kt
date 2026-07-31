@@ -68,6 +68,13 @@ class RuleEditorState(
     val actionsExpanded: MutableState<Boolean> = mutableStateOf(value = false)
     val showManifestYaml: MutableState<Boolean> = mutableStateOf(value = false)
 
+    /**
+     * Whether the diagnostics list is shown. Collapsing it hands its height to the center panel, which
+     * the Test and Builder modes need; the severity badges stay in the header either way, so a collapsed
+     * panel never hides that there are errors.
+     */
+    val diagnosticsExpanded: MutableState<Boolean> = mutableStateOf(value = true)
+
     // Editor UX
     val cursorRect: MutableState<Rect> = mutableStateOf(value = Rect.Zero)
     val showAutoComplete: MutableState<Boolean> = mutableStateOf(value = false)
