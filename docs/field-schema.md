@@ -63,9 +63,14 @@ Each field has exactly one type. The type determines which operators can be used
 | `decimal` | Numbers with decimals | Amounts, prices, percentages |
 | `boolean` | `true` / `false` | Flags, yes/no fields |
 | `string_set` | A set of strings | Tags, labels, categories — multiple values per field |
-| `date` | Dates | Dates (future use) |
+| `date` | ISO dates (`2024-06-15`) | Booking dates, due dates, timestamps compared by day |
+| `collection` | A list of records | Transactions, order items, positions — see [Nested Data](#nested-data) |
+| `object` | A nested record | Customer, address, counterparty — see [Nested Data](#nested-data) |
 
-|> **Aliases accepted:** `text` can also be written as `string`. `integer` can be written as `int` or `long`. `decimal` can be written as `number` or `bigdecimal`. `string_set` can also be written as `stringset` or `set`. `boolean` can be written as `bool`.
+> **Aliases accepted:** `text` can also be written as `string`. `integer` can be written as `int` or `long`. `decimal` can be written as `number` or `bigdecimal`. `string_set` can also be written as `stringset` or `set`. `boolean` can be written as `bool`. `collection` can be written as `list` or `array`, and `object` as `map`.
+
+> **Note:** A `date` value is compared as a calendar date. Input may be an ISO string, a `LocalDate`, a
+> `LocalDateTime`, or an `Instant` — anything carrying a time is reduced to its date.
 
 ---
 
@@ -155,7 +160,10 @@ If you list specific operators, only those are permitted — the validator will 
 | `lte` | Less than or equal | `amount <= 9999` |
 | `between` | Inclusive range check | `amount between 100 5000` |
 
-|> Symbolic operators `>`, `>=`, `<`, `<=`, `==` can be used in rules instead of the word forms.
+> Symbolic operators `>`, `>=`, `<`, `<=` can be used in rules instead of the word forms.
+> For equality, prefer the word form `equals`: `==` is routed to the value-expression engine, which
+> skips the field's declared operator list and does not apply normalizers to the literal. See
+> [Rules](./rules.md#named-operators-vs-symbolic-operators).
 
 ### String Set Field Operators
 
@@ -163,6 +171,94 @@ If you list specific operators, only those are permitted — the validator will 
 |---|---|---|
 | `containsAny` | At least one of the listed values is in the set | `tags containsAny ["vip", "premium"]` |
 | `containsAll` | All of the listed values are in the set | `tags containsAll ["verified", "active"]` |
+
+### Boolean Field Operators
+
+| Operator | Meaning | Example rule condition |
+|---|---|---|
+| `equals` | The flag has this value | `isActive equals true` |
+
+`equals` is the only operator for a boolean field, and the value is the bare word `true` or `false` — never quoted.
+
+### Date Field Operators
+
+| Operator | Meaning | Example rule condition |
+|---|---|---|
+| `equals` | Same day | `bookingDate equals "2024-06-15"` |
+| `gt` | After | `bookingDate gt "2024-01-01"` |
+| `gte` | On or after | `bookingDate >= "2024-01-01"` |
+| `lt` | Before | `bookingDate lt "2020-01-01"` |
+| `lte` | On or before | `bookingDate <= "2024-12-31"` |
+| `between` | Inclusive date range | `bookingDate between "2024-01-01" "2024-12-31"` |
+
+Date literals are always quoted ISO dates (`YYYY-MM-DD`). Any other format is rejected when the rules load.
+
+### Collection and Object Fields
+
+These two types hold structure rather than a value, so they have **no operators of their own**. Rules
+navigate into them or aggregate over them instead — see [Nested Data](#nested-data).
+
+---
+
+## Nested Data
+
+Real input data is rarely flat. A record may carry a list of transactions, or a nested customer object.
+Declare those with `collection` (a list of records) or `object` (a single record), and list their
+members under a nested `fields:` block.
+
+```yaml
+schema: orders-v1
+
+fields:
+
+  orders:
+    type: collection            # a list of order records
+    fields:
+      status:
+        type: text
+      total:
+        type: decimal
+      customer:
+        type: object            # an object inside a collection
+        fields:
+          country:
+            type: text
+      items:
+        type: collection        # a collection inside a collection
+        fields:
+          sku:
+            type: text
+          price:
+            type: decimal
+```
+
+`fields:` is recursive, so nesting can go as deep as your data does. With the schema above, rules can
+navigate into a record and aggregate over a list:
+
+```
+orders.customer.country == "DE"
+count(orders) > 3
+sum(orders.total) > 1000
+sum(orders[status == "paid"].items.price) > 500
+```
+
+See [Value Expressions](./expressions.md) for the full set of aggregate functions and filters.
+
+### `string_set` or `collection`?
+
+| Your data | Type | Why |
+|---|---|---|
+| `["vip", "premium"]` | `string_set` | A set of plain strings; rules test membership |
+| `[{"amount": 100, "label": "risk"}]` | `collection` | A list of records; rules aggregate over their fields |
+
+### Declaring the members is optional
+
+| Nested `fields:` declared | What you get |
+|---|---|
+| Yes | Member names are validated, leaf types are known, mistakes are caught when the rules load, and the visual editor offers the members in its dropdowns |
+| No | Paths still work at runtime, but nothing below the declared field is checked — a typo like `orders.totl` silently never matches |
+
+Declaring the members is always worth it unless the data shape is genuinely unknown.
 
 ---
 
@@ -251,4 +347,5 @@ fields:
 - **Restrict operators explicitly** when you want to prevent analysts from accidentally using an expensive operator (like `regex`) on a high-traffic field.
 - **Version your schema name** (e.g. `transaction-v1`, `transaction-v2`) so you can identify which schema version a rule set was written against.
 - **Use `string_set` for multi-value fields** like tags, labels, or categories — never store multiple values in a single text field separated by commas.
+- **Declare the members of every `collection` and `object`** — it is what turns a silent typo deep in a path into a load-time error, and it is what fills the dropdowns in the visual editor.
 - **Keep field names consistent** across all your schemas if multiple rule sets share the same data model — this makes rules more portable.

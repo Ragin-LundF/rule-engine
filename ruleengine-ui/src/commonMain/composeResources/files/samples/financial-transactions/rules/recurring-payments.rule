@@ -1,0 +1,40 @@
+# Boolean and date conditions.
+# Both are editable in Builder mode: a boolean field offers a true/false dropdown,
+# a date field takes quoted ISO dates.
+
+rule "recurring-subscription" {
+  when
+    recurring equals true
+    amount between 5 100
+
+  then
+    label "subscription"
+    score 5
+}
+
+rule "one-off-large-payment" {
+  when
+    recurring equals false
+    and amount > 5000
+
+  then
+    flag "one-off-large"
+    score 40
+}
+
+rule "current-year-booking" {
+  when
+    bookingDate between "2024-01-01" "2024-12-31"
+
+  then
+    label "fiscal-2024"
+}
+
+rule "backdated-entry" {
+  when
+    bookingDate < "2020-01-01"
+
+  then
+    flag "backdated"
+    alert "manual-review-required"
+}

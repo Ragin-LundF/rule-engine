@@ -38,6 +38,35 @@ rule "risk-ratio" {
 }
 ```
 
+That second example reads a **nested list** of transactions. Data does not have to be flat — declare a
+list of records as a `collection` and its members become available to rules at any depth:
+
+```yaml
+fields:
+  orders:
+    type: collection
+    fields:
+      status:
+        type: text
+      total:
+        type: decimal
+      items:
+        type: collection
+        fields:
+          price:
+            type: decimal
+```
+
+```
+rule "large-paid-order" {
+  when
+    sum(orders[status == "paid"].items.price) > 1000
+
+  then
+    flag "large-paid-order"
+}
+```
+
 Rules are stored as plain `.rule` files, validated against a field schema, and evaluated at runtime without redeployment.
 
 ---
@@ -46,13 +75,15 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 
 - **Human-readable DSL** — rule authors do not need to write code
 - **Field schema** — defines the data fields and their types; the engine validates rules against it
+- **Nested data** — `collection` and `object` field types describe lists of records and nested records to any depth
 - **Action schema** — defines what outcomes a rule can produce
 - **Aggregate functions** — `sum`, `count`, `avg`, `median`, `max`, `min`, `subtract` over nested lists
-- **Filtered array paths** — `transactions[label == "risk"].amount` selects and projects in one step
+- **Filtered array paths** — `orders[status == "paid"].items[price > 0].price` filters at every level
 - **Arithmetic** — combine aggregates with `+`, `-`, `*`, `/`
+- **Text, numbers, flags and dates** — normalized text matching, numeric ranges, `true`/`false` flags, and ISO date comparisons
 - **Manifest** — a single YAML file that ties schema, actions, and rule files together
 - **CLI tools** — validate and evaluate rules from the command line
-- **Visual editor** — browser-based UI for editing, validating, and visualising rules
+- **Visual editor** — desktop app for editing, validating, and visualising rules, including aggregates and calculations
 - **Tracing** — optional decision-tree export for every evaluation
 
 ---
@@ -75,6 +106,8 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 ## AI Rule Generation
 
 The file [RULE-SPEC.md](RULE-SPEC.md) is a machine-readable specification you can hand to an AI assistant to generate or convert rules automatically.
+
+Every rule example in it is executed by an automated test, so the spec cannot drift away from what the engine actually accepts.
 
 ---
 
@@ -99,4 +132,9 @@ Evaluate an input file and print a trace:
 
 ## Visual Editor
 
-See [README_UI.md](README_UI.md) for the desktop app rule editor.
+A Compose Desktop app for authoring rules without touching the DSL text: a schema editor with nested
+fields, and a rule builder whose condition rows cover plain comparisons as well as aggregates,
+calculations, filters, `not` and `ignoreCase`. Rules stay plain `.rule` files — the builder reads and
+writes the same text you would write by hand.
+
+See [README_UI.md](README_UI.md) to run it.

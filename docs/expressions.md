@@ -3,6 +3,10 @@
 Value expressions extend the rule DSL with aggregate functions, arithmetic, and symbolic comparison operators.
 They allow rules to reason about **collections of objects** — for example, summing amounts across a list of transactions.
 
+Declare the collections they operate on in the [field schema](./field-schema.md#nested-data): a
+`collection` field with its members listed under a nested `fields:` block. Aggregates work without that
+declaration, but nothing in the path gets checked.
+
 ---
 
 ## 1. Overview
@@ -32,7 +36,7 @@ A value expression is one of:
 |---|---|---|
 | Literal number | `100`, `0.03` | A numeric constant |
 | Literal text | `"risk"` | A text constant (inside filter only) |
-| Field path | `transactions.amount` | Navigate into a nested field or project a field from a list |
+| Field path | `transactions.amount`, `orders[status == "paid"].items.price` | Navigate into nested fields to any depth, optionally filtering at each level |
 | Aggregate function call | `sum(transactions.amount)` | Apply an aggregate function to a collection |
 | Arithmetic expression | `sum(...) * 0.03` | Combine value expressions with `+`, `-`, `*`, `/` |
 
@@ -125,13 +129,27 @@ Given input:
 
 The path `transactions.amount` resolves to `[100.00, 90.00]`.
 
-Multi-level projection works the same way:
-
 ```
 sum(transactions.amount)        → 190.00
 count(transactions)             → 2
 avg(transactions.amount)        → 95.00
 ```
+
+Paths may be **any depth**, following the nested `fields:` declared in the
+[field schema](./field-schema.md#nested-data):
+
+```
+sum(orders.items.price)
+orders.customer.country
+```
+
+### Projection flattens every level
+
+`sum(orders.items.price)` is the sum across **all items of all orders** — not a total per order. Each
+level is flattened into a single list of values before the function runs.
+
+There is no grouping construct in the engine. If a rule needs a per-parent figure, the input data has
+to provide it as a field.
 
 ---
 
@@ -145,10 +163,31 @@ transactions[amount > 0]
 transactions[label == "risk"].amount
 ```
 
-The filter expression supports:
-- Symbolic comparison operators: `==`, `!=`, `>`, `>=`, `<`, `<=`
-- Legacy named operators: `equals`, `gt`, `gte`, `lt`, `lte`, `contains`, etc.
-- The field names inside `[...]` refer to fields of the **array element**, not the top-level object.
+Field names inside `[...]` refer to fields of the **array element**, not the top-level object.
+
+**Every segment of a path may carry its own filter**, so a nested collection can be narrowed at each
+level:
+
+```
+orders[status == "paid"].items[price > 0].price
+```
+
+### What a filter may contain
+
+A filter is a single comparison — narrower than a normal condition:
+
+| Allowed | Not allowed |
+|---|---|
+| `==`, `!=`, `>`, `>=`, `<`, `<=` | `and`, `or`, `not` |
+| named `gt`, `gte`, `lt`, `lte` | `equals`, `contains`, `in`, `between`, `regex`, `containsAny`, `containsAll` |
+
+Two points that catch people out:
+
+- Write equality as `==`, never as `equals`. `transactions[label equals "risk"]` is rejected.
+- To require two conditions on the same element, chain filters rather than using `and`:
+  `transactions[label == "risk"][amount > 100]`.
+
+These are reported when the rules are compiled, so they surface at load time rather than at runtime.
 
 ### Examples
 
@@ -209,7 +248,7 @@ A missing value on either side of a comparison always produces `false`.
 ## 10. Performance Notes
 
 - Aggregate expressions are **cached per evaluation**: if the same expression (e.g. `sum(transactions.amount)`) appears multiple times in a rule, it is computed only once.
-- Filtered paths iterate the array once per filter; combining multiple filtered aggregates in one rule is efficient.
+- Filtered paths iterate the array once per filter, at each level of the path; combining multiple filtered aggregates in one rule is efficient.
 - For very large arrays (tens of thousands of elements), prefer pre-aggregated fields in the input data when latency is critical.
 
 ---
@@ -224,3 +263,12 @@ A missing value on either side of a comparison always produces `false`.
 | `unknownFn(transactions) > 0` | Unknown aggregate function `unknownFn` |
 | `sum(transactions.amount) contains "x"` | Operator `contains` is not valid for numeric comparison |
 | `sum(transactions.amount) > "text"` | Right-hand side must be numeric |
+| `sum(orders.totl)` where `orders` declares `total` | `Unknown field 'totl' in 'orders.totl'` |
+| `transactions[label == "risk" and amount > 0]` | `Only comparison expressions are supported in filter segments` |
+| `transactions[label equals "risk"]` | `Operator 'equals' is not supported in filter segments` |
+
+> **One case is a warning, not an error:** if the **root** of a multi-segment path is not declared in
+> the schema, the rule still loads and a warning is reported, because the root may be a structure read
+> straight from the input data. `sum(unknownThing.amount) > 1` is accepted with a warning, while a
+> single-segment `unknownThing > 1` is an error. Declaring the collection in the schema turns this into
+> real checking.

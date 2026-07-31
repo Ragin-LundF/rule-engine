@@ -12,7 +12,7 @@ The engine simply returns a list of matched rules and their actions; it is up to
 
 An action has:
 - a **name** — a short identifier such as `label`, `flag`, `score`, or `alert`
-- one **argument** — a fixed value provided in the rule (e.g. the string `"rent"` or the number `100`)
+- at most one **argument** — a fixed value provided in the rule (e.g. the string `"rent"` or the number `100`). An action can also take no argument at all, when the name alone carries the meaning.
 
 When a rule matches, all actions declared in its `then` block are included in the result.
 
@@ -51,10 +51,11 @@ The top-level key is `actions`, which contains one entry per action.
 ```yaml
 actions:
   actionName:
-    argTypes: [<type>]
+    argTypes: [<type>]      # one type, or [] for an action that takes no argument
 ```
 
-Each action can accept **exactly one argument** of a declared type.
+Each action accepts **at most one argument** of a declared type. Use an empty list (`argTypes: []`) for
+an action that is just a signal.
 
 ### Argument Types
 
@@ -63,6 +64,7 @@ Each action can accept **exactly one argument** of a declared type.
 | `string`  | Any text value in double quotes |
 | `integer` | A whole number                  |
 | `decimal` | A number with decimal places    |
+| *(none)*  | `argTypes: []` — no argument    |
 
 ---
 
@@ -103,6 +105,12 @@ or for numeric actions:
 actionName 42
 ```
 
+or, for an action declared with `argTypes: []`, the bare name on its own:
+
+```
+suppress
+```
+
 A rule can have **multiple actions**:
 
 ```
@@ -129,7 +137,7 @@ This produces three actions when the rule fires:
 The engine validates actions at load time:
 - **Unknown actions** are rejected. If a rule uses `notify` but the action schema does not define `notify`, loading fails with a clear error.
 - **Wrong argument type** is rejected. If `score` expects an `integer` but a rule says `score "high"`, that is a validation error.
-- **Wrong number of arguments** is rejected. Each action takes exactly one argument.
+- **Wrong number of arguments** is rejected. An action declared with one `argTypes` entry must be given exactly one argument; an action declared `argTypes: []` must be given none.
 
 This means mistakes are caught before any rule runs — not silently at runtime.
 
@@ -149,6 +157,7 @@ You can define any actions your project needs, but these names are widely recogn
 | `alert` | `string` | Trigger an alert with a named reason |
 | `reject` | `string` | Signal that the item should be rejected, with a reason |
 | `notify` | `string` | Trigger a notification |
+| `suppress` | *(none)* | Drop the record from downstream processing |
 
 ---
 

@@ -1,56 +1,76 @@
-Rule Engine — UI and Core
+# Rule Engine — Visual Editor
 
-This workspace contains two main modules:
-- `ruleengine-core` — the rule engine core (parser, compiler, validation, schema loaders)
-- `ruleengine-ui`   — a simple Compose Desktop + web UI to load schema and rules, validate, save or copy rules
+The `ruleengine-ui` module is a Compose Desktop application for authoring rule projects: schema,
+actions and rules, with validation and evaluation against sample input.
 
-Quick commands
+Rules stay plain `.rule` text at all times. The editor reads and writes the same files you would write
+by hand, so switching between the visual builder and the code view is lossless.
+
+---
+
+## Running it
 
 From the project root:
 
-Run core tests:
-
 ```bash
-./gradlew :ruleengine-core:test --no-daemon --console=plain
+./gradlew :ruleengine-ui:run
 ```
 
-Build the full project:
+Run the tests:
 
 ```bash
-./gradlew build --no-daemon --console=plain
+./gradlew :ruleengine-core:test :ruleengine-ui:jvmTest
 ```
 
-Run the desktop UI (Compose Desktop):
+Build everything:
 
 ```bash
-./gradlew :ruleengine-ui:run --no-daemon --console=plain
+./gradlew build
 ```
 
-Notes
+---
 
-- The desktop UI uses `FieldSchemaLoader.loadFromString(...)` to load schemas from pasted or opened files and `ruleengine.dsl.parser.Parser(...)` + `ruleengine.compiler.Validator.validate(...)` to validate rules. Diagnostics are shown in the UI.
-- YAML parsing is handled by creating a YAML parser and using the centrally configured JSON mapper to deserialize into domain DTOs (this keeps configuration consistent across JSON and YAML).
-- You may see a few deprecation warnings from the Jackson dataformat API (createParser(InputStream) is marked deprecated). These are non-blocking and the parsing flow is compatible with the core.
+## What the editor gives you
 
-UI Implementation Guide
------------------------
+| Area | What you can do |
+|---|---|
+| **Sample gallery** | Open a ready-made project (financial transactions, log filter, product recommendation, access control) without touching the file system |
+| **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
+| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands |
+| **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
+| **Diagram view** | See a rule's condition tree |
+| **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
+| **Test panel** | Evaluate the rule set against JSON input and inspect the decision tree |
 
-The `ruleengine-ui` module contains a Compose-based editor component (`ui/RuleEditor.kt`) that demonstrates how to embed the core functionality in a desktop or web UI.
+### Advanced conditions in the builder
 
-Key integration points
-- Load field schema from a string or file: `ruleengine.schema.FieldSchemaLoader.loadFromString(content, nameHint)`
-- Parse rules: `ruleengine.dsl.parser.Parser(input).parseRules()`
-- Validate: `ruleengine.compiler.Validator.validate(asts, schema, actions?)`
-- Optional: use `ruleengine.manifest.ManifestLoader` to parse a `manifest.yaml` and load multiple entries.
+A condition row is `operand · operator · operand`. Each operand is a chip that can be a field, a
+literal value, an aggregate, or a calculation:
 
-Example (UI flow in Kotlin)
+- **Aggregate** — pick a function (`count`, `sum`, `avg`, `median`, `max`, `min`, `subtract`) and build
+  the path one segment at a time, attaching `where` filters to any segment.
+- **Calculation** — a flat list of terms joined by `+`, `-`, `*`, `/`, with optional parentheses.
 
-1) User pastes or opens a YAML schema -> call `FieldSchemaLoader.loadFromString(schemaText, "ui-schema")`.
-2) User edits/pastes rules -> call `Parser(input = rulesText).parseRules()` and then `Validator.validate(asts, schema)` to get diagnostics.
-3) Show diagnostics and, if valid, allow saving or exporting compiled rules via `Compiler.compileRules(...)`.
+Aggregates and calculations are numeric, so those two operand kinds are offered only when the
+comparison can be numeric — a text field will not let you build a sum against it. Rows carrying a
+computed operand are marked with an accent stripe and show the DSL they generate underneath.
 
-Notes and next steps
-- The UI currently validates rules without applying the actions schema by default; adding an option to load and apply `actions.yaml` is straightforward using the same ActionSchema loader in the core.
-- The project contains a `jsMain` entry with a minimal web UI; the Gradle configuration currently runs the desktop app by default but can be adapted to build a web bundle.
+Only `then`-block `extract` clauses are still code-only; a rule using one opens read-only in the
+builder with an explanation.
 
-If you'd like, I can add a small demo that runs a complete edit -> validate -> evaluate cycle inside the UI and exports a DecisionTree JSON result.
+---
+
+## Embedding the core yourself
+
+The UI is a thin layer over `ruleengine-core`. The same entry points are available to any application:
+
+| Step | Call |
+|---|---|
+| Load a field schema | `FieldSchemaLoader.loadFromString(content, nameHint)` |
+| Load an action schema | `ActionSchemaLoader.loadFromString(content)` |
+| Parse rules | `Parser(input = rulesText).parseRules()` |
+| Validate | `Validator.validate(asts, schema, actions)` |
+| Compile | `Compiler.compileRules(asts, schema)` |
+| Load a whole project | `ManifestLoader` |
+
+See the [Integration Guide](docs/integration-guide.md) for the full API, error handling and tracing.
