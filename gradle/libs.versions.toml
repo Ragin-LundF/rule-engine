@@ -1,17 +1,15 @@
 [versions]
-kotlin = "2.3.21"
+kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 # Jackson 3 series - prefer the latest compatible 3.x release. You can update this to a newer patch version if available.
 jackson2 = "2.22"
-jackson3 = "3.2.0"
+jackson3 = "3.2.1"
 
 [libraries]
 # Kotlin test libraries
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-
 # Coroutines (explicit to override the older version pulled in by Compose)
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
-
 # --- Jackson
 jackson-annotations = { module = "com.fasterxml.jackson.core:jackson-annotations", version.ref = "jackson2" }
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson3" }
@@ -31,10 +29,11 @@ jackson = [
 ]
 
 [plugins]
-jreleaser = { id = "org.jreleaser", version = "1.25.0" }
+jreleaser = "org.jreleaser:1.25.0"
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
-kotlin-dokka = { id = "org.jetbrains.dokka", version = "2.2.0" }
-jetbrains-compose = { id = "org.jetbrains.compose", version = "1.11.1" }
+kotlin-dokka = "org.jetbrains.dokka:2.2.0"
+jetbrains-compose = "org.jetbrains.compose:1.11.1"
 jetbrains-compose-kotlin-plugin = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-detekt = { id = "dev.detekt", version = "2.0.0-alpha.4" }
+detekt = "dev.detekt:2.0.0-alpha.5"
+version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.0"

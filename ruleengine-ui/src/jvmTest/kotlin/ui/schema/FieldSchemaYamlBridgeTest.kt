@@ -142,4 +142,120 @@ class FieldSchemaYamlBridgeTest {
         val reloaded = FieldSchemaYamlBridge.fromYaml(yaml)
         assertEquals("desc", reloaded.fields.first().alias)
     }
+
+    // ── nested structures ─────────────────────────────────────────────────────
+
+    @Test
+    fun `nested collections and objects survive a yaml round-trip at three levels`() {
+        val state = SchemaEditorState(
+            schemaName = "nested",
+            fields = listOf(
+                EditableField(
+                    path = "orders",
+                    type = SchemaFieldType.COLLECTION,
+                    fields = listOf(
+                        EditableField(
+                            path = "status",
+                            type = SchemaFieldType.TEXT,
+                            operators = listOf("equals"),
+                        ),
+                        EditableField(
+                            path = "customer",
+                            type = SchemaFieldType.OBJECT,
+                            fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
+                        ),
+                        EditableField(
+                            path = "items",
+                            type = SchemaFieldType.COLLECTION,
+                            fields = listOf(EditableField(path = "price", type = SchemaFieldType.DECIMAL)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        val yaml = FieldSchemaYamlBridge.toYaml(state)
+        val reloaded = FieldSchemaYamlBridge.fromYaml(yaml)
+
+        val orders = reloaded.fields.single()
+        assertEquals(SchemaFieldType.COLLECTION, orders.type)
+        assertEquals(setOf("status", "customer", "items"), orders.fields.map { it.path }.toSet())
+
+        val items = orders.fields.first { it.path == "items" }
+        assertEquals(SchemaFieldType.COLLECTION, items.type)
+        assertEquals(SchemaFieldType.DECIMAL, items.fields.single().type)
+        assertEquals("price", items.fields.single().path)
+
+        val customer = orders.fields.first { it.path == "customer" }
+        assertEquals(SchemaFieldType.OBJECT, customer.type)
+        assertEquals("country", customer.fields.single().path)
+    }
+
+    @Test
+    fun `nested fields are omitted for scalar types`() {
+        val state = SchemaEditorState(
+            fields = listOf(
+                EditableField(
+                    path = "amount",
+                    type = SchemaFieldType.DECIMAL,
+                    // A leftover nested list from a type change must not be written out, because the
+                    // loader rejects nested fields on a scalar type.
+                    fields = listOf(EditableField(path = "stale", type = SchemaFieldType.TEXT)),
+                ),
+            ),
+        )
+
+        val yaml = FieldSchemaYamlBridge.toYaml(state)
+
+        assertFalse(yaml.contains("stale"))
+        assertTrue(FieldSchemaYamlBridge.fromYaml(yaml).fields.single().fields.isEmpty())
+    }
+
+    // ── date formats ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `date_time fields parse from yaml`() {
+        val yaml = """
+            schema: temporal
+            fields:
+              bookedAt:
+                type: date_time
+        """.trimIndent()
+
+        assertEquals(SchemaFieldType.DATE_TIME, FieldSchemaYamlBridge.fromYaml(yaml).fields.single().type)
+    }
+
+    @Test
+    fun `a declared format round-trips through toYaml and fromYaml`() {
+        val state = SchemaEditorState(
+            schemaName = "formats",
+            fields = listOf(
+                EditableField(path = "dueDate", type = SchemaFieldType.DATE, format = "dd.MM.yyyy"),
+                EditableField(path = "eventAt", type = SchemaFieldType.DATE_TIME, format = "dd.MM.yyyy HH:mm"),
+                EditableField(path = "createdAt", type = SchemaFieldType.DATE),
+            ),
+        )
+
+        val reloaded = FieldSchemaYamlBridge.fromYaml(FieldSchemaYamlBridge.toYaml(state))
+
+        assertEquals("dd.MM.yyyy", reloaded.fields.first { it.path == "dueDate" }.format)
+        assertEquals("dd.MM.yyyy HH:mm", reloaded.fields.first { it.path == "eventAt" }.format)
+        assertEquals("", reloaded.fields.first { it.path == "createdAt" }.format)
+    }
+
+    @Test
+    fun `format is omitted for non-temporal types`() {
+        val state = SchemaEditorState(
+            fields = listOf(
+                // A leftover format from a type change must not be written out, because the loader
+                // rejects `format` on anything but a date type.
+                EditableField(path = "purpose", type = SchemaFieldType.TEXT, format = "dd.MM.yyyy"),
+            ),
+        )
+
+        val yaml = FieldSchemaYamlBridge.toYaml(state)
+
+        assertFalse(yaml.contains("format"))
+        assertFalse(FieldSchemaYamlBridge.fromYaml(yaml).isReadOnly, "emitted yaml must still load")
+    }
 }

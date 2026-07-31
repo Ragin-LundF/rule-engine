@@ -14,9 +14,10 @@ These guides explain how to write and manage rules without any programming knowl
 | [Field Schema](./field-schema.md) | How to define the data fields that rules operate on               |
 | [Action Schema](./actions.md)     | How to define the actions rules can produce                       |
 | [Rules](./rules.md)               | How to write conditions, combine them, and define outcomes        |
+| [Value Expressions](./expressions.md) | Aggregates, arithmetic and filters over nested lists of records |
 | [Manifest](./manifest.md)         | How to organise multiple rule files into a project                |
 
-**Recommended reading order:** Introduction → Field Schema → Action Schema → Rules → Manifest
+**Recommended reading order:** Introduction → Field Schema → Action Schema → Rules → Value Expressions → Manifest
 
 ---
 

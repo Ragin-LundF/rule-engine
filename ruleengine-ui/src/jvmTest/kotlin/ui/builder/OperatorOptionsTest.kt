@@ -1,5 +1,6 @@
 package ui.builder
 
+import ruleengine.evaluator.compiled.AggregateFunctionName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -52,6 +53,35 @@ class OperatorOptionsTest {
     fun `forField with empty schema operators returns decimal defaults`() {
         val ops = OperatorOptions.forField(fieldType = "decimal")
         assertEquals(OperatorOptions.DECIMAL, ops)
+    }
+
+    @Test
+    fun `integer does not offer in, which the engine allows on text only`() {
+        assertTrue("in" !in OperatorOptions.INTEGER)
+        assertTrue("in" !in OperatorOptions.DECIMAL)
+        assertTrue("in" in OperatorOptions.TEXT)
+    }
+
+    @Test
+    fun `aggregate function list matches the engine enum`() {
+        assertEquals(
+            expected = AggregateFunctionName.entries.map { it.name.lowercase() }.sorted(),
+            actual = OperatorOptions.AGGREGATE_FUNCTIONS.sorted(),
+        )
+    }
+
+    @Test
+    fun `forField gives date_time the same operators as date`() {
+        assertEquals(OperatorOptions.DATE, OperatorOptions.forField(fieldType = "date_time"))
+        assertEquals(OperatorOptions.DATE, OperatorOptions.forField(fieldType = "date"))
+    }
+
+    @Test
+    fun `forField restricts date_time to the schema operators`() {
+        val ops = OperatorOptions.forField(fieldType = "date_time", schemaOperators = listOf("gt", "between"))
+        assertTrue(">" in ops)
+        assertTrue("between" in ops)
+        assertTrue("equals" !in ops)
     }
 
     @Test

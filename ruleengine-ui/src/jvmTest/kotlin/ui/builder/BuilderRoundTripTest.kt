@@ -74,6 +74,7 @@ class BuilderRoundTripTest {
         for (node in nodes) {
             when (node) {
                 is MutableConditionNode.Leaf -> result.add(node.inner.joinToPrevious)
+                is MutableConditionNode.ComparisonLeaf -> result.add(node.inner.joinToPrevious)
                 is MutableConditionNode.Group -> result.addAll(collectJoins(node.nodes))
             }
         }

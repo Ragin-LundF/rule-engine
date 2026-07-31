@@ -2,51 +2,67 @@ package ui.builder
 
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.ArithmeticOperatorAst
+import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.BooleanLiteral
+import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.FieldAccessAst
+import ruleengine.dsl.ast.FieldSegmentAst
+import ruleengine.dsl.ast.FilterSegmentAst
+import ruleengine.dsl.ast.FunctionCallValueAst
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
+import ruleengine.dsl.ast.LiteralValueAst
+import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionAst
 
 /**
  * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
  *
  * Supported constructs:
- * - Single [ConditionAst]
- * - Flat or nested combinations of [AndAst] and [OrAst] whose leaves are [ConditionAst]
+ * - [ConditionAst] — plain `field operator literal` rows, including `between`, lists and `ignoreCase`
+ * - [ComparisonExpressionAst] — symbolic comparisons whose sides may be aggregates, arithmetic,
+ *   field paths (including filtered ones, at any depth) or literals
+ * - [NotAst] — rendered as a negation flag on the node it wraps
+ * - Flat or nested combinations of [AndAst] and [OrAst]
  * - [ActionAst] with [StringLiteral] or [NumberLiteral] arguments
- * - [BetweenLiteral] values
- * - [ListLiteral] values
  *
- * Tree structure is preserved via [BuilderConditionNode.Group] nodes so that
- * parenthesized grouping is maintained through the round-trip.
- * Everything else produces [BuilderRule.Unsupported].
+ * Tree structure is preserved via [BuilderConditionNode.Group] nodes so that parenthesized grouping
+ * is maintained through the round-trip.
+ *
+ * Only `then`-block extractions and shapes the engine itself rejects produce
+ * [BuilderRule.Unsupported]; the reason names the construct that caused it.
  */
 object RuleAstToBuilderMapper {
 
     fun map(rule: RuleAst): BuilderRule {
-        val conditionNodes = collectNodes(
-            expr = rule.condition,
-            joinToPrevious = "",
-        )
-
-        if (conditionNodes == null) {
+        val extraction = rule.actions.firstOrNull { it.extraction != null }
+        if (extraction != null) {
             return BuilderRule.Unsupported(
                 id = rule.id,
-                reason = "Rule contains advanced syntax (nested not, extractions, arithmetic). Edit in Code mode.",
+                reason = "Rule uses a regex extraction in its 'then' block, which the Builder cannot edit yet.",
             )
         }
 
-        val actions = rule.actions.map { mapAction(it) }
+        val conditionNodes = collectNodes(expr = rule.condition, joinToPrevious = "")
+            ?: return BuilderRule.Unsupported(
+                id = rule.id,
+                reason = unsupportedReason(expr = rule.condition),
+            )
 
         return BuilderRule.Supported(
             id = rule.id,
             conditionNodes = conditionNodes,
-            actions = actions,
+            actions = rule.actions.map { mapAction(action = it) },
         )
     }
 
@@ -60,35 +76,65 @@ object RuleAstToBuilderMapper {
         expr: ExpressionAst,
         joinToPrevious: String,
     ): List<BuilderConditionNode>? = when (expr) {
-        is ConditionAst -> {
-            val condition = mapConditionAst(condition = expr) ?: return null
-            listOf(
-                BuilderConditionNode.Condition(
-                    nodeId = condition.id,
-                    field = condition.field,
-                    operator = condition.operator,
-                    value = condition.value,
-                    valueTo = condition.valueTo,
-                    listItems = condition.listItems,
-                    joinToPrevious = joinToPrevious,
-                )
-            )
+        is ConditionAst -> mapConditionAst(condition = expr, joinToPrevious = joinToPrevious)?.let { listOf(it) }
+
+        is ComparisonExpressionAst -> mapComparisonAst(
+            comparison = expr,
+            joinToPrevious = joinToPrevious,
+        )?.let { listOf(it) }
+
+        is NotAst -> mapNot(expr = expr, joinToPrevious = joinToPrevious)
+
+        is AndAst -> collectGroupedChildren(
+            children = expr.children,
+            groupJoin = "and",
+            parentJoin = joinToPrevious,
+        )
+
+        is OrAst -> collectGroupedChildren(
+            children = expr.children,
+            groupJoin = "or",
+            parentJoin = joinToPrevious,
+        )
+    }
+
+    /**
+     * Maps `not <expr>`: a single-node child carries the negation directly, while a multi-node child
+     * is wrapped in a negated group so the parentheses survive the round-trip.
+     */
+    private fun mapNot(
+        expr: NotAst,
+        joinToPrevious: String,
+    ): List<BuilderConditionNode>? {
+        val childNodes = collectNodes(expr = expr.child, joinToPrevious = joinToPrevious) ?: return null
+        val single = childNodes.singleOrNull()
+        if (single != null) {
+            return listOf(negate(node = single))
         }
-        is AndAst -> {
-            collectGroupedChildren(
-                children = expr.children,
-                groupJoin = "and",
-                parentJoin = joinToPrevious,
+        return listOf(
+            BuilderConditionNode.Group(
+                nodeId = nextId(prefix = "grp"),
+                nodes = childNodes.mapIndexed { index, node ->
+                    if (index == 0) withJoin(node = node, join = "") else node
+                },
+                negated = true,
+                joinToPrevious = joinToPrevious,
             )
-        }
-        is OrAst -> {
-            collectGroupedChildren(
-                children = expr.children,
-                groupJoin = "or",
-                parentJoin = joinToPrevious,
-            )
-        }
-        else -> null
+        )
+    }
+
+    private fun negate(node: BuilderConditionNode): BuilderConditionNode = when (node) {
+        is BuilderCondition -> node.copy(negated = !node.negated)
+        is BuilderConditionNode.Condition -> node.copy(negated = !node.negated)
+        is BuilderConditionNode.Comparison -> node.copy(negated = !node.negated)
+        is BuilderConditionNode.Group -> node.copy(negated = !node.negated)
+    }
+
+    private fun withJoin(node: BuilderConditionNode, join: String): BuilderConditionNode = when (node) {
+        is BuilderCondition -> node.copy(joinToPrevious = join)
+        is BuilderConditionNode.Condition -> node.copy(joinToPrevious = join)
+        is BuilderConditionNode.Comparison -> node.copy(joinToPrevious = join)
+        is BuilderConditionNode.Group -> node.copy(joinToPrevious = join)
     }
 
     /**
@@ -126,31 +172,195 @@ object RuleAstToBuilderMapper {
         return result
     }
 
-    // ── condition / action mapping ────────────────────────────────────────────
+    // ── condition / comparison mapping ────────────────────────────────────────
 
-    /**
-     * Maps a `ConditionAst` object to a `BuilderCondition` object or returns `null` if the mapping cannot be performed.
-     *
-     * @param condition The `ConditionAst` object to be transformed.
-     *  Contains the field, operator, and value representing a condition in the abstract syntax tree (AST).
-     * @return A `BuilderCondition` object if the mapping is successful, otherwise `null`.
-     */
-    private fun mapConditionAst(condition: ConditionAst): BuilderCondition? {
-        val literalValue = literalToValue(condition.value) ?: return null
-        return BuilderCondition(
-            id = generateId(),
+    private fun mapConditionAst(
+        condition: ConditionAst,
+        joinToPrevious: String,
+    ): BuilderConditionNode.Condition? {
+        val literalValue = literalToValue(lit = condition.value) ?: return null
+        return BuilderConditionNode.Condition(
+            nodeId = nextId(prefix = "nid"),
             field = condition.field,
-            operator = normalizeOperator(condition.operator),
+            operator = normalizeOperator(operator = condition.operator),
             value = literalValue.value,
             valueTo = literalValue.valueTo,
             listItems = literalValue.listItems,
-            joinToPrevious = "",
+            ignoreCase = condition.ignoreCase,
+            joinToPrevious = joinToPrevious,
         )
     }
+
+    private fun mapComparisonAst(
+        comparison: ComparisonExpressionAst,
+        joinToPrevious: String,
+    ): BuilderConditionNode.Comparison? {
+        val left = mapValueExpression(expr = comparison.left) ?: return null
+        val right = mapValueExpression(expr = comparison.right) ?: return null
+        return BuilderConditionNode.Comparison(
+            nodeId = nextId(prefix = "cmp"),
+            left = left,
+            operator = comparisonSymbol(operator = comparison.operator),
+            right = right,
+            ignoreCase = comparison.ignoreCase,
+            joinToPrevious = joinToPrevious,
+        )
+    }
+
+    // ── value expressions ─────────────────────────────────────────────────────
+
+    /** Maps one side of a comparison. Returns null for shapes the Builder cannot represent. */
+    private fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = when (expr) {
+        is LiteralValueAst -> when (val literal = expr.literal) {
+            is StringLiteral -> BuilderOperand.Literal(text = literal.value, numeric = false)
+            is NumberLiteral -> BuilderOperand.Literal(text = literal.value, numeric = true)
+            else -> null
+        }
+
+        is FieldAccessAst -> mapFieldAccess(expr = expr)
+
+        is FunctionCallValueAst -> {
+            val argument = expr.arguments.singleOrNull() as? FieldAccessAst
+            val path = argument?.let { mapPath(segments = it.path) }
+            if (path == null) null else BuilderOperand.Aggregate(function = expr.name.lowercase(), path = path)
+        }
+
+        is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
+    }
+
+    /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
+    private fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? =
+        mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
+
+    /**
+     * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step and
+     * each following [FilterSegmentAst] attaches to the step it filters.
+     */
+    private fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
+        val steps = mutableListOf<BuilderPathStep>()
+        for (segment in segments) {
+            when (segment) {
+                is FieldSegmentAst -> steps.add(BuilderPathStep(name = segment.name))
+                is FilterSegmentAst -> {
+                    val target = steps.lastOrNull() ?: return null
+                    val filter = mapFilter(expr = segment.expression) ?: return null
+                    steps[steps.lastIndex] = target.copy(filters = target.filters + filter)
+                }
+            }
+        }
+        return steps.ifEmpty { null }
+    }
+
+    /** Maps a filter expression. Only single comparisons against a literal are representable. */
+    private fun mapFilter(expr: ExpressionAst): BuilderFilter? = when (expr) {
+        is ComparisonExpressionAst -> {
+            val field = (expr.left as? FieldAccessAst)?.let { access ->
+                (access.path.singleOrNull() as? FieldSegmentAst)?.name
+            }
+            val value = (expr.right as? LiteralValueAst)?.literal?.let { literalText(lit = it) }
+            if (field == null || value == null) {
+                null
+            } else {
+                BuilderFilter(
+                    field = field,
+                    operator = comparisonSymbol(operator = expr.operator),
+                    value = value,
+                )
+            }
+        }
+
+        is ConditionAst -> literalText(lit = expr.value)?.let { value ->
+            BuilderFilter(
+                field = expr.field,
+                operator = normalizeOperator(operator = expr.operator),
+                value = value,
+            )
+        }
+
+        else -> null
+    }
+
+    /**
+     * Flattens an arithmetic tree into a term list. A sub-expression that binds differently from its
+     * parent becomes a nested parenthesized [BuilderOperand.Calc] term, which is what preserves
+     * `(a + b) * c` through the round-trip.
+     */
+    private fun mapArithmetic(expr: ArithmeticValueAst, parenthesized: Boolean): BuilderOperand? {
+        val terms = mutableListOf<BuilderTerm>()
+        if (!flattenArithmetic(expr = expr, into = terms)) return null
+        return BuilderOperand.Calc(terms = terms, parenthesized = parenthesized)
+    }
+
+    private fun flattenArithmetic(
+        expr: ArithmeticValueAst,
+        into: MutableList<BuilderTerm>,
+    ): Boolean {
+        val symbol = arithmeticSymbol(operator = expr.operator)
+
+        // The parser is left-associative, so the left spine continues the same chain as long as the
+        // child binds at the same precedence; otherwise it has to be parenthesized to stay faithful.
+        val left = expr.left
+        if (left is ArithmeticValueAst && samePrecedence(a = left.operator, b = expr.operator)) {
+            if (!flattenArithmetic(expr = left, into = into)) return false
+        } else {
+            val operand = mapOperandTerm(expr = left) ?: return false
+            into.add(BuilderTerm(operator = "", operand = operand))
+        }
+
+        val right = mapOperandTerm(expr = expr.right) ?: return false
+        into.add(BuilderTerm(operator = symbol, operand = right))
+        return true
+    }
+
+    /** Maps a term of an arithmetic chain, parenthesizing a nested chain of different precedence. */
+    private fun mapOperandTerm(expr: ValueExpressionAst): BuilderOperand? =
+        if (expr is ArithmeticValueAst) {
+            mapArithmetic(expr = expr, parenthesized = true)
+        } else {
+            mapValueExpression(expr = expr)
+        }
+
+    private fun samePrecedence(a: ArithmeticOperatorAst, b: ArithmeticOperatorAst): Boolean =
+        precedence(operator = a) == precedence(operator = b)
+
+    private fun precedence(operator: ArithmeticOperatorAst): Int = when (operator) {
+        ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
+        ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
+    }
+
+    private fun arithmeticSymbol(operator: ArithmeticOperatorAst): String = when (operator) {
+        ArithmeticOperatorAst.ADD -> "+"
+        ArithmeticOperatorAst.SUBTRACT -> "-"
+        ArithmeticOperatorAst.MULTIPLY -> "*"
+        ArithmeticOperatorAst.DIVIDE -> "/"
+    }
+
+    private fun comparisonSymbol(operator: ComparisonOperatorAst): String = when (operator) {
+        ComparisonOperatorAst.EQ -> "=="
+        ComparisonOperatorAst.NEQ -> "!="
+        ComparisonOperatorAst.GT -> ">"
+        ComparisonOperatorAst.GTE -> ">="
+        ComparisonOperatorAst.LT -> "<"
+        ComparisonOperatorAst.LTE -> "<="
+    }
+
+    // ── actions ───────────────────────────────────────────────────────────────
+
+    private fun mapAction(action: ActionAst): BuilderAction {
+        val args = action.arguments.map { literalToValue(lit = it)?.value ?: "?" }
+        return BuilderAction(
+            id = nextId(prefix = "act"),
+            name = action.name,
+            arguments = args,
+        )
+    }
+
+    // ── literals ──────────────────────────────────────────────────────────────
 
     private fun literalToValue(lit: LiteralAst): LiteralValue? = when (lit) {
         is StringLiteral -> LiteralValue(value = lit.value)
         is NumberLiteral -> LiteralValue(value = lit.value)
+        is BooleanLiteral -> LiteralValue(value = lit.value.toString())
         is ListLiteral -> {
             val items = lit.items.map { item ->
                 when (item) {
@@ -165,22 +375,76 @@ object RuleAstToBuilderMapper {
         else -> null
     }
 
-    private fun mapAction(action: ActionAst): BuilderAction {
-        val args = action.arguments.map { literalToValue(it)?.value ?: "?" }
-        return BuilderAction(
-            id = generateId(),
-            name = action.name,
-            arguments = args,
-        )
+    private fun literalText(lit: LiteralAst): String? = when (lit) {
+        is StringLiteral -> lit.value
+        is NumberLiteral -> lit.value
+        is BooleanLiteral -> lit.value.toString()
+        else -> null
     }
 
-    private fun normalizeOperator(operator: String): String = operator
+    /**
+     * Maps the DSL's word-form operators onto the symbols the Builder dropdowns offer, so a rule
+     * written as `amount gt 5` selects the `>` entry instead of showing a value that is not in the list.
+     */
+    private fun normalizeOperator(operator: String): String =
+        WORD_FORM_OPERATORS[operator.lowercase()] ?: operator
+
+    private val WORD_FORM_OPERATORS: Map<String, String> = mapOf(
+        "gt" to ">",
+        "greater_than" to ">",
+        "gte" to ">=",
+        "greater_or_equal" to ">=",
+        "lt" to "<",
+        "less_than" to "<",
+        "lte" to "<=",
+        "less_or_equal" to "<=",
+        "ne" to "!=",
+        "neq" to "!=",
+        "not_equals" to "!=",
+        "eq" to "equals",
+        "==" to "equals",
+        "=" to "equals",
+        "matches" to "regex",
+        "regexp" to "regex",
+        "starts_with" to "startsWith",
+        "ends_with" to "endsWith",
+        "containsany" to "containsAny",
+        "containsall" to "containsAll",
+    )
+
+    /** Names the construct that prevented mapping, so the lock message is specific. */
+    private fun unsupportedReason(expr: ExpressionAst): String {
+        val construct = findUnmappable(expr = expr) ?: "an expression"
+        return "Rule uses $construct, which the Builder cannot edit yet."
+    }
+
+    private fun findUnmappable(expr: ExpressionAst): String? = when (expr) {
+        is AndAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
+        is OrAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
+        is NotAst -> findUnmappable(expr = expr.child)
+        is ConditionAst -> if (literalToValue(lit = expr.value) == null) {
+            "an unsupported literal value"
+        } else {
+            null
+        }
+        is ComparisonExpressionAst -> describeUnmappableOperand(expr = expr.left)
+            ?: describeUnmappableOperand(expr = expr.right)
+    }
+
+    private fun describeUnmappableOperand(expr: ValueExpressionAst): String? {
+        if (mapValueExpression(expr = expr) != null) return null
+        return when {
+            expr is FunctionCallValueAst -> "a function argument the Builder cannot represent"
+            expr is FieldAccessAst -> "a field path the Builder cannot represent"
+            else -> "an unsupported value expression"
+        }
+    }
 
     // Using a simple counter instead of java.util.UUID so this code can
     // eventually move to commonMain without a JVM dependency.
     private var idCounter = 0
 
-    private fun generateId(): String = "nid-${idCounter++}"
+    private fun nextId(prefix: String): String = "$prefix-${idCounter++}"
 }
 
 /** Internal holder for a decomposed literal value. */

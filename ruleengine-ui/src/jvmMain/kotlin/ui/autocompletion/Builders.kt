@@ -171,7 +171,7 @@ private fun buildOperatorCompletions(
     return operators.map { op ->
         val placeholder = valuePlaceholderForOperator(
             op = op,
-            fieldType = def.type
+            def = def
         )
         val displayId = def.getDisplayId()
         CompletionItem(
@@ -194,7 +194,7 @@ private fun buildValuePlaceholderCompletions(
     ) ?: return emptyList()
     val placeholder = valuePlaceholderForOperator(
         op = operator,
-        fieldType = def.type
+        def = def
     )
     return listOf(
         CompletionItem(

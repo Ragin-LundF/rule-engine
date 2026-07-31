@@ -210,7 +210,10 @@ val schema = FieldSchemaLoader.loadFromReader(reader = reader, nameHint = "my-sc
 
 The returned `FieldSchema` contains:
 - `schema.name` — the schema name
-- `schema.fields` — a `Map<FieldId, FieldDefinition>`, each with `.type`, `.normalizers`, and `.operators`
+- `schema.fields` — a `Map<FieldId, FieldDefinition>`, each with `.type`, `.alias`, `.normalizers`, `.operators`, and `.fields`
+- `.fields` on a definition holds the nested members of a `COLLECTION` or `OBJECT` field, recursively.
+  It is empty for scalar fields, and also empty for a structure whose members were not declared. The
+  `FieldType.isStructure` extension property tells the two structure types apart from the rest.
 
 ### 4.2 Loading an Action Schema
 
@@ -225,6 +228,9 @@ val actions = ActionSchemaLoader.loadFromReader(reader = someReader)
 
 The returned `ActionSchema` contains:
 - `actions.actions` — a `Map<String, ActionDefinition>`, each with `argTypes: List<ActionArgType>`
+
+`argTypes` holds one entry for an action that takes a value, and is **empty** for an action that takes
+none (declared as `argTypes: []` and written in a rule as the bare action name).
 
 ### 4.3 Parsing Rules
 
@@ -289,12 +295,25 @@ Severity levels: `ERROR` (blocks loading), `WARNING` (informational).
 
 The validator checks:
 - All field names referenced in rules exist in the schema
+- Nested paths resolve against the declared members of a `COLLECTION` / `OBJECT` field, one segment at a
+  time, to any depth
+- Field names inside a path filter (`orders[status == "paid"]`) resolve against the members of the
+  element being filtered, not the top-level schema
 - All operators used in conditions are allowed for the field's type
-- Literal types match the field type (e.g. no string literal on a numeric field)
+- Literal types match the field type (e.g. no string literal on a numeric field, `true` / `false` for
+  booleans, and for a date field either ISO or the pattern the field declares in its `format`)
 - Valid regular expression patterns for `regex` operator
 - All actions are defined in the action schema (if provided)
-- Action argument types match the action schema definition
+- Action argument counts and types match the action schema definition
 - All rule IDs are unique
+
+Two deliberate asymmetries are worth knowing when you interpret diagnostics:
+
+- An unknown member of a **declared** structure is an `ERROR`; a path below an **undeclared** structure
+  is not checked at all.
+- An undeclared **root** on a multi-segment path is a `WARNING`, not an error, because the root may be a
+  structure read straight from the input data. `sum(unknownThing.amount) > 1` therefore loads, while a
+  single-segment `unknownThing > 1` fails.
 
 ### 4.5 Compiling Rules
 
@@ -361,8 +380,21 @@ The engine accepts any `Map<String, Any?>` — the keys are field names, the val
 | `TEXT` | `String` |
 | `INTEGER` | `Long`, `Int`, `Short`, `Byte` |
 | `DECIMAL` | `BigDecimal`, `Double`, `Float` |
-| `BOOLEAN` | `Boolean` |
+| `BOOLEAN` | `Boolean`, or the `String` `"true"` / `"false"` |
 | `STRING_SET` | `List<String>`, `Set<String>`, `Collection<String>` |
+| `DATE` | `LocalDate`, `LocalDateTime`, `Instant`, or a `String` in the field's format |
+| `DATE_TIME` | `LocalDateTime`, `LocalDate` (starts at midnight), `Instant`, or a `String` in the field's format |
+| `COLLECTION` | `List<Map<String, Any?>>` — a list of records |
+| `OBJECT` | `Map<String, Any?>` — a single record |
+
+A value that cannot be read as its declared type is treated as absent, which makes conditions on it
+`false` rather than raising an error. A `DATE` carrying a time is reduced to its calendar date; a
+`DATE_TIME` keeps it. An `Instant` is resolved at UTC, because the engine has no timezone concept.
+
+A `String` date is read with the pattern the field declares in its
+[`format`](field-schema.md#date-formats), or as ISO-8601 when it declares none. A value that is already
+a `LocalDate`, `LocalDateTime` or `Instant` carries no text, so no pattern applies to it — those types
+are always accepted as they are.
 
 ```kotlin
 import ruleengine.evaluator.context.RuleContext

@@ -9,6 +9,10 @@
 > - Manifest YAML file(s)
 >
 > **IMPORTANT — No Hallucination Rule:** Every field type, operator, normalizer, action argument type, file key, and DSL keyword used in generated output **must** come exclusively from the lists in this specification. Do **not** invent types, operators, keywords, or file keys that are not listed here.
+>
+> Every rule example in this document is executed by an automated test
+> (`ruleengine-core/src/test/kotlin/ruleengine/docs/SpecExampleTest.kt`), which parses, validates and
+> compiles it against the schema examples shown here. If an example ever stops working, that test fails.
 
 ---
 
@@ -48,7 +52,7 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 ### Key Principles
 
 - The engine **validates everything at load time**. Typos, unknown fields, wrong operators, and wrong argument types are all caught before any rule runs.
-- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic.
+- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
 - The engine **never modifies** input data. It only reads it and returns results.
 
 ---
@@ -106,13 +110,21 @@ Use **exactly** one of these values for the `type` key. No other values are vali
 | `decimal` | `number`, `bigdecimal` | Numbers with decimal places: amounts, prices, percentages |
 | `boolean` | `bool` | True/false flags |
 | `string_set` | `stringset`, `set` | Multiple string values per field: tags, labels, categories |
-| `date` | — | Dates (reserved for future use; limited operator support) |
+| `date` | — | Calendar dates, compared with quoted literals |
+| `date_time` | `datetime`, `timestamp` | Dates with a time of day, compared at time precision |
+| `collection` | `list`, `array` | A **list of objects**: transactions, order items, positions |
+| `object` | `map` | A **single nested record**: customer, address, counterparty |
 
 > **Rule:** Always use the canonical name in generated output. Aliases are only accepted as input when a user writes them; always write the canonical form in output files.
 
+> **Rule:** `collection` and `object` are **structure types**. They are never compared directly — you
+> navigate into them with a dotted path (`customer.country`) or aggregate over them
+> (`sum(transactions.amount)`). Writing `transactions equals "x"` is an error. See
+> [3.5 Nested Data](#35-nested-data--collections-and-objects).
+
 ### 3.2 Normalizers — Exhaustive List
 
-Normalizers apply **only** to `text` and `string_set` fields. They are applied in the listed order before any rule comparison. They are **not valid** on `integer`, `decimal`, `boolean`, or `date` fields.
+Normalizers apply **only** to `text` and `string_set` fields. They are applied in the listed order before any rule comparison. They are **not valid** on `integer`, `decimal`, `boolean`, `date`, `date_time`, `collection`, or `object` fields.
 
 | Name | What it does | Typical use |
 |---|---|---|
@@ -181,12 +193,104 @@ The `operators` list restricts which comparison operations rule authors may use 
 
 #### Boolean field operators (`boolean`)
 
-Boolean fields are compared directly in conditions (no explicit operator list is used in the schema; the comparison is implicit in the rule). Use `equals` with `true` or `false`:
+`equals` is the **only** operator for boolean fields. The value is the bare word `true` or `false` — never quoted, never `"yes"` / `1`.
+
+| Operator | Meaning | Example in a rule |
+|---|---|---|
+| `equals` | Flag has this value | `isActive equals true` |
+
 ```
 isActive equals true
+isActive equals false
+not isActive equals true      # equivalent to `isActive equals false` for a field that is present
 ```
 
-> **Rule:** Do **not** use text operators (`contains`, `startsWith`, etc.) on numeric or boolean fields. Do **not** use numeric operators on text fields. Do **not** use `between` on text fields. Do **not** use `containsAny` / `containsAll` on non-`string_set` fields.
+> **Note:** `not isActive equals true` also matches records where the field is **absent**, because a
+> missing value makes the inner condition false. Use `isActive equals false` when the flag must be
+> present and false.
+
+#### Date field operators (`date`, `date_time`)
+
+Both types use the same six operators. There is no separate "before" or "after" operator: **`lt` is
+"before" and `gt` is "after"**.
+
+Literals are always **quoted**. By default they are ISO-8601 — `"2024-01-31"` for a `date`,
+`"2024-06-15T09:30:00"` for a `date_time` — and any other spelling is rejected at load time. A field
+that declares a [`format`](#the-format-key) uses that pattern instead.
+
+A `date` comparison is by calendar date: a value carrying a time is truncated to its date. A
+`date_time` comparison keeps the time, so `bookedAt gt "2024-06-15T09:00:00"` is false for a value at
+exactly 09:00:00 and true one second later.
+
+| Operator | Symbolic alias | Meaning | Example in a rule |
+|---|---|---|---|
+| `equals` | `==` or `=` | Same day (`date`) / same instant (`date_time`) | `bookingDate equals "2024-06-15"` |
+| `gt` | `>` | After | `bookingDate gt "2024-01-01"` |
+| `gte` | `>=` | On or after | `bookingDate >= "2024-01-01"` |
+| `lt` | `<` | Before | `bookingDate lt "2020-01-01"` |
+| `lte` | `<=` | On or before | `bookingDate <= "2024-12-31"` |
+| `between` | — | Inclusive range | `bookingDate between "2024-01-01" "2024-12-31"` |
+
+> **Rule:** Do **not** use text operators (`contains`, `startsWith`, etc.) on numeric, boolean, or date fields. Do **not** use numeric operators on text fields. Do **not** use `between` on text fields. Do **not** use `containsAny` / `containsAll` on non-`string_set` fields. Do **not** use any operator directly on a `collection` or `object` field.
+
+#### The `format` key
+
+A `date` or `date_time` field may declare a `format`: a
+[`java.time.format.DateTimeFormatter`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/time/format/DateTimeFormatter.html)
+pattern such as `dd.MM.yyyy`. It is the field's **only** date format — it governs both the incoming data
+value and the literal written in every rule for that field:
+
+```yaml
+schema: invoices-v1
+
+fields:
+  dueDate:
+    type: date
+    format: "dd.MM.yyyy"
+  paidAt:
+    type: date_time
+    format: "dd.MM.yyyy HH:mm"
+```
+
+```
+rule "overdue-invoice" {
+  when
+    dueDate lt "31.01.2024"
+
+  then
+    flag "overdue"
+}
+```
+
+> **Rule:** A declared `format` **replaces** ISO, it does not extend it. With the schema above,
+> `dueDate equals "2024-01-31"` is an error and the input value `"2024-01-31"` does not match.
+> Omit `format` whenever the data is ISO-8601 — that is the default and needs no declaration.
+
+| Constraint | Notes |
+|---|---|
+| Valid on `date` and `date_time` only | A `format` on any other type is rejected when the schema loads |
+| Must be a usable pattern | Rejected at load time when it is malformed (`QQQQQQ`) or cannot represent a complete value (`MM-dd` on a `date`, `yyyy-MM-dd` on a `date_time`) |
+| Applies to text values | An input already typed as a date (a `LocalDate`, `LocalDateTime` or `Instant` handed to the engine by the host application) carries no text, so no pattern applies to it |
+| Prefer separators | An all-digit pattern such as `yyyyMMdd` works in a hand-written rule but is not round-trip-safe in the visual Builder, which cannot tell that value from a number |
+
+> **Note:** A `format` on a **nested** member of a `collection` / `object` is accepted and checked, but
+> has no effect at runtime: nested paths are compared as raw text (see
+> [3.5 Nested Data](#35-nested-data--collections-and-objects)).
+
+#### Named operators vs. symbolic operators — important
+
+Both spellings exist, and they do **not** take the same path through the engine:
+
+| Comparison | Write | Why |
+|---|---|---|
+| A field against a literal | **Named**: `equals`, `gt`, `gte`, `lt`, `lte`, `between`, `contains`, … | Fully validated: the field's declared `operators:` list is enforced, the literal type is checked, and text normalizers are applied to the literal as well as the field |
+| A value expression (aggregate or arithmetic) | **Symbolic**: `==`, `!=`, `>`, `>=`, `<`, `<=` | Required — the engine only routes a condition through the expression engine for symbolic operators |
+
+> **Rule:** For a plain field-vs-literal comparison, prefer the **named** operator.
+> `==` and `!=` always route to the expression engine, which does **not** enforce the field's declared
+> `operators:` list and does **not** normalize the literal. On a field with a `lowercase` normalizer,
+> `counterparty equals "ACME"` matches the value `"acme"`, while `counterparty == "ACME"` does **not**.
+> `>`, `>=`, `<`, `<=` on a plain field are equivalent to their named forms.
 
 ### 3.4 Field Schema Example
 
@@ -262,7 +366,92 @@ fields:
     operators:
       - containsAny
       - containsAll
+
+  # Yes/no flag
+  isActive:
+    type: boolean
+    operators:
+      - equals
+
+  # Calendar date — ISO literals, because no `format` is declared
+  bookingDate:
+    type: date
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # Date with a time of day
+  bookedAt:
+    type: date_time
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
 ```
+
+### 3.5 Nested Data — Collections and Objects
+
+Input data is often not flat: a record may carry a list of transactions, or a nested customer object.
+Declare those with `collection` (a list) or `object` (a single record) and a nested `fields:` block.
+
+`fields:` is **recursive** — a nested member may itself be a `collection` or `object` with its own
+`fields:`, so nesting depth is unlimited.
+
+```yaml
+schema: orders-v1
+
+fields:
+
+  orders:
+    type: collection          # a list of order objects
+    fields:
+      status:
+        type: text
+      total:
+        type: decimal
+      customer:
+        type: object          # an object inside a collection
+        fields:
+          country:
+            type: text
+      items:
+        type: collection      # a collection inside a collection
+        fields:
+          sku:
+            type: text
+          price:
+            type: decimal
+```
+
+Given that schema, rules can navigate and aggregate to any declared depth:
+
+```
+orders.customer.country == "DE"
+count(orders) > 3
+sum(orders.total) > 1000
+sum(orders[status == "paid"].items[price > 0].price) > 500
+```
+
+#### Declaring nested members is optional but recommended
+
+| Nested `fields:` declared | What you get |
+|---|---|
+| Yes | Member names are validated, wrong nesting is an error at load time, leaf types are known, and the visual Builder offers the members in its dropdowns |
+| No | Paths still work at runtime, but nothing below the declared field is checked — a typo like `orders.totl` goes unnoticed |
+
+> **Rule:** When the business description mentions a list of records or a nested record, declare it as
+> `collection` / `object` **with** its members. Only omit the members when the data shape is genuinely
+> unknown.
+
+> **Rule:** `normalizers:` and `operators:` are not valid on a `collection` or `object` field itself.
+> Declare them on the nested scalar members instead.
 
 ---
 
@@ -273,10 +462,11 @@ fields:
 ```yaml
 actions:
   <actionName>:             # lowercase hyphenated or camelCase identifier, must be unique
-    argTypes: [<argType>]   # REQUIRED — a list with exactly ONE element from the argType table
+    argTypes: [<argType>]   # REQUIRED — one element from the argType table, or [] for no argument
 ```
 
-> **Important:** Each action accepts **exactly one argument**. The `argTypes` list always contains exactly one entry.
+> **Important:** An action takes **at most one argument**. `argTypes` holds exactly one entry for an
+> action that takes a value, or is **empty** (`[]`) for an action that is just a signal.
 
 ### 4.1 Argument Types — Exhaustive List
 
@@ -285,8 +475,13 @@ actions:
 | `string` | Any text in double quotes | `label "rent"` |
 | `integer` | A whole number (no quotes) | `score 10` |
 | `decimal` | A number with decimal places (no quotes) | `threshold 0.75` |
+| *(none)* | `argTypes: []` — the rule writes the bare action name | `suppress` |
 
 > **Rule:** Only `string`, `integer`, and `decimal` are valid argument types. No other types exist for actions.
+
+> **Rule:** The number of arguments in a rule must match `argTypes` exactly. An action declared
+> `argTypes: [string]` must be given one quoted value; an action declared `argTypes: []` must be given
+> none. `argTypes` never holds more than one entry.
 
 ### 4.2 Action Schema Example
 
@@ -306,6 +501,8 @@ actions:
     argTypes: [string]
   notify:
     argTypes: [string]
+  suppress:
+    argTypes: []            # a signal with no argument
 ```
 
 ### 4.3 Commonly Used Action Names (by convention)
@@ -321,6 +518,7 @@ You may define any action names that fit the domain. These are widely used conve
 | `alert` | `string` | Trigger an alert with a named reason |
 | `reject` | `string` | Signal that the item should be rejected, with a reason |
 | `notify` | `string` | Trigger a notification |
+| `suppress` | *(none)* | Drop the record from downstream processing |
 
 ---
 
@@ -331,7 +529,7 @@ You may define any action names that fit the domain. These are widely used conve
 - Extension: **`.rule`**
 - A single `.rule` file may contain **one or more rules**.
 - Lines starting with `#` are **comments** and are ignored.
-- Rules are evaluated **independently** — all matching rules fire; there is no stop-first or priority mechanism.
+- Rules are evaluated **independently** — all matching rules fire; there is no stop-first or priority mechanism. Order is still deterministic: rules are evaluated in declaration order within a file (and across files in manifest `rules:` order), and matches are returned in that order.
 
 ### 5.2 Rule structure
 
@@ -393,9 +591,42 @@ tags containsAny ["vip", "premium"]
 tags containsAll ["verified", "active"]
 ```
 
+#### Boolean condition examples
+
+```
+isActive equals true
+isActive equals false
+```
+
+#### Date condition examples
+
+```
+bookingDate equals "2024-06-15"
+bookingDate >= "2024-01-01"
+bookingDate between "2024-01-01" "2024-12-31"
+bookedAt gt "2024-06-15T09:00:00"
+dueDate lt "31.01.2024"
+```
+
+> Date values are always quoted. Without a `format` they are ISO — `YYYY-MM-DD` for a `date`,
+> `YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
+> `bookingDate equals "15.06.2024"` are both rejected at load time. A field that declares a
+> [`format`](#the-format-key) uses that pattern instead, which is why `dueDate` above is written
+> `"31.01.2024"`.
+
+#### Nested path condition examples
+
+When a field is declared `collection` or `object`, navigate into it with a dotted path:
+
+```
+orders.customer.country == "DE"
+```
+
+For anything that aggregates over a collection, see [5.8 Value Expressions](#58-value-expressions--aggregate-functions-and-arithmetic).
+
 #### The `ignoreCase` modifier
 
-For text operators (`equals`, `contains`, `startsWith`, `endsWith`, `regex`), append `ignoreCase` after the value to make the comparison case-insensitive:
+For text operators (`equals`, `contains`, `startsWith`, `endsWith`, `regex`) and string-set operators, append `ignoreCase` after the value to make the comparison case-insensitive:
 
 ```
 counterparty equals "Netflix" ignoreCase
@@ -403,11 +634,16 @@ counterparty equals "Netflix" ignoreCase
 
 This is useful when a field does **not** have a `lowercase` or `uppercase` normalizer but you still need case-insensitive matching.
 
+> **Rule:** `ignoreCase` only applies to `text` and `string_set` conditions. On a numeric, boolean, or
+> date condition it is accepted but does nothing — do not write it there. It also cannot be combined
+> with a symbolic operator: `counterparty == "Netflix" ignoreCase` is a **parse error**. Use the named
+> operator (`equals`) when you need `ignoreCase`.
+
 ### 5.4 Combining conditions
 
 #### AND — all conditions must be true
 
-Use the `and` keyword between conditions, or simply place conditions on consecutive lines (implicit AND):
+Use the `and` keyword between conditions:
 
 ```
 rule "high-risk" {
@@ -419,6 +655,23 @@ rule "high-risk" {
     flag "review"
 }
 ```
+
+Conditions on **consecutive lines** are also joined with AND, with no keyword needed. These two rules
+are identical:
+
+```
+rule "high-risk-implicit" {
+  when
+    country equals "ng"
+    amount >= 10000
+
+  then
+    flag "review"
+}
+```
+
+> **Rule:** Prefer the explicit `and` in generated output. It reads unambiguously and survives
+> reformatting; the implicit form depends on the line break.
 
 #### OR — at least one condition must be true
 
@@ -485,6 +738,12 @@ then
 
 - **String arguments** are always in double quotes.
 - **Numeric arguments** are plain numbers — no quotes.
+- **Actions declared `argTypes: []`** are written as the bare name, with nothing after it:
+  ```
+  then
+    suppress
+    tag "noise"
+  ```
 - A rule may have **any number of actions**.
 - All declared actions are returned when the rule matches.
 
@@ -589,12 +848,41 @@ A dot-separated path projects a field from each element of a list:
 transactions.amount   →  [100.00, 90.00, ...]
 ```
 
-A filter in `[...]` selects only matching elements before aggregation:
+Paths may be **any depth**, following the nested `fields:` you declared in the schema
+([3.5](#35-nested-data--collections-and-objects)):
+
+```
+sum(orders.items.price)
+orders.customer.country
+```
+
+> **Important — projection flattens.** `sum(orders.items.price)` is the sum across **all items of all
+> orders**, not a per-order total. Every level is flattened into one list of values. The engine has no
+> grouping construct; if you need a per-parent figure, the input data must supply it as a field.
+
+A filter in `[...]` selects only matching elements. **Each** segment of a path may carry its own
+filter:
 
 ```
 transactions[label == "risk"].amount
 transactions[amount > 0]
+orders[status == "paid"].items[price > 0].price
 ```
+
+Field names inside `[...]` refer to fields of the **element being filtered**, not to top-level fields.
+
+#### Operators allowed inside a filter
+
+A filter is a single comparison. This is narrower than a normal condition:
+
+| Allowed inside `[...]` | Not allowed inside `[...]` |
+|---|---|
+| `==`, `!=`, `>`, `>=`, `<`, `<=` | `and`, `or`, `not` |
+| named `gt`, `gte`, `lt`, `lte` | `equals`, `contains`, `in`, `between`, `regex`, `containsAny`, `containsAll` |
+
+> **Rule:** Inside a filter, write equality as `==`, never as `equals`. To require two conditions on
+> the same element, chain filters: `transactions[label == "risk"][amount > 100]`.
+> Violations of this table are reported when the rules are compiled, not as validation warnings.
 
 #### Examples
 
@@ -721,13 +1009,25 @@ This section describes how to map common business descriptions to the technical 
 | A count, year, quantity, integer score | `integer` |
 | A yes/no flag, enabled/disabled state | `boolean` |
 | A list of tags, labels, or categories | `string_set` |
-| A date or date range | `date` |
+| A date | `date` |
+| A date with a time of day ("booked at 09:30") | `date_time` |
+| A date in a non-ISO format ("31.01.2024") | `date` / `date_time` + `format:` |
+| A **list of records** ("each transaction has an amount and a label") | `collection` + nested `fields:` |
+| A **single nested record** ("the customer has a country and an IBAN") | `object` + nested `fields:` |
 
 **Ask yourself for each field:**
 - Is it free text or a structured code? → `text`
 - Does it have decimal places? → `decimal`, otherwise `integer`
-- Can it hold multiple values at once? → `string_set`
 - Is it only ever true or false? → `boolean`
+- Is it a calendar date? → `date`, or `date_time` when the time of day matters
+- Does the data spell dates in something other than ISO? → declare a `format:` on that field
+- Can it hold multiple **plain strings** at once? → `string_set`
+- Is it a list of things that each have their **own fields**? → `collection`, and declare those fields
+- Is it one nested record with its own fields? → `object`, and declare those fields
+
+> **Distinguishing `string_set` from `collection`:** a list of bare strings (`["vip", "premium"]`) is a
+> `string_set`. A list of objects (`[{"amount": 100, "label": "risk"}]`) is a `collection`. Rules
+> aggregate over a `collection`; they only test membership on a `string_set`.
 
 ### 7.2 Mapping business rule statements to DSL conditions
 
@@ -987,18 +1287,32 @@ The engine validates everything at load time and rejects the following. Never ge
 | Constraint | Example of invalid usage |
 |---|---|
 | Unknown field type | `type: number_list` (not a valid type) |
-| Normalizer on a non-text field | Adding `lowercase` to an `integer` field |
 | Unknown normalizer name | `normalizers: [strip]` (`strip` does not exist; use `trim`) |
-| Unknown operator name | `operators: [matches]` (`matches` does not exist; use `regex`) |
-| Operator not valid for the field type | `operators: [contains]` on an `integer` field |
+| Unknown operator name | `operators: [greaterThan]` (`greaterThan` does not exist; use `gt`) |
+| Nested `fields:` on a scalar type | `amount: {type: decimal, fields: {...}}` — only `collection` and `object` may nest |
+| `format` on a non-date field | `purpose: {type: text, format: "dd.MM.yyyy"}` — only `date` and `date_time` accept it |
+| Malformed `format` pattern | `format: "QQQQQQ"` (not a valid `DateTimeFormatter` pattern) |
+| `format` that cannot represent the value | `format: "MM-dd"` on a `date` (no year), `format: "yyyy-MM-dd"` on a `date_time` (no time) |
+| Empty `format` | `format: ""` — omit the key instead to get ISO |
+
+> **Operator names must be canonical.** Write the spelling from the operator tables in
+> [3.3](#33-operators--exhaustive-list-by-type): `startsWith`, not `starts_with` or `startswith`;
+> `regex`, not `matches`. The engine accepts those variants as aliases so older schemas keep loading,
+> but generated output should always use the canonical name. A name the engine has no implementation for
+> — `greaterThan`, `not_contains`, `isEmpty` — is rejected when the schema loads.
+>
+> **A declared `operators:` list is a whitelist, not a type check.** Listing an operator the field's type
+> does not support (`operators: [contains]` on an `integer`) still loads; the error surfaces on the rule
+> that uses it. Declaring only a subset restricts the field to that subset, so a rule using any other
+> operator is rejected even though the type supports it.
 
 ### Action schema constraints
 
 | Constraint | Example of invalid usage |
 |---|---|
 | Unknown argument type | `argTypes: [bool]` (use `string`, `integer`, or `decimal`) |
-| More than one argument type | `argTypes: [string, integer]` (exactly one is allowed) |
-| Empty argTypes list | `argTypes: []` (must have exactly one entry) |
+| More than one argument type | `argTypes: [string, integer]` (at most one is allowed) |
+| Argument count mismatch in a rule | `suppress "x"` when `suppress` is declared `argTypes: []`, or a bare `label` when `label` expects a string |
 
 ### Rule DSL constraints
 
@@ -1011,6 +1325,21 @@ The engine validates everything at load time and rejects the following. Never ge
 | Action not defined in action schema | `notify "x"` when `notify` is not in the action schema |
 | `between` on a text field | `purpose between "a" "z"` (not valid) |
 | List literal on a non-`in` / non-`containsAny/All` operator | `purpose equals ["a", "b"]` |
+| Quoted or non-boolean value on a boolean field | `isActive equals "true"`, `isActive equals 1` |
+| Non-ISO date literal on a field with no `format` | `bookingDate equals "15.06.2024"` (use `"2024-06-15"`) |
+| ISO literal on a field that declares a `format` | `dueDate equals "2024-01-31"` when `dueDate` declares `format: "dd.MM.yyyy"` (use `"31.01.2024"`) |
+| Date-only literal on a `date_time` field | `bookedAt equals "2024-06-15"` (use `"2024-06-15T00:00:00"`) |
+| Comparing a structure directly | `transactions equals "x"` — navigate into it or aggregate over it |
+| Unknown member of a declared structure | `orders.totl` when `orders` declares `total` |
+| `and` / `or` inside a filter | `transactions[a > 1 and b > 2]` — chain filters instead |
+| Named `equals` inside a filter | `transactions[label equals "risk"]` (use `==`) |
+| Text operator inside a filter | `transactions[label contains "risk"]` |
+| `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
+
+> **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
+> produces a warning and the rule still loads, because the root may be an undeclared structure read
+> straight from the input. `sum(unknownThing.amount) > 1` is therefore accepted with a warning, while a
+> single-segment `unknownThing > 1` is an error. Declare the structure to get real checking.
 
 ### Manifest constraints
 
@@ -1030,15 +1359,21 @@ The engine validates everything at load time and rejects the following. Never ge
 
 - [ ] Every data field the business analyst described has an entry under `fields:`.
 - [ ] Each field has exactly one `type:` from the valid types list.
-- [ ] Normalizers are only applied to `text` or `string_set` fields.
+- [ ] Lists of records are `collection`, nested records are `object`, and their members are declared
+      under a nested `fields:`.
+- [ ] Normalizers are only applied to `text` or `string_set` fields — never to a `collection` or
+      `object` itself.
 - [ ] All normalizer names come from the six built-in normalizers.
 - [ ] All operator names match the valid operators for the field's type.
+- [ ] No `operators:` or `normalizers:` on a `collection` / `object` field.
+- [ ] A date whose time of day matters is a `date_time`, not a `date`.
+- [ ] `format:` appears only on `date` / `date_time` fields, and only when the data is not ISO-8601.
 - [ ] The schema has a versioned `schema:` name (e.g. `my-schema-v1`).
 
 ### Checklist: Action Schema
 
 - [ ] Every outcome the business analyst described has a named action.
-- [ ] Every action has exactly one entry in `argTypes:`.
+- [ ] Every action has one entry in `argTypes:`, or `[]` when it takes no argument.
 - [ ] All arg types are `string`, `integer`, or `decimal`.
 
 ### Checklist: Rule Files
@@ -1046,11 +1381,19 @@ The engine validates everything at load time and rejects the following. Never ge
 - [ ] Every rule has a unique, descriptive ID.
 - [ ] Every field name in every condition exists in the field schema.
 - [ ] Every operator used in a condition is in the field's allowed operators list.
-- [ ] `between` is only used on `integer` or `decimal` fields (two numeric bounds, no quotes).
+- [ ] Named operators (`equals`, `gt`, …) are used for field-vs-literal comparisons; symbolic
+      operators (`==`, `>`, …) only where a value expression is involved.
+- [ ] `between` is only used on `integer`, `decimal`, `date` or `date_time` fields — two numeric bounds
+      without quotes, or two quoted date values.
+- [ ] Boolean values are the bare words `true` / `false`; date values are quoted, in the field's
+      declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise.
 - [ ] `in` / `containsAny` / `containsAll` use a JSON-style list: `["a", "b"]`.
-- [ ] Every action in every `then` block is defined in the action schema.
-- [ ] String action arguments are in double quotes; numeric arguments have no quotes.
+- [ ] Filters inside `[...]` use only `==`, `!=`, `>`, `>=`, `<`, `<=` and contain no `and` / `or`.
+- [ ] Every action in every `then` block is defined in the action schema, with a matching argument count.
+- [ ] String action arguments are in double quotes; numeric arguments have no quotes; zero-argument
+      actions are written bare.
 - [ ] Parentheses are used wherever AND/OR grouping could be ambiguous.
+- [ ] `and` is written explicitly rather than relying on the implicit line-break AND.
 - [ ] Related rules are grouped in thematic files.
 - [ ] Each file has a comment header explaining its purpose.
 

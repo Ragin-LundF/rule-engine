@@ -11,7 +11,7 @@ rule "critically-slow-request" {
 
 rule "slow-request" {
   when
-    responseTime between 2000 and 5000
+    responseTime between 2000 5000
 
   then
     tag "slow"

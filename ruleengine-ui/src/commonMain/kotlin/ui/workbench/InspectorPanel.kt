@@ -86,6 +86,7 @@ private fun countLeafConditions(nodes: List<MutableConditionNode>): Int {
     return nodes.sumOf { node ->
         when (node) {
             is MutableConditionNode.Leaf -> 1
+            is MutableConditionNode.ComparisonLeaf -> 1
             is MutableConditionNode.Group -> countLeafConditions(node.nodes)
         }
     }
@@ -103,6 +104,8 @@ private fun findLeafCondition(
             is MutableConditionNode.Leaf -> {
                 if (node.inner.id == id) return node.inner
             }
+            // Comparison rows are inspected in the row itself, not in the inspector panel.
+            is MutableConditionNode.ComparisonLeaf -> Unit
             is MutableConditionNode.Group -> {
                 val found = findLeafCondition(node.nodes, id)
                 if (found != null) return found

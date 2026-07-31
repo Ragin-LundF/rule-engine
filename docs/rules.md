@@ -12,8 +12,8 @@ The syntax is intentionally simple and close to natural language, so that busine
 
 - A `.rule` file can contain **one or more rules**.
 - Each rule has a unique **ID** (a string in double quotes).
-- Rules are evaluated **independently** — the engine checks every rule against the input and returns all that match.
-- The order of rules in a file does not affect results.
+- Rules are evaluated **independently** — the engine checks every rule against the input and returns *all* that match. There is no priority or stop-first logic; one rule matching never suppresses another.
+- Evaluation order **is deterministic**: rules run in the order they are declared in the file, and matches are returned in that same order. Across multiple files, the [manifest](./manifest.md) `rules:` list order applies first, then declaration order within each file. This does not change *which* rules match — only the order in which matches are returned.
 
 ---
 
@@ -91,6 +91,84 @@ The fields and allowed operators come from the [Field Schema](./field-schema.md)
 | `containsAny` | `tags containsAny ["vip", "premium"]` | At least one listed value is in the set |
 | `containsAll` | `tags containsAll ["verified", "active"]` | All listed values are in the set |
 
+### Boolean Conditions
+
+| Operator | Example | Meaning |
+|---|---|---|
+| `equals` | `isActive equals true` | The flag has this value |
+
+`equals` is the only operator, and the value is the bare word `true` or `false` — never quoted.
+
+```
+isActive equals true
+isActive equals false
+```
+
+> **Note:** `not isActive equals true` also matches records where the field is missing, because a
+> missing value makes the inner condition false. Write `isActive equals false` when the flag must be
+> present and false.
+
+### Date Conditions
+
+There is no `before` or `after` operator: **`lt` means before and `gt` means after.**
+
+| Operator | Symbolic form | Example | Meaning |
+|---|---|---|---|
+| `equals` | `==` | `bookingDate equals "2024-06-15"` | Same day |
+| `gt` | `>` | `bookingDate > "2024-01-01"` | After |
+| `gte` | `>=` | `bookingDate >= "2024-01-01"` | On or after |
+| `lt` | `<` | `bookingDate < "2020-01-01"` | Before |
+| `lte` | `<=` | `bookingDate <= "2024-12-31"` | On or before |
+| `between` | — | `bookingDate between "2024-01-01" "2024-12-31"` | Inclusive date range |
+
+A `date_time` field uses the same operators and compares the time of day too:
+
+```
+bookedAt gt "2024-06-15T09:00:00"
+bookedAt between "2024-06-15T09:00:00" "2024-06-15T17:00:00"
+```
+
+Dates are always quoted. Without a declared format they are ISO — `YYYY-MM-DD` for a `date`,
+`YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
+`bookingDate equals "15.06.2024"` are both rejected when the rules load.
+
+When the schema declares a [`format`](field-schema.md#date-formats) for the field, that pattern is what
+the rule must use instead:
+
+```
+dueDate lt "31.01.2024"
+```
+
+### Conditions on Nested Data
+
+When the schema declares a field as a `collection` or `object`, a condition can navigate into it:
+
+```
+orders.customer.country == "DE"
+```
+
+To reason about a whole list — a total, an average, a count of matching elements — use a
+[value expression](./expressions.md):
+
+```
+sum(orders[status == "paid"].total) > 1000
+```
+
+### Named Operators vs Symbolic Operators
+
+Most operators can be written as a word (`equals`, `gt`) or a symbol (`==`, `>`). They are not
+interchangeable in one respect:
+
+| Comparison | Write | Why |
+|---|---|---|
+| A field against a value | **Named** — `equals`, `gt`, `contains`, … | Fully checked: the field's declared operator list applies, the value type is verified, and text normalizers are applied to the value as well as the field |
+| An aggregate or calculation | **Symbolic** — `==`, `!=`, `>`, `>=`, `<`, `<=` | Required; see [Value Expressions](./expressions.md) |
+
+> **Important:** `==` and `!=` always go through the value-expression engine, which does not apply
+> normalizers to the value. On a field with a `lowercase` normalizer, `counterparty equals "ACME"`
+> matches the stored value `acme`, but `counterparty == "ACME"` does not. Use the word form for plain
+> field comparisons. `>`, `>=`, `<` and `<=` behave the same in both spellings.
+
 ### Field Notation and Aliases
 
 Rules can use either the **full dot-notation path** or a **field alias** to refer to data fields. 
@@ -155,6 +233,23 @@ rule "high-risk-country" {
 ```
 
 Both `country equals "ng"` **and** `amount >= 10000` must be true for the rule to match.
+
+Conditions on consecutive lines are joined with AND automatically, so the `and` keyword can be left
+out. These two blocks mean the same thing:
+
+```
+when
+  country equals "ng"
+  and amount >= 10000
+```
+
+```
+when
+  country equals "ng"
+  amount >= 10000
+```
+
+Writing `and` explicitly is clearer and does not depend on the line break, so prefer it.
 
 ### OR — At least one condition must be true
 
@@ -266,6 +361,14 @@ then
 
 String arguments are always in double quotes.
 Numeric arguments are written as plain numbers.
+
+An action declared in the schema with `argTypes: []` takes no argument and is written as the bare name:
+
+```
+then
+  suppress
+  tag "noise"
+```
 
 A rule can have **any number of actions**.
 All of them are returned when the rule matches.
@@ -524,8 +627,17 @@ rule "flagged-customer" {
 | Using an operator not allowed for a field | `Operator 'contains' is not allowed for field 'amount'` | Use a numeric operator like `gt`, `gte`, `lt`, `lte`, `between` |
 | Using an action not defined in the action schema | `Unknown action 'notify'` | Add `notify` to the action schema YAML |
 | Two rules with the same ID | `Duplicate rule id: rent-payment` | Give each rule a unique ID |
-| `between` used on a text field | `Operator 'between' is not applicable to text field` | Use `between` only on `integer` or `decimal` fields |
+| `between` used on a text field | `Operator 'between' is not applicable to text field` | Use `between` only on `integer`, `decimal`, `date` or `date_time` fields |
 | Wrong argument type for an action | `Action 'score' argument 0 expects INTEGER` | Use a number, not a quoted string: `score 10` not `score "10"` |
+| Quoting a boolean value | `Field 'isActive' expects 'true' or 'false'` | Write `isActive equals true`, without quotes |
+| A date in the wrong format | `Invalid date '15.06.2024' … expected ISO format YYYY-MM-DD` | Use `"2024-06-15"` |
+| An ISO date on a field that declares a format | `Invalid date '2024-01-31' … expected format 'dd.MM.yyyy' (e.g. "31.01.2024")` | Write the value in the field's own format |
+| Comparing a collection or object directly | `Field 'orders' is a collection and cannot be compared directly` | Navigate into it (`orders.total`) or aggregate over it (`sum(orders.total)`) |
+| Misspelling a member of a declared collection | `Unknown field 'totl' in 'orders.totl'` | Check the nested `fields:` block in the schema |
+| `and` inside a path filter | `Only comparison expressions are supported in filter segments` | Chain filters: `orders[status == "paid"][total > 100]` |
+| `equals` inside a path filter | `Operator 'equals' is not supported in filter segments` | Use `==` inside `[...]` |
+| `ignoreCase` after a symbolic operator | `Expected 'then' block` | Use the word form: `name equals "Acme" ignoreCase` |
+| An action given the wrong number of arguments | `Action 'suppress' expects 0 arguments but got 1` | Match the action's `argTypes` — a bare name when it is `[]` |
 
 ---
 
@@ -537,6 +649,8 @@ rule "flagged-customer" {
 - **Test incrementally** — validate rules against sample data before deploying
 - **Use the `ignoreCase` modifier** instead of duplicating rules for different capitalizations
 - **Prefer `in` over many `or equals`** — `sepaCode in ["CCRD", "DCRD", "PMNT"]` is cleaner than three separate conditions
+- **Write `and` explicitly** — consecutive lines are joined with AND automatically, but the keyword makes the intent obvious and survives reformatting
+- **Use the word form for field comparisons** — `equals` rather than `==`, so normalizers and the schema's operator list both apply
 - **Mirror the extraction pattern in the `when` condition** — if you use `extract ref regex("TXN-([0-9]+)", 1)` in the `then` block, guard the rule with `reference regex "TXN-[0-9]+"` so the extraction only runs when a match is guaranteed
 - **Extraction always produces a string** — only use `$1` as the argument for `string`-typed actions; it cannot be used with `integer` or `decimal` action arguments
 

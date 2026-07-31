@@ -1,6 +1,7 @@
 package ui.diagrams
 
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.ListLiteral
@@ -12,6 +13,7 @@ internal fun formatLiteral(lit: LiteralAst): String {
     return when (lit) {
         is StringLiteral  -> "\"${lit.value}\""
         is NumberLiteral  -> lit.value
+        is BooleanLiteral -> lit.value.toString()
         is ListLiteral    -> "[${lit.items.joinToString(", ") { formatLiteral(it) }}]"
         is BetweenLiteral -> "${lit.low}..${lit.high}"
         is ExtractionRefLiteral -> $$"$$${lit.groupIndex}"

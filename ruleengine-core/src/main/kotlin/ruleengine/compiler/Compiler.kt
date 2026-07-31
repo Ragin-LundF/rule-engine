@@ -1,5 +1,6 @@
 package ruleengine.compiler
 
+import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.DecimalOperator
 import ruleengine.compiler.operators.IntegerOperator
 import ruleengine.compiler.operators.OperatorUtils
@@ -9,6 +10,9 @@ import ruleengine.compiler.operators.TextRegexOperator
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.FieldType.BOOLEAN
+import ruleengine.core.domain.FieldType.DATE
+import ruleengine.core.domain.FieldType.DATE_TIME
 import ruleengine.core.domain.FieldType.DECIMAL
 import ruleengine.core.domain.FieldType.INTEGER
 import ruleengine.core.domain.FieldType.STRING_SET
@@ -17,6 +21,7 @@ import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
@@ -32,6 +37,7 @@ import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
+import ruleengine.evaluator.compiled.BooleanEqualsExpression
 import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
@@ -290,6 +296,18 @@ object Compiler {
                 normalizerRegistry = normalizerRegistry
             )
 
+            BOOLEAN -> compileBooleanCondition(
+                cond = cond,
+                fieldId = fieldId
+            )
+
+            DATE, DATE_TIME -> DateOperator.compile(
+                ruleId = ruleIdOrNull(cond = cond),
+                cond = cond,
+                fieldId = fieldId,
+                def = def
+            )
+
             else -> throw CompilationException(
                 ruleId = ruleIdOrNull(cond = cond),
                 details = "Field type ${def.type} not supported in compiler yet"
@@ -339,6 +357,14 @@ object Compiler {
     @Suppress("UnusedParameter")
     private fun compileIntegerCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
         return IntegerOperator.compile(ruleId = ruleIdOrNull(cond = cond), cond = cond, fieldId = fieldId)
+    }
+
+    private fun compileBooleanCondition(cond: ConditionAst, fieldId: FieldId): CompiledExpression {
+        val literal = cond.value as? BooleanLiteral ?: throw CompilationException(
+            ruleId = ruleIdOrNull(cond = cond),
+            details = "Expected 'true' or 'false' for boolean field '${cond.field}'"
+        )
+        return BooleanEqualsExpression(field = fieldId, expected = literal.value)
     }
 
     @Suppress("ThrowsCount")

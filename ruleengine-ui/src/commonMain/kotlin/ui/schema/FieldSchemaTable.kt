@@ -175,30 +175,7 @@ private fun AddFieldDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            val templates = listOf(
-                "Blank field" to EditableField(),
-                "Text field" to EditableField(
-                    path = "field",
-                    type = SchemaFieldType.TEXT,
-                    operators = listOf("equals", "contains"),
-                ),
-                "Integer field" to EditableField(
-                    path = "count",
-                    type = SchemaFieldType.INTEGER,
-                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
-                ),
-                "Decimal field" to EditableField(
-                    path = "amount",
-                    type = SchemaFieldType.DECIMAL,
-                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
-                ),
-                "Boolean field" to EditableField(
-                    path = "flag",
-                    type = SchemaFieldType.BOOLEAN,
-                    operators = listOf("equals"),
-                ),
-            )
-            templates.forEach { (label, template) ->
+            FieldTemplates.forEach { (label, template) ->
                 DropdownMenuItem(onClick = {
                     onAdd(template)
                     expanded = false
@@ -279,7 +256,9 @@ private fun FieldRow(
             )
             TypeDropdown(
                 selected = field.type,
-                onSelect = { onFieldChange(field.copy(type = it)) },
+                // A format only means something on a date type; carrying a stale one over to another type
+                // would emit YAML the loader rejects.
+                onSelect = { onFieldChange(field.copy(type = it, format = if (it.isTemporal) field.format else "")) },
                 modifier = Modifier.weight(weight = 1.5f),
             )
             if (editable) {
@@ -289,31 +268,70 @@ private fun FieldRow(
             }
         }
 
+        // A structure is navigated into, so normalizers and operators do not apply to it; its nested
+        // members are edited as indented child rows instead.
+        if (field.type.isStructure) {
+            NestedFieldsSection(
+                field = field,
+                editable = editable,
+                onFieldChange = onFieldChange,
+            )
+            return@Column
+        }
+
+        // ── date format ───────────────────────────────────────────────────
+        if (field.type.isTemporal) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Format",
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                    modifier = Modifier.width(80.dp),
+                )
+                OutlinedTextField(
+                    value = field.format,
+                    onValueChange = { onFieldChange(field.copy(format = it)) },
+                    modifier = Modifier.weight(1f),
+                    enabled = editable,
+                    singleLine = true,
+                    placeholder = { Text(formatPlaceholder(type = field.type), color = TextMuted) },
+                    colors = fieldColors,
+                )
+            }
+        }
+
         // ── normalizers ───────────────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Normalizers",
-                style = MaterialTheme.typography.caption,
-                color = TextMuted,
-                modifier = Modifier.width(80.dp).padding(top = 6.dp),
-            )
-            NormalizerSelector(
-                selected = field.normalizers,
-                onToggle = { norm ->
-                    val updated = if (norm in field.normalizers) {
-                        field.normalizers - norm
-                    } else {
-                        field.normalizers + norm
-                    }
-                    onFieldChange(field.copy(normalizers = updated))
-                },
-                enabled = editable,
-                modifier = Modifier.weight(1f),
-            )
+        // Only text values are normalized by the engine, so the row would be inert on other types.
+        if (field.type.isNormalizable) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Normalizers",
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                    modifier = Modifier.width(80.dp).padding(top = 6.dp),
+                )
+                NormalizerSelector(
+                    selected = field.normalizers,
+                    onToggle = { norm ->
+                        val updated = if (norm in field.normalizers) {
+                            field.normalizers - norm
+                        } else {
+                            field.normalizers + norm
+                        }
+                        onFieldChange(field.copy(normalizers = updated))
+                    },
+                    enabled = editable,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         // ── operators ─────────────────────────────────────────────────────
@@ -329,6 +347,7 @@ private fun FieldRow(
                 modifier = Modifier.width(80.dp).padding(top = 6.dp),
             )
             OperatorSelector(
+                type = field.type,
                 selected = field.operators,
                 onToggle = { op ->
                     val updated = if (op in field.operators) {
@@ -344,6 +363,83 @@ private fun FieldRow(
         }
     }
 }
+
+/** Hint shown in the empty format box: a pattern example, plus what leaving it empty means. */
+private fun formatPlaceholder(type: SchemaFieldType): String {
+    return if (type == SchemaFieldType.DATE_TIME) {
+        "dd.MM.yyyy HH:mm — optional, ISO if empty"
+    } else {
+        "dd.MM.yyyy — optional, ISO if empty"
+    }
+}
+
+/**
+ * Nested members of a collection or object field, rendered as indented child rows.
+ *
+ * [FieldRow] is reused recursively, so a member that is itself a structure gets the same treatment at
+ * the next level down and nesting depth is unbounded.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun NestedFieldsSection(
+    field: EditableField,
+    editable: Boolean,
+    onFieldChange: (EditableField) -> Unit,
+) {
+    var collapsed by remember { mutableStateOf(value = false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = { collapsed = !collapsed }) {
+            Text(
+                text = if (collapsed) "▸ ${field.fields.size} nested field(s)" else "▾ nested fields",
+                style = MaterialTheme.typography.caption,
+                color = PrimaryBlue,
+            )
+        }
+    }
+
+    if (collapsed) return
+
+    Column(
+        modifier = Modifier.padding(start = NESTED_INDENT),
+        verticalArrangement = Arrangement.spacedBy(space = 4.dp),
+    ) {
+        field.fields.forEachIndexed { index, nested ->
+            FieldRow(
+                field = nested,
+                editable = editable,
+                isDuplicate = field.fields.count { it.path.isNotBlank() && it.path == nested.path } > 1,
+                onFieldChange = { updated ->
+                    onFieldChange(
+                        field.copy(
+                            fields = field.fields.toMutableList().also { it[index] = updated },
+                        )
+                    )
+                },
+                onDelete = {
+                    onFieldChange(field.copy(fields = field.fields.filterIndexed { i, _ -> i != index }))
+                },
+            )
+        }
+
+        if (editable) {
+            TextButton(
+                onClick = {
+                    onFieldChange(field.copy(fields = field.fields + EditableField(path = "field")))
+                },
+            ) {
+                Text(text = "+ nested field", color = PrimaryBlue, style = MaterialTheme.typography.caption)
+            }
+        }
+    }
+}
+
+/** Indentation applied per nesting level of the schema table. */
+private val NESTED_INDENT = 16.dp
 
 @Suppress("FunctionNaming")
 @Composable

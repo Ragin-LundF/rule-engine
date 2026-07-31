@@ -1,0 +1,15 @@
+def unstableVersionKeywords = ['-beta', 'dev', '-rc', '-m', '-SNAPSHOT', '-ALPHA']
+versionCatalogUpdate {
+    // sort the catalog by key (default is true)
+    sortByKey = false
+    // Referenced that are pinned are not automatically updated.
+    // They are also not automatically kept however (use keep for that).
+
+    // Return true in the version selector function to accept the updated version
+    // For more details refer to the chapter earlier in this README
+    versionSelector { moduleVersionCandidate ->
+        // here 'it' is a ModuleVersionCandidate that can be used to determine if the version
+        // is allowed, returning true if it is.
+        !(unstableVersionKeywords.any { uk -> moduleVersionCandidate.candidate.version.containsIgnoreCase(uk) })
+    }
+}

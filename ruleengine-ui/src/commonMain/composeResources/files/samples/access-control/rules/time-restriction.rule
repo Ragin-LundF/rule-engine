@@ -1,6 +1,6 @@
 rule "maintenance-window" {
   when
-    hour between 2 and 4
+    hour between 2 4
     and not role in ["admin", "service-account"]
 
   then

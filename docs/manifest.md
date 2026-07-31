@@ -49,7 +49,7 @@ This means you can move the entire project folder without changing any paths.
 | `id` | ✅ | Unique identifier for this entry |
 | `schema` | optional | Relative path to the field schema YAML file |
 | `actions` | optional | Relative path to the action schema YAML file |
-| `rules` | ✅ | List of relative paths to `.rule` files |
+| `rules` | ✅ | List of relative paths to `.rule` files. **The list order defines execution order** — rules are evaluated file by file in this order, then in declaration order within each file, and matches are returned in that order. |
 
 ---
 
