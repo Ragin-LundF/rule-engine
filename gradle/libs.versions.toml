@@ -3,7 +3,7 @@ kotlin = "2.3.21"
 kotlinx-coroutines = "1.11.0"
 # Jackson 3 series - prefer the latest compatible 3.x release. You can update this to a newer patch version if available.
 jackson2 = "2.22"
-jackson3 = "3.2.0"
+jackson3 = "3.2.1"
 
 [libraries]
 # Kotlin test libraries
