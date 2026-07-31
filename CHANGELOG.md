@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 1.4.0
+
+### Added
+
+- **`RuleEngineBuilder`** (`ruleengine.builder`) — one call turns a manifest into ready-to-use
+  engines: `RuleEngineBuilder.fromManifest(manifestPath)` resolves every referenced file relative to
+  the manifest, loads the field and action schema, parses the rule files in manifest order, validates
+  and compiles them, and returns a `LoadedRuleEngine` per manifest entry keyed by entry id (pass
+  `entryId` to build a single entry). `LoadedRuleEngine` bundles engine, schema, action schema and
+  validation warnings, and its `evaluate(input)` performs normalisation and evaluation, so callers no
+  longer have to keep the schema in a second variable or wire `RuleContext` /
+  `PreparedRuleContext` themselves. Any problem — missing or unreadable file, path escaping the
+  manifest directory, unknown entry id, validation error — raises the new `RuleEngineBuildException`
+  with a message naming the manifest, the entry, the concrete cause and every diagnostic, so a
+  half-initialised engine can never be used. Documented as the quick start in the
+  [Integration Guide](docs/integration-guide.md); the manual pipeline is retained as "Advanced Rule
+  Engine Preparation".
+- **`ManifestPathResolver`** (`ruleengine.manifest`) — moved from the UI module into core; rejects
+  manifest paths that escape the manifest's own directory. `RuleEngineBuilder` applies it to every
+  referenced schema, action and rule file.
+
+### Changed
+
+- `ManifestLoader.load` now reads through the shared 25 MB bounded reader used by the other loaders,
+  so an oversized manifest raises `InputTooLargeException` instead of being read into memory.
+- `EvaluateCli` manifest mode delegates to `RuleEngineBuilder`. Load failures (missing schema, broken
+  rule file) now report the builder's detailed message and exit with code `2` instead of `3`;
+  evaluation output is unchanged.
+
 ## Release 1.3.0
 
 ### Added

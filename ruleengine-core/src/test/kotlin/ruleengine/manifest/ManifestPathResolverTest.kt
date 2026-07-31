@@ -1,4 +1,4 @@
-package ui.editor.rules
+package ruleengine.manifest
 
 import java.nio.file.Path
 import kotlin.test.Test

@@ -10,6 +10,8 @@ import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.manifest.ManifestEntry
+import ruleengine.manifest.ManifestPathResolution
+import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
