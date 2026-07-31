@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 1.4.0
+
+### Added
+
+- **`RuleEngineBuilder`** (`ruleengine.builder`) — one call turns a manifest into ready-to-use
+  engines: `RuleEngineBuilder.fromManifest(manifestPath)` resolves every referenced file relative to
+  the manifest, loads the field and action schema, parses the rule files in manifest order, validates
+  and compiles them, and returns a `LoadedRuleEngine` per manifest entry keyed by entry id (pass
+  `entryId` to build a single entry). `LoadedRuleEngine` bundles engine, schema, action schema and
+  validation warnings, and its `evaluate(input)` performs normalisation and evaluation, so callers no
+  longer have to keep the schema in a second variable or wire `RuleContext` /
+  `PreparedRuleContext` themselves. Any problem — missing or unreadable file, path escaping the
+  manifest directory, unknown entry id, validation error — raises the new `RuleEngineBuildException`
+  with a message naming the manifest, the entry, the concrete cause and every diagnostic, so a
+  half-initialised engine can never be used. Documented as the quick start in the
+  [Integration Guide](docs/integration-guide.md); the manual pipeline is retained as "Advanced Rule
+  Engine Preparation".
+- **`ManifestPathResolver`** (`ruleengine.manifest`) — moved from the UI module into core; rejects
+  manifest paths that escape the manifest's own directory. `RuleEngineBuilder` applies it to every
+  referenced schema, action and rule file.
+
+### Changed
+
+- `ManifestLoader.load` now reads through the shared 25 MB bounded reader used by the other loaders,
+  so an oversized manifest raises `InputTooLargeException` instead of being read into memory.
+- `EvaluateCli` manifest mode delegates to `RuleEngineBuilder`. Load failures (missing schema, broken
+  rule file) now report the builder's detailed message and exit with code `2` instead of `3`;
+  evaluation output is unchanged.
+
+### Fixed
+
+- **Builder mode: filtered and nested paths are editable again.** A path in an aggregate, calculation
+  or field operand is now a row of breadcrumb pills, each picked from the members the schema declares
+  at that depth, with the restrictions of the selected segment in a `where` drawer titled after it —
+  so `count(orders[status == "paid"].items)` no longer needs the code editor. Field names are never
+  typed: the free-text fallback that appeared for undeclared segments is gone, and a value the schema
+  does not declare — a path whose root is only present in the raw context, which the engine allows
+  with a warning — is marked instead of being offered as a valid choice or silently rewritten.
+  Repointing a segment now drops the tail that was resolved against the old member, removing a
+  segment keeps the tail, and every operand panel echoes the DSL it generates.
+
 ## Release 1.3.0
 
 ### Added

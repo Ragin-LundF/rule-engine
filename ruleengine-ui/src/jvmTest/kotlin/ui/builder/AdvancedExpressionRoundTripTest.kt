@@ -147,6 +147,17 @@ class AdvancedExpressionRoundTripTest {
         assertRoundTrips(condition = "sum(orders.total) > sum(refunds.amount)")
     }
 
+    /**
+     * An undeclared root is legal on a multi-segment path — the engine warns rather than failing — so
+     * the Builder must carry such a path through untouched instead of rewriting it against the schema.
+     */
+    @Test
+    fun `filtered path over an undeclared root round-trips`() {
+        assertRoundTrips(
+            condition = """count(reports.income.accountData[accountType == "CHECKING"]) > 0"""
+        )
+    }
+
     // ── arithmetic ────────────────────────────────────────────────────────────
 
     @Test

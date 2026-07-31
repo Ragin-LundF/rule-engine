@@ -48,30 +48,6 @@ sealed interface BuilderOperand {
     ) : BuilderOperand
 }
 
-/**
- * One path segment plus the filters attached to it — mirrors an engine `FieldSegmentAst` followed by
- * zero or more `FilterSegmentAst`.
- *
- * Multiple [filters] on one step are joined with `and` in the generated DSL.
- */
-data class BuilderPathStep(
-    val name: String,
-    val filters: List<BuilderFilter> = emptyList(),
-)
-
-/** A single `[field op value]` filter applied to the step it belongs to. */
-data class BuilderFilter(
-    val field: String,
-    val operator: String,
-    val value: String,
-)
-
-/** One term of a [BuilderOperand.Calc]; [operator] is empty for the first term. */
-data class BuilderTerm(
-    val operator: String,
-    val operand: BuilderOperand,
-)
-
 /** True when this operand always yields a number, and so requires a numeric comparison. */
 val BuilderOperand.isComputed: Boolean
     get() = this is BuilderOperand.Aggregate || this is BuilderOperand.Calc
@@ -83,7 +59,3 @@ fun fieldOperand(name: String): BuilderOperand.FieldRef =
 /** Builds a path operand from dotted names, e.g. `orders.items.price`. */
 fun pathOperand(dotted: String): BuilderOperand.FieldRef =
     BuilderOperand.FieldRef(path = dotted.split(".").map { BuilderPathStep(name = it) })
-
-/** Dotted names of a path, ignoring filters — the form used to look fields up in the catalog. */
-val List<BuilderPathStep>.names: List<String>
-    get() = map { it.name }

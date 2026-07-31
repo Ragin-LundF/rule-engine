@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ui.AccentOrange
 import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
@@ -35,6 +36,10 @@ import ui.TextSecondary
  * A clearly clickable dropdown.
  * - The trigger looks like a real select box with the chevron pinned to the far right.
  * - The menu opens directly below the trigger (inside the same anchor Box).
+ *
+ * A [selected] value that is not among [options] is not silently presented as a valid choice: it is
+ * marked as unknown and kept in the menu, so the user can see that the current value is off-list and
+ * re-selecting it stays a no-op instead of being impossible.
  */
 @Composable
 fun DropdownSelector(
@@ -46,6 +51,7 @@ fun DropdownSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val label = selected.ifBlank { placeholder }
+    val unknown = selected.isNotBlank() && selected !in options
 
     Box(modifier = modifier) {
         Row(
@@ -64,11 +70,15 @@ fun DropdownSelector(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = label,
+                text = if (unknown) "$label $UNKNOWN_MARKER" else label,
                 style = MaterialTheme.typography.body2.copy(
                     fontWeight = if (selected.isNotBlank()) FontWeight.Medium else FontWeight.Normal,
                 ),
-                color = if (selected.isNotBlank()) TextPrimary else TextSecondary,
+                color = when {
+                    unknown -> AccentOrange
+                    selected.isNotBlank() -> TextPrimary
+                    else -> TextSecondary
+                },
             )
             Text(
                 text = "▼",
@@ -77,39 +87,71 @@ fun DropdownSelector(
             )
         }
 
-        DropdownMenu(
+        OptionMenu(
             expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .background(color = BgElevated)
-                .border(
-                    width = 1.dp,
-                    color = BorderColor,
-                    shape = RoundedCornerShape(size = 8.dp),
-                ),
-        ) {
-            options.forEach { option ->
-                val selectedOption = option == selected
-                DropdownMenuItem(
-                    onClick = {
-                        onSelected(option)
-                        expanded = false
+            options = options,
+            selected = selected,
+            onSelected = onSelected,
+            onDismiss = { expanded = false },
+        )
+    }
+}
+
+/** Marker appended to a value the schema does not declare, matching `ui.schema.OperatorSelector`. */
+internal const val UNKNOWN_MARKER: String = "⚠"
+
+/**
+ * The option list shared by [DropdownSelector] and [PathSegmentPill], so both mark an off-list value
+ * the same way and neither can drop it.
+ */
+@Composable
+internal fun OptionMenu(
+    expanded: Boolean,
+    options: List<String>,
+    selected: String,
+    onSelected: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    // The current value leads the menu when it is off-list: it must stay selectable, but visibly so.
+    val entries = if (selected.isNotBlank() && selected !in options) listOf(selected) + options else options
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .background(color = BgElevated)
+            .border(
+                width = 1.dp,
+                color = BorderColor,
+                shape = RoundedCornerShape(size = 8.dp),
+            ),
+    ) {
+        entries.forEach { option ->
+            val isSelected = option == selected
+            val declared = option in options
+            DropdownMenuItem(
+                onClick = {
+                    onSelected(option)
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        color = if (isSelected) BgHover else BgElevated,
+                        shape = RoundedCornerShape(size = 6.dp),
+                    ),
+            ) {
+                Text(
+                    text = if (declared) option else "$option $UNKNOWN_MARKER",
+                    style = MaterialTheme.typography.body2,
+                    color = when {
+                        !declared -> AccentOrange
+                        isSelected -> PrimaryBlue
+                        else -> TextPrimary
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            color = if (selectedOption) BgHover else BgElevated,
-                            shape = RoundedCornerShape(size = 6.dp),
-                        ),
-                ) {
-                    Text(
-                        text = option,
-                        style = MaterialTheme.typography.body2,
-                        color = if (selectedOption) PrimaryBlue else TextPrimary,
-                        fontWeight = if (selectedOption) FontWeight.SemiBold else FontWeight.Normal,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

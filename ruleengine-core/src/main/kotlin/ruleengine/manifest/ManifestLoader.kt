@@ -1,9 +1,9 @@
 package ruleengine.manifest
 
+import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import tools.jackson.core.ObjectReadContext
 import tools.jackson.dataformat.yaml.YAMLFactory
-import java.nio.file.Files
 import java.nio.file.Path
 
 object ManifestLoader {
@@ -25,7 +25,7 @@ object ManifestLoader {
     }
 
     fun load(path: Path): ProjectManifest {
-        val content = Files.readString(path)
+        val content = FileInputSupport.readBoundedText(path = path, kind = "manifest")
         return loadFromString(content = content)
     }
 }
