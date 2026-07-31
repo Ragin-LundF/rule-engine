@@ -58,12 +58,16 @@ object BuilderToRuleDsl {
 
         nodes.forEachIndexed { index, node ->
             val joinStr = if (index == 0) "" else " ${node.joinToPrevious.ifBlank { "and" }} "
+            val notStr = if (node.negated) "not " else ""
             when (node) {
                 is MutableConditionNode.Leaf -> {
-                    sb.append("$indentStr$joinStr${renderConditionLine(node.inner)}\n")
+                    sb.append("$indentStr$joinStr$notStr${renderConditionLine(node.inner)}\n")
+                }
+                is MutableConditionNode.ComparisonLeaf -> {
+                    sb.append("$indentStr$joinStr$notStr${renderComparisonLine(node.inner)}\n")
                 }
                 is MutableConditionNode.Group -> {
-                    sb.append("$indentStr${joinStr}(\n")
+                    sb.append("$indentStr$joinStr$notStr(\n")
                     renderNodes(
                         nodes = node.nodes.toList(),
                         sb = sb,
@@ -79,7 +83,7 @@ object BuilderToRuleDsl {
 
     private fun renderConditionLine(cond: MutableBuilderCondition): String {
         val op = cond.operator
-        return when {
+        val body = when {
             OperatorOptions.isBetween(op) -> {
                 val low = quoteIfNeeded(cond.value.trim())
                 val high = quoteIfNeeded(cond.valueTo.trim())
@@ -91,7 +95,16 @@ object BuilderToRuleDsl {
             }
             else -> "${cond.field} $op ${quoteIfNeeded(cond.value)}"
         }
+        return body + ignoreCaseSuffix(ignoreCase = cond.ignoreCase)
     }
+
+    private fun renderComparisonLine(comparison: MutableBuilderComparison): String {
+        val left = OperandText.toDsl(operand = comparison.left)
+        val right = OperandText.toDsl(operand = comparison.right)
+        return "$left ${comparison.operator} $right" + ignoreCaseSuffix(ignoreCase = comparison.ignoreCase)
+    }
+
+    private fun ignoreCaseSuffix(ignoreCase: Boolean): String = if (ignoreCase) " ignoreCase" else ""
 
     private fun renderAction(action: MutableBuilderAction): String {
         val args = action.arguments.joinToString(" ") { quoteIfNeeded(it) }
@@ -102,11 +115,5 @@ object BuilderToRuleDsl {
      * Wraps [value] in double quotes if it is not already quoted and is not a
      * plain number or boolean literal.
      */
-    private fun quoteIfNeeded(value: String): String {
-        val trimmed = value.trim()
-        if (trimmed.startsWith("\"") && trimmed.endsWith("\"")) return trimmed
-        if (trimmed.toDoubleOrNull() != null) return trimmed
-        if (trimmed == "true" || trimmed == "false") return trimmed
-        return "\"$trimmed\""
-    }
+    private fun quoteIfNeeded(value: String): String = OperandText.quoteUnlessNumeric(value = value)
 }

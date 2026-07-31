@@ -13,7 +13,7 @@ rule "luxury-item" {
 rule "high-rated-affordable" {
   when
     rating >= 4.7
-    and price between 20 and 150
+    and price between 20 150
     and reviewCount >= 100
 
   then

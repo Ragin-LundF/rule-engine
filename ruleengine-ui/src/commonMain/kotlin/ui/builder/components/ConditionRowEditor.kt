@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.CatalogFieldInfo
 import ui.builder.MutableBuilderCondition
@@ -28,6 +31,7 @@ fun ConditionRowEditor(
     onSelected: () -> Unit,
     onChanged: () -> Unit,
     onRemove: () -> Unit,
+    onSwitchToAdvanced: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val fieldInfo = fields.firstOrNull { it.id == condition.field }
@@ -35,6 +39,10 @@ fun ConditionRowEditor(
         fieldType = fieldInfo?.type ?: "text",
         schemaOperators = fieldInfo?.operators ?: emptyList(),
     )
+    // Only text-ish comparisons can be case-insensitive; the engine ignores the flag elsewhere.
+    val supportsIgnoreCase = fieldInfo == null ||
+        fieldInfo.type.lowercase() == "text" ||
+        fieldInfo.type.lowercase() == "string_set"
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -85,7 +93,34 @@ fun ConditionRowEditor(
             TypedValueEditor(
                 condition = condition,
                 onChanged = onChanged,
+                fieldType = fieldInfo?.type ?: "text",
                 modifier = Modifier.weight(weight = 1f),
+            )
+
+            if (supportsIgnoreCase) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = condition.ignoreCase,
+                        onCheckedChange = {
+                            condition.ignoreCase = it
+                            onChanged()
+                        },
+                        colors = CheckboxDefaults.colors(checkedColor = PrimaryBlue),
+                    )
+                    Text(
+                        text = "ignore case",
+                        style = MaterialTheme.typography.caption,
+                        color = TextSecondary,
+                    )
+                }
+            }
+        }
+
+        // Escape hatch into a comparison row, where a side can become an aggregate or calculation.
+        if (onSwitchToAdvanced != null) {
+            TinyButton(
+                text = "ƒ",
+                onClick = onSwitchToAdvanced,
             )
         }
 

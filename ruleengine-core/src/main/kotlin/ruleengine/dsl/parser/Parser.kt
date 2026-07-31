@@ -5,6 +5,7 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
@@ -34,6 +35,14 @@ import ruleengine.dsl.lexer.TokenType
 class Parser(private val input: String) {
     private val tokens: List<Token> = Lexer(input = input).tokenize()
     private var pos = 0
+
+    private companion object {
+        /**
+         * Identifiers that must never be read as the start of an implicitly `and`-joined condition:
+         * `then` closes the `when` block, and the rest are infix keywords with their own handling.
+         */
+        val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "and", "or", "ignoreCase")
+    }
 
     private fun current(): Token {
         return tokens.getOrElse(index = pos) { tokens.last() }
@@ -131,9 +140,11 @@ class Parser(private val input: String) {
                 val name = c.text
                 advance()
 
-                // parse single argument as string or number or list
-                val arg = parseLiteral()
-                actions += ActionAst(name = name, arguments = listOf(arg))
+                // The argument is optional: an action declared with `argTypes: []` takes none, so a
+                // literal is only consumed when one actually follows. Argument count is checked
+                // against the action schema by the validator.
+                val arg = if (startsLiteral(token = current())) parseLiteral() else null
+                actions += ActionAst(name = name, arguments = listOfNotNull(arg))
             }
         }
 
@@ -160,13 +171,39 @@ class Parser(private val input: String) {
     private fun parseAnd(): ExpressionAst {
         val left = parseUnary()
         val parts = mutableListOf(left)
-        while (current().type == TokenType.IDENT && current().text == "and") {
-            advance()
+        while (true) {
+            when {
+                current().type == TokenType.IDENT && current().text == "and" -> advance()
+                startsImplicitAnd() -> Unit // no keyword to consume
+                else -> break
+            }
             parts += parseUnary()
         }
 
         return if (parts.size == 1) left else AndAst(children = parts)
     }
+
+    /**
+     * True when the current token begins a new condition on a line after the one just parsed, which
+     * the DSL treats as an implicit `and`.
+     *
+     * There is no newline token — the lexer discards whitespace — so this compares the line recorded
+     * on the token against the line of the last consumed token. Only a `(` or a plain identifier can
+     * open a condition; `then` must be excluded or the `when` block would never terminate, and the
+     * infix keywords are handled by their own branches.
+     */
+    private fun startsImplicitAnd(): Boolean {
+        val token = current()
+        if (token.line <= previousLine()) return false
+        return when (token.type) {
+            TokenType.LPAREN -> true
+            TokenType.IDENT -> token.text !in INFIX_AND_BLOCK_KEYWORDS
+            else -> false
+        }
+    }
+
+    /** Line of the most recently consumed token, or 0 before anything has been consumed. */
+    private fun previousLine(): Int = if (pos > 0) tokens[pos - 1].line else 0
 
     private fun parseUnary(): ExpressionAst {
         val token = current()
@@ -326,6 +363,14 @@ class Parser(private val input: String) {
                 advance()
                 LiteralValueAst(literal = StringLiteral(value = token.text))
             }
+            // Must precede the field-access branch, or `isActive == true` would read `true` as a
+            // field name and report an unknown field.
+            TokenType.IDENT if isBooleanText(text = token.text) -> {
+                advance()
+                LiteralValueAst(
+                    literal = BooleanLiteral(value = token.text.equals(other = "true", ignoreCase = true))
+                )
+            }
             TokenType.IDENT -> parseFunctionCallOrFieldAccess()
             else -> throw ParseException(
                 line = token.line,
@@ -457,31 +502,29 @@ class Parser(private val input: String) {
         }
     }
 
-    @Suppress("ThrowsCount")
+    /**
+     * Parses the two bounds of `between`.
+     *
+     * Bounds are numbers for numeric fields and quoted ISO dates for date fields; [BetweenLiteral]
+     * carries both as text and the field's compiler decides how to read them.
+     */
     private fun parseBetweenLiteral(): BetweenLiteral {
-        val lowTok = current()
-        if (lowTok.type != TokenType.NUMBER) {
+        val low = parseBoundToken(label = "lower")
+        val high = parseBoundToken(label = "upper")
+        return BetweenLiteral(low = low, high = high)
+    }
+
+    private fun parseBoundToken(label: String): String {
+        val token = current()
+        if (token.type != TokenType.NUMBER && token.type != TokenType.STRING) {
             throw ParseException(
-                line = lowTok.line,
-                column = lowTok.col,
-                messageText = "Expected lower bound number literal for 'between'"
+                line = token.line,
+                column = token.col,
+                messageText = "Expected $label bound (number or quoted date) for 'between'"
             )
         }
-
         advance()
-
-        val highTok = current()
-        if (highTok.type != TokenType.NUMBER) {
-            throw ParseException(
-                line = highTok.line,
-                column = highTok.col,
-                messageText = "Expected upper bound number literal for 'between'"
-            )
-        }
-
-        advance()
-
-        return BetweenLiteral(low = lowTok.text, high = highTok.text)
+        return token.text
     }
 
     private fun parseIgnoreCaseModifier(): Boolean {
@@ -491,6 +534,16 @@ class Parser(private val input: String) {
         }
 
         return false
+    }
+
+    /**
+     * True when [token] can begin an action argument: a string, a number, a list, or an extraction
+     * reference such as `$1`. Anything else means the action has no argument.
+     */
+    private fun startsLiteral(token: Token): Boolean = when (token.type) {
+        TokenType.STRING, TokenType.NUMBER, TokenType.LBRACKET -> true
+        TokenType.IDENT -> token.text.startsWith(prefix = "$")
+        else -> false
     }
 
     private fun parseLiteral(): LiteralAst {
@@ -520,17 +573,26 @@ class Parser(private val input: String) {
                 ListLiteral(items = items)
             }
 
+            TokenType.IDENT if isBooleanText(text = token.text) -> {
+                advance()
+                BooleanLiteral(value = token.text.equals(other = "true", ignoreCase = true))
+            }
+
             else -> {
                 throw ParseException(
                     line = token.line,
                     column = token.col,
-                    messageText = "Expected literal (string/number/list)"
+                    messageText = "Expected literal (string/number/list/true/false)"
                 )
             }
         }
 
         return result
     }
+
+    /** True for the two identifiers the parser treats as boolean literals in value position. */
+    private fun isBooleanText(text: String): Boolean =
+        text.equals(other = "true", ignoreCase = true) || text.equals(other = "false", ignoreCase = true)
 
     /**
      * Parses a literal or an extraction reference (`$N`).

@@ -58,6 +58,7 @@ fields:
       - gte
       - lt
       - lte
+      - between
 
   tags:
     type: string_set

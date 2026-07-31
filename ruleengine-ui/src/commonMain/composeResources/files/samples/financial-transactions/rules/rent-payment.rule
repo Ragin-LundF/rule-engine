@@ -16,7 +16,7 @@ rule "utility-bill" {
     or purpose contains "gas"
     or purpose contains "water"
     or purpose contains "internet")
-    and amount between 20 and 500
+    and amount between 20 500
 
   then
     label "utility"

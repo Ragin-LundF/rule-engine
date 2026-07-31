@@ -1,5 +1,6 @@
 package ui.schema
 
+import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldSchema
 import ruleengine.schema.FieldSchemaLoader
 
@@ -31,16 +32,7 @@ object FieldSchemaYamlBridge {
 
         val hasCustomNormalizerGroups = yaml.contains(Regex("^normalizers:", RegexOption.MULTILINE))
 
-        val fields = schema.fields.values.map { def ->
-            EditableField(
-                path = def.id.value,
-                alias = def.alias ?: "",
-                type = SchemaFieldType.entries.firstOrNull { it.yamlValue == def.type.name.lowercase() }
-                    ?: SchemaFieldType.TEXT,
-                normalizers = def.normalizers.map { it.value },
-                operators = def.operators.map { it.value },
-            )
-        }
+        val fields = schema.fields.values.map { it.toEditableField() }
 
         return SchemaEditorState(
             schemaName = schema.name,
@@ -62,22 +54,43 @@ object FieldSchemaYamlBridge {
             sb.appendLine()
         }
         sb.appendLine("fields:")
-        for (field in state.fields) {
-            if (field.path.isBlank()) continue
-            sb.appendLine("  ${field.path}:")
-            sb.appendLine("    type: ${field.type.yamlValue}")
-            if (field.alias.isNotBlank()) {
-                sb.appendLine("    alias: ${field.alias}")
-            }
-            if (field.normalizers.isNotEmpty()) {
-                sb.appendLine("    normalizers:")
-                field.normalizers.forEach { sb.appendLine("      - $it") }
-            }
-            if (field.operators.isNotEmpty()) {
-                sb.appendLine("    operators:")
-                field.operators.forEach { sb.appendLine("      - $it") }
-            }
-        }
+        appendFields(sb = sb, fields = state.fields, indent = "  ")
         return sb.toString()
     }
+
+    /** Writes a list of fields, recursing into nested members with deeper indentation. */
+    private fun appendFields(sb: StringBuilder, fields: List<EditableField>, indent: String) {
+        for (field in fields) {
+            if (field.path.isBlank()) continue
+            val body = "$indent  "
+            sb.appendLine("$indent${field.path}:")
+            sb.appendLine("${body}type: ${field.type.yamlValue}")
+            if (field.alias.isNotBlank()) {
+                sb.appendLine("${body}alias: ${field.alias}")
+            }
+            if (field.normalizers.isNotEmpty()) {
+                sb.appendLine("${body}normalizers:")
+                field.normalizers.forEach { sb.appendLine("$body  - $it") }
+            }
+            if (field.operators.isNotEmpty()) {
+                sb.appendLine("${body}operators:")
+                field.operators.forEach { sb.appendLine("$body  - $it") }
+            }
+            if (field.type.isStructure && field.fields.isNotEmpty()) {
+                sb.appendLine("${body}fields:")
+                appendFields(sb = sb, fields = field.fields, indent = "$body  ")
+            }
+        }
+    }
 }
+
+/** Converts an engine definition to the editable row model, recursing into nested members. */
+private fun FieldDefinition.toEditableField(): EditableField = EditableField(
+    path = id.value,
+    alias = alias ?: "",
+    type = SchemaFieldType.entries.firstOrNull { it.yamlValue == type.name.lowercase() }
+        ?: SchemaFieldType.TEXT,
+    normalizers = normalizers.map { it.value },
+    operators = operators.map { it.value },
+    fields = fields.values.map { it.toEditableField() },
+)

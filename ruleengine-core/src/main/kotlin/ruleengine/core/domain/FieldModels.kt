@@ -15,15 +15,33 @@ enum class FieldType {
     DECIMAL,
     BOOLEAN,
     STRING_SET,
-    DATE
+    DATE,
+
+    /** A list of elements, navigable with dotted paths and filters (e.g. `orders[status == "paid"].total`). */
+    COLLECTION,
+
+    /** A single nested object, navigable with dotted paths (e.g. `customer.address.city`). */
+    OBJECT
 }
+
+/** True for the structure types whose [FieldDefinition.fields] describe nested members. */
+val FieldType.isStructure: Boolean
+    get() = this == FieldType.COLLECTION || this == FieldType.OBJECT
 
 data class FieldDefinition(
     val id: FieldId,
     val type: FieldType,
     val alias: String? = null,
     val normalizers: List<NormalizerId> = emptyList(),
-    val operators: Set<OperatorId> = emptySet()
+    val operators: Set<OperatorId> = emptySet(),
+    /**
+     * Nested members of a [FieldType.COLLECTION] or [FieldType.OBJECT] field.
+     *
+     * Recursive: a nested member may itself be a structure with its own [fields], so nesting depth
+     * is unbounded. Empty for scalar fields, and also empty for structures whose members are not
+     * declared — in that case path validation stays permissive (see `ValueExpressionValidator`).
+     */
+    val fields: Map<FieldId, FieldDefinition> = emptyMap()
 )
 
 data class FieldSchema(

@@ -32,6 +32,7 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.components.ActionRowEditor
+import ui.builder.components.ComparisonRowEditor
 import ui.builder.components.ConditionRowEditor
 import ui.builder.components.RuleBuilderHeader
 import ui.components.TinyButton
@@ -77,7 +78,7 @@ fun RuleBuilderView(
         )
 
         if (editorState.isLocked) {
-            LockedBuilderMessage(reason = editorState.lockReason)
+            LockedBuilderMessage(kind = editorState.lockKind, reason = editorState.lockReason)
             return@Column
         }
 
@@ -186,6 +187,22 @@ private fun WhenSection(
             },
         )
         AddButton(
+            label = "+ Calculation",
+            onClick = {
+                editorState.addComparison(
+                    left = OperandRules.defaultOperand(
+                        kind = OperandRules.OperandKind.AGGREGATE,
+                        fields = catalogFields,
+                        previous = BuilderOperand.Literal(text = "", numeric = false),
+                    ),
+                    operator = OperatorOptions.COMPARISON_NUMERIC.first(),
+                    right = BuilderOperand.Literal(text = "0", numeric = true),
+                )
+                selectedGroupIds.clear()
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+        AddButton(
             label = "+ Group",
             onClick = {
                 val joinToPrevious = editorState.conditionNodes.lastOrNull()?.let { "and" } ?: ""
@@ -247,10 +264,38 @@ private fun renderNodes(
                 )
             }
 
+            NotToggle(
+                negated = node.negated,
+                onToggle = { negated ->
+                    node.negated = negated
+                    emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                },
+            )
+
             when (node) {
                 is MutableConditionNode.Leaf -> {
                     ConditionRowEditor(
                         condition = node.inner,
+                        fields = catalogFields,
+                        onSelected = { onConditionSelected(node.inner.id) },
+                        onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
+                        onRemove = {
+                            editorState.removeCondition(id = node.id)
+                            selectedGroupIds?.remove(node.id)
+                            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                        },
+                        onSwitchToAdvanced = {
+                            editorState.toComparison(
+                                id = node.id,
+                                operator = OperatorOptions.COMPARISON_NUMERIC.first(),
+                            )
+                            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+                        },
+                    )
+                }
+                is MutableConditionNode.ComparisonLeaf -> {
+                    ComparisonRowEditor(
+                        comparison = node.inner,
                         fields = catalogFields,
                         onSelected = { onConditionSelected(node.inner.id) },
                         onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
@@ -559,19 +604,25 @@ private fun AddButton(
 }
 
 @Composable
-private fun LockedBuilderMessage(reason: String, modifier: Modifier = Modifier) {
+private fun LockedBuilderMessage(
+    kind: BuilderLockKind,
+    reason: String,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier.padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text = if (reason == "No rule selected.") "Select a rule from the manifest to edit it here."
-            else "⚠  Advanced syntax detected",
+            text = when (kind) {
+                BuilderLockKind.NO_RULE_SELECTED -> "Select a rule from the manifest to edit it here."
+                else -> "⚠  This rule can only be edited in Code mode"
+            },
             style = MaterialTheme.typography.subtitle1,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colors.onSurface,
         )
-        if (reason != "No rule selected.") {
+        if (kind != BuilderLockKind.NO_RULE_SELECTED) {
             Text(text = reason, style = MaterialTheme.typography.body2, color = TextSecondary)
             Text(
                 text = "Switch to Code mode to edit this rule.",
@@ -580,6 +631,21 @@ private fun LockedBuilderMessage(reason: String, modifier: Modifier = Modifier) 
             )
         }
     }
+}
+
+/** Toggle for `not`, shown on every node so a condition can be negated in place. */
+@Composable
+private fun NotToggle(
+    negated: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TinyButton(
+        text = "NOT",
+        primary = negated,
+        onClick = { onToggle(!negated) },
+        modifier = modifier,
+    )
 }
 
 private fun emitDslChange(

@@ -39,6 +39,7 @@ import ui.builder.BuilderAction
 import ui.builder.BuilderCondition
 import ui.builder.BuilderConditionNode
 import ui.builder.BuilderRule
+import ui.builder.OperandText
 import ui.components.StatusBadge
 
 @Suppress("FunctionNaming")
@@ -225,17 +226,23 @@ private fun conditionValuePart(value: String, valueTo: String, listItems: List<S
 
 private fun BuilderConditionNode.toSummaryLines(indent: String = ""): List<String> {
     val join = if (joinToPrevious.isNotBlank()) "${joinToPrevious.uppercase()} " else ""
+    val not = if (negated) "NOT " else ""
     return when (this) {
         is BuilderCondition -> {
             val valuePart = conditionValuePart(value = value, valueTo = valueTo, listItems = listItems)
-            listOf("$indent$join$field $operator $valuePart")
+            listOf("$indent$join$not$field $operator $valuePart")
         }
         is BuilderConditionNode.Condition -> {
             val valuePart = conditionValuePart(value = value, valueTo = valueTo, listItems = listItems)
-            listOf("$indent$join$field $operator $valuePart")
+            listOf("$indent$join$not$field $operator $valuePart")
+        }
+        is BuilderConditionNode.Comparison -> {
+            val left = OperandText.toLabel(operand = left)
+            val right = OperandText.toLabel(operand = right)
+            listOf("$indent$join$not$left $operator $right")
         }
         is BuilderConditionNode.Group -> {
-            listOf("$indent${join}(") +
+            listOf("$indent$join$not(") +
                 nodes.flatMap { it.toSummaryLines(indent = "$indent  ") } +
                 listOf("$indent)")
         }

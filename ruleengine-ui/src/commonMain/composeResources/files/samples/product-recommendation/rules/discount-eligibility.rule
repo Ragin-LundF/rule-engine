@@ -1,6 +1,6 @@
 rule "clearance-discount" {
   when
-    stock between 1 and 10
+    stock between 1 10
     and not tags containsAny ["new-arrival", "pre-order"]
 
   then
@@ -21,7 +21,7 @@ rule "bulk-discount" {
 rule "loyalty-discount" {
   when
     tags containsAny ["loyalty-reward", "member-exclusive"]
-    and price between 50 and 1000
+    and price between 50 1000
 
   then
     discount 10

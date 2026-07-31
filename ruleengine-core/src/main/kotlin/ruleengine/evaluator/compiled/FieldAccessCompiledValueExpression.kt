@@ -2,6 +2,7 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
+import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedText
@@ -19,6 +20,7 @@ class FieldAccessCompiledValueExpression(
                 is PreparedInteger -> NumberExpressionValue(value = BigDecimal(prepared.value))
                 is PreparedDecimal -> NumberExpressionValue(value = prepared.value)
                 is PreparedText -> TextExpressionValue(value = prepared.normalized)
+                is PreparedBoolean -> BooleanExpressionValue(value = prepared.value)
                 else -> {
                     val raw = context.rawContext.getRaw(fieldPath = listOf(fieldId.value))
                     rawToExpressionValue(raw = raw)
@@ -87,6 +89,7 @@ class FieldAccessCompiledValueExpression(
             null -> MissingExpressionValue
             is Number -> NumberExpressionValue(value = BigDecimal(raw.toString()))
             is String -> TextExpressionValue(value = raw)
+            is Boolean -> BooleanExpressionValue(value = raw)
             is Collection<*> -> {
                 val elements = raw.mapNotNull { element ->
                     val v = rawToExpressionValue(raw = element)

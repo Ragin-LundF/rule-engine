@@ -32,6 +32,7 @@ import ui.builder.OperatorOptions
 fun TypedValueEditor(
     condition: MutableBuilderCondition,
     onChanged: () -> Unit,
+    fieldType: String = "text",
     modifier: Modifier = Modifier,
 ) {
     when {
@@ -45,12 +46,36 @@ fun TypedValueEditor(
             onChanged = onChanged,
             modifier = modifier,
         )
+        // A boolean has exactly two values, so a dropdown beats free text and cannot be mistyped.
+        fieldType.lowercase() == "boolean" -> BooleanValueEditor(
+            condition = condition,
+            onChanged = onChanged,
+            modifier = modifier,
+        )
         else -> SingleValueEditor(
             condition = condition,
             onChanged = onChanged,
             modifier = modifier,
         )
     }
+}
+
+@Composable
+private fun BooleanValueEditor(
+    condition: MutableBuilderCondition,
+    onChanged: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    DropdownSelector(
+        selected = condition.value,
+        options = listOf("true", "false"),
+        onSelected = { selected ->
+            condition.value = selected
+            onChanged()
+        },
+        modifier = modifier.width(width = 120.dp),
+        placeholder = "true / false",
+    )
 }
 
 @Composable

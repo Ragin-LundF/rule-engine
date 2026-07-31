@@ -1,0 +1,43 @@
+# Aggregate rules over the `transactions` collection.
+# These are editable in Builder mode: each condition is a comparison row whose
+# sides can be a field, a value, an aggregate, or a calculation.
+
+rule "high-total-volume" {
+  when
+    sum(transactions.amount) > 10000
+
+  then
+    flag "high-total-volume"
+    score 60
+}
+
+rule "risk-share-too-high" {
+  when
+    sum(transactions[label == "risk"].amount) > sum(transactions[amount > 0].amount) * 0.03
+
+  then
+    flag "high-risk-ratio"
+    alert "manual-review-required"
+    score 80
+}
+
+rule "many-small-transfers" {
+  when
+    count(transactions[amount < 100]) > 20
+    and avg(transactions.amount) < 50
+
+  then
+    flag "micro-transfer-pattern"
+    alert "potential-structuring"
+    score 70
+}
+
+rule "foreign-counterparty-volume" {
+  when
+    not sum(transactions[label == "domestic"].amount) >= sum(transactions.amount)
+    and max(transactions.amount) > 2500
+
+  then
+    flag "foreign-counterparty-volume"
+    score 50
+}

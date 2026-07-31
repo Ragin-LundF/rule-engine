@@ -197,6 +197,16 @@ private fun AddFieldDropdown(
                     type = SchemaFieldType.BOOLEAN,
                     operators = listOf("equals"),
                 ),
+                "Collection (list of objects)" to EditableField(
+                    path = "items",
+                    type = SchemaFieldType.COLLECTION,
+                    fields = listOf(EditableField(path = "amount", type = SchemaFieldType.DECIMAL)),
+                ),
+                "Object (nested fields)" to EditableField(
+                    path = "customer",
+                    type = SchemaFieldType.OBJECT,
+                    fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
+                ),
             )
             templates.forEach { (label, template) ->
                 DropdownMenuItem(onClick = {
@@ -289,6 +299,17 @@ private fun FieldRow(
             }
         }
 
+        // A structure is navigated into, so normalizers and operators do not apply to it; its nested
+        // members are edited as indented child rows instead.
+        if (field.type.isStructure) {
+            NestedFieldsSection(
+                field = field,
+                editable = editable,
+                onFieldChange = onFieldChange,
+            )
+            return@Column
+        }
+
         // ── normalizers ───────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -344,6 +365,74 @@ private fun FieldRow(
         }
     }
 }
+
+/**
+ * Nested members of a collection or object field, rendered as indented child rows.
+ *
+ * [FieldRow] is reused recursively, so a member that is itself a structure gets the same treatment at
+ * the next level down and nesting depth is unbounded.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun NestedFieldsSection(
+    field: EditableField,
+    editable: Boolean,
+    onFieldChange: (EditableField) -> Unit,
+) {
+    var collapsed by remember { mutableStateOf(value = false) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = { collapsed = !collapsed }) {
+            Text(
+                text = if (collapsed) "▸ ${field.fields.size} nested field(s)" else "▾ nested fields",
+                style = MaterialTheme.typography.caption,
+                color = PrimaryBlue,
+            )
+        }
+    }
+
+    if (collapsed) return
+
+    Column(
+        modifier = Modifier.padding(start = NESTED_INDENT),
+        verticalArrangement = Arrangement.spacedBy(space = 4.dp),
+    ) {
+        field.fields.forEachIndexed { index, nested ->
+            FieldRow(
+                field = nested,
+                editable = editable,
+                isDuplicate = field.fields.count { it.path.isNotBlank() && it.path == nested.path } > 1,
+                onFieldChange = { updated ->
+                    onFieldChange(
+                        field.copy(
+                            fields = field.fields.toMutableList().also { it[index] = updated },
+                        )
+                    )
+                },
+                onDelete = {
+                    onFieldChange(field.copy(fields = field.fields.filterIndexed { i, _ -> i != index }))
+                },
+            )
+        }
+
+        if (editable) {
+            TextButton(
+                onClick = {
+                    onFieldChange(field.copy(fields = field.fields + EditableField(path = "field")))
+                },
+            ) {
+                Text(text = "+ nested field", color = PrimaryBlue, style = MaterialTheme.typography.caption)
+            }
+        }
+    }
+}
+
+/** Indentation applied per nesting level of the schema table. */
+private val NESTED_INDENT = 16.dp
 
 @Suppress("FunctionNaming")
 @Composable

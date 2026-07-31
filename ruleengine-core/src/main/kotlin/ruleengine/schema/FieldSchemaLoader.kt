@@ -5,6 +5,7 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.isStructure
 import ruleengine.core.domain.OperatorId
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
@@ -81,12 +82,27 @@ object FieldSchemaLoader {
         validateNormalizers(fieldName = fieldName, normalizers = normalizers)
         val operators = raw.operators?.map { OperatorId(value = it) }?.toSet() ?: emptySet()
 
+        // Recurse into nested members; a nested structure carries its own `fields`, so depth is unbounded.
+        val nested = raw.fields?.let { rawNested ->
+            if (!type.isStructure) {
+                throw SchemaLoadException(
+                    path = Path.of(fieldName.value),
+                    details = "field '${fieldName.value}' declares nested 'fields' but its type is " +
+                        "'${type.name.lowercase()}'; only 'collection' and 'object' can have nested fields"
+                )
+            }
+            rawNested.entries.associate { (name, def) ->
+                FieldId(value = name) to mapRawDefinition(fieldName = FieldId(value = name), raw = def)
+            }
+        } ?: emptyMap()
+
         return FieldDefinition(
             id = fieldName,
             type = type,
             alias = raw.alias,
             normalizers = normalizers,
-            operators = operators
+            operators = operators,
+            fields = nested
         )
     }
 
@@ -111,6 +127,8 @@ object FieldSchemaLoader {
             "boolean", "bool" -> FieldType.BOOLEAN
             "stringset", "string_set", "set" -> FieldType.STRING_SET
             "date" -> FieldType.DATE
+            "collection", "list", "array" -> FieldType.COLLECTION
+            "object", "map" -> FieldType.OBJECT
             else -> throw IllegalArgumentException("Unknown field type: $s")
         }
     }

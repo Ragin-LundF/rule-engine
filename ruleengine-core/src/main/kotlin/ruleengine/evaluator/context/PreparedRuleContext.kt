@@ -6,12 +6,19 @@ import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.compiled.EvaluationCache
+import ruleengine.evaluator.context.dto.PreparedBoolean
+import ruleengine.evaluator.context.dto.PreparedDate
 import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedStringSet
 import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.context.dto.PreparedValue
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeParseException
 
 class PreparedRuleContext(
     private val values: Map<FieldId, PreparedValue>,
@@ -51,6 +58,8 @@ class PreparedRuleContext(
 
                     FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
                     FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
+                    FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
+                    FieldType.DATE -> prepareDate(fieldId = fieldId, raw = raw, map = map)
                     FieldType.STRING_SET -> prepareStringSet(
                         fieldId = fieldId,
                         def = def,
@@ -79,6 +88,40 @@ class PreparedRuleContext(
             var normalized = s
             for (n in def.normalizers) normalized = registry.get(n).normalize(value = normalized)
             map[fieldId] = PreparedText(original = s, normalized = normalized)
+        }
+
+        /**
+         * Reads a calendar date. A value carrying a time is truncated to its date; an `Instant` is
+         * resolved at UTC, because the engine compares calendar dates and has no timezone concept.
+         */
+        private fun prepareDate(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
+            val date = when (raw) {
+                is LocalDate -> raw
+                is LocalDateTime -> raw.toLocalDate()
+                is Instant -> raw.atZone(ZoneOffset.UTC).toLocalDate()
+                is String -> try {
+                    LocalDate.parse(raw)
+                } catch (_: DateTimeParseException) {
+                    return
+                }
+
+                else -> return
+            }
+            map[fieldId] = PreparedDate(value = date)
+        }
+
+        private fun prepareBoolean(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
+            val flag = when (raw) {
+                is Boolean -> raw
+                is String -> when {
+                    raw.equals(other = "true", ignoreCase = true) -> true
+                    raw.equals(other = "false", ignoreCase = true) -> false
+                    else -> return
+                }
+
+                else -> return
+            }
+            map[fieldId] = PreparedBoolean(value = flag)
         }
 
         private fun prepareInteger(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {

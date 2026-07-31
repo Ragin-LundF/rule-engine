@@ -84,6 +84,7 @@ private fun fieldTypeColor(type: FieldType): Color {
         FieldType.BOOLEAN -> AccentPurple
         FieldType.STRING_SET -> AccentGreen
         FieldType.DATE -> TextSecondary
+        FieldType.COLLECTION, FieldType.OBJECT -> AccentGreen
     }
 }
 
@@ -216,6 +217,7 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
                                     FieldType.DECIMAL -> " 0.0"
                                     FieldType.BOOLEAN -> " true"
                                     FieldType.DATE -> " \"2024-01-01\""
+                                    FieldType.COLLECTION, FieldType.OBJECT -> ""
                                 }
                                 onInsert("$displayName $opText$ph")
                             }

@@ -46,6 +46,15 @@ class ComparisonCompiledExpression(
                 }
             }
 
+            is BooleanExpressionValue if rightValue is BooleanExpressionValue -> {
+                when (operator) {
+                    ComparisonOperatorAst.EQ -> leftValue.value == rightValue.value
+                    ComparisonOperatorAst.NEQ -> leftValue.value != rightValue.value
+                    // Ordering has no meaning for booleans.
+                    else -> false
+                }
+            }
+
             else -> false
         }
     }

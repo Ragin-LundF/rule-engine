@@ -12,6 +12,13 @@ data class EditableField(
     val type: SchemaFieldType = SchemaFieldType.TEXT,
     val normalizers: List<String> = emptyList(),
     val operators: List<String> = emptyList(),
+    /**
+     * Members of a [SchemaFieldType.COLLECTION] or [SchemaFieldType.OBJECT] field.
+     *
+     * Recursive, mirroring [ruleengine.core.domain.FieldDefinition.fields], so a collection of objects
+     * that themselves contain collections is expressible to any depth.
+     */
+    val fields: List<EditableField> = emptyList(),
 )
 
 /**
@@ -25,7 +32,13 @@ enum class SchemaFieldType(val displayName: String, val yamlValue: String) {
     BOOLEAN("boolean", "boolean"),
     STRING_SET("string_set", "string_set"),
     DATE("date", "date"),
+    COLLECTION("collection", "collection"),
+    OBJECT("object", "object"),
 }
+
+/** True for the types whose [EditableField.fields] describe nested members. */
+val SchemaFieldType.isStructure: Boolean
+    get() = this == SchemaFieldType.COLLECTION || this == SchemaFieldType.OBJECT
 
 /** All normalizer ids known to the engine, used to populate the selector. */
 val KnownNormalizers: List<String> = listOf(

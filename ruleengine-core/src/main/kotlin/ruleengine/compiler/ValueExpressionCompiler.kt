@@ -4,6 +4,7 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ArithmeticValueAst
+import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FieldSegmentAst
@@ -15,6 +16,7 @@ import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.ArithmeticCompiledValueExpression
+import ruleengine.evaluator.compiled.BooleanExpressionValue
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.CompiledFieldSegment
 import ruleengine.evaluator.compiled.CompiledFilterSegment
@@ -49,6 +51,7 @@ internal object ValueExpressionCompiler {
         val value = when (val lit = literal.literal) {
             is NumberLiteral -> NumberExpressionValue(value = BigDecimal(lit.value))
             is StringLiteral -> TextExpressionValue(value = lit.value)
+            is BooleanLiteral -> BooleanExpressionValue(value = lit.value)
             else -> throw CompilationException(
                 ruleId = null,
                 details = "Unsupported literal type: ${literal.literal::class.simpleName}"

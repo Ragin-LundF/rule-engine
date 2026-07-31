@@ -82,3 +82,37 @@ fields:
       - gte
       - lt
       - lte
+
+  # Yes/no flag — compared with `equals true` or `equals false`.
+  recurring:
+    type: boolean
+    operators:
+      - equals
+
+  # Calendar date — compared with quoted ISO dates, e.g. `bookingDate >= "2024-01-01"`.
+  bookingDate:
+    type: date
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # A collection declares its element members, which lets the Builder offer
+  # `transactions ▸ amount` in aggregate paths and type-check filters.
+  transactions:
+    type: collection
+    fields:
+      amount:
+        type: decimal
+      label:
+        type: text
+      counterparty:
+        type: object
+        fields:
+          iban:
+            type: text
+          country:
+            type: text

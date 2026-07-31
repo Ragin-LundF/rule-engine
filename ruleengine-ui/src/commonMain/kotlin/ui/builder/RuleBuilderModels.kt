@@ -19,6 +19,8 @@ data class BuilderCondition(
     val value: String,
     val valueTo: String = "",
     val listItems: List<String> = emptyList(),
+    val ignoreCase: Boolean = false,
+    override val negated: Boolean = false,
     override val joinToPrevious: String = "",
 ) : BuilderConditionNode {
     override val nodeId: String get() = id
@@ -32,7 +34,10 @@ sealed interface BuilderConditionNode {
     val nodeId: String
     val joinToPrevious: String
 
-    /** A leaf condition row. */
+    /** True when the node is wrapped in `not (...)`. */
+    val negated: Boolean
+
+    /** A leaf condition row comparing a single field to a literal (`field operator value`). */
     data class Condition(
         override val nodeId: String,
         val field: String,
@@ -40,6 +45,24 @@ sealed interface BuilderConditionNode {
         val value: String,
         val valueTo: String = "",
         val listItems: List<String> = emptyList(),
+        val ignoreCase: Boolean = false,
+        override val negated: Boolean = false,
+        override val joinToPrevious: String = "",
+    ) : BuilderConditionNode
+
+    /**
+     * A leaf condition row comparing two [BuilderOperand]s with a symbolic operator.
+     *
+     * This is the shape that carries aggregates, arithmetic and filtered paths. [Condition] stays as
+     * the representation for plain field-to-literal rows so simple rules render exactly as before.
+     */
+    data class Comparison(
+        override val nodeId: String,
+        val left: BuilderOperand,
+        val operator: String,
+        val right: BuilderOperand,
+        val ignoreCase: Boolean = false,
+        override val negated: Boolean = false,
         override val joinToPrevious: String = "",
     ) : BuilderConditionNode
 
@@ -47,6 +70,7 @@ sealed interface BuilderConditionNode {
     data class Group(
         override val nodeId: String,
         val nodes: List<BuilderConditionNode>,
+        override val negated: Boolean = false,
         override val joinToPrevious: String = "",
     ) : BuilderConditionNode
 }

@@ -28,6 +28,8 @@ internal fun defaultOperatorsForType(fieldType: FieldType): List<String> {
         FieldType.BOOLEAN    -> BOOL_OPS
         FieldType.STRING_SET -> SET_OPS
         FieldType.DATE       -> DATE_OPS
+        // Structures are navigated, not compared: no direct operators.
+        FieldType.COLLECTION, FieldType.OBJECT -> emptyList()
     }
 }
 
@@ -42,6 +44,7 @@ internal fun valuePlaceholderForOperator(op: String, fieldType: FieldType): Stri
             FieldType.BOOLEAN    -> "true"
             FieldType.STRING_SET -> "\"value\""
             FieldType.DATE       -> "\"2024-01-01\""
+            FieldType.COLLECTION, FieldType.OBJECT -> ""
         }
     }
 }
