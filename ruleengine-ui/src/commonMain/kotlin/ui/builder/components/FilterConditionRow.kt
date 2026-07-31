@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import ui.AccentOrange
 import ui.BgElevated
 import ui.BorderColor
 import ui.TextPrimary
@@ -27,10 +28,12 @@ import ui.builder.OperatorOptions
 import ui.components.TinyButton
 
 /**
- * A single `where` row of a filtered path segment: element field, operator, value.
+ * A single restriction of a filtered path segment: element field, operator, value — bracketed like the
+ * `[...]` it generates.
  *
  * The field dropdown lists the members of the element being filtered, so names here refer to element
- * fields rather than top-level fields — matching how the engine evaluates filter segments.
+ * fields rather than top-level fields — matching how the engine evaluates filter segments. Only the
+ * value is typed; a field name is always picked from the schema.
  */
 @Composable
 fun FilterConditionRow(
@@ -46,16 +49,18 @@ fun FilterConditionRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "where",
-            style = MaterialTheme.typography.caption,
+            text = "[",
+            style = MaterialTheme.typography.body2,
             color = TextSecondary,
         )
 
         if (fieldOptions.isEmpty()) {
-            PlainTextField(
-                value = filter.field,
-                placeholder = "field",
-                onValueChange = { onFilterChanged(filter.copy(field = it)) },
+            // The element declares no members, so there is nothing valid to offer — and nothing to
+            // type either. The name the rule text carried is kept and marked instead.
+            Text(
+                text = "${filter.field} $UNKNOWN_MARKER",
+                style = MaterialTheme.typography.body2,
+                color = AccentOrange,
                 modifier = Modifier.width(width = 110.dp),
             )
         } else {
@@ -74,11 +79,18 @@ fun FilterConditionRow(
             modifier = Modifier.width(width = 80.dp),
         )
 
+        // The value is a literal, not a field name, so it stays free text.
         PlainTextField(
             value = filter.value,
             placeholder = "value",
             onValueChange = { onFilterChanged(filter.copy(value = it)) },
             modifier = Modifier.width(width = 110.dp),
+        )
+
+        Text(
+            text = "]",
+            style = MaterialTheme.typography.body2,
+            color = TextSecondary,
         )
 
         TinyButton(text = "×", onClick = onRemove)
