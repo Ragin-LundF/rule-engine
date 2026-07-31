@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## 1.5.0
+
+### Fixed
+
+- **A compilation error names the rule it came from.** Every `CompilationException` read
+  `Compilation failed for rule <unknown>`, whatever went wrong and however many rules were being compiled.
+  The operator layer had always accepted a `ruleId` and passed it on, but `Compiler` fed it a private helper
+  that ignored its argument and returned a constant `null`, so the id never left the `RuleAst` and the whole
+  plumbing was inert. The rule id is now threaded from `Compiler.compileRule` through every condition,
+  action, extraction, filter segment and value expression, so a failure points at the rule to fix instead of
+  at the whole file.
+
+- **An equality filter written with a named operator could not compile.**
+  `count(parcels[status equals "paid"])` failed with `Operator 'equals' is not supported in filter segments`,
+  as did the `eq` and `=` spellings. The filter compiler branches on the canonical name produced by
+  `OperatorUtils.normalizeOperator` — which maps `==`, `=` and `eq` to `equals`, and `>` to `gt` — but its
+  branches were written against the raw symbols. So `==`, `>`, `>=`, `<`, `<=` and the `greater_than` /
+  `less_than_or_equal` aliases were keys the `when` could never receive; only `gt`, `gte`, `lt`, `lte` and
+  `!=` ever matched, and `equals` fell through to the error. Every spelling of `equals`, `gt`, `gte`, `lt`
+  and `lte` now works in a filter segment.
+
+- **A non-string element of a list action argument became the parser's debug output.** `label ["a", 1]`
+  compiled to the arguments `["a", "NumberLiteral(value=1)"]`, because list items were translated with a
+  string cast that fell back to the AST node's `toString()`. List items now go through the same literal
+  conversion as a top-level argument, at any nesting depth.
+
+- **A boolean action argument was silently dropped.** `extract iban regex("(\d+)", 1) label true` compiled
+  the argument to `null`: the translation handled strings, numbers and lists, and let everything else fall
+  through to a `null` value. Booleans are translated now, and a literal the compiler genuinely cannot
+  translate raises a `CompilationException` naming the action instead of producing a `null` argument.
+
+- **`ignoreCase` in a filter segment was ignored rather than applied.**
+  `count(parcels[status equals "paid" ignoreCase])` compiled to a case-*sensitive* comparison and quietly
+  returned the wrong count, because the comparison used inside a filter has no case-insensitive mode. The
+  modifier is now rejected at compile time with a message naming it, so the rule fails loudly instead of
+  evaluating to something other than what it says. A rule that relied on it therefore no longer compiles;
+  case-insensitive filtering has to be expressed with a normalizer on the filtered field.
+
+### Changed
+
+- `Compiler` internals, with no change in behaviour: the `compileDecimalCondition` /
+  `compileIntegerCondition` pass-throughs are inlined into `compileCondition` next to the existing date
+  branch, `compileFilterExpression` is private, the `when` over `FieldType` is exhaustive instead of ending
+  in a catch-all `else`, and the four `@Suppress` annotations that covered the removed helper and the two
+  wrappers are gone.
+
 ## 1.4.0
 
 ### Added
