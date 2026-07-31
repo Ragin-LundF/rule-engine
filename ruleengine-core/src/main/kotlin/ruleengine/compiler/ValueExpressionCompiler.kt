@@ -33,27 +33,41 @@ internal object ValueExpressionCompiler {
     fun compile(
         expr: ValueExpressionAst,
         schema: FieldSchema,
+        ruleId: String? = null,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)? = null
     ): CompiledValueExpression {
         return when (expr) {
-            is LiteralValueAst -> compileLiteral(literal = expr)
-            is FieldAccessAst -> compileFieldAccess(expr = expr, schema = schema, filterCompiler = filterCompiler)
-            is ArithmeticValueAst -> compileArithmetic(expr = expr, schema = schema, filterCompiler = filterCompiler)
+            is LiteralValueAst -> compileLiteral(literal = expr, ruleId = ruleId)
+            is FieldAccessAst -> compileFieldAccess(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            is ArithmeticValueAst -> compileArithmetic(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
             is FunctionCallValueAst -> compileFunctionCall(
                 expr = expr,
                 schema = schema,
+                ruleId = ruleId,
                 filterCompiler = filterCompiler
             )
         }
     }
 
-    private fun compileLiteral(literal: LiteralValueAst): CompiledValueExpression {
+    private fun compileLiteral(literal: LiteralValueAst, ruleId: String?): CompiledValueExpression {
         val value = when (val lit = literal.literal) {
             is NumberLiteral -> NumberExpressionValue(value = BigDecimal(lit.value))
             is StringLiteral -> TextExpressionValue(value = lit.value)
             is BooleanLiteral -> BooleanExpressionValue(value = lit.value)
             else -> throw CompilationException(
-                ruleId = null,
+                ruleId = ruleId,
                 details = "Unsupported literal type: ${literal.literal::class.simpleName}"
             )
         }
@@ -63,6 +77,7 @@ internal object ValueExpressionCompiler {
     private fun compileFieldAccess(
         expr: FieldAccessAst,
         schema: FieldSchema,
+        ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): CompiledValueExpression {
         val compiledSegments = mutableListOf<CompiledPathSegment>()
@@ -79,7 +94,7 @@ internal object ValueExpressionCompiler {
 
                 is FilterSegmentAst -> {
                     val compiler = filterCompiler ?: throw CompilationException(
-                        ruleId = null,
+                        ruleId = ruleId,
                         details = "Filter segments in field paths are not supported in this context"
                     )
                     val compiledFilter = compiler(segment.expression, schema)
@@ -93,31 +108,38 @@ internal object ValueExpressionCompiler {
     private fun compileFunctionCall(
         expr: FunctionCallValueAst,
         schema: FieldSchema,
+        ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): CompiledValueExpression {
         val functionName = AggregateFunctionName.entries.find {
             it.name.equals(expr.name, ignoreCase = true)
         } ?: throw CompilationException(
-            ruleId = null,
+            ruleId = ruleId,
             details = "Unknown function '${expr.name}'"
         )
         if (expr.arguments.size != 1) {
             throw CompilationException(
-                ruleId = null,
+                ruleId = ruleId,
                 details = "Function '${expr.name}' requires exactly one argument"
             )
         }
-        val compiledArg = compile(expr = expr.arguments[0], schema = schema, filterCompiler = filterCompiler)
+        val compiledArg = compile(
+            expr = expr.arguments[0],
+            schema = schema,
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
+        )
         return FunctionCallCompiledValueExpression(function = functionName, argument = compiledArg)
     }
 
     private fun compileArithmetic(
         expr: ArithmeticValueAst,
         schema: FieldSchema,
+        ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): CompiledValueExpression {
-        val left = compile(expr = expr.left, schema = schema, filterCompiler = filterCompiler)
-        val right = compile(expr = expr.right, schema = schema, filterCompiler = filterCompiler)
+        val left = compile(expr = expr.left, schema = schema, ruleId = ruleId, filterCompiler = filterCompiler)
+        val right = compile(expr = expr.right, schema = schema, ruleId = ruleId, filterCompiler = filterCompiler)
         val cost = maxOf(left.cost, right.cost)
         return ArithmeticCompiledValueExpression(
             left = left,
