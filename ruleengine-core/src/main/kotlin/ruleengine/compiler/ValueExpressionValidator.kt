@@ -1,11 +1,11 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.isStructure
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.isStructure
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ArithmeticValueAst
@@ -82,7 +82,7 @@ internal object ValueExpressionValidator {
 
     /**
      * Walks a field path of arbitrary length, one segment at a time, descending
-     * [ruleengine.core.domain.FieldDefinition.fields] so that `orders[status == "paid"].items[price > 0].price`
+     * [ruleengine.core.domain.dto.FieldDefinition.fields] so that `orders[status == "paid"].items[price > 0].price`
      * is typed from its declared leaf rather than assumed numeric.
      *
      * The walk is permissive by design: as soon as a node stops declaring nested members it yields

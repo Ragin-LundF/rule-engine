@@ -1,11 +1,11 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.ActionArgType
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldSchema
 import ui.DslCursorContext
 import ui.DslSection
 

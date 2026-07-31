@@ -4,7 +4,7 @@ package ui.schema
  * Editable representation of a single field in the visual schema editor.
  *
  * All fields are plain strings so the composable layer stays in commonMain.
- * The bridge layer (jvmMain) converts between this model and [ruleengine.core.domain.FieldSchema].
+ * The bridge layer (jvmMain) converts between this model and [ruleengine.core.domain.dto.FieldSchema].
  */
 data class EditableField(
     val path: String = "",
@@ -20,7 +20,7 @@ data class EditableField(
     /**
      * Members of a [SchemaFieldType.COLLECTION] or [SchemaFieldType.OBJECT] field.
      *
-     * Recursive, mirroring [ruleengine.core.domain.FieldDefinition.fields], so a collection of objects
+     * Recursive, mirroring [ruleengine.core.domain.dto.FieldDefinition.fields], so a collection of objects
      * that themselves contain collections is expressible to any depth.
      */
     val fields: List<EditableField> = emptyList(),
@@ -28,7 +28,7 @@ data class EditableField(
 
 /**
  * Supported field types exposed in the visual editor.
- * Maps 1-to-1 with [ruleengine.core.domain.FieldType].
+ * Maps 1-to-1 with [ruleengine.core.domain.dto.FieldType].
  */
 enum class SchemaFieldType(val displayName: String, val yamlValue: String) {
     TEXT("text", "text"),

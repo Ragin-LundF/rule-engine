@@ -25,12 +25,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionDefinition
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldType
-import ui.autocompletion.valuePlaceholderForOperator
+import ruleengine.core.domain.dto.ActionArgType
+import ruleengine.core.domain.dto.ActionDefinition
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldType
 import ui.AccentGreen
 import ui.AccentPurple
 import ui.BgHover
@@ -44,6 +43,7 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.autocompletion.valuePlaceholderForOperator
 
 enum class ViewMode {
     BUILDER,

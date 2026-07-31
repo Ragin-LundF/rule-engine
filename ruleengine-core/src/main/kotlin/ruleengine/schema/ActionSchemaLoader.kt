@@ -1,8 +1,8 @@
 package ruleengine.schema
 
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionDefinition
-import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.dto.ActionArgType
+import ruleengine.core.domain.dto.ActionDefinition
+import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil

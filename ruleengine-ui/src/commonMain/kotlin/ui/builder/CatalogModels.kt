@@ -11,7 +11,7 @@ data class CatalogFieldInfo(
     val format: String = "",
     /**
      * Members of a collection or object field. Recursive, mirroring
-     * `ruleengine.core.domain.FieldDefinition.fields`, so path pickers can descend to any depth.
+     * `ruleengine.core.domain.dto.FieldDefinition.fields`, so path pickers can descend to any depth.
      */
     val nestedFields: List<CatalogFieldInfo> = emptyList(),
 )

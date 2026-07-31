@@ -1,9 +1,9 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.TemporalFormat
-import ruleengine.core.domain.isTemporal
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.isTemporal
 
 // ── Completion model
 

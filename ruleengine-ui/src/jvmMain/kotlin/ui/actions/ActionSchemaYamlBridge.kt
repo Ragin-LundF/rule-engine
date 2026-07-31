@@ -1,6 +1,6 @@
 package ui.actions
 
-import ruleengine.core.domain.ActionSchema
+import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.schema.ActionSchemaLoader
 
 /**

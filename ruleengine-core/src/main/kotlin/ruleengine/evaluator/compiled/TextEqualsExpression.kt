@@ -1,6 +1,6 @@
 package ruleengine.evaluator.compiled
 
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.dto.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.trace.TraceCollector

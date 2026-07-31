@@ -2,14 +2,14 @@ package ruleengine.compiler
 
 import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.ActionArgType
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst

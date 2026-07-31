@@ -1,15 +1,8 @@
 package ruleengine.core.domain
 
-enum class ActionArgType { STRING, INTEGER, DECIMAL }
-
-data class ActionDefinition(
-    val name: String,
-    val argTypes: List<ActionArgType>
-)
-
-data class ActionSchema(
-    val actions: Map<String, ActionDefinition>
-)
+import ruleengine.core.domain.dto.ActionArgType
+import ruleengine.core.domain.dto.ActionDefinition
+import ruleengine.core.domain.dto.ActionSchema
 
 object DefaultActionSchema {
     val basic = ActionSchema(actions = mapOf(
@@ -19,4 +12,3 @@ object DefaultActionSchema {
         "score" to ActionDefinition(name = "score", argTypes = listOf(ActionArgType.INTEGER))
     ))
 }
-

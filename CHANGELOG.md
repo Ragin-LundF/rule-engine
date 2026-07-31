@@ -8,6 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 1.5.0
 
+### Changed
+
+- **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,
+  `FieldType` (with its `isStructure` / `isTemporal` extensions), `FieldId`, `OperatorId`, `NormalizerId`,
+  `ActionSchema`, `ActionDefinition`, `ActionArgType`, `RuleMatch`, `RuleAction` and `EvaluationResult` are
+  now declared in `ruleengine.core.domain.dto`, one top-level declaration per file. `ruleengine.core.domain`
+  keeps the logic that operates on them — `FieldPathResolver`, `FieldPathResolution`, `TemporalFormat` and
+  `DefaultActionSchema`. Only the package changed: every type, member and default value is untouched, so
+  updating an integration is a matter of adding `.dto` to the affected imports
+  (`import ruleengine.core.domain.FieldSchema` becomes `import ruleengine.core.domain.dto.FieldSchema`).
+  The two files that previously held all of it, `FieldModels.kt` and `ActionSchema.kt`, declared eleven and
+  four types respectively, against the one-declaration-per-file rule the rest of the codebase follows; the
+  `dto` subpackage matches `ruleengine.schema.dto`, `ruleengine.evaluator.context.dto` and
+  `ruleengine.evaluator.trace.dto`, which were already laid out this way.
+
+- `Compiler` internals, with no change in behaviour: the `compileDecimalCondition` /
+  `compileIntegerCondition` pass-throughs are inlined into `compileCondition` next to the existing date
+  branch, `compileFilterExpression` is private, the `when` over `FieldType` is exhaustive instead of ending
+  in a catch-all `else`, and the four `@Suppress` annotations that covered the removed helper and the two
+  wrappers are gone.
+
 ### Fixed
 
 - **A compilation error names the rule it came from.** Every `CompilationException` read
@@ -43,14 +64,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   modifier is now rejected at compile time with a message naming it, so the rule fails loudly instead of
   evaluating to something other than what it says. A rule that relied on it therefore no longer compiles;
   case-insensitive filtering has to be expressed with a normalizer on the filtered field.
-
-### Changed
-
-- `Compiler` internals, with no change in behaviour: the `compileDecimalCondition` /
-  `compileIntegerCondition` pass-throughs are inlined into `compileCondition` next to the existing date
-  branch, `compileFilterExpression` is private, the `when` over `FieldType` is exhaustive instead of ending
-  in a catch-all `else`, and the four `@Suppress` annotations that covered the removed helper and the two
-  wrappers are gone.
 
 ## 1.4.0
 

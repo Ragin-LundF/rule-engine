@@ -1,5 +1,7 @@
 package ruleengine.core.domain
 
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter

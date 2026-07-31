@@ -2,8 +2,8 @@ package ruleengine.builder
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic

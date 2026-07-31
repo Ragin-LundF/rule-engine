@@ -6,8 +6,8 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.lexer.Lexer

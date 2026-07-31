@@ -1,6 +1,6 @@
 package ui.builder
 
-import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.dto.FieldDefinition
 
 /**
  * Converts an engine [FieldDefinition] into the platform-neutral [CatalogFieldInfo] the Builder uses.

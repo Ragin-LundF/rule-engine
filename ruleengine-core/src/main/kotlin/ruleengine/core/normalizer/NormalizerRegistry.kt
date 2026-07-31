@@ -1,6 +1,6 @@
 package ruleengine.core.normalizer
 
-import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.dto.NormalizerId
 
 object NormalizerRegistry {
     private val builtins: Map<String, Normalizer> = mapOf(

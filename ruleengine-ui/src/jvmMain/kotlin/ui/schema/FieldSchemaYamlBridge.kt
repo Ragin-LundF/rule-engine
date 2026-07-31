@@ -1,7 +1,7 @@
 package ui.schema
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.schema.FieldSchemaLoader
 
 /**

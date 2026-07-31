@@ -1,7 +1,7 @@
 package ui
 
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ui.autocompletion.AutoCompleteDropdown as AutoCompleteDropdownImpl
 import ui.autocompletion.CompletionItem as CompletionItemImpl
 import ui.autocompletion.CompletionKind as CompletionKindImpl

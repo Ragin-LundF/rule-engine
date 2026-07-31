@@ -1,11 +1,11 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.domain.dto.OperatorId
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals

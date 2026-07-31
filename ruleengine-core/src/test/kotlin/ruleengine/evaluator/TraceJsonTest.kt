@@ -2,12 +2,12 @@ package ruleengine.evaluator
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.domain.dto.OperatorId
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.context.PreparedRuleContext

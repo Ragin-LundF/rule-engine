@@ -1,5 +1,9 @@
 package ruleengine.core.domain
 
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

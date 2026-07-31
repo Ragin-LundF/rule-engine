@@ -1,5 +1,10 @@
 package ruleengine.core.domain
 
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
+
 /**
  * Resolves a field identifier written in a rule to its declaration in a [FieldSchema].
  *

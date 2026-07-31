@@ -1,11 +1,11 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.TemporalFormat
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.compiled.EvaluationCache
 import ruleengine.evaluator.context.dto.PreparedBoolean

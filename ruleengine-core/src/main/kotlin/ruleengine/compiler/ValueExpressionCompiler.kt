@@ -1,7 +1,7 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BooleanLiteral

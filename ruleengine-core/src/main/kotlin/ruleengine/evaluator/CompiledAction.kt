@@ -1,6 +1,6 @@
 package ruleengine.evaluator
 
-import ruleengine.core.domain.RuleAction
+import ruleengine.core.domain.dto.RuleAction
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.context.PreparedRuleContext
 

@@ -1,5 +1,5 @@
 package ui
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType

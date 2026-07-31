@@ -1,16 +1,14 @@
 package ruleengine.compiler
 
 import org.junit.jupiter.api.Test
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.StringLiteral
 import kotlin.test.assertTrue
-import kotlin.test.assertEquals
 
 class ValidatorAliasResolutionTest {
 

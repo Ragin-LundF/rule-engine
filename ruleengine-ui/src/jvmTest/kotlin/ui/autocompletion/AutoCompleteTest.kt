@@ -1,8 +1,8 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

@@ -238,7 +238,7 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.compiler.Compiler
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -570,9 +570,9 @@ val result = engine.evaluate(prepared = prepared)
 ### 4.9 Reading the Result
 
 ```kotlin
-import ruleengine.core.domain.EvaluationResult
-import ruleengine.core.domain.RuleMatch
-import ruleengine.core.domain.RuleAction
+import ruleengine.core.domain.dto.EvaluationResult
+import ruleengine.core.domain.dto.RuleMatch
+import ruleengine.core.domain.dto.RuleAction
 
 val result: EvaluationResult = engine.evaluate(prepared = prepared)
 
@@ -727,7 +727,7 @@ a failed reload leaves the previous engine in place:
 ```kotlin
 import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
-import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.errors.RuleEngineBuildException
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
@@ -815,7 +815,7 @@ Register a custom normalizer in the `NormalizerRegistry` so that schemas can ref
 
 ```kotlin
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.dto.NormalizerId
 
 // Register before loading any schema
 NormalizerRegistry.register(
@@ -846,7 +846,8 @@ fields:
 | Package | Contents |
 |---|---|
 | `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
-| `ruleengine.core.domain` | Domain model: `FieldSchema`, `FieldDefinition`, `FieldType`, `ActionSchema`, `RuleMatch`, `EvaluationResult`, `RuleAction` |
+| `ruleengine.core.domain.dto` | Domain model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId`, `OperatorId`, `NormalizerId`, `ActionSchema`, `ActionDefinition`, `ActionArgType`, `RuleMatch`, `EvaluationResult`, `RuleAction` |
+| `ruleengine.core.domain` | Logic over that model: `FieldPathResolver` / `FieldPathResolution` (dotted-path resolution), `TemporalFormat` (date pattern parsing), `DefaultActionSchema` |
 | `ruleengine.core.normalizer` | `NormalizerRegistry`, `NormalizerProfile`, built-in normalizers |
 | `ruleengine.core.errors` | `RuleEngineException`, `RuleEngineBuildException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |
 | `ruleengine.dsl.parser` | `Parser` — parses `.rule` text into `List<RuleAst>` |
@@ -869,7 +870,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
-import ruleengine.core.domain.RuleMatch
+import ruleengine.core.domain.dto.RuleMatch
 import java.nio.file.Path
 
 @Configuration

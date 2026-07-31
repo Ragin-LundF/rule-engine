@@ -4,7 +4,7 @@ import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.core.io.FileInputSupport

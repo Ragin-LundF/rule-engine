@@ -1,14 +1,14 @@
 package ruleengine.evaluator
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.domain.dto.OperatorId
 import ruleengine.evaluator.compiled.AndExpression
-import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.ComparisonOperator
+import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.DecimalComparisonExpression
 import ruleengine.evaluator.compiled.RegexExtractExpression
 import ruleengine.evaluator.compiled.TextEqualsExpression

@@ -1,6 +1,6 @@
 package ruleengine.schema
 
-import ruleengine.core.domain.ActionArgType
+import ruleengine.core.domain.dto.ActionArgType
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
 import java.nio.file.Files

@@ -2,11 +2,11 @@ package ruleengine.docs
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
@@ -144,9 +144,9 @@ class SpecExampleTest {
         val supplements = supplementaryActions
             .filterNot { name -> declared.any { it.name == name } }
             .map { name ->
-                ruleengine.core.domain.ActionDefinition(
+                ruleengine.core.domain.dto.ActionDefinition(
                     name = name,
-                    argTypes = listOf(ruleengine.core.domain.ActionArgType.STRING),
+                    argTypes = listOf(ruleengine.core.domain.dto.ActionArgType.STRING),
                 )
             }
         return ActionSchema(actions = (declared + supplements).associateBy { it.name })

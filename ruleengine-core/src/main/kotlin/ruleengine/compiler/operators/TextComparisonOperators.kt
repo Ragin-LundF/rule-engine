@@ -1,7 +1,7 @@
 package ruleengine.compiler.operators
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.dto.FieldDefinition
+import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ConditionAst

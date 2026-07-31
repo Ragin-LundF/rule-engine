@@ -6,8 +6,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestPathResolution

@@ -1,7 +1,7 @@
 package ruleengine.evaluator
 
-import ruleengine.core.domain.EvaluationResult
-import ruleengine.core.domain.RuleMatch
+import ruleengine.core.domain.dto.EvaluationResult
+import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.NoopTraceCollector
