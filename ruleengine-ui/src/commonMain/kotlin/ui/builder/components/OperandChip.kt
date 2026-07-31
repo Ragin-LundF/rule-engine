@@ -53,7 +53,9 @@ fun OperandChip(
     var menuOpen by remember { mutableStateOf(value = false) }
     val kind = OperandRules.kindOf(operand = operand)
     val kinds = OperandRules.availableKinds(other = otherOperand, fields = fields)
-    val isEditable = kind == OperandRules.OperandKind.AGGREGATE || kind == OperandRules.OperandKind.CALCULATION
+    // A literal is edited on the row itself; everything else — including a filtered field path — has
+    // a panel worth expanding, so the caret must be there to say so.
+    val isEditable = kind != OperandRules.OperandKind.VALUE
 
     Row(
         modifier = modifier

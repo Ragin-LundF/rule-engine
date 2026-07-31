@@ -1,12 +1,11 @@
-package ui.editor.rules
+package ruleengine.manifest
 
 import java.nio.file.Path
 
-sealed interface ManifestPathResolution {
-    data class Accepted(val path: Path) : ManifestPathResolution
-    data class Rejected(val message: String) : ManifestPathResolution
-}
-
+/**
+ * Resolves paths referenced by a manifest entry against the manifest's own directory and rejects
+ * every candidate that escapes it (for example `../../etc/passwd`).
+ */
 object ManifestPathResolver {
     fun resolveWithinBase(baseDir: Path, relativePath: String, label: String): ManifestPathResolution {
         val normalizedBaseDir = baseDir.toAbsolutePath().normalize()
@@ -21,4 +20,3 @@ object ManifestPathResolver {
         }
     }
 }
-

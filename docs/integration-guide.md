@@ -8,16 +8,17 @@ This guide is for **developers** who want to embed the Rule Engine into a JVM ap
 
 1. [Adding the Dependency](#1-adding-the-dependency)
 2. [Core Concepts for Developers](#2-core-concepts-for-developers)
-3. [Quick-Start: Manifest-Based Loading](#3-quick-start-manifest-based-loading)
-4. [Step-by-Step: Manual Setup](#4-step-by-step-manual-setup)
-   - [Loading a Field Schema](#41-loading-a-field-schema)
-   - [Loading an Action Schema](#42-loading-an-action-schema)
-   - [Parsing Rules](#43-parsing-rules)
-   - [Validating Rules](#44-validating-rules)
-   - [Compiling Rules](#45-compiling-rules)
-   - [Building the Engine](#46-building-the-engine)
-   - [Evaluating Input Data](#47-evaluating-input-data)
-   - [Reading the Result](#48-reading-the-result)
+3. [Quick Start: RuleEngineBuilder](#3-quick-start-ruleenginebuilder)
+4. [Advanced Rule Engine Preparation](#4-advanced-rule-engine-preparation)
+   - [Manifest-Based Loading by Hand](#41-manifest-based-loading-by-hand)
+   - [Loading a Field Schema](#42-loading-a-field-schema)
+   - [Loading an Action Schema](#43-loading-an-action-schema)
+   - [Parsing Rules](#44-parsing-rules)
+   - [Validating Rules](#45-validating-rules)
+   - [Compiling Rules](#46-compiling-rules)
+   - [Building the Engine](#47-building-the-engine)
+   - [Evaluating Input Data](#48-evaluating-input-data)
+   - [Reading the Result](#49-reading-the-result)
 5. [Tracing — Decision Tree Output](#5-tracing--decision-tree-output)
 6. [Loading from Strings and Readers](#6-loading-from-strings-and-readers)
 7. [Thread Safety and Lifecycle](#7-thread-safety-and-lifecycle)
@@ -99,12 +100,136 @@ RuleEngine.evaluate()         ──►  EvaluationResult
 **Key principle:** parsing, validation, and compilation happen once.
 The `RuleEngine` instance is reused for every evaluation — it is stateless and thread-safe after construction.
 
+`RuleEngineBuilder` (see section 3) runs the entire load phase for you; section 4 shows the same
+phases driven one component at a time.
+
 ---
 
-## 3. Quick-Start: Manifest-Based Loading
+## 3. Quick Start: RuleEngineBuilder
 
-The fastest way to get started is to use a manifest file.
-The manifest points to all required files; the engine resolves paths relative to the manifest.
+`RuleEngineBuilder` performs the **whole load phase in one call**: it reads the manifest, resolves
+every referenced file relative to the manifest, loads the field and action schema, parses the rule
+files in manifest order, validates them and compiles them into a ready engine.
+
+```kotlin
+import ruleengine.builder.RuleEngineBuilder
+import java.nio.file.Path
+
+// Loads every entry of the manifest, keyed by entry id
+val engines = RuleEngineBuilder.fromManifest(manifestPath = Path.of("rules/manifest.yaml"))
+
+val loaded = engines.getValue("transactions")
+
+val result = loaded.evaluate(
+    input = mapOf(
+        "purpose" to "Rent apartment January",
+        "amount" to 750.0,
+        "tags" to listOf("regular")
+    )
+)
+
+for (match in result.matches) {
+    println("Rule matched: ${match.ruleId}")
+    for (action in match.actions) {
+        println("  Action: ${action.name} ${action.arguments}")
+    }
+}
+```
+
+That is the complete integration — no separate loader calls, no manual validation check, and no
+second variable holding the schema.
+
+### What you get back
+
+`fromManifest` returns a `Map<String, LoadedRuleEngine>` keyed by manifest entry id. Each
+`LoadedRuleEngine` bundles everything belonging to one entry:
+
+- `entryId: String` — the manifest entry it was built from
+- `engine: RuleEngine` — the compiled engine
+- `schema: FieldSchema` — the schema the rules were compiled against
+- `actions: ActionSchema?` — the action schema, or `null` when the entry declares none
+- `warnings: List<ValidationDiagnostic>` — non-fatal diagnostics (errors would have failed the build)
+- `evaluate(input, includeTrace)` — normalises the input against `schema` and evaluates it
+
+Because the schema travels with the engine, a single object can be passed around, stored as a bean,
+or swapped atomically on reload.
+
+### Loading a single entry
+
+Pass `entryId` to build only one entry — the result is then a single-element map, so sibling entries
+are never read:
+
+```kotlin
+val engines = RuleEngineBuilder.fromManifest(
+    manifestPath = Path.of("rules/manifest.yaml"),
+    entryId = "transactions"
+)
+```
+
+`fromManifestEntry` does the same but returns the `LoadedRuleEngine` directly:
+
+```kotlin
+val loaded = RuleEngineBuilder.fromManifestEntry(
+    manifestPath = Path.of("rules/manifest.yaml"),
+    entryId = "transactions"
+)
+```
+
+### Parameters
+
+| Parameter | Default | Purpose |
+|---|---|---|
+| `manifestPath` | — | Path to the manifest YAML (or JSON) file |
+| `entryId` | `null` | Build only this entry instead of all of them |
+| `shortCircuitByOutput` | `false` | Enable the output-based short-circuit optimisation (see section 4.7) |
+| `normalizerRegistry` | `NormalizerRegistry.default` | Normalizer registry used for compilation |
+
+### What is validated
+
+The builder fails fast instead of handing out a half-initialised engine. It raises
+`RuleEngineBuildException` (from `ruleengine.core.errors`) when:
+
+- the manifest is missing, unreadable, empty, or declares duplicate entry ids
+- `entryId` names an entry that does not exist — the message lists the available ids
+- an entry declares no `schema` or no rule files
+- a referenced schema, action or rule file does not exist — the message names both the relative path
+  from the manifest and the resolved absolute path
+- a referenced path escapes the manifest directory (for example `../../etc/passwd`)
+- a schema or rule file cannot be loaded or parsed
+- rule validation reports an `ERROR`
+
+The exception message states the manifest, the affected entry and the concrete problem, and appends
+one line per validation diagnostic, so the full reason is available without a logging framework. The
+structured diagnostics remain accessible via `RuleEngineBuildException.diagnostics`:
+
+```kotlin
+import ruleengine.core.errors.RuleEngineBuildException
+
+try {
+    val engines = RuleEngineBuilder.fromManifest(manifestPath = Path.of("rules/manifest.yaml"))
+} catch (e: RuleEngineBuildException) {
+    logger.error("Rule engine startup failed: ${e.message}")
+    e.diagnostics.forEach { diagnostic -> logger.error("  ${diagnostic.severity}: ${diagnostic.message}") }
+    throw e
+}
+```
+
+Warnings never fail the build; inspect `loaded.warnings` if you want to surface them.
+
+> **Note:** The builder loads from the filesystem. For custom sources (strings, readers, classpath
+> resources) or partial pipelines, use the individual components described in section 4.
+
+---
+
+## 4. Advanced Rule Engine Preparation
+
+Use the individual components when `RuleEngineBuilder` does not fit: rules that come from a database
+or a classpath resource instead of files, a validation-only tool that never compiles, a custom
+assembly of schemas and rule sets, or full control over each phase.
+
+### 4.1 Manifest-Based Loading by Hand
+
+This is what `RuleEngineBuilder.fromManifest` does internally, written out:
 
 ```kotlin
 import ruleengine.manifest.ManifestLoader
@@ -113,13 +238,16 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.compiler.Compiler
+import ruleengine.core.domain.FieldSchema
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
 import java.nio.file.Path
 import java.nio.file.Files
 
-fun buildEngine(manifestPath: Path): RuleEngine {
+data class ManualEngine(val engine: RuleEngine, val schema: FieldSchema)
+
+fun buildEngine(manifestPath: Path): ManualEngine {
     val manifest = ManifestLoader.load(path = manifestPath)
     val entry = manifest.entries.first()
     val baseDir = manifestPath.parent
@@ -138,23 +266,24 @@ fun buildEngine(manifestPath: Path): RuleEngine {
     }
 
     val compiled = Compiler.compileRules(asts = ruleAsts, schema = schema)
-    return RuleEngine(compiledRules = compiled)
+    return ManualEngine(engine = RuleEngine(compiledRules = compiled), schema = schema)
 }
 ```
 
-Evaluating a single record:
+Note that the schema has to be carried alongside the engine: `RuleEngine` does not hold it, but
+`PreparedRuleContext.prepare` needs it for normalisation. Evaluating a single record:
 
 ```kotlin
-val engine = buildEngine(Path.of("rules/manifest.yaml"))
+val manual = buildEngine(Path.of("rules/manifest.yaml"))
 
-val result = engine.evaluate(
+val result = manual.engine.evaluate(
     prepared = PreparedRuleContext.prepare(
         ctx = RuleContext.of(
             "purpose" to "Rent apartment January",
             "amount" to 750.0,
             "tags" to listOf("regular")
         ),
-        schema = schema
+        schema = manual.schema
     )
 )
 
@@ -166,11 +295,11 @@ for (match in result.matches) {
 }
 ```
 
----
+> **Note:** Unlike the builder, this hand-written version does not check that referenced paths stay
+> inside the manifest directory. Use `ManifestPathResolver.resolveWithinBase` from
+> `ruleengine.manifest` when the manifest is not fully under your control.
 
-## 4. Step-by-Step: Manual Setup
-
-### 4.1 Loading a Field Schema
+### 4.2 Loading a Field Schema
 
 Load from a file:
 
@@ -215,7 +344,7 @@ The returned `FieldSchema` contains:
   It is empty for scalar fields, and also empty for a structure whose members were not declared. The
   `FieldType.isStructure` extension property tells the two structure types apart from the rest.
 
-### 4.2 Loading an Action Schema
+### 4.3 Loading an Action Schema
 
 ```kotlin
 import ruleengine.schema.ActionSchemaLoader
@@ -232,7 +361,7 @@ The returned `ActionSchema` contains:
 `argTypes` holds one entry for an action that takes a value, and is **empty** for an action that takes
 none (declared as `argTypes: []` and written in a rule as the bare action name).
 
-### 4.3 Parsing Rules
+### 4.4 Parsing Rules
 
 Parse one or more rule files into ASTs:
 
@@ -267,7 +396,7 @@ val ruleAsts = Files.walk(Path.of("rules"))
 
 If parsing fails, a `ParseException` is thrown with the line and column of the error.
 
-### 4.4 Validating Rules
+### 4.5 Validating Rules
 
 ```kotlin
 import ruleengine.compiler.Validator
@@ -315,7 +444,7 @@ Two deliberate asymmetries are worth knowing when you interpret diagnostics:
   structure read straight from the input data. `sum(unknownThing.amount) > 1` therefore loads, while a
   single-segment `unknownThing > 1` fails.
 
-### 4.5 Compiling Rules
+### 4.6 Compiling Rules
 
 ```kotlin
 import ruleengine.compiler.Compiler
@@ -329,7 +458,7 @@ Compilation:
 - Pre-compiles regular expression patterns
 - Sorts `AND` children by evaluation cost (cheapest first) for short-circuit optimisation
 
-### 4.6 Building the Engine
+### 4.7 Building the Engine
 
 ```kotlin
 import ruleengine.evaluator.RuleEngine
@@ -368,7 +497,7 @@ Behaviour notes:
 Leave the flag at its default (`false`) when you need every matching rule reported or must
 preserve declaration order — behaviour is then identical to previous versions.
 
-### 4.7 Evaluating Input Data
+### 4.8 Evaluating Input Data
 
 Input data is provided as key-value pairs via `RuleContext`.
 The engine accepts any `Map<String, Any?>` — the keys are field names, the values are the field values.
@@ -438,7 +567,7 @@ val prepared = PreparedRuleContext.prepare(ctx = context, schema = schema)
 val result = engine.evaluate(prepared = prepared)
 ```
 
-### 4.8 Reading the Result
+### 4.9 Reading the Result
 
 ```kotlin
 import ruleengine.core.domain.EvaluationResult
@@ -458,7 +587,7 @@ for (match: RuleMatch in result.matches) {
 ```
 
 `EvaluationResult`:
-- `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.6)
+- `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.7)
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
 
 `RuleMatch`:
@@ -572,6 +701,9 @@ ManifestLoader.loadFromString(content = yamlString)
 
 All loaders accept both YAML and JSON content.
 
+> **Note:** `RuleEngineBuilder` reads from the filesystem only. Content that lives in a database, a
+> classpath resource or memory has to go through these loaders — see section 4.
+
 ---
 
 ## 7. Thread Safety and Lifecycle
@@ -582,31 +714,43 @@ All loaders accept both YAML and JSON content.
 | `ActionSchema` | ✅ (immutable) | Application lifetime / per rule reload |
 | `List<CompiledRule>` | ✅ (immutable) | Application lifetime / per rule reload |
 | `RuleEngine` | ✅ (stateless) | Application lifetime — create once, reuse |
+| `LoadedRuleEngine` | ✅ (immutable) | Application lifetime / per rule reload |
 | `RuleContext` | ❌ (per-call) | Per evaluation |
 | `PreparedRuleContext` | ❌ (per-call) | Per evaluation |
 
 ### Hot Reload Pattern
 
-To support rule updates without restarting the application, use an `AtomicReference`:
+To support rule updates without restarting the application, keep the `LoadedRuleEngine` in an
+`AtomicReference` and swap it after a successful rebuild. Because the builder throws on any problem,
+a failed reload leaves the previous engine in place:
 
 ```kotlin
+import ruleengine.builder.LoadedRuleEngine
+import ruleengine.builder.RuleEngineBuilder
+import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.errors.RuleEngineBuildException
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 
-class RuleEngineService(private val manifestPath: Path) {
-    private val engineRef: AtomicReference<RuleEngine> = AtomicReference(buildEngine())
+class RuleEngineService(private val manifestPath: Path, private val entryId: String) {
+    private val engineRef: AtomicReference<LoadedRuleEngine> = AtomicReference(build())
 
-    private fun buildEngine(): RuleEngine {
-        // ... load, validate, compile as shown in section 3
-    }
+    private fun build(): LoadedRuleEngine =
+        RuleEngineBuilder.fromManifestEntry(manifestPath = manifestPath, entryId = entryId)
 
-    fun reload() {
-        engineRef.set(buildEngine())
-    }
+    /** Returns true when the new rules were applied; the old engine stays active otherwise. */
+    fun reload(): Boolean =
+        runCatching { build() }.fold(
+            onSuccess = { reloaded -> engineRef.set(reloaded); true },
+            onFailure = { failure ->
+                if (failure !is RuleEngineBuildException) throw failure
+                logger.error("Rule reload rejected, keeping the current rules: ${failure.message}")
+                false
+            }
+        )
 
-    fun evaluate(context: RuleContext): EvaluationResult {
-        val prepared = PreparedRuleContext.prepare(ctx = context, schema = currentSchema())
-        return engineRef.get().evaluate(prepared = prepared)
-    }
+    fun evaluate(input: Map<String, Any?>): EvaluationResult =
+        engineRef.get().evaluate(input = input)
 }
 ```
 
@@ -618,11 +762,15 @@ The engine uses typed exceptions for different failure modes:
 
 | Exception | When thrown | Package |
 |---|---|---|
+| `RuleEngineBuildException` | `RuleEngineBuilder` cannot build an engine from a manifest | `ruleengine.core.errors` |
 | `SchemaLoadException` | A schema YAML file cannot be read or is invalid | `ruleengine.core.errors` |
 | `ParseException` | A `.rule` file contains a syntax error | `ruleengine.dsl.diagnostics` |
 | `CompilationException` | A rule passes validation but cannot be compiled | `ruleengine.core.errors` |
+| `InputTooLargeException` | A manifest, schema, rule or input file exceeds the 25 MB read limit | `ruleengine.core.errors` |
 
-All exceptions extend `RuleEngineException`.
+All exceptions extend `RuleEngineException`. When `RuleEngineBuilder` is used, every load-phase
+failure surfaces as a `RuleEngineBuildException` that keeps the original failure as its `cause` and
+exposes rule diagnostics via `diagnostics`, so a single catch block covers the whole load phase.
 
 ```kotlin
 import ruleengine.core.errors.SchemaLoadException
@@ -697,9 +845,10 @@ fields:
 
 | Package | Contents |
 |---|---|
+| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
 | `ruleengine.core.domain` | Domain model: `FieldSchema`, `FieldDefinition`, `FieldType`, `ActionSchema`, `RuleMatch`, `EvaluationResult`, `RuleAction` |
 | `ruleengine.core.normalizer` | `NormalizerRegistry`, `NormalizerProfile`, built-in normalizers |
-| `ruleengine.core.errors` | `RuleEngineException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |
+| `ruleengine.core.errors` | `RuleEngineException`, `RuleEngineBuildException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |
 | `ruleengine.dsl.parser` | `Parser` — parses `.rule` text into `List<RuleAst>` |
 | `ruleengine.dsl.ast` | AST node types: `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, `ActionAst`, etc. |
 | `ruleengine.dsl.diagnostics` | `ParseException` |
@@ -708,7 +857,7 @@ fields:
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext` |
 | `ruleengine.evaluator.trace` | `TraceCollector`, `DecisionTree`, `DecisionNode`, `toJson()` |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader` |
-| `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry` |
+| `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry`, `ManifestPathResolver` |
 | `ruleengine.jackson` | `JacksonUtil` — shared `ObjectMapper` instance |
 
 ---
@@ -718,60 +867,41 @@ fields:
 ```kotlin
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import ruleengine.compiler.Compiler
-import ruleengine.compiler.Validator
-import ruleengine.dsl.parser.Parser
-import ruleengine.evaluator.RuleEngine
-import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.context.RuleContext
-import ruleengine.manifest.ManifestLoader
-import ruleengine.schema.ActionSchemaLoader
-import ruleengine.schema.FieldSchemaLoader
-import java.nio.file.Files
+import ruleengine.builder.LoadedRuleEngine
+import ruleengine.builder.RuleEngineBuilder
+import ruleengine.core.domain.RuleMatch
 import java.nio.file.Path
 
 @Configuration
 class RuleEngineConfig {
 
     @Bean
-    fun ruleEngine(): RuleEngine {
-        val manifestPath = Path.of("config/rules/manifest.yaml")
-        val manifest = ManifestLoader.load(path = manifestPath)
-        val entry = manifest.entries.first()
-        val baseDir = manifestPath.parent
-
-        val schema = FieldSchemaLoader.load(path = baseDir.resolve(entry.schema!!))
-        val actions = ActionSchemaLoader.load(path = baseDir.resolve(entry.actions!!))
-
-        val ruleAsts = entry.rules.flatMap { rel ->
-            Parser(input = Files.readString(baseDir.resolve(rel))).parseRules()
-        }
-
-        val validation = Validator.validate(asts = ruleAsts, schema = schema, actions = actions)
-        check(validation.isValid) { "Rule validation failed: ${validation.diagnostics}" }
-
-        val compiled = Compiler.compileRules(asts = ruleAsts, schema = schema)
-        return RuleEngine(compiledRules = compiled)
-    }
+    fun transactionRules(): LoadedRuleEngine =
+        RuleEngineBuilder.fromManifestEntry(
+            manifestPath = Path.of("config/rules/manifest.yaml"),
+            entryId = "transactions"
+        )
 }
 
 @Service
-class TransactionClassificationService(private val ruleEngine: RuleEngine,
-                                       private val schema: FieldSchema) {
+class TransactionClassificationService(private val transactionRules: LoadedRuleEngine) {
 
-    fun classify(transaction: Transaction): List<RuleMatch> {
-        val context = RuleContext.of(
-            "purpose"  to transaction.purpose,
-            "amount"   to transaction.amount,
-            "sepaCode" to transaction.sepaCode,
-            "iban"     to transaction.iban,
-            "tags"     to transaction.tags
-        )
-        val prepared = PreparedRuleContext.prepare(ctx = context, schema = schema)
-        return ruleEngine.evaluate(prepared = prepared).matches
-    }
+    fun classify(transaction: Transaction): List<RuleMatch> =
+        transactionRules.evaluate(
+            input = mapOf(
+                "purpose" to transaction.purpose,
+                "amount" to transaction.amount,
+                "sepaCode" to transaction.sepaCode,
+                "iban" to transaction.iban,
+                "tags" to transaction.tags
+            )
+        ).matches
 }
 ```
+
+A single `LoadedRuleEngine` bean carries the engine and its schema together, so no second bean is
+needed. A `RuleEngineBuildException` during bean creation fails application startup, which is the
+intended behaviour: the application never serves traffic with rules that did not validate.
 
 ---
 
@@ -779,10 +909,13 @@ class TransactionClassificationService(private val ruleEngine: RuleEngine,
 
 - [ ] Library added to `dependencies`
 - [ ] Manifest (or schema + rule files) placed on the classpath or filesystem
-- [ ] Schema and rules loaded once at application startup
-- [ ] Validation result checked — fail fast if rules are invalid
-- [ ] `RuleEngine` stored as a singleton/bean — not re-created per request
-- [ ] `RuleContext` and `PreparedRuleContext` created per request/record
+- [ ] Engine built once at application startup — `RuleEngineBuilder.fromManifest` unless a manual
+      pipeline is required
+- [ ] Validation result checked — fail fast if rules are invalid (the builder does this for you)
+- [ ] `LoadedRuleEngine` / `RuleEngine` stored as a singleton/bean — not re-created per request
+- [ ] Input passed per request/record via `LoadedRuleEngine.evaluate` (or `RuleContext` +
+      `PreparedRuleContext` in the manual setup)
 - [ ] Result `EvaluationResult.matches` consumed by the application layer
-- [ ] Error handling for `SchemaLoadException` and `ParseException` in place
+- [ ] Error handling for `RuleEngineBuildException` (or `SchemaLoadException` and `ParseException` in
+      the manual setup) in place
 

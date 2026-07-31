@@ -22,7 +22,7 @@ import ui.TextSecondary
 import ui.builder.BuilderOperand
 import ui.builder.BuilderTerm
 import ui.builder.CatalogFieldInfo
-import ui.builder.OperandRules
+import ui.builder.OperandText
 import ui.builder.OperatorOptions
 import ui.components.TinyButton
 
@@ -211,7 +211,7 @@ fun NestedOperandEditor(
     }
 }
 
-/** Inline editor for a field path, reusing the same N-segment breadcrumb as the aggregate panel. */
+/** Inline editor for a field path, reusing the same breadcrumb as the aggregate panel. */
 @Composable
 fun FieldPathEditor(
     fieldRef: BuilderOperand.FieldRef,
@@ -219,36 +219,15 @@ fun FieldPathEditor(
     onChanged: (BuilderOperand.FieldRef) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PanelCard(title = "Field", modifier = modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
-            fieldRef.path.forEachIndexed { depth, step ->
-                PathStepRow(
-                    step = step,
-                    depth = depth,
-                    path = fieldRef.path,
-                    fields = fields,
-                    onStepChanged = { updated ->
-                        onChanged(fieldRef.copy(path = fieldRef.path.replaceAt(index = depth, value = updated)))
-                    },
-                    onRemove = if (depth == 0) {
-                        null
-                    } else {
-                        { onChanged(fieldRef.copy(path = fieldRef.path.take(n = depth))) }
-                    },
-                )
-            }
-
-            if (OperandRules.canAppendSegment(fields = fields, path = fieldRef.path)) {
-                TinyButton(
-                    text = "+ segment",
-                    onClick = {
-                        val next = OperandRules
-                            .segmentOptions(fields = fields, path = fieldRef.path, depth = fieldRef.path.size)
-                            .firstOrNull()?.id ?: ""
-                        onChanged(fieldRef.copy(path = fieldRef.path + ui.builder.BuilderPathStep(name = next)))
-                    },
-                )
-            }
-        }
+    PanelCard(
+        title = "Field",
+        detail = OperandText.toDsl(operand = fieldRef),
+        modifier = modifier,
+    ) {
+        PathBreadcrumb(
+            path = fieldRef.path,
+            fields = fields,
+            onPathChanged = { onChanged(fieldRef.copy(path = it)) },
+        )
     }
 }

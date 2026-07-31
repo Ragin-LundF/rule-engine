@@ -18,20 +18,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import ui.BgSurface
 import ui.BorderColor
+import ui.TextMuted
 import ui.TextSecondary
 import ui.builder.BuilderOperand
-import ui.builder.BuilderPathStep
 import ui.builder.CatalogFieldInfo
-import ui.builder.OperandRules
+import ui.builder.OperandText
 import ui.builder.OperatorOptions
-import ui.components.TinyButton
 
 /**
- * Inline editor for an aggregate operand: the function, the path it aggregates over, and the filters
- * on each path segment.
+ * Inline editor for an aggregate operand: the function, the path it aggregates over, and the
+ * restrictions on each path segment.
  *
- * The path is an N-segment breadcrumb — segments are rendered in a loop by [PathStepRow], so depth is
- * unbounded and a deep path needs no extra code here.
+ * The path is delegated to [PathBreadcrumb], so depth is unbounded and a deep or filtered path needs
+ * no extra code here.
  */
 @Composable
 fun AggregateEditor(
@@ -40,7 +39,11 @@ fun AggregateEditor(
     onChanged: (BuilderOperand.Aggregate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PanelCard(title = "Aggregate", modifier = modifier) {
+    PanelCard(
+        title = "Aggregate",
+        detail = OperandText.toDsl(operand = aggregate),
+        modifier = modifier,
+    ) {
         LabelledRow(label = "function") {
             DropdownSelector(
                 selected = aggregate.function,
@@ -51,37 +54,11 @@ fun AggregateEditor(
         }
 
         LabelledRow(label = "over") {
-            Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
-                aggregate.path.forEachIndexed { depth, step ->
-                    PathStepRow(
-                        step = step,
-                        depth = depth,
-                        path = aggregate.path,
-                        fields = fields,
-                        onStepChanged = { updated ->
-                            onChanged(aggregate.copy(path = aggregate.path.replaceAt(index = depth, value = updated)))
-                        },
-                        // The first segment is the collection itself and cannot be dropped.
-                        onRemove = if (depth == 0) {
-                            null
-                        } else {
-                            { onChanged(aggregate.copy(path = aggregate.path.take(n = depth))) }
-                        },
-                    )
-                }
-
-                if (OperandRules.canAppendSegment(fields = fields, path = aggregate.path)) {
-                    TinyButton(
-                        text = "+ segment",
-                        onClick = {
-                            val next = OperandRules
-                                .segmentOptions(fields = fields, path = aggregate.path, depth = aggregate.path.size)
-                                .firstOrNull()?.id ?: ""
-                            onChanged(aggregate.copy(path = aggregate.path + BuilderPathStep(name = next)))
-                        },
-                    )
-                }
-            }
+            PathBreadcrumb(
+                path = aggregate.path,
+                fields = fields,
+                onPathChanged = { onChanged(aggregate.copy(path = it)) },
+            )
         }
 
         // Projection flattens across every level, which is easy to misread as per-parent grouping.
@@ -98,11 +75,17 @@ fun AggregateEditor(
 internal fun <T> List<T>.replaceAt(index: Int, value: T): List<T> =
     toMutableList().also { it[index] = value }
 
-/** A bordered panel used by the inline operand editors. */
+/**
+ * A bordered panel used by the inline operand editors.
+ *
+ * [detail] echoes the DSL the panel currently generates, so what the controls produce is verifiable
+ * without switching to Code mode.
+ */
 @Composable
 internal fun PanelCard(
     title: String,
     modifier: Modifier = Modifier,
+    detail: String = "",
     content: @Composable () -> Unit,
 ) {
     Column(
@@ -114,11 +97,23 @@ internal fun PanelCard(
             .padding(all = 10.dp),
         verticalArrangement = Arrangement.spacedBy(space = 6.dp),
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.caption,
-            color = TextSecondary,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(space = 12.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.caption,
+                color = TextSecondary,
+            )
+            if (detail.isNotBlank()) {
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                )
+            }
+        }
         content()
     }
 }

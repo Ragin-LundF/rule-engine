@@ -1,20 +1,18 @@
 package ruleengine.cli
 
+import ruleengine.builder.LoadedRuleEngine
+import ruleengine.builder.RuleEngineBuilder
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.EvaluationResult
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.errors.RuleEngineBuildException
+import ruleengine.core.errors.Severity
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
-import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.context.RuleContext
-import ruleengine.core.domain.ActionSchema
 import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import ruleengine.manifest.ManifestLoader
-import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Files
 import java.nio.file.Path
@@ -56,24 +54,8 @@ object EvaluateCli {
         val parsedArguments = parseArguments(args = args)
         val cliOptions = readCliOptions(parsedArguments = parsedArguments, out = out) ?: return 2
 
-        val loaded = loadRules(cliOptions = cliOptions, out = out) ?: return 2
-
-        val validationResult = Validator.validate(
-            asts = loaded.asts,
-            schema = loaded.schema,
-            actions = loaded.actions
-        )
-        if (!validationResult.isValid) {
-            out.append("Validation failed: ${validationResult.diagnostics}\n")
-            return 1
-        }
-
-        val compiledRules = Compiler.compileRules(
-            asts = loaded.asts,
-            schema = loaded.schema,
-            normalizerRegistry = NormalizerRegistry.default
-        )
-        val engine = RuleEngine(compiledRules = compiledRules)
+        val outcome = loadEngine(cliOptions = cliOptions, out = out)
+        val loaded = outcome.engine ?: return outcome.exitCode
 
         val inputJson = FileInputSupport.readBoundedText(
             path = Path.of(cliOptions.inputFilePath),
@@ -81,8 +63,7 @@ object EvaluateCli {
         )
         val inputMap = readInputMap(inputJson = inputJson)
 
-        val preparedContext = prepareRuleContext(inputMap = inputMap, schema = loaded.schema)
-        val evaluationResult = engine.evaluate(prepared = preparedContext, includeTrace = cliOptions.traceEnabled)
+        val evaluationResult = loaded.evaluate(input = inputMap, includeTrace = cliOptions.traceEnabled)
 
         writeEvaluationResult(
             evaluationResult = evaluationResult,
@@ -139,12 +120,13 @@ object EvaluateCli {
     }
 
     /**
-     * Resolves the field schema, ordered rule ASTs, and optional action schema for evaluation.
-     * Manifest mode is authoritative for ordering: rules are collected in the manifest's
-     * `rules` list order, then in-file declaration order. Directory mode walks the rules folder
-     * in sorted (alphabetical) path order. Returns null after printing an error on failure.
+     * Builds the engine for evaluation.
+     * Manifest mode delegates to [RuleEngineBuilder] and is authoritative for ordering: rules are
+     * collected in the manifest's `rules` list order, then in-file declaration order. Directory mode
+     * walks the rules folder in sorted (alphabetical) path order. On failure the outcome carries a
+     * null engine plus the exit code, after the reason has been printed.
      */
-    private fun loadRules(cliOptions: CliOptions, out: Appendable): LoadedRules? {
+    private fun loadEngine(cliOptions: CliOptions, out: Appendable): LoadOutcome {
         return if (cliOptions.manifestPath != null) {
             loadFromManifest(manifestPath = cliOptions.manifestPath, entryId = cliOptions.entryId, out = out)
         } else {
@@ -152,60 +134,62 @@ object EvaluateCli {
         }
     }
 
-    private fun loadFromDirectory(schemaPath: String, rulesPath: String, out: Appendable): LoadedRules? {
+    private fun loadFromDirectory(schemaPath: String, rulesPath: String, out: Appendable): LoadOutcome {
         val schema = FieldSchemaLoader.load(path = Path.of(schemaPath))
         val rulesDirectory = Path.of(rulesPath)
         if (!Files.exists(rulesDirectory) || !Files.isDirectory(rulesDirectory)) {
             out.append("Rules path is not a directory: $rulesPath\n")
-            return null
+            return LoadOutcome(engine = null, exitCode = 2)
         }
         val asts = FileInputSupport.walkRuleFiles(root = rulesDirectory).flatMap { ruleFile ->
             Parser(input = FileInputSupport.readBoundedText(path = ruleFile, kind = "rule file")).parseRules()
         }
-        return LoadedRules(schema = schema, asts = asts, actions = null)
+
+        val validationResult = Validator.validate(asts = asts, schema = schema, actions = null)
+        if (!validationResult.isValid) {
+            out.append("Validation failed: ${validationResult.diagnostics}\n")
+            return LoadOutcome(engine = null, exitCode = 1)
+        }
+
+        val compiledRules = Compiler.compileRules(
+            asts = asts,
+            schema = schema,
+            normalizerRegistry = NormalizerRegistry.default
+        )
+        return LoadOutcome(
+            engine = LoadedRuleEngine(
+                entryId = rulesPath,
+                engine = RuleEngine(compiledRules = compiledRules),
+                schema = schema,
+                warnings = validationResult.diagnostics,
+            )
+        )
     }
 
-    @Suppress("ReturnCount")
-    private fun loadFromManifest(manifestPath: String, entryId: String?, out: Appendable): LoadedRules? {
+    private fun loadFromManifest(manifestPath: String, entryId: String?, out: Appendable): LoadOutcome {
         val manifestFile = Path.of(manifestPath)
-        val manifest = ManifestLoader.load(path = manifestFile)
-        val entry = if (entryId != null) {
-            manifest.entries.firstOrNull { it.id == entryId }
-        } else {
-            manifest.entries.firstOrNull()
+
+        return runCatching {
+            // Without --entry the first manifest entry is used, so sibling entries are never loaded.
+            val resolvedEntryId = entryId
+                ?: ManifestLoader.load(path = manifestFile).entries.firstOrNull()?.id
+                ?: error("manifest contains no entries")
+
+            LoadOutcome(
+                engine = RuleEngineBuilder.fromManifestEntry(manifestPath = manifestFile, entryId = resolvedEntryId)
+            )
+        }.getOrElse { failure ->
+            out.append("Manifest error: ${failure.message}\n")
+            LoadOutcome(engine = null, exitCode = if (failure.isValidationFailure()) 1 else 2)
         }
-        if (entry == null) {
-            val detail = entryId?.let { "no entry with id '$it'" } ?: "manifest contains no entries"
-            out.append("Manifest error: $detail\n")
-            return null
-        }
-        val baseDir = manifestFile.toAbsolutePath().parent
-        val schemaRel = entry.schema
-        if (schemaRel == null) {
-            out.append("Manifest error: entry '${entry.id}' has no schema\n")
-            return null
-        }
-        val schema = FieldSchemaLoader.load(path = baseDir.resolve(schemaRel))
-        val actions = entry.actions?.let { ActionSchemaLoader.load(path = baseDir.resolve(it)) }
-        val asts = entry.rules.flatMap { rel ->
-            Parser(
-                input = FileInputSupport.readBoundedText(path = baseDir.resolve(rel), kind = "rule file")
-            ).parseRules()
-        }
-        return LoadedRules(schema = schema, asts = asts, actions = actions)
     }
+
+    private fun Throwable.isValidationFailure(): Boolean =
+        this is RuleEngineBuildException && diagnostics.any { it.severity == Severity.ERROR }
 
     private fun readInputMap(inputJson: String): Map<String, Any?> {
         @Suppress("UNCHECKED_CAST")
         return JacksonUtil.jsonMapper.readValue(inputJson, Map::class.java) as Map<String, Any?>
-    }
-
-    private fun prepareRuleContext(inputMap: Map<String, Any?>, schema: FieldSchema): PreparedRuleContext {
-        val ruleContext = RuleContext.of(entries = inputMap.entries.map {
-            it.key to it.value
-        }.toTypedArray())
-
-        return PreparedRuleContext.prepare(ctx = ruleContext, schema = schema)
     }
 
     private fun writeEvaluationResult(
@@ -259,10 +243,10 @@ object EvaluateCli {
         val format: String?,
     )
 
-    private data class LoadedRules(
-        val schema: FieldSchema,
-        val asts: List<RuleAst>,
-        val actions: ActionSchema?,
+    /** Either a ready engine, or a null engine plus the exit code to return. */
+    private data class LoadOutcome(
+        val engine: LoadedRuleEngine?,
+        val exitCode: Int = 0,
     )
 }
 
