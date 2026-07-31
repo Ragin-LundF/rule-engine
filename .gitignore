@@ -11,6 +11,7 @@
 .hermes
 .agentbridge
 .kotlin
+.plan
 
 # Build targets
 .gradle/*
@@ -26,8 +27,5 @@
 # Other
 logs/*
 devops/data/*
-/labelling-rest-client-java/src/generated
-/etc/k6/summary.html
 
-burp-report.html
 issues.json
