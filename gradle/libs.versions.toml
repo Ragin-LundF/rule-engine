@@ -1,5 +1,5 @@
 [versions]
-kotlin = "2.3.21"
+kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 # Jackson 3 series - prefer the latest compatible 3.x release. You can update this to a newer patch version if available.
 jackson2 = "2.22"

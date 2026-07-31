@@ -84,6 +84,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sample-schema.yaml` declared `starts_with` on its `country` field, so `country startsWith "DE"` could
   not be used with the schema the README quick-start points at.
 
+### Updated
+- Upgraded `jackson` to `3.2.1`
+- Upgraded `kotlin` to `2.4.10`
+
+
 ## Release 1.2.0
 
 ### Added
