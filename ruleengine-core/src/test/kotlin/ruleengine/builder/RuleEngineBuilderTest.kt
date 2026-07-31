@@ -26,24 +26,7 @@ class RuleEngineBuilderTest {
 
     @Test
     fun `loads all entries of a multi entry manifest`() {
-        val dir = writeProject()
-        Files.writeString(
-            dir.resolve("manifest.yaml"),
-            """
-            name: multi
-            entries:
-              - id: first
-                schema: schema.yaml
-                actions: actions.yaml
-                rules:
-                  - rules/a.rule
-              - id: second
-                schema: schema.yaml
-                actions: actions.yaml
-                rules:
-                  - rules/b.rule
-            """.trimIndent()
-        )
+        val dir = writeMultiEntryProject()
 
         val engines = RuleEngineBuilder.fromManifest(manifestPath = dir.resolve("manifest.yaml"))
 
@@ -60,10 +43,12 @@ class RuleEngineBuilderTest {
 
     @Test
     fun `entryId narrows the result to a single key value pair`() {
-        val engines = RuleEngineBuilder.fromManifest(manifestPath = KLS_MANIFEST, entryId = "legal_affairs")
+        val dir = writeMultiEntryProject()
 
-        assertEquals(expected = setOf("legal_affairs"), actual = engines.keys)
-        assertEquals(expected = "legal_affairs", actual = engines.getValue("legal_affairs").entryId)
+        val engines = RuleEngineBuilder.fromManifest(manifestPath = dir.resolve("manifest.yaml"), entryId = "second")
+
+        assertEquals(expected = setOf("second"), actual = engines.keys)
+        assertEquals(expected = "second", actual = engines.getValue("second").entryId)
     }
 
     @Test
@@ -444,6 +429,29 @@ class RuleEngineBuilderTest {
         return dir
     }
 
+    /** A temp project whose manifest declares two entries, `first` over `a.rule` and `second` over `b.rule`. */
+    private fun writeMultiEntryProject(): Path {
+        val dir = writeProject()
+        Files.writeString(
+            dir.resolve("manifest.yaml"),
+            """
+            name: multi
+            entries:
+              - id: first
+                schema: schema.yaml
+                actions: actions.yaml
+                rules:
+                  - rules/a.rule
+              - id: second
+                schema: schema.yaml
+                actions: actions.yaml
+                rules:
+                  - rules/b.rule
+            """.trimIndent()
+        )
+        return dir
+    }
+
     private fun writeManifest(
         dir: Path,
         schema: String? = "schema.yaml",
@@ -479,7 +487,6 @@ class RuleEngineBuilderTest {
     private companion object {
         val RESOURCES: Path = Path.of("src/test/resources")
         val FULL_MANIFEST: Path = RESOURCES.resolve("full-manifest.yaml")
-        val KLS_MANIFEST: Path = RESOURCES.resolve("kls/kls_manifest.yaml")
         val MATCHING_INPUT: Map<String, Any?> = mapOf("p" to "x")
 
         val SCHEMA_YAML: String = """
