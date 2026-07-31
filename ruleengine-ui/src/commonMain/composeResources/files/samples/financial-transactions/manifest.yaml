@@ -12,3 +12,5 @@ entries:
       - rules/rent-payment.rule
       - rules/fraud-detection.rule
       - rules/vip-customer.rule
+      - rules/transaction-aggregates.rule
+      - rules/recurring-payments.rule

@@ -24,7 +24,7 @@ The rule engine is built around four simple building blocks:
 
 | Concept | What it is | File type |
 |---|---|---|
-| **Field Schema** | Defines the data fields available for rules | YAML (`.yaml`) |
+| **Field Schema** | Defines the data fields available for rules, including nested lists and records | YAML (`.yaml`) |
 | **Action Schema** | Defines what actions a rule can trigger | YAML (`.yaml`) |
 | **Rules** | The actual business logic — conditions and actions | `.rule` |
 | **Manifest** | A project file that ties everything together | YAML (`.yaml`) |
@@ -35,6 +35,7 @@ You can also jump directly to:
 - [Field Schema](./field-schema.md) — defining your data
 - [Action Schema](./actions.md) — defining what rules can do
 - [Rules](./rules.md) — writing conditions and outcomes
+- [Value Expressions](./expressions.md) — totals, averages and counts over nested lists
 - [Manifest](./manifest.md) — organising your rule project
 
 ---
@@ -163,7 +164,7 @@ Your application (or integration) then decides what to do with those actions —
 ## Key Design Principles
 
 - **Rules are data, not code.** Non-developers can write, read, and maintain them.
-- **Validation before execution.** The engine catches mistakes (wrong field names, incompatible operators, etc.) before any rule runs.
+- **Validation before execution.** The engine catches mistakes (wrong field names, incompatible operators, wrong literal types, etc.) before any rule runs. Paths into nested data are checked as far as the schema declares them, so declaring the members of a collection is what buys you that safety.
 - **No surprises at runtime.** If a rule file loads successfully, it will behave exactly as written.
 - **Fast evaluation.** Rules are compiled into optimised internal structures; no re-parsing at runtime.
 

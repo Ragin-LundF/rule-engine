@@ -59,8 +59,17 @@ fields:
     type: integer
     operators:
       - equals
-      - greaterThan
-      - lessThan
+      - gt
+      - lt
+      - between
+  dueDate:
+    type: date
+    format: "dd.MM.yyyy"
+    operators:
+      - equals
+      - gt
+      - lt
+      - between
 """.trimIndent()
 
 val ACTION_SCHEMA_EXAMPLE: String = """

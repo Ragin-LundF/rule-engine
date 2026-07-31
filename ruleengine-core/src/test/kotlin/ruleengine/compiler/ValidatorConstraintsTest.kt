@@ -4,6 +4,7 @@ import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.OperatorId
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -100,6 +101,36 @@ class ValidatorConstraintsTest {
             },
             message = "Expected unsupported operator diagnostic, got: ${result.diagnostics}"
         )
+    }
+
+    /**
+     * A schema written by an older visual editor declares `starts_with`. That has to allow
+     * `startsWith`, otherwise the declaration silently restricts the field to a name no rule can use.
+     */
+    @Test
+    fun `validator accepts a condition whose operator is declared in a legacy snake_case spelling`() {
+        val schema = FieldSchema(
+            name = "legacy-operator-names",
+            fields = mapOf(
+                FieldId(value = "purpose") to FieldDefinition(
+                    id = FieldId(value = "purpose"),
+                    type = FieldType.TEXT,
+                    operators = setOf(OperatorId(value = "equals"), OperatorId(value = "starts_with")),
+                )
+            )
+        )
+        val asts = Parser(
+            input = """
+                rule "legacy-operator" {
+                  when purpose startsWith "DE"
+                  then label "x"
+                }
+            """.trimIndent()
+        ).parseRules()
+
+        val result = Validator.validate(asts = asts, schema = schema)
+
+        assertTrue(actual = result.isValid, message = "Expected validation to pass, got: ${result.diagnostics}")
     }
 }
 

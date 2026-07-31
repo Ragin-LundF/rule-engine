@@ -32,10 +32,14 @@ data class YamlCursorContext(
 
 // ── YAML completion candidates ────────────────────────────────────────────────
 
-private val FIELD_TYPE_VALUES = listOf("text", "integer", "decimal", "boolean", "stringSet", "date")
+private val FIELD_TYPE_VALUES = listOf(
+    "text", "integer", "decimal", "boolean", "string_set",
+    "date", "date_time", "collection", "object",
+)
+private val FORMAT_VALUES = listOf("dd.MM.yyyy", "yyyy/MM/dd", "dd.MM.yyyy HH:mm", "yyyy-MM-dd HH:mm:ss")
 private val NORMALIZER_VALUES = listOf(
     "trim", "lowercase", "uppercase",
-    "german_umlaut_fold", "ascii_fold",
+    "german_umlaut_fold",
     "collapse_whitespace", "remove_punctuation",
 )
 private val OPERATOR_VALUES = listOf(
@@ -47,7 +51,7 @@ private val ARG_TYPE_VALUES = listOf("string", "integer", "decimal")
 
 private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")
 private val ACTION_SCHEMA_TOP_KEYS = listOf("actions")
-private val FIELD_DEF_KEYS = listOf("type", "normalizers", "operators")
+private val FIELD_DEF_KEYS = listOf("type", "alias", "format", "normalizers", "operators", "fields")
 private val ACTION_DEF_KEYS = listOf("argTypes")
 
 // ── YAML cursor context analyzer ──────────────────────────────────────────────
@@ -126,6 +130,12 @@ fun buildYamlCompletions(
         context.isValue && context.currentKey == "type" ->
             FIELD_TYPE_VALUES.map { value ->
                 CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "field type")
+            }
+
+        // Value of `format:` → date pattern examples
+        context.isValue && context.currentKey == "format" ->
+            FORMAT_VALUES.map { value ->
+                CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "date format")
             }
 
         // List item under `normalizers:` → normalizer names
@@ -320,8 +330,8 @@ private fun resolveKeyStyle(
         // Action names are at indent 2 under `actions`.
         indent == 2 && parentKey == "actions" -> SpanStyle(color = ColorAction)
 
-        // Sub-keys of field definitions (`type`, `normalizers`, `operators`, `alias`).
-        key in setOf("type", "normalizers", "operators", "alias") ->
+        // Sub-keys of field definitions (`type`, `format`, `normalizers`, `operators`, `alias`).
+        key in setOf("type", "format", "normalizers", "operators", "alias") ->
             SpanStyle(color = ColorKeyword)
 
         else -> SpanStyle(color = TextSecondary)
@@ -408,7 +418,7 @@ private fun fieldTypeValueColor(value: String): SpanStyle {
         "decimal", "bigdecimal", "number" -> Color(0xFF58A6FF)
         "boolean", "bool" -> AccentPurple
         "stringset", "string_set", "set" -> AccentGreen
-        "date" -> AccentOrange
+        "date", "date_time", "datetime", "timestamp" -> AccentOrange
         else -> TextPrimary
     }
     return SpanStyle(color = color)

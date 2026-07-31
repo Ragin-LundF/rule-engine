@@ -12,6 +12,7 @@ import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.TokenType
+import ui.builder.OperatorOptions
 
 // Syntax token colours are defined centrally in ui.Theme so the whole workbench
 // shares the same palette; they are imported here from the ui package.
@@ -30,9 +31,7 @@ private val DSL_NAMED_OPS = setOf(
 )
 
 /** Aggregate function names recognized in value expressions. */
-private val DSL_FUNCTIONS = setOf(
-    "count", "sum", "subtract", "avg", "median", "max", "min",
-)
+private val DSL_FUNCTIONS = OperatorOptions.AGGREGATE_FUNCTIONS.toSet()
 
 /**
  * Builds an [AnnotatedString] with syntax colouring for the rule DSL.

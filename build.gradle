@@ -6,6 +6,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     id "signing"
     id "maven-publish"
+    alias(libs.plugins.version.catalog.update)
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.multiplatform) apply false
     alias(libs.plugins.jetbrains.compose) apply false
@@ -16,6 +17,7 @@ plugins {
 }
 
 apply from: "${rootDir}/config/gradle/wrapper.gradle"
+apply from: "${rootDir}/config/gradle/version_updates.gradle"
 
 subprojects {
     // export of classes for subscripts

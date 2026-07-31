@@ -22,7 +22,7 @@ fields:
     type: text
     operators:
       - equals
-      - starts_with
+      - startsWith
 
   tags:
     type: string_set

@@ -1,5 +1,6 @@
 package ruleengine.compiler
 
+import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionSchema
@@ -12,6 +13,7 @@ import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.BetweenLiteral
+import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
@@ -134,11 +136,12 @@ object Validator {
             return
         }
 
-        if (def.type == FieldType.BOOLEAN || def.type == FieldType.DATE) {
+        if (def.type == FieldType.COLLECTION || def.type == FieldType.OBJECT) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' uses unsupported field type ${def.type}; " +
-                        "BOOLEAN and DATE are not supported yet"
+                message = "Field '${cond.field}' is a ${def.type.name.lowercase()} and cannot be compared " +
+                        "directly; navigate into it (e.g. '${cond.field}.someField') or use an aggregate " +
+                        "function such as count(${cond.field})"
             )
             return
         }
@@ -209,6 +212,62 @@ object Validator {
                     severity = Severity.ERROR,
                     message = "Field '${cond.field}' expects list or string literal"
                 )
+
+            FieldType.BOOLEAN -> if (cond.value !is BooleanLiteral)
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' expects 'true' or 'false'"
+                )
+
+            FieldType.DATE, FieldType.DATE_TIME ->
+                validateDateLiteral(cond = cond, def = def, op = op, diagnostics = diagnostics)
+        }
+    }
+
+    /**
+     * Date literals are quoted: ISO-8601 by default, or the field's declared `format` when it has one.
+     * `between` needs two of them.
+     */
+    private fun validateDateLiteral(
+        cond: ConditionAst,
+        def: FieldDefinition,
+        op: String,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        val expected = DateOperator.expectedFormatText(def = def)
+        if (op == "between") {
+            val between = cond.value as? BetweenLiteral ?: run {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected"
+                )
+                return
+            }
+            listOf(between.low, between.high)
+                .filterNot { DateOperator.isValidLiteral(text = it, def = def) }
+                .forEach { invalid ->
+                    diagnostics += ValidationDiagnostic(
+                        severity = Severity.ERROR,
+                        message = "Invalid date bound '$invalid' for field '${cond.field}'; " +
+                                "expected $expected"
+                    )
+                }
+            return
+        }
+
+        val literal = cond.value as? StringLiteral ?: run {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${cond.field}' expects a quoted date literal in $expected"
+            )
+            return
+        }
+        if (!DateOperator.isValidLiteral(text = literal.value, def = def)) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Invalid date '${literal.value}' for field '${cond.field}'; " +
+                        "expected $expected"
+            )
         }
     }
 
@@ -346,6 +405,9 @@ private fun supportedOperatorsFor(type: FieldType): Set<String> {
         FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
         FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
         FieldType.STRING_SET -> setOf("containsAny", "containsAll")
+        FieldType.BOOLEAN -> setOf("equals")
+        FieldType.DATE, FieldType.DATE_TIME -> setOf("equals", "gt", "gte", "lt", "lte", "between")
+        // COLLECTION and OBJECT are navigated or aggregated, never compared directly.
         else -> emptySet()
     }
 }

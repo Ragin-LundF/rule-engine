@@ -31,6 +31,7 @@ import ui.builder.BuilderToRuleDsl
 import ui.builder.CatalogActionInfo
 import ui.builder.CatalogFieldInfo
 import ui.builder.RuleAstToBuilderMapper
+import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
 import ui.components.PlaceholderPanel
 import ui.editor.rules.RuleEditorState
@@ -242,13 +243,7 @@ actual fun RuleEditor() {
         } ?: emptyList()
     }
     val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
-        state.parsedSchema.value?.fields?.values?.map { def ->
-            CatalogFieldInfo(
-                id = def.id.value,
-                type = def.type.name.lowercase(),
-                operators = def.operators.map { it.value },
-            )
-        } ?: emptyList()
+        state.parsedSchema.value?.fields?.values?.map { def -> def.toCatalogFieldInfo() } ?: emptyList()
     }
     val catalogActions = remember(key1 = state.parsedActionSchema.value) {
         state.parsedActionSchema.value?.actions?.values?.map { def ->
@@ -639,15 +634,52 @@ private fun generateUniqueRuleId(existingIds: Set<String>): String {
 /**
  * Replaces the DSL block for [ruleId] inside [fullText] with [newRuleDsl].
  * If the rule block is not found, appends [newRuleDsl] at the end.
+ *
+ * The body is located by counting braces rather than by a `[^}]*` match, because a rule body may
+ * legitimately contain `}` — most often inside a regex pattern such as `regex "^DE\\d{20}$"`. A
+ * regex-based match fails on those rules, and a failed match silently appends a duplicate instead of
+ * replacing the original.
  */
-private fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
+internal fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
+    val range = findRuleBlockRange(fullText = fullText, ruleId = ruleId)
+        ?: return if (fullText.isBlank()) newRuleDsl else "$fullText\n$newRuleDsl"
+    return fullText.replaceRange(range = range, replacement = newRuleDsl)
+}
+
+/**
+ * Finds the character range of the `rule "<id>" { ... }` block, or null when there is none.
+ * Braces inside string literals and `#` comments are ignored.
+ */
+internal fun findRuleBlockRange(fullText: String, ruleId: String): IntRange? {
     val escapedId = Regex.escape(literal = ruleId)
-    val pattern = Regex(pattern = """rule\s+\"$escapedId\"\s*\{[^}]*\}""", option = RegexOption.DOT_MATCHES_ALL)
-    return if (pattern.containsMatchIn(input = fullText)) {
-        pattern.replace(input = fullText, replacement = newRuleDsl)
-    } else {
-        if (fullText.isBlank()) newRuleDsl else "$fullText\n$newRuleDsl"
+    val header = Regex(pattern = """rule\s+"$escapedId"\s*\{""")
+    val match = header.find(input = fullText) ?: return null
+
+    var depth = 0
+    var index = match.range.last // positioned on the opening brace
+    var inString = false
+    var inComment = false
+
+    while (index < fullText.length) {
+        val char = fullText[index]
+        when {
+            inComment -> if (char == '\n') inComment = false
+            inString -> when (char) {
+                '\\' -> index++ // skip the escaped character
+                '"' -> inString = false
+            }
+            char == '"' -> inString = true
+            char == '#' -> inComment = true
+            char == '{' -> depth++
+            char == '}' -> {
+                depth--
+                if (depth == 0) return match.range.first..index
+            }
+        }
+        index++
     }
+    // Unbalanced braces: treat the rule as not found rather than corrupting the text.
+    return null
 }
 
 private fun BuilderRule.isLocked(): Boolean = when (this) {
