@@ -16,6 +16,7 @@ These guides explain how to write and manage rules without any programming knowl
 | [Rules](./rules.md)               | How to write conditions, combine them, and define outcomes        |
 | [Value Expressions](./expressions.md) | Aggregates, arithmetic and filters over nested lists of records |
 | [Manifest](./manifest.md)         | How to organise multiple rule files into a project                |
+| [Worked example](../ruleengine-core/src/test/resources/warehouse-shipments) | A complete `warehouse-shipments` bundle — nested objects, collections, aggregates and two input files |
 
 **Recommended reading order:** Introduction → Field Schema → Action Schema → Rules → Value Expressions → Manifest
 

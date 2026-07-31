@@ -2,6 +2,7 @@ package ruleengine.compiler
 
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.isStructure
@@ -95,7 +96,7 @@ internal object ValueExpressionValidator {
     ): ValueKind {
         val rootSegment = expr.path.firstOrNull() as? FieldSegmentAst ?: return ValueKind.UNKNOWN
         val isSingleSegment = expr.path.size == 1
-        val resolvedId = resolveIdentifier(identifier = rootSegment.name, schema = schema)
+        val resolvedId = FieldPathResolver.resolveName(identifier = rootSegment.name, fields = schema.fields)
         var current: FieldDefinition? = schema.fields[FieldId(value = resolvedId)]
 
         if (current == null) {
@@ -154,7 +155,9 @@ internal object ValueExpressionValidator {
         val members = parent?.takeIf { it.type.isStructure }?.fields?.takeIf { it.isNotEmpty() }
             ?: return MemberStep.Undeclared
 
-        val memberId = FieldId(value = resolveIdentifier(identifier = segment.name, fields = members))
+        val memberId = FieldId(
+            value = FieldPathResolver.resolveName(identifier = segment.name, fields = members)
+        )
         val member = members[memberId]
             ?: run {
                 diagnostics += ValidationDiagnostic(
@@ -258,19 +261,4 @@ internal object ValueExpressionValidator {
         return ValueKind.NUMERIC
     }
 
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String =
-        resolveIdentifier(identifier = identifier, fields = schema.fields)
-
-    /** Resolves an identifier against a set of field definitions, honouring aliases. */
-    private fun resolveIdentifier(identifier: String, fields: Map<FieldId, FieldDefinition>): String {
-        if (fields.containsKey(FieldId(value = identifier))) {
-            return identifier
-        }
-        for ((id, definition) in fields) {
-            if (definition.alias == identifier) {
-                return id.value
-            }
-        }
-        return identifier
-    }
 }

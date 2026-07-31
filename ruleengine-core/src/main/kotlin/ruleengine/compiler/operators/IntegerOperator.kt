@@ -18,13 +18,13 @@ object IntegerOperator {
                 ruleId = ruleId,
                 details = "Operator 'between' expects two integer bounds for field '${cond.field}'"
             )
-            val low = runCatching { between.low.toLong() }.getOrElse { ex ->
+            val low = runCatching { between.low.toLong() }.getOrElse {
                 throw CompilationException(
                     ruleId = ruleId,
                     details = "Invalid lower bound: ${between.low}"
                 )
             }
-            val high = runCatching { between.high.toLong() }.getOrElse { ex ->
+            val high = runCatching { between.high.toLong() }.getOrElse {
                 throw CompilationException(
                     ruleId = ruleId,
                     details = "Invalid upper bound: ${between.high}"
@@ -37,7 +37,7 @@ object IntegerOperator {
             ruleId = ruleId,
             details = "Expected numeric literal for integer field '${cond.field}'"
         )
-        val expected = runCatching { literal.value.toLong() }.getOrElse { ex ->
+        val expected = runCatching { literal.value.toLong() }.getOrElse {
             throw CompilationException(
                 ruleId = ruleId,
                 details = "Invalid integer literal: ${literal.value}"

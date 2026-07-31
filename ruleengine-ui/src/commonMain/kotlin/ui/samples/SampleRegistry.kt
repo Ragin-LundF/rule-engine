@@ -43,6 +43,20 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "warehouse-shipments",
+            name = "Warehouse Shipments",
+            description = "Assess parcel deliveries from nested shipment data: dotted paths into the " +
+                "shipment record, plus aggregates and filters over the parcel and checkpoint collections.",
+            category = SampleCategory.LOGISTICS,
+            schemaResPath = "files/samples/warehouse-shipments/schema.yaml",
+            actionsResPath = "files/samples/warehouse-shipments/actions.yaml",
+            ruleResPaths = listOf(
+                "files/samples/warehouse-shipments/rules/delivery-quality.rule",
+                "files/samples/warehouse-shipments/rules/parcel-condition.rule",
+                "files/samples/warehouse-shipments/rules/route-risk.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "access-control",
             name = "Access Control",
             description = "Enforce role-based permissions, IP allowlist/blocklist rules, and time-window restrictions on API routes.",

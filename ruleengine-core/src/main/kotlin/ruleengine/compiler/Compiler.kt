@@ -9,6 +9,8 @@ import ruleengine.compiler.operators.TextInOperator
 import ruleengine.compiler.operators.TextRegexOperator
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldPathResolution
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType.BOOLEAN
 import ruleengine.core.domain.FieldType.DATE
@@ -109,13 +111,12 @@ object Compiler {
     private fun compileExtraction(extraction: ExtractionAst, schema: FieldSchema): RegexExtractExpression {
         return when (extraction) {
             is ExtractionAst.RegexExtraction -> {
-                val fieldId = FieldId(value = extraction.sourceField)
-                if (schema.fields[fieldId] == null) {
-                    throw CompilationException(
+                val resolution = FieldPathResolver.resolve(identifier = extraction.sourceField, schema = schema)
+                val fieldId = (resolution as? FieldPathResolution.Resolved)?.id
+                    ?: throw CompilationException(
                         ruleId = null,
                         details = "Extraction references unknown field '${extraction.sourceField}'"
                     )
-                }
                 val compiledPattern = runCatching {
                     Regex(pattern = extraction.pattern)
                 }.getOrElse { cause ->
@@ -255,15 +256,20 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry
     ): CompiledExpression {
-        val resolvedId = resolveIdentifier(
-            identifier = cond.field,
-            schema = schema
-        )
-        val fieldId = FieldId(value = resolvedId)
-        val def = schema.fields[fieldId] ?: throw CompilationException(
+        val resolution = FieldPathResolver.resolve(identifier = cond.field, schema = schema)
+        val resolved = resolution as? FieldPathResolution.Resolved ?: throw CompilationException(
             ruleId = ruleIdOrNull(cond = cond),
-            details = "Unknown field '${cond.field}'"
+            details = when (resolution) {
+                is FieldPathResolution.CrossesCollection -> FieldPathMessages.crossesCollection(
+                    field = cond.field,
+                    collectionPath = resolution.collectionPath
+                )
+
+                else -> FieldPathMessages.unknownField(field = cond.field)
+            }
         )
+        val fieldId = resolved.id
+        val def = resolved.definition
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
 
@@ -278,14 +284,12 @@ object Compiler {
 
             DECIMAL -> compileDecimalCondition(
                 cond = cond,
-                fieldId = fieldId,
-                op = op
+                fieldId = fieldId
             )
 
             INTEGER -> compileIntegerCondition(
                 cond = cond,
-                fieldId = fieldId,
-                op = op
+                fieldId = fieldId
             )
 
             STRING_SET -> compileStringSetCondition(
@@ -346,7 +350,7 @@ object Compiler {
     }
 
     @Suppress("UnusedParameter")
-    private fun compileDecimalCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
+    private fun compileDecimalCondition(cond: ConditionAst, fieldId: FieldId): CompiledExpression {
         return DecimalOperator.compile(
             ruleId = ruleIdOrNull(cond = cond),
             cond = cond,
@@ -355,7 +359,7 @@ object Compiler {
     }
 
     @Suppress("UnusedParameter")
-    private fun compileIntegerCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
+    private fun compileIntegerCondition(cond: ConditionAst, fieldId: FieldId): CompiledExpression {
         return IntegerOperator.compile(ruleId = ruleIdOrNull(cond = cond), cond = cond, fieldId = fieldId)
     }
 
@@ -446,24 +450,5 @@ object Compiler {
     @Suppress("FunctionOnlyReturningConstant", "UnusedParameter")
     private fun ruleIdOrNull(cond: ConditionAst): String? {
         return null
-    }
-
-    /**
-     * Resolves a field identifier from user input to the canonical field ID.
-     * Checks the field ID first, then falls back to alias matching.
-     */
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
-        val fieldId = FieldId(value = identifier)
-        if (schema.fields.containsKey(fieldId)) {
-            return identifier
-        }
-
-        for ((id, definition) in schema.fields) {
-            if (definition.alias == identifier) {
-                return id.value
-            }
-        }
-
-        return identifier
     }
 }

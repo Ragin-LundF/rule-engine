@@ -141,17 +141,20 @@ dueDate lt "31.01.2024"
 
 ### Conditions on Nested Data
 
-When the schema declares a field as a `collection` or `object`, a condition can navigate into it:
+When the schema declares a field as an `object`, a condition navigates into it with a dotted path and
+compares it like any other field:
 
 ```
-orders.customer.country == "DE"
+shipment.customer.tier equals "gold"
+shipment.transitDays <= 2
 ```
 
-To reason about a whole list — a total, an average, a count of matching elements — use a
-[value expression](./expressions.md):
+A `collection` holds many records, so a path through it has one value per element and needs a
+[value expression](./expressions.md) — a total, an average, or a count of matching elements:
 
 ```
 sum(orders[status == "paid"].total) > 1000
+count(orders[customer.country == "DE"]) > 0
 ```
 
 ### Named Operators vs Symbolic Operators
@@ -175,6 +178,9 @@ Rules can use either the **full dot-notation path** or a **field alias** to refe
 
 #### Full Dot-Notation
 Use the complete path to a field as defined in the schema. This is highly explicit and avoids ambiguity.
+The schema may declare the path either as a single dotted field id or as nested `fields:` blocks — both
+spellings work with every operator (see [Nested Data](./field-schema.md#nested-data)). A path that reads
+through a `collection` is the one exception: aggregate or filter it instead.
 
 To understand how dot-notation works, consider the following input JSON:
 
@@ -634,6 +640,7 @@ rule "flagged-customer" {
 | An ISO date on a field that declares a format | `Invalid date '2024-01-31' … expected format 'dd.MM.yyyy' (e.g. "31.01.2024")` | Write the value in the field's own format |
 | Comparing a collection or object directly | `Field 'orders' is a collection and cannot be compared directly` | Navigate into it (`orders.total`) or aggregate over it (`sum(orders.total)`) |
 | Misspelling a member of a declared collection | `Unknown field 'totl' in 'orders.totl'` | Check the nested `fields:` block in the schema |
+| Comparing a path that reads through a collection | `Field 'orders.total' reads through collection 'orders' …` | Aggregate it (`sum(orders.total) > 100`) or filter it (`count(orders[total > 100]) > 0`) |
 | `and` inside a path filter | `Only comparison expressions are supported in filter segments` | Chain filters: `orders[status == "paid"][total > 100]` |
 | `equals` inside a path filter | `Operator 'equals' is not supported in filter segments` | Use `==` inside `[...]` |
 | `ignoreCase` after a symbolic operator | `Expected 'then' block` | Use the word form: `name equals "Acme" ignoreCase` |

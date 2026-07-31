@@ -35,7 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rule file) now report the builder's detailed message and exit with code `2` instead of `3`;
   evaluation output is unchanged.
 
+- **`warehouse-shipments` example bundle** — the documented worked example for nested data
+  (`ruleengine-core/src/test/resources/warehouse-shipments`): a `shipment` object read by plain
+  conditions plus `parcels` and `checkpoints` collections read by aggregates and filters, with two input
+  files and `WarehouseShipmentsIntegrationTest` asserting the full outcome of each. Linked from
+  [Field Schema](docs/field-schema.md#nested-data) and available in the UI sample gallery as **Warehouse
+  Shipments**.
+
 ### Fixed
+
+- **A nested path works in a plain condition.** A field declared through nested `fields:` blocks was only
+  reachable from a value expression (`sum(...)`, `count(...)`, `==`, `!=`); a plain comparison such as
+  `shipment.transitDays >= 3` or `shipment.customer.tier equals "gold"` failed with
+  `Unknown field '<path>' in condition`, because `Validator`, `Compiler` and `PreparedRuleContext` each
+  looked the whole dotted name up as a single flat schema key. Path resolution now lives in one place
+  (`FieldPathResolver` in `ruleengine.core.domain`) and is shared by all three, so every operator, the
+  declared `normalizers:` and a `format:` apply to a member of an `object` exactly as they do to a
+  top-level field. A field id that spells out the path itself keeps precedence, so existing flat schemas
+  are unaffected. A path that reads through a `collection` — which yields one value per element and
+  silently never matched before — is now rejected with a message naming the collection and pointing at
+  `count(...)` / `sum(...)` / a filter. Nested paths are also offered by editor autocomplete.
 
 - **Builder mode: filtered and nested paths are editable again.** A path in an aggregate, calculation
   or field operand is now a row of breadcrumb pills, each picked from the members the schema declares

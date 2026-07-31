@@ -1,7 +1,10 @@
 package ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.*
+import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Shapes
+import androidx.compose.material.Typography
+import androidx.compose.material.darkColors
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -36,6 +39,7 @@ val AccentOrangeSoft= Color(0xFFF59E0B).copy(alpha = 0.12f)
 val AccentPurple    = Color(0xFFA78BFA)
 val AccentPurpleSoft= Color(0xFFA78BFA).copy(alpha = 0.12f)
 val AccentCyan      = Color(0xFF22D3EE)
+val AccentCyanSoft  = Color(0xFF22D3EE).copy(alpha = 0.12f)
 
 // Text
 val TextPrimary     = Color(0xFFF0F4FA)

@@ -1,0 +1,14 @@
+name: warehouse-shipments
+
+# Sample: Warehouse Shipments
+# Demonstrates nested data: a `shipment` object navigated with dotted paths in plain conditions,
+# plus aggregates and filters over the `parcels` and `checkpoints` collections.
+
+entries:
+  - id: warehouse-shipments
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/delivery-quality.rule
+      - rules/parcel-condition.rule
+      - rules/route-risk.rule

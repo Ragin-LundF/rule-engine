@@ -5,6 +5,7 @@ enum class SampleCategory(val label: String) {
     LOGGING("Logging"),
     ECOMMERCE("E-Commerce"),
     SECURITY("Security"),
+    LOGISTICS("Logistics"),
 }
 
 data class SampleDescriptor(

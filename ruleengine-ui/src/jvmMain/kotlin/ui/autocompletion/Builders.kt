@@ -3,7 +3,8 @@ package ui.autocompletion
 import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldPathResolution
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.FieldSchema
 import ui.DslCursorContext
 import ui.DslSection
@@ -14,17 +15,19 @@ private fun FieldDefinition.getDisplayId(): String {
 
 /**
  * Resolves a field identifier from user input to the actual field definition.
- * Checks the field ID first, then falls back to alias matching.
+ *
+ * Delegates to the core resolver, so a nested path (`shipment.customer.tier`) offers the same operator and
+ * value completions as a top-level field or an alias.
  */
 private fun resolveFieldByIdentifier(
     identifier: String,
     schema: FieldSchema?
 ): FieldDefinition? {
-    val fieldId = FieldId(value = identifier)
-    if (schema?.fields?.containsKey(fieldId) == true) {
-        return schema.fields[fieldId]
-    }
-    return schema?.fields?.values?.find { it.alias == identifier }
+    val resolution = FieldPathResolver.resolve(
+        identifier = identifier,
+        schema = schema ?: return null
+    )
+    return (resolution as? FieldPathResolution.Resolved)?.definition
 }
 
 /** Forwarding function for contextual completions. */
@@ -141,15 +144,33 @@ private fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionIt
         add(CompletionItem(label = "true", insertText = "true", kind = CompletionKind.LITERAL, hint = "boolean"))
         add(CompletionItem(label = "false", insertText = "false", kind = CompletionKind.LITERAL, hint = "boolean"))
         addAll(buildAggregateFunctionCompletions())
-        schema?.fields?.forEach { (id, def) ->
+        val offered = mutableSetOf<String>()
+        schema?.fields?.forEach { (_, def) ->
+            val label = def.getDisplayId()
+            offered += label
             add(
                 CompletionItem(
-                    label = def.getDisplayId(),
-                    insertText = def.getDisplayId(),
+                    label = label,
+                    insertText = label,
                     kind = CompletionKind.FIELD,
                     hint = def.type.name.lowercase()
                 )
             )
+        }
+        // Members of an `object` are usable in a plain condition, so offer their dotted paths as well.
+        schema?.let { loaded ->
+            FieldPathResolver.scalarPaths(schema = loaded).forEach { (id, def) ->
+                if (offered.add(id.value)) {
+                    add(
+                        CompletionItem(
+                            label = id.value,
+                            insertText = id.value,
+                            kind = CompletionKind.FIELD,
+                            hint = def.type.name.lowercase()
+                        )
+                    )
+                }
+            }
         }
     }
 }

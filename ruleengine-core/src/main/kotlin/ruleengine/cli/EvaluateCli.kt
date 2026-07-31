@@ -7,10 +7,10 @@ import ruleengine.compiler.Validator
 import ruleengine.core.domain.EvaluationResult
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
+import ruleengine.core.io.FileInputSupport
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
-import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.FieldSchemaLoader
@@ -30,6 +30,7 @@ import kotlin.system.exitProcess
  *     --schema <schema.yaml> --rules <rules-dir> --input-file <input.json> [--trace]
  *       [--format json|pretty-json]
  */
+@Suppress("TooManyFunctions")
 object EvaluateCli {
     @JvmStatic
     fun main(args: Array<String>) {

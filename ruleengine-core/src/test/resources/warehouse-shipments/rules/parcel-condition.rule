@@ -1,0 +1,50 @@
+# 2. Parcel condition and handling — aggregates and filters over the `parcels` collection.
+#
+# Schema: schema.yaml
+
+rule "all-parcels-intact" {
+  when
+    count(parcels[damaged == true]) == 0
+
+  then
+    assessment "condition:green"
+    reason "no-damaged-parcel-reported"
+}
+
+rule "damaged-parcels-reported" {
+  when
+    count(parcels[damaged == true]) > 0
+
+  then
+    assessment "condition:red"
+    reason "at-least-one-damaged-parcel"
+}
+
+rule "two-person-lift" {
+  when
+    sum(parcels.weightKg) > 100
+
+  then
+    assessment "handling:two-person-lift"
+    reason "total-weight-above-one-hundred-kilograms"
+}
+
+# More than a quarter of the load is fragile, so the whole shipment is handled as fragile.
+rule "fragile-load" {
+  when
+    sum(parcels[category == "fragile"].weightKg) > sum(parcels.weightKg) * 0.25
+
+  then
+    assessment "handling:fragile-load"
+    reason "fragile-parcels-exceed-a-quarter-of-the-weight"
+}
+
+# A filter may read a nested member of the element it filters.
+rule "consolidate-at-hamburg-hub" {
+  when
+    count(parcels[origin.hub == "HAM"]) >= 2
+
+  then
+    assessment "consolidation:hub-ham"
+    reason "two-or-more-parcels-originate-in-hamburg"
+}

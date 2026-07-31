@@ -1,0 +1,52 @@
+# 1. Delivery quality — read straight from the nested `shipment` record.
+#
+# Every condition here is a plain comparison on a path declared through nested `fields:` blocks.
+# Schema: schema.yaml
+
+rule "premium-service-promise" {
+  when
+    shipment.customer.tier equals "gold"
+    and shipment.service contains "express"
+
+  then
+    assessment "service:premium"
+    reason "gold-customer-on-express-service"
+}
+
+rule "transit-within-promise" {
+  when
+    shipment.transitDays <= 2
+
+  then
+    assessment "transit:green"
+    reason "delivered-within-two-days"
+}
+
+rule "transit-over-promise" {
+  when
+    shipment.transitDays > 2
+
+  then
+    assessment "transit:red"
+    reason "more-than-two-days-in-transit"
+}
+
+# Cover note is required for a valuable shipment; the operator normalizes the country before comparing.
+rule "insurance-required" {
+  when
+    shipment.declaredValue between 1000 25000
+    and shipment.customer.country equals "DE"
+
+  then
+    assessment "insurance:required"
+    reason "declared-value-above-one-thousand"
+}
+
+rule "pickup-inside-planning-window" {
+  when
+    shipment.pickedUpAt >= "01.03.2026"
+
+  then
+    assessment "pickup:in-window"
+    reason "picked-up-in-the-current-planning-window"
+}

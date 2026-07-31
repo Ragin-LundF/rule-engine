@@ -1,0 +1,10 @@
+name: warehouse-shipments
+
+entries:
+  - id: shipment-assessment
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/delivery-quality.rule
+      - rules/parcel-condition.rule
+      - rules/route-risk.rule

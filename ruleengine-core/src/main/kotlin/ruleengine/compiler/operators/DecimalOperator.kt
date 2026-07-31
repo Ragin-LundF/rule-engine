@@ -19,13 +19,13 @@ object DecimalOperator {
                 ruleId = ruleId,
                 details = "Operator 'between' expects two numeric bounds for field '${cond.field}'"
             )
-            val low = runCatching { BigDecimal(between.low) }.getOrElse { ex ->
+            val low = runCatching { BigDecimal(between.low) }.getOrElse {
                 throw CompilationException(
                     ruleId = ruleId,
                     details = "Invalid lower bound: ${between.low}"
                 )
             }
-            val high = runCatching { BigDecimal(between.high) }.getOrElse { ex ->
+            val high = runCatching { BigDecimal(between.high) }.getOrElse {
                 throw CompilationException(
                     ruleId = ruleId,
                     details = "Invalid upper bound: ${between.high}"
@@ -38,7 +38,7 @@ object DecimalOperator {
             ruleId = ruleId,
             details = "Expected numeric literal for decimal field '${cond.field}'"
         )
-        val expected = runCatching { BigDecimal(literal.value) }.getOrElse { ex ->
+        val expected = runCatching { BigDecimal(literal.value) }.getOrElse {
             throw CompilationException(
                 ruleId = ruleId,
                 details = "Invalid decimal literal: ${literal.value}"

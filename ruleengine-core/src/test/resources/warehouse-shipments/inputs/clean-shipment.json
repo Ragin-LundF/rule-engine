@@ -1,0 +1,41 @@
+{
+  "shipment": {
+    "reference": "WS-10041",
+    "service": " Express Domestic ",
+    "transitDays": 2,
+    "declaredValue": 1450.00,
+    "pickedUpAt": "17.03.2026",
+    "customer": {
+      "tier": "Gold",
+      "country": "de"
+    }
+  },
+  "parcels": [
+    {
+      "code": "P-1",
+      "weightKg": 12.5,
+      "category": "standard",
+      "damaged": false,
+      "origin": { "hub": "HAM" }
+    },
+    {
+      "code": "P-2",
+      "weightKg": 8.0,
+      "category": "standard",
+      "damaged": false,
+      "origin": { "hub": "BER" }
+    },
+    {
+      "code": "P-3",
+      "weightKg": 4.5,
+      "category": "fragile",
+      "damaged": false,
+      "origin": { "hub": "MUC" }
+    }
+  ],
+  "checkpoints": [
+    { "site": "HAM-depot", "delayMinutes": 0, "scanned": true },
+    { "site": "HAN-hub", "delayMinutes": 15, "scanned": true },
+    { "site": "BER-depot", "delayMinutes": 25, "scanned": true }
+  ]
+}

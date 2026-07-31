@@ -6,6 +6,8 @@ import ruleengine.core.domain.ActionArgType
 import ruleengine.core.domain.ActionSchema
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldPathResolution
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.errors.Severity
@@ -117,23 +119,31 @@ object Validator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
-        val resolvedFieldId = resolveIdentifier(identifier = cond.field, schema = schema)
-        val fieldId = FieldId(value = resolvedFieldId)
-        val def = schema.fields[fieldId]
-        if (def == null) {
-            val suggestion = suggestClosest(
-                input = cond.field,
-                candidates = buildList {
-                    addAll(schema.fields.keys.map { it.value })
-                    addAll(schema.fields.mapNotNull { it.value.alias })
-                }
-            )
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Unknown field '${cond.field}' in condition",
-                suggestion = suggestion
-            )
-            return
+        val def = when (val resolution = FieldPathResolver.resolve(identifier = cond.field, schema = schema)) {
+            is FieldPathResolution.Resolved -> resolution.definition
+
+            is FieldPathResolution.CrossesCollection -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = FieldPathMessages.crossesCollection(
+                        field = cond.field,
+                        collectionPath = resolution.collectionPath
+                    )
+                )
+                return
+            }
+
+            is FieldPathResolution.Unknown -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Unknown field '${cond.field}' in condition",
+                    suggestion = suggestClosest(
+                        input = cond.field,
+                        candidates = fieldCandidates(schema = schema)
+                    )
+                )
+                return
+            }
         }
 
         if (def.type == FieldType.COLLECTION || def.type == FieldType.OBJECT) {
@@ -271,19 +281,33 @@ object Validator {
         }
     }
 
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
-        val fieldId = FieldId(value = identifier)
-        if (schema.fields.containsKey(fieldId)) {
-            return identifier
-        }
-
-        for ((id, definition) in schema.fields) {
-            if (definition.alias == identifier) {
-                return id.value
+    /**
+     * Names a rule may use for a field: every declared path that resolves to a scalar, plus the aliases.
+     *
+     * Nested paths are included so a typo deep in a path (`shipment.customer.tir`) can still be pointed at
+     * the field the author meant.
+     */
+    private fun fieldCandidates(schema: FieldSchema): List<String> {
+        val scalarPaths = FieldPathResolver.scalarPaths(schema = schema)
+        return buildList {
+            addAll(scalarPaths.keys.map { it.value })
+            // The author may have written the alias rather than the declared name, so offer that spelling too.
+            for ((fieldId, definition) in scalarPaths) {
+                val alias = definition.alias ?: continue
+                add(aliasPath(path = fieldId.value, alias = alias))
             }
+            addAll(schema.fields.keys.map { it.value })
+            addAll(schema.fields.mapNotNull { it.value.alias })
         }
+    }
 
-        return identifier
+    /** The same path with its last segment replaced by [alias]. */
+    private fun aliasPath(path: String, alias: String): String {
+        val prefix = path.substringBeforeLast(delimiter = '.', missingDelimiterValue = "")
+        if (prefix.isEmpty()) {
+            return alias
+        }
+        return "$prefix.$alias"
     }
 
     @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "NestedBlockDepth")
@@ -345,19 +369,15 @@ object Validator {
     ) {
         when (extraction) {
             is ExtractionAst.RegexExtraction -> {
-                val resolvedSource = resolveIdentifier(
+                val resolution = FieldPathResolver.resolve(
                     identifier = extraction.sourceField,
                     schema = fieldSchema
                 )
-                val fieldId = FieldId(value = resolvedSource)
-                val def = fieldSchema.fields[fieldId]
+                val def = (resolution as? FieldPathResolution.Resolved)?.definition
                 if (def == null) {
                     val suggestion = suggestClosest(
                         input = extraction.sourceField,
-                        candidates = buildList {
-                            addAll(fieldSchema.fields.keys.map { it.value })
-                            addAll(fieldSchema.fields.mapNotNull { it.value.alias })
-                        }
+                        candidates = fieldCandidates(schema = fieldSchema)
                     )
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,

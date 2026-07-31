@@ -273,8 +273,9 @@ rule "overdue-invoice" {
 | Applies to text values | An input already typed as a date (a `LocalDate`, `LocalDateTime` or `Instant` handed to the engine by the host application) carries no text, so no pattern applies to it |
 | Prefer separators | An all-digit pattern such as `yyyyMMdd` works in a hand-written rule but is not round-trip-safe in the visual Builder, which cannot tell that value from a number |
 
-> **Note:** A `format` on a **nested** member of a `collection` / `object` is accepted and checked, but
-> has no effect at runtime: nested paths are compared as raw text (see
+> **Note:** A `format` on a member of a **`collection`** is accepted and checked, but has no effect at
+> runtime: a path that reads through a list is projected and compared as raw text. A member of an
+> **`object`** is a normal typed field, so its `format` does apply (see
 > [3.5 Nested Data](#35-nested-data--collections-and-objects)).
 
 #### Named operators vs. symbolic operators — important
@@ -433,11 +434,62 @@ fields:
 Given that schema, rules can navigate and aggregate to any declared depth:
 
 ```
-orders.customer.country == "DE"
 count(orders) > 3
 sum(orders.total) > 1000
 sum(orders[status == "paid"].items[price > 0].price) > 500
+count(orders[customer.country == "DE"]) > 0
 ```
+
+#### A path into an `object` is a normal field; a path through a `collection` is not
+
+An `object` holds exactly one record, so a path into it has exactly one value. Such a path is used like any
+other field — every operator, its declared `normalizers:` and its `format` all apply:
+
+```yaml
+schema: shipments-v1
+
+fields:
+  shipment:
+    type: object
+    fields:
+      transitDays:
+        type: integer
+      pickedUpAt:
+        type: date
+        format: dd.MM.yyyy
+      customer:
+        type: object
+        fields:
+          tier:
+            type: text
+            normalizers:
+              - trim
+              - lowercase
+```
+
+```
+rule "fast-gold-shipment" {
+  when
+    shipment.transitDays <= 2
+    and shipment.customer.tier equals "gold"
+    and shipment.pickedUpAt >= "01.03.2026"
+
+  then
+    label "premium-on-time"
+}
+```
+
+A `collection` holds many records, so a path through it yields **one value per element** and cannot be
+compared to a single literal. The engine rejects it and names the collection:
+
+```text
+Field 'orders.total' reads through collection 'orders', which yields one value per element and cannot be
+compared directly; use an aggregate function such as count(orders), sum(orders.total) or a filter such as
+orders[...]
+```
+
+> **Rule:** Compare a path into an `object` directly. Wrap a path through a `collection` in an aggregate
+> function or a filter.
 
 #### Declaring nested members is optional but recommended
 
@@ -452,6 +504,13 @@ sum(orders[status == "paid"].items[price > 0].price) > 500
 
 > **Rule:** `normalizers:` and `operators:` are not valid on a `collection` or `object` field itself.
 > Declare them on the nested scalar members instead.
+
+#### Worked example
+
+[`ruleengine-core/src/test/resources/warehouse-shipments`](ruleengine-core/src/test/resources/warehouse-shipments)
+is a complete bundle built on both shapes: a `shipment` object read by plain conditions, and `parcels` and
+`checkpoints` collections read by aggregates and filters. It ships two input files and is executed by
+`WarehouseShipmentsIntegrationTest`, so every path in it is known to work.
 
 ---
 
@@ -616,13 +675,22 @@ dueDate lt "31.01.2024"
 
 #### Nested path condition examples
 
-When a field is declared `collection` or `object`, navigate into it with a dotted path:
+When a field is declared `object`, navigate into it with a dotted path and compare it like any other field —
+named and symbolic operators both work:
 
 ```
-orders.customer.country == "DE"
+shipment.customer.tier equals "gold"
+shipment.transitDays <= 2
 ```
 
-For anything that aggregates over a collection, see [5.8 Value Expressions](#58-value-expressions--aggregate-functions-and-arithmetic).
+A path that reads through a `collection` cannot be compared directly, because it yields one value per
+element. Aggregate or filter it instead — see
+[5.8 Value Expressions](#58-value-expressions--aggregate-functions-and-arithmetic):
+
+```
+count(orders[customer.country == "DE"]) > 0
+sum(orders.total) > 1000
+```
 
 #### The `ignoreCase` modifier
 
@@ -853,7 +921,7 @@ Paths may be **any depth**, following the nested `fields:` you declared in the s
 
 ```
 sum(orders.items.price)
-orders.customer.country
+count(orders[customer.country == "DE"])
 ```
 
 > **Important — projection flattens.** `sum(orders.items.price)` is the sum across **all items of all

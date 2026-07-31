@@ -39,6 +39,7 @@ import java.nio.file.Path
  * individual loaders (`FieldSchemaLoader`, `ActionSchemaLoader`, `Parser`, `Validator`, `Compiler`)
  * directly.
  */
+@Suppress("TooManyFunctions")
 object RuleEngineBuilder {
     /**
      * Loads every entry of the manifest at [manifestPath], or only the entry named [entryId].

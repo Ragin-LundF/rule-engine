@@ -137,11 +137,18 @@ class NestedPathValidationTest {
             label = "text equality on a nested leaf"
         )
 
-        // Ordering comparisons are text-illegal, which is only detectable once the leaf is typed.
+        // Ordering comparisons are text-illegal, which is only detectable once the leaf is typed. The path
+        // reads through a collection, which a plain condition cannot do either — assert the message so this
+        // stays a real check instead of passing on whichever error happens to come first.
         val result = validate(condition = """orders.status > "paid"""")
         assertFalse(
             actual = result.isValid,
             message = "Ordering comparison on a nested text leaf should be rejected"
+        )
+        val error = result.diagnostics.first { it.severity == Severity.ERROR }
+        assertTrue(
+            actual = error.message.contains("collection 'orders'"),
+            message = "Expected the message to name the collection, got: ${error.message}"
         )
     }
 

@@ -140,8 +140,13 @@ Paths may be **any depth**, following the nested `fields:` declared in the
 
 ```
 sum(orders.items.price)
-orders.customer.country
+count(orders[customer.country == "DE"])
 ```
+
+A path that stays inside `object` records has a single value, so it does not need an aggregate at all — it
+works as a plain condition with any operator (see
+[A path into an `object`](./field-schema.md#a-path-into-an-object-behaves-like-any-other-field)). Aggregates
+are for paths that read through a `collection`.
 
 ### Projection flattens every level
 
@@ -266,6 +271,7 @@ A missing value on either side of a comparison always produces `false`.
 | `sum(orders.totl)` where `orders` declares `total` | `Unknown field 'totl' in 'orders.totl'` |
 | `transactions[label == "risk" and amount > 0]` | `Only comparison expressions are supported in filter segments` |
 | `transactions[label equals "risk"]` | `Operator 'equals' is not supported in filter segments` |
+| `transactions.amount > 100` as a plain condition | `Field 'transactions.amount' reads through collection 'transactions' …` — wrap it in an aggregate or a filter |
 
 > **One case is a warning, not an error:** if the **root** of a multi-segment path is not declared in
 > the schema, the rule still loads and a warning is reported, because the root may be a structure read

@@ -2,6 +2,7 @@ package ruleengine.evaluator.context
 
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.TemporalFormat
@@ -47,36 +48,56 @@ class PreparedRuleContext(
             val map = mutableMapOf<FieldId, PreparedValue>()
 
             for ((fieldId, def) in schema.fields) {
-                val raw = ctx.get(fieldId) ?: continue
-                when (def.type) {
-                    FieldType.TEXT -> prepareText(
-                        fieldId = fieldId,
-                        def = def,
-                        raw = raw,
-                        map = map,
-                        registry = normalizerRegistry
-                    )
+                prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
+            }
 
-                    FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.DATE -> prepareDate(fieldId = fieldId, def = def, raw = raw, map = map)
-                    FieldType.DATE_TIME -> prepareDateTime(fieldId = fieldId, def = def, raw = raw, map = map)
-                    FieldType.STRING_SET -> prepareStringSet(
-                        fieldId = fieldId,
-                        def = def,
-                        raw = raw,
-                        map = map,
-                        registry = normalizerRegistry
-                    )
-
-                    else -> {
-                        // unsupported types for now
-                    }
+            // A scalar declared inside an `object` is read by its dotted path, which `RuleContext.get`
+            // already navigates. Collections are left out: projecting a list yields many values, which only
+            // the value expression path can compare. A dotted field id declared flat is prepared by the loop
+            // above and is not overwritten here.
+            for ((fieldId, def) in FieldPathResolver.scalarPaths(schema = schema)) {
+                if (!map.containsKey(fieldId)) {
+                    prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
                 }
             }
 
             return PreparedRuleContext(values = map, rawContext = ctx)
+        }
+
+        private fun prepareValue(
+            fieldId: FieldId,
+            def: FieldDefinition,
+            ctx: RuleContext,
+            map: MutableMap<FieldId, PreparedValue>,
+            registry: NormalizerRegistry
+        ) {
+            val raw = ctx.get(fieldId) ?: return
+            when (def.type) {
+                FieldType.TEXT -> prepareText(
+                    fieldId = fieldId,
+                    def = def,
+                    raw = raw,
+                    map = map,
+                    registry = registry
+                )
+
+                FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
+                FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
+                FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
+                FieldType.DATE -> prepareDate(fieldId = fieldId, def = def, raw = raw, map = map)
+                FieldType.DATE_TIME -> prepareDateTime(fieldId = fieldId, def = def, raw = raw, map = map)
+                FieldType.STRING_SET -> prepareStringSet(
+                    fieldId = fieldId,
+                    def = def,
+                    raw = raw,
+                    map = map,
+                    registry = registry
+                )
+
+                else -> {
+                    // Structure types carry no value of their own; their members are prepared instead.
+                }
+            }
         }
 
         private fun prepareText(
