@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## Release 1.3.0
+## Unreleased
 
 ### Added
 
@@ -30,6 +30,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Documentation fidelity test** — every rule example in `RULE-SPEC.md`, `README.md` and `docs/` is
   parsed, validated and compiled by an automated test, so the specification handed to AI assistants
   cannot drift from what the engine accepts.
+- **`date_time` field type** (aliases `datetime`, `timestamp`) — a date with a time of day, compared at
+  time precision with the same six operators as `date`. Input may be a `LocalDateTime`, a `LocalDate`
+  (starting at midnight), an `Instant` (resolved at UTC) or a string.
+- **Every field type is offered by "+ Add field"** in the visual schema editor. The menu previously
+  hardcoded seven templates and omitted `string_set`, `date` and `date_time`, so those types were
+  reachable only by adding a blank field and changing its type afterwards. The list is now derived from
+  one place and a test asserts it covers every type.
+- **Operator chips are filtered to the field's type** in the schema editor, so a `date` field no longer
+  offers `contains` and a `string_set` field no longer offers `between`. An operator already present in a
+  loaded schema but invalid for its type is still shown, marked, so it can be removed.
+- **Unknown operator names are rejected when the schema loads** — `operators: [greaterThan]` now fails
+  with `Unknown operator 'greaterThan' for field 'amount'` instead of silently restricting the field to a
+  name no rule can use. `starts_with` / `ends_with` / `startswith` / `matches` are accepted as aliases of
+  the canonical names, so schemas written by earlier versions of the editor keep loading — and their
+  conditions now work rather than being rejected.
+- **Per-field date format** — a `date` / `date_time` field may declare `format: "dd.MM.yyyy"`, a
+  `DateTimeFormatter` pattern that governs both the incoming data value and the literal written in every
+  rule for that field. Omitting it keeps today's ISO-8601 behaviour, so existing schemas and rules are
+  unaffected. A `format` on a non-date field, a malformed pattern, or one that cannot represent a
+  complete value is rejected when the schema loads. The schema editor edits the pattern per field, and
+  the Builder and autocomplete offer value placeholders in it.
 
 ### Fixed
 
@@ -44,6 +65,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bundled samples did not load.** Five rules used `between 20 and 500`, which the DSL does not accept;
   one used a zero-argument action the parser rejected; one used `between` on a field whose schema
   omitted that operator. All samples are now covered by a test.
+- The editor's `between` value placeholder inserted the numeric `0 100` for date fields as well, which
+  could never compile; date fields now get a pair of quoted date samples.
+- **The schema editor offered operators and normalizers the engine does not have.** `not_equals`,
+  `not_contains`, `isEmpty` and `isNotEmpty` were selectable but have no implementation anywhere in the
+  engine; `starts_with` / `ends_with` were spelled in a form the validator did not recognise; `regex` was
+  missing although text fields support it. The normalizer chips were missing `collapse_whitespace` and
+  `remove_punctuation`, and the YAML autocomplete offered `ascii_fold`, which does not exist and produced
+  a schema that failed to load.
+- Normalizer chips are no longer shown for types the engine never normalizes (anything but `text` and
+  `string_set`).
+- The YAML `type:` autocomplete was missing `collection` and `object`, and spelled `stringSet` where the
+  editor writes `string_set`.
+- The rule editor's schema **Example** button inserted `greaterThan` / `lessThan`, which are not engine
+  operators, so the example it produced rejected every rule written against it.
+- The Builder offered `in` on numeric fields and `contains` on `string_set` fields; the engine allows
+  neither.
+- `sample-schema.yaml` declared `starts_with` on its `country` field, so `country startsWith "DE"` could
+  not be used with the schema the README quick-start points at.
 
 ## Release 1.2.0
 

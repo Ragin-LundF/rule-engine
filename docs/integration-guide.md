@@ -300,8 +300,8 @@ The validator checks:
 - Field names inside a path filter (`orders[status == "paid"]`) resolve against the members of the
   element being filtered, not the top-level schema
 - All operators used in conditions are allowed for the field's type
-- Literal types match the field type (e.g. no string literal on a numeric field, ISO format for dates,
-  `true` / `false` for booleans)
+- Literal types match the field type (e.g. no string literal on a numeric field, `true` / `false` for
+  booleans, and for a date field either ISO or the pattern the field declares in its `format`)
 - Valid regular expression patterns for `regex` operator
 - All actions are defined in the action schema (if provided)
 - Action argument counts and types match the action schema definition
@@ -382,13 +382,19 @@ The engine accepts any `Map<String, Any?>` — the keys are field names, the val
 | `DECIMAL` | `BigDecimal`, `Double`, `Float` |
 | `BOOLEAN` | `Boolean`, or the `String` `"true"` / `"false"` |
 | `STRING_SET` | `List<String>`, `Set<String>`, `Collection<String>` |
-| `DATE` | `LocalDate`, `LocalDateTime`, `Instant`, or an ISO-8601 `String` |
+| `DATE` | `LocalDate`, `LocalDateTime`, `Instant`, or a `String` in the field's format |
+| `DATE_TIME` | `LocalDateTime`, `LocalDate` (starts at midnight), `Instant`, or a `String` in the field's format |
 | `COLLECTION` | `List<Map<String, Any?>>` — a list of records |
 | `OBJECT` | `Map<String, Any?>` — a single record |
 
 A value that cannot be read as its declared type is treated as absent, which makes conditions on it
-`false` rather than raising an error. A `DATE` carrying a time is reduced to its calendar date; an
-`Instant` is resolved at UTC.
+`false` rather than raising an error. A `DATE` carrying a time is reduced to its calendar date; a
+`DATE_TIME` keeps it. An `Instant` is resolved at UTC, because the engine has no timezone concept.
+
+A `String` date is read with the pattern the field declares in its
+[`format`](field-schema.md#date-formats), or as ISO-8601 when it declares none. A value that is already
+a `LocalDate`, `LocalDateTime` or `Instant` carries no text, so no pattern applies to it — those types
+are always accepted as they are.
 
 ```kotlin
 import ruleengine.evaluator.context.RuleContext

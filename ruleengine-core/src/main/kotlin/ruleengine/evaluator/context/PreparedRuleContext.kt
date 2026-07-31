@@ -4,10 +4,12 @@ import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.TemporalFormat
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.compiled.EvaluationCache
 import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDate
+import ruleengine.evaluator.context.dto.PreparedDateTime
 import ruleengine.evaluator.context.dto.PreparedDecimal
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedStringSet
@@ -18,7 +20,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
-import java.time.format.DateTimeParseException
 
 class PreparedRuleContext(
     private val values: Map<FieldId, PreparedValue>,
@@ -59,7 +60,8 @@ class PreparedRuleContext(
                     FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
                     FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
                     FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.DATE -> prepareDate(fieldId = fieldId, raw = raw, map = map)
+                    FieldType.DATE -> prepareDate(fieldId = fieldId, def = def, raw = raw, map = map)
+                    FieldType.DATE_TIME -> prepareDateTime(fieldId = fieldId, def = def, raw = raw, map = map)
                     FieldType.STRING_SET -> prepareStringSet(
                         fieldId = fieldId,
                         def = def,
@@ -93,21 +95,45 @@ class PreparedRuleContext(
         /**
          * Reads a calendar date. A value carrying a time is truncated to its date; an `Instant` is
          * resolved at UTC, because the engine compares calendar dates and has no timezone concept.
+         *
+         * A `String` is read with the field's declared [FieldDefinition.format], or as ISO-8601 when the
+         * field declares none. Already-typed values carry no text, so no format applies to them.
          */
-        private fun prepareDate(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
+        private fun prepareDate(
+            fieldId: FieldId,
+            def: FieldDefinition,
+            raw: Any?,
+            map: MutableMap<FieldId, PreparedValue>
+        ) {
             val date = when (raw) {
                 is LocalDate -> raw
                 is LocalDateTime -> raw.toLocalDate()
                 is Instant -> raw.atZone(ZoneOffset.UTC).toLocalDate()
-                is String -> try {
-                    LocalDate.parse(raw)
-                } catch (_: DateTimeParseException) {
-                    return
-                }
-
+                is String -> TemporalFormat.parseDate(text = raw, pattern = def.format) ?: return
                 else -> return
             }
             map[fieldId] = PreparedDate(value = date)
+        }
+
+        /**
+         * Reads a date with its time of day. A date-only value starts at midnight, and an `Instant` is
+         * resolved at UTC. A `String` is read with the field's declared [FieldDefinition.format], or as
+         * ISO-8601 when the field declares none.
+         */
+        private fun prepareDateTime(
+            fieldId: FieldId,
+            def: FieldDefinition,
+            raw: Any?,
+            map: MutableMap<FieldId, PreparedValue>
+        ) {
+            val dateTime = when (raw) {
+                is LocalDateTime -> raw
+                is LocalDate -> raw.atStartOfDay()
+                is Instant -> LocalDateTime.ofInstant(raw, ZoneOffset.UTC)
+                is String -> TemporalFormat.parseDateTime(text = raw, pattern = def.format) ?: return
+                else -> return
+            }
+            map[fieldId] = PreparedDateTime(value = dateTime)
         }
 
         private fun prepareBoolean(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {

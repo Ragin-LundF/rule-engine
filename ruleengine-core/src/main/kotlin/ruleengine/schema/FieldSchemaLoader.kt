@@ -5,8 +5,11 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType
 import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.TemporalFormat
 import ruleengine.core.domain.isStructure
+import ruleengine.core.domain.isTemporal
 import ruleengine.core.domain.OperatorId
+import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
 import ruleengine.core.normalizer.NormalizerRegistry
@@ -81,6 +84,8 @@ object FieldSchemaLoader {
         val normalizers = raw.normalizers?.map { NormalizerId(value = it) } ?: emptyList()
         validateNormalizers(fieldName = fieldName, normalizers = normalizers)
         val operators = raw.operators?.map { OperatorId(value = it) }?.toSet() ?: emptySet()
+        validateOperators(fieldName = fieldName, operators = operators)
+        validateFormat(fieldName = fieldName, type = type, format = raw.format)
 
         // Recurse into nested members; a nested structure carries its own `fields`, so depth is unbounded.
         val nested = raw.fields?.let { rawNested ->
@@ -100,6 +105,7 @@ object FieldSchemaLoader {
             id = fieldName,
             type = type,
             alias = raw.alias,
+            format = raw.format,
             normalizers = normalizers,
             operators = operators,
             fields = nested
@@ -119,6 +125,47 @@ object FieldSchemaLoader {
         }
     }
 
+    /**
+     * Rejects an operator name the engine cannot compile.
+     *
+     * A declared `operators:` list is the field's whitelist, so a name the engine does not know silently
+     * disables every condition on that field — the diagnostic then blames the rule
+     * (`Operator 'startsWith' is not allowed for field 'x'. Allowed: [starts_with]`) rather than the typo
+     * in the schema. Checking the type is deliberately left to `Validator`, which owns the per-type rule.
+     */
+    private fun validateOperators(fieldName: FieldId, operators: Set<OperatorId>) {
+        val unknown = operators.filterNot { OperatorUtils.isKnownOperator(op = it.value) }
+        if (unknown.isNotEmpty()) {
+            throw SchemaLoadException(
+                path = Path.of(fieldName.value),
+                details = "Unknown operator '${unknown.first().value}' for field '${fieldName.value}'"
+            )
+        }
+    }
+
+    /**
+     * Rejects a `format` that cannot work, because Jackson silently drops keys it does not know: without
+     * this check a `format` on the wrong field type would look accepted and quietly do nothing.
+     */
+    private fun validateFormat(fieldName: FieldId, type: FieldType, format: String?) {
+        if (format == null) {
+            return
+        }
+        val problem = when {
+            format.isBlank() -> "field '${fieldName.value}' declares an empty 'format'"
+
+            !type.isTemporal -> "field '${fieldName.value}' declares 'format' but its type is " +
+                "'${type.name.lowercase()}'; 'format' is only valid on 'date' and 'date_time' fields"
+
+            else -> TemporalFormat.unusableReason(type = type, pattern = format)?.let { reason ->
+                "field '${fieldName.value}' declares an invalid 'format' pattern '$format': $reason"
+            }
+        }
+        if (problem != null) {
+            throw SchemaLoadException(path = Path.of(fieldName.value), details = problem)
+        }
+    }
+
     private fun parseFieldType(s: String): FieldType {
         return when (s.lowercase()) {
             "text", "string" -> FieldType.TEXT
@@ -127,6 +174,7 @@ object FieldSchemaLoader {
             "boolean", "bool" -> FieldType.BOOLEAN
             "stringset", "string_set", "set" -> FieldType.STRING_SET
             "date" -> FieldType.DATE
+            "date_time", "datetime", "timestamp" -> FieldType.DATE_TIME
             "collection", "list", "array" -> FieldType.COLLECTION
             "object", "map" -> FieldType.OBJECT
             else -> throw IllegalArgumentException("Unknown field type: $s")

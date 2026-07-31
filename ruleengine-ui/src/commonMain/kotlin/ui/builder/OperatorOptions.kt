@@ -7,7 +7,8 @@ package ui.builder
 object OperatorOptions {
 
     val TEXT: List<String> = listOf("equals", "contains", "startsWith", "endsWith", "in", "regex", "!=")
-    val INTEGER: List<String> = listOf("equals", ">", ">=", "<", "<=", "between", "in", "!=")
+    // No `in`: the engine allows it on text fields only (`Validator.supportedOperatorsFor`).
+    val INTEGER: List<String> = listOf("equals", ">", ">=", "<", "<=", "between", "!=")
     val DECIMAL: List<String> = listOf("equals", ">", ">=", "<", "<=", "between", "!=")
     val BOOLEAN: List<String> = listOf("equals")
     val STRING_SET: List<String> = listOf("containsAny", "containsAll")
@@ -27,7 +28,7 @@ object OperatorOptions {
      * Aggregate functions understood by the engine, lowercase.
      *
      * Must stay in sync with `ruleengine.evaluator.compiled.AggregateFunctionName`, which lives in
-     * the JVM-only core module and so cannot be referenced from `commonMain`. `AggregateFunctionsTest`
+     * the JVM-only core module and so cannot be referenced from `commonMain`. `OperatorOptionsTest`
      * asserts the two lists match.
      */
     val AGGREGATE_FUNCTIONS: List<String> =
@@ -86,7 +87,7 @@ object OperatorOptions {
             "decimal" -> DECIMAL
             "boolean" -> BOOLEAN
             "string_set" -> STRING_SET
-            "date" -> DATE
+            "date", "date_time" -> DATE
             // A structure is navigated into or aggregated over, never compared directly.
             "collection", "object" -> return emptyList()
             else -> TEXT

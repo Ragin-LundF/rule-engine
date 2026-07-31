@@ -63,14 +63,19 @@ Each field has exactly one type. The type determines which operators can be used
 | `decimal` | Numbers with decimals | Amounts, prices, percentages |
 | `boolean` | `true` / `false` | Flags, yes/no fields |
 | `string_set` | A set of strings | Tags, labels, categories — multiple values per field |
-| `date` | ISO dates (`2024-06-15`) | Booking dates, due dates, timestamps compared by day |
+| `date` | ISO dates (`2024-06-15`), or the field's own [format](#date-formats) | Booking dates, due dates, timestamps compared by day |
+| `date_time` | ISO date-times (`2024-06-15T09:30:00`), or the field's own [format](#date-formats) | Timestamps where the time of day matters |
 | `collection` | A list of records | Transactions, order items, positions — see [Nested Data](#nested-data) |
 | `object` | A nested record | Customer, address, counterparty — see [Nested Data](#nested-data) |
 
 > **Aliases accepted:** `text` can also be written as `string`. `integer` can be written as `int` or `long`. `decimal` can be written as `number` or `bigdecimal`. `string_set` can also be written as `stringset` or `set`. `boolean` can be written as `bool`. `collection` can be written as `list` or `array`, and `object` as `map`.
+`date_time` can be written as `datetime` or `timestamp`.
 
-> **Note:** A `date` value is compared as a calendar date. Input may be an ISO string, a `LocalDate`, a
-> `LocalDateTime`, or an `Instant` — anything carrying a time is reduced to its date.
+> **Note:** A `date` value is compared as a calendar date. Input may be a string, a `LocalDate`, a
+> `LocalDateTime`, or an `Instant` — anything carrying a time is reduced to its date. Use `date_time`
+> when the time of day must take part in the comparison: there, a `LocalDate` input starts at midnight
+> and an `Instant` is resolved at UTC. A string input is read with the field's declared
+> [format](#date-formats), or as ISO-8601 when it declares none.
 
 ---
 
@@ -138,6 +143,13 @@ The `operators` list controls which comparison operations are allowed in rules f
 If you omit the `operators` list entirely, all operators that match the field type are allowed.
 If you list specific operators, only those are permitted — the validator will reject any rule that uses another operator on that field.
 
+Use the exact names from the tables below. An operator name the engine does not implement — `greaterThan`,
+`isEmpty` — is rejected when the schema loads. (`starts_with`, `startswith` and `matches` are accepted as
+aliases for `startsWith` and `regex` so older schemas keep working, but write the canonical name.)
+
+In the [visual editor](../README_UI.md) the operator chips are filtered to the field's type, so only the
+operators listed for that type can be ticked.
+
 ### Text Field Operators
 
 | Operator | Meaning | Example rule condition |
@@ -180,18 +192,76 @@ If you list specific operators, only those are permitted — the validator will 
 
 `equals` is the only operator for a boolean field, and the value is the bare word `true` or `false` — never quoted.
 
-### Date Field Operators
+### Date and Date-Time Field Operators
+
+`date` and `date_time` share the same six operators. There is no separate "before" or "after" operator:
+`lt` is before, `gt` is after.
 
 | Operator | Meaning | Example rule condition |
 |---|---|---|
-| `equals` | Same day | `bookingDate equals "2024-06-15"` |
+| `equals` | Same day / same instant | `bookingDate equals "2024-06-15"` |
 | `gt` | After | `bookingDate gt "2024-01-01"` |
 | `gte` | On or after | `bookingDate >= "2024-01-01"` |
 | `lt` | Before | `bookingDate lt "2020-01-01"` |
 | `lte` | On or before | `bookingDate <= "2024-12-31"` |
-| `between` | Inclusive date range | `bookingDate between "2024-01-01" "2024-12-31"` |
+| `between` | Inclusive range | `bookingDate between "2024-01-01" "2024-12-31"` |
 
-Date literals are always quoted ISO dates (`YYYY-MM-DD`). Any other format is rejected when the rules load.
+Date literals are always quoted. By default they are ISO — `YYYY-MM-DD` for a `date`,
+`YYYY-MM-DDTHH:MM:SS` for a `date_time` — and any other spelling is rejected when the rules load. A
+field that declares a [format](#date-formats) uses that pattern instead.
+
+Only a `date_time` comparison can see the time of day. `bookedAt gt "2024-06-15T09:00:00"` is false for
+a value at exactly 09:00:00 and true one second later; on a `date` field the same input would have been
+truncated to `2024-06-15` first.
+
+### Date Formats
+
+Real-world data does not always arrive as ISO-8601. A `date` or `date_time` field can declare the
+pattern its values use, with `format:`:
+
+```yaml
+schema: invoices-v1
+
+fields:
+  issuedOn:
+    type: date
+  dueDate:
+    type: date
+    format: "dd.MM.yyyy"
+  paidAt:
+    type: date_time
+    format: "dd.MM.yyyy HH:mm"
+```
+
+The value is a [`java.time.format.DateTimeFormatter`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/time/format/DateTimeFormatter.html)
+pattern. It is the field's **only** date format, and it applies in both directions:
+
+- the incoming data value is read with it — `dueDate` accepts `"31.01.2024"`,
+- every literal written in a rule for that field must use it — `dueDate lt "31.01.2024"`.
+
+A declared format **replaces** ISO rather than extending it, so with the schema above
+`dueDate equals "2024-01-31"` is a validation error and the input `"2024-01-31"` does not match. Leave
+`format` out whenever the data is ISO — that is the default, and `issuedOn` above needs no declaration.
+
+The schema is rejected at load time when a `format`:
+
+| Problem | Example |
+|---|---|
+| sits on a field that is not a date | `format` on a `text` field |
+| is not a valid pattern | `format: "QQQQQQ"` |
+| cannot represent a complete value | `format: "MM-dd"` on a `date` (no year), `format: "yyyy-MM-dd"` on a `date_time` (no time) |
+| is empty | `format: ""` — omit the key instead |
+
+A few limits worth knowing:
+
+- **A format only applies to text input.** When the host application hands the engine a value that is
+  already a `LocalDate`, `LocalDateTime` or `Instant`, there is no text to parse and the pattern is not
+  consulted.
+- **A format on a nested member has no runtime effect.** It is accepted and validated, but members of a
+  `collection` / `object` are reached through a path and compared as raw text — see
+  [Nested Data](#nested-data).
+- **Prefer a pattern with separators.** An all-digit pattern such as `yyyyMMdd` works in a hand-written
+  rule, but the visual Builder cannot tell such a value from a number and will emit it unquoted.
 
 ### Collection and Object Fields
 

@@ -210,4 +210,52 @@ class FieldSchemaYamlBridgeTest {
         assertFalse(yaml.contains("stale"))
         assertTrue(FieldSchemaYamlBridge.fromYaml(yaml).fields.single().fields.isEmpty())
     }
+
+    // ── date formats ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `date_time fields parse from yaml`() {
+        val yaml = """
+            schema: temporal
+            fields:
+              bookedAt:
+                type: date_time
+        """.trimIndent()
+
+        assertEquals(SchemaFieldType.DATE_TIME, FieldSchemaYamlBridge.fromYaml(yaml).fields.single().type)
+    }
+
+    @Test
+    fun `a declared format round-trips through toYaml and fromYaml`() {
+        val state = SchemaEditorState(
+            schemaName = "formats",
+            fields = listOf(
+                EditableField(path = "dueDate", type = SchemaFieldType.DATE, format = "dd.MM.yyyy"),
+                EditableField(path = "eventAt", type = SchemaFieldType.DATE_TIME, format = "dd.MM.yyyy HH:mm"),
+                EditableField(path = "createdAt", type = SchemaFieldType.DATE),
+            ),
+        )
+
+        val reloaded = FieldSchemaYamlBridge.fromYaml(FieldSchemaYamlBridge.toYaml(state))
+
+        assertEquals("dd.MM.yyyy", reloaded.fields.first { it.path == "dueDate" }.format)
+        assertEquals("dd.MM.yyyy HH:mm", reloaded.fields.first { it.path == "eventAt" }.format)
+        assertEquals("", reloaded.fields.first { it.path == "createdAt" }.format)
+    }
+
+    @Test
+    fun `format is omitted for non-temporal types`() {
+        val state = SchemaEditorState(
+            fields = listOf(
+                // A leftover format from a type change must not be written out, because the loader
+                // rejects `format` on anything but a date type.
+                EditableField(path = "purpose", type = SchemaFieldType.TEXT, format = "dd.MM.yyyy"),
+            ),
+        )
+
+        val yaml = FieldSchemaYamlBridge.toYaml(state)
+
+        assertFalse(yaml.contains("format"))
+        assertFalse(FieldSchemaYamlBridge.fromYaml(yaml).isReadOnly, "emitted yaml must still load")
+    }
 }

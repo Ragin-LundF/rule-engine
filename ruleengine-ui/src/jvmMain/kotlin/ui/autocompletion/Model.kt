@@ -1,6 +1,9 @@
 package ui.autocompletion
 
+import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.TemporalFormat
+import ruleengine.core.domain.isTemporal
 
 // ── Completion model
 
@@ -17,7 +20,8 @@ public data class CompletionItem(
 internal val TEXT_OPS    = listOf("equals", "contains", "startsWith", "endsWith", "in", "regex", "==", "!=")
 internal val NUM_OPS     = listOf("equals", "gt", "gte", "lt", "lte", "between", "==", "!=", ">", ">=", "<", "<=")
 internal val BOOL_OPS    = listOf("equals")
-internal val SET_OPS     = listOf("contains", "containsAny", "containsAll")
+// A string set is tested for membership only; the engine rejects `contains` on it.
+internal val SET_OPS     = listOf("containsAny", "containsAll")
 internal val DATE_OPS    = listOf("equals", "gt", "gte", "lt", "lte", "between")
 
 internal fun defaultOperatorsForType(fieldType: FieldType): List<String> {
@@ -27,25 +31,39 @@ internal fun defaultOperatorsForType(fieldType: FieldType): List<String> {
         FieldType.DECIMAL    -> NUM_OPS
         FieldType.BOOLEAN    -> BOOL_OPS
         FieldType.STRING_SET -> SET_OPS
-        FieldType.DATE       -> DATE_OPS
+        FieldType.DATE, FieldType.DATE_TIME -> DATE_OPS
         // Structures are navigated, not compared: no direct operators.
         FieldType.COLLECTION, FieldType.OBJECT -> emptyList()
     }
 }
 
-internal fun valuePlaceholderForOperator(op: String, fieldType: FieldType): String {
+/**
+ * Snippet inserted after an operator, in the shape the field actually accepts — so a date field with a
+ * declared `format` suggests a value in that format rather than an ISO one the compiler would reject.
+ */
+internal fun valuePlaceholderForOperator(op: String, def: FieldDefinition): String {
+    if (op.lowercase() == "between") {
+        // Date bounds are quoted values, not numbers, so they need their own sample pair.
+        if (def.type.isTemporal) {
+            val sample = temporalSample(def = def)
+            return "$sample $sample"
+        }
+        return "0 100"
+    }
     return when (op.lowercase()) {
-        "between"                    -> "0 100"
         "in", "containsany", "containsall" -> "[\"a\", \"b\"]"
-        else                         -> when (fieldType) {
+        else                         -> when (def.type) {
             FieldType.TEXT       -> "\"value\""
             FieldType.INTEGER    -> "0"
             FieldType.DECIMAL    -> "0.0"
             FieldType.BOOLEAN    -> "true"
             FieldType.STRING_SET -> "\"value\""
-            FieldType.DATE       -> "\"2024-01-01\""
+            FieldType.DATE, FieldType.DATE_TIME -> temporalSample(def = def)
             FieldType.COLLECTION, FieldType.OBJECT -> ""
         }
     }
 }
 
+private fun temporalSample(def: FieldDefinition): String {
+    return "\"${TemporalFormat.sample(type = def.type, pattern = def.format)}\""
+}

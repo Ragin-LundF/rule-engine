@@ -6,7 +6,7 @@ Use this file when touching `ruleengine-core` or core packages.
 
 | Package | Purpose |
 |---|---|
-| `ruleengine.core.domain` | Shared domain models such as `FieldSchema`, `FieldDefinition`, `FieldType`, `RuleMatch`, and inline value classes such as `FieldId`, `OperatorId`, `NormalizerId`. |
+| `ruleengine.core.domain` | Shared domain models such as `FieldSchema`, `FieldDefinition`, `FieldType`, `RuleMatch`, `TemporalFormat` (the single owner of date pattern parsing), and inline value classes such as `FieldId`, `OperatorId`, `NormalizerId`. |
 | `ruleengine.core.errors` | Exception types such as `CompilationException`, `SchemaLoadException`, `RuleEngineException`, plus `ValidationDiagnostic` and `Severity`. |
 | `ruleengine.core.normalizer` | `Normalizer` functional interface, `NormalizerProfile`, and `NormalizerRegistry` singleton. |
 | `ruleengine.dsl.lexer` | `Lexer`, `Token`, `TokenType`; raw tokenisation of the rule DSL. |
@@ -44,6 +44,13 @@ When adding a new `FieldType` or operator:
 4. Add validation logic in `Validator.validateCondition`.
 5. Add a new `CompiledExpression` implementation in `ruleengine.evaluator.compiled`.
 6. Update `AutoComplete.kt` in `ruleengine-ui`, especially `defaultOperatorsForType` and `valuePlaceholderForOperator`.
+7. Map the YAML spelling and its aliases in `FieldSchemaLoader.parseFieldType`, and list the type's
+   operators in `Validator.supportedOperatorsFor` and `ui.builder.OperatorOptions.forField`. The last two
+   have a fallback branch and fail *silently* when a type is missing, so cover them with a test; the
+   `when` blocks elsewhere are exhaustive and the compiler flags them for you.
+8. Mirror the type in the UI: `ui.schema.SchemaFieldType` (its `yamlValue` must equal the lowercased
+   `FieldType` name, or the YAML bridge silently degrades the field to `TEXT`), `YamlHighlighter`
+   (`FIELD_TYPE_VALUES`, `fieldTypeValueColor`) and `DesktopRuleEditorItems.fieldTypeColor`.
 
 If the change affects DSL keywords or operators, also update relevant UI syntax highlighting and autocomplete rules.
 

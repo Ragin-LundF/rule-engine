@@ -110,7 +110,8 @@ Use **exactly** one of these values for the `type` key. No other values are vali
 | `decimal` | `number`, `bigdecimal` | Numbers with decimal places: amounts, prices, percentages |
 | `boolean` | `bool` | True/false flags |
 | `string_set` | `stringset`, `set` | Multiple string values per field: tags, labels, categories |
-| `date` | — | Calendar dates, compared with quoted ISO-8601 literals |
+| `date` | — | Calendar dates, compared with quoted literals |
+| `date_time` | `datetime`, `timestamp` | Dates with a time of day, compared at time precision |
 | `collection` | `list`, `array` | A **list of objects**: transactions, order items, positions |
 | `object` | `map` | A **single nested record**: customer, address, counterparty |
 
@@ -123,7 +124,7 @@ Use **exactly** one of these values for the `type` key. No other values are vali
 
 ### 3.2 Normalizers — Exhaustive List
 
-Normalizers apply **only** to `text` and `string_set` fields. They are applied in the listed order before any rule comparison. They are **not valid** on `integer`, `decimal`, `boolean`, `date`, `collection`, or `object` fields.
+Normalizers apply **only** to `text` and `string_set` fields. They are applied in the listed order before any rule comparison. They are **not valid** on `integer`, `decimal`, `boolean`, `date`, `date_time`, `collection`, or `object` fields.
 
 | Name | What it does | Typical use |
 |---|---|---|
@@ -208,20 +209,73 @@ not isActive equals true      # equivalent to `isActive equals false` for a fiel
 > missing value makes the inner condition false. Use `isActive equals false` when the flag must be
 > present and false.
 
-#### Date field operators (`date`)
+#### Date field operators (`date`, `date_time`)
 
-Date literals are **quoted ISO-8601 calendar dates**: `"2024-01-31"`. Any other format is rejected at load time. Comparison is by calendar date; a value carrying a time is truncated to its date.
+Both types use the same six operators. There is no separate "before" or "after" operator: **`lt` is
+"before" and `gt` is "after"**.
+
+Literals are always **quoted**. By default they are ISO-8601 — `"2024-01-31"` for a `date`,
+`"2024-06-15T09:30:00"` for a `date_time` — and any other spelling is rejected at load time. A field
+that declares a [`format`](#the-format-key) uses that pattern instead.
+
+A `date` comparison is by calendar date: a value carrying a time is truncated to its date. A
+`date_time` comparison keeps the time, so `bookedAt gt "2024-06-15T09:00:00"` is false for a value at
+exactly 09:00:00 and true one second later.
 
 | Operator | Symbolic alias | Meaning | Example in a rule |
 |---|---|---|---|
-| `equals` | `==` or `=` | Same day | `bookingDate equals "2024-06-15"` |
+| `equals` | `==` or `=` | Same day (`date`) / same instant (`date_time`) | `bookingDate equals "2024-06-15"` |
 | `gt` | `>` | After | `bookingDate gt "2024-01-01"` |
 | `gte` | `>=` | On or after | `bookingDate >= "2024-01-01"` |
 | `lt` | `<` | Before | `bookingDate lt "2020-01-01"` |
 | `lte` | `<=` | On or before | `bookingDate <= "2024-12-31"` |
-| `between` | — | Inclusive date range | `bookingDate between "2024-01-01" "2024-12-31"` |
+| `between` | — | Inclusive range | `bookingDate between "2024-01-01" "2024-12-31"` |
 
 > **Rule:** Do **not** use text operators (`contains`, `startsWith`, etc.) on numeric, boolean, or date fields. Do **not** use numeric operators on text fields. Do **not** use `between` on text fields. Do **not** use `containsAny` / `containsAll` on non-`string_set` fields. Do **not** use any operator directly on a `collection` or `object` field.
+
+#### The `format` key
+
+A `date` or `date_time` field may declare a `format`: a
+[`java.time.format.DateTimeFormatter`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/time/format/DateTimeFormatter.html)
+pattern such as `dd.MM.yyyy`. It is the field's **only** date format — it governs both the incoming data
+value and the literal written in every rule for that field:
+
+```yaml
+schema: invoices-v1
+
+fields:
+  dueDate:
+    type: date
+    format: "dd.MM.yyyy"
+  paidAt:
+    type: date_time
+    format: "dd.MM.yyyy HH:mm"
+```
+
+```
+rule "overdue-invoice" {
+  when
+    dueDate lt "31.01.2024"
+
+  then
+    flag "overdue"
+}
+```
+
+> **Rule:** A declared `format` **replaces** ISO, it does not extend it. With the schema above,
+> `dueDate equals "2024-01-31"` is an error and the input value `"2024-01-31"` does not match.
+> Omit `format` whenever the data is ISO-8601 — that is the default and needs no declaration.
+
+| Constraint | Notes |
+|---|---|
+| Valid on `date` and `date_time` only | A `format` on any other type is rejected when the schema loads |
+| Must be a usable pattern | Rejected at load time when it is malformed (`QQQQQQ`) or cannot represent a complete value (`MM-dd` on a `date`, `yyyy-MM-dd` on a `date_time`) |
+| Applies to text values | An input already typed as a date (a `LocalDate`, `LocalDateTime` or `Instant` handed to the engine by the host application) carries no text, so no pattern applies to it |
+| Prefer separators | An all-digit pattern such as `yyyyMMdd` works in a hand-written rule but is not round-trip-safe in the visual Builder, which cannot tell that value from a number |
+
+> **Note:** A `format` on a **nested** member of a `collection` / `object` is accepted and checked, but
+> has no effect at runtime: nested paths are compared as raw text (see
+> [3.5 Nested Data](#35-nested-data--collections-and-objects)).
 
 #### Named operators vs. symbolic operators — important
 
@@ -319,9 +373,20 @@ fields:
     operators:
       - equals
 
-  # Calendar date
+  # Calendar date — ISO literals, because no `format` is declared
   bookingDate:
     type: date
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # Date with a time of day
+  bookedAt:
+    type: date_time
     operators:
       - equals
       - gt
@@ -539,10 +604,15 @@ isActive equals false
 bookingDate equals "2024-06-15"
 bookingDate >= "2024-01-01"
 bookingDate between "2024-01-01" "2024-12-31"
+bookedAt gt "2024-06-15T09:00:00"
+dueDate lt "31.01.2024"
 ```
 
-> Date values are always quoted ISO dates (`YYYY-MM-DD`). `bookingDate > 20240101` and
-> `bookingDate equals "15.06.2024"` are both rejected at load time.
+> Date values are always quoted. Without a `format` they are ISO — `YYYY-MM-DD` for a `date`,
+> `YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
+> `bookingDate equals "15.06.2024"` are both rejected at load time. A field that declares a
+> [`format`](#the-format-key) uses that pattern instead, which is why `dueDate` above is written
+> `"31.01.2024"`.
 
 #### Nested path condition examples
 
@@ -940,6 +1010,8 @@ This section describes how to map common business descriptions to the technical 
 | A yes/no flag, enabled/disabled state | `boolean` |
 | A list of tags, labels, or categories | `string_set` |
 | A date | `date` |
+| A date with a time of day ("booked at 09:30") | `date_time` |
+| A date in a non-ISO format ("31.01.2024") | `date` / `date_time` + `format:` |
 | A **list of records** ("each transaction has an amount and a label") | `collection` + nested `fields:` |
 | A **single nested record** ("the customer has a country and an IBAN") | `object` + nested `fields:` |
 
@@ -947,7 +1019,8 @@ This section describes how to map common business descriptions to the technical 
 - Is it free text or a structured code? → `text`
 - Does it have decimal places? → `decimal`, otherwise `integer`
 - Is it only ever true or false? → `boolean`
-- Is it a calendar date? → `date`
+- Is it a calendar date? → `date`, or `date_time` when the time of day matters
+- Does the data spell dates in something other than ISO? → declare a `format:` on that field
 - Can it hold multiple **plain strings** at once? → `string_set`
 - Is it a list of things that each have their **own fields**? → `collection`, and declare those fields
 - Is it one nested record with its own fields? → `object`, and declare those fields
@@ -1214,11 +1287,24 @@ The engine validates everything at load time and rejects the following. Never ge
 | Constraint | Example of invalid usage |
 |---|---|
 | Unknown field type | `type: number_list` (not a valid type) |
-| Normalizer on a non-text field | Adding `lowercase` to an `integer` field |
 | Unknown normalizer name | `normalizers: [strip]` (`strip` does not exist; use `trim`) |
-| Unknown operator name | `operators: [matches]` (`matches` does not exist; use `regex`) |
-| Operator not valid for the field type | `operators: [contains]` on an `integer` field |
+| Unknown operator name | `operators: [greaterThan]` (`greaterThan` does not exist; use `gt`) |
 | Nested `fields:` on a scalar type | `amount: {type: decimal, fields: {...}}` — only `collection` and `object` may nest |
+| `format` on a non-date field | `purpose: {type: text, format: "dd.MM.yyyy"}` — only `date` and `date_time` accept it |
+| Malformed `format` pattern | `format: "QQQQQQ"` (not a valid `DateTimeFormatter` pattern) |
+| `format` that cannot represent the value | `format: "MM-dd"` on a `date` (no year), `format: "yyyy-MM-dd"` on a `date_time` (no time) |
+| Empty `format` | `format: ""` — omit the key instead to get ISO |
+
+> **Operator names must be canonical.** Write the spelling from the operator tables in
+> [3.3](#33-operators--exhaustive-list-by-type): `startsWith`, not `starts_with` or `startswith`;
+> `regex`, not `matches`. The engine accepts those variants as aliases so older schemas keep loading,
+> but generated output should always use the canonical name. A name the engine has no implementation for
+> — `greaterThan`, `not_contains`, `isEmpty` — is rejected when the schema loads.
+>
+> **A declared `operators:` list is a whitelist, not a type check.** Listing an operator the field's type
+> does not support (`operators: [contains]` on an `integer`) still loads; the error surfaces on the rule
+> that uses it. Declaring only a subset restricts the field to that subset, so a rule using any other
+> operator is rejected even though the type supports it.
 
 ### Action schema constraints
 
@@ -1240,7 +1326,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | `between` on a text field | `purpose between "a" "z"` (not valid) |
 | List literal on a non-`in` / non-`containsAny/All` operator | `purpose equals ["a", "b"]` |
 | Quoted or non-boolean value on a boolean field | `isActive equals "true"`, `isActive equals 1` |
-| Non-ISO date literal | `bookingDate equals "15.06.2024"` (use `"2024-06-15"`) |
+| Non-ISO date literal on a field with no `format` | `bookingDate equals "15.06.2024"` (use `"2024-06-15"`) |
+| ISO literal on a field that declares a `format` | `dueDate equals "2024-01-31"` when `dueDate` declares `format: "dd.MM.yyyy"` (use `"31.01.2024"`) |
+| Date-only literal on a `date_time` field | `bookedAt equals "2024-06-15"` (use `"2024-06-15T00:00:00"`) |
 | Comparing a structure directly | `transactions equals "x"` — navigate into it or aggregate over it |
 | Unknown member of a declared structure | `orders.totl` when `orders` declares `total` |
 | `and` / `or` inside a filter | `transactions[a > 1 and b > 2]` — chain filters instead |
@@ -1278,6 +1366,8 @@ The engine validates everything at load time and rejects the following. Never ge
 - [ ] All normalizer names come from the six built-in normalizers.
 - [ ] All operator names match the valid operators for the field's type.
 - [ ] No `operators:` or `normalizers:` on a `collection` / `object` field.
+- [ ] A date whose time of day matters is a `date_time`, not a `date`.
+- [ ] `format:` appears only on `date` / `date_time` fields, and only when the data is not ISO-8601.
 - [ ] The schema has a versioned `schema:` name (e.g. `my-schema-v1`).
 
 ### Checklist: Action Schema
@@ -1293,9 +1383,10 @@ The engine validates everything at load time and rejects the following. Never ge
 - [ ] Every operator used in a condition is in the field's allowed operators list.
 - [ ] Named operators (`equals`, `gt`, …) are used for field-vs-literal comparisons; symbolic
       operators (`==`, `>`, …) only where a value expression is involved.
-- [ ] `between` is only used on `integer`, `decimal` or `date` fields — two numeric bounds without
-      quotes, or two quoted ISO dates.
-- [ ] Boolean values are the bare words `true` / `false`; date values are quoted `YYYY-MM-DD`.
+- [ ] `between` is only used on `integer`, `decimal`, `date` or `date_time` fields — two numeric bounds
+      without quotes, or two quoted date values.
+- [ ] Boolean values are the bare words `true` / `false`; date values are quoted, in the field's
+      declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise.
 - [ ] `in` / `containsAny` / `containsAll` use a JSON-style list: `["a", "b"]`.
 - [ ] Filters inside `[...]` use only `==`, `!=`, `>`, `>=`, `<`, `<=` and contain no `and` / `or`.
 - [ ] Every action in every `then` block is defined in the action schema, with a matching argument count.

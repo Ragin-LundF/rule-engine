@@ -17,6 +17,9 @@ enum class FieldType {
     STRING_SET,
     DATE,
 
+    /** A calendar date with a time of day. Unlike [DATE], the time component is kept and compared. */
+    DATE_TIME,
+
     /** A list of elements, navigable with dotted paths and filters (e.g. `orders[status == "paid"].total`). */
     COLLECTION,
 
@@ -28,10 +31,21 @@ enum class FieldType {
 val FieldType.isStructure: Boolean
     get() = this == FieldType.COLLECTION || this == FieldType.OBJECT
 
+/** True for the date types that accept a [FieldDefinition.format] pattern. */
+val FieldType.isTemporal: Boolean
+    get() = this == FieldType.DATE || this == FieldType.DATE_TIME
+
 data class FieldDefinition(
     val id: FieldId,
     val type: FieldType,
     val alias: String? = null,
+    /**
+     * Date pattern for a [FieldType.DATE] / [FieldType.DATE_TIME] field, e.g. `dd.MM.yyyy`.
+     *
+     * Governs both how a `String` input value is read and how a literal in a rule must be written.
+     * `null` means ISO-8601, which is the default. Always `null` for every other field type.
+     */
+    val format: String? = null,
     val normalizers: List<NormalizerId> = emptyList(),
     val operators: Set<OperatorId> = emptySet(),
     /**

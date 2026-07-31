@@ -7,6 +7,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldType
@@ -172,6 +173,199 @@ class FieldSchemaLoaderTest {
         val transactions = schema.fields[FieldId(value = "transactions")]!!
         assertEquals(expected = FieldType.STRING_SET, actual = transactions.type)
         assertTrue(actual = transactions.fields.isEmpty())
+    }
+
+    @Test
+    fun `an unknown operator name throws SchemaLoadException`() {
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: bad-operator
+                    fields:
+                      amount:
+                        type: integer
+                        operators:
+                          - greaterThan
+                """.trimIndent()
+            )
+        }
+
+        assertTrue(
+            actual = exception.details.contains(other = "Unknown operator 'greaterThan'"),
+            message = exception.details,
+        )
+    }
+
+    @Test
+    fun `canonical, symbolic and legacy operator spellings all load`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: operator-spellings
+                fields:
+                  purpose:
+                    type: text
+                    operators:
+                      - equals
+                      - startsWith
+                      - starts_with
+                      - regex
+                  amount:
+                    type: decimal
+                    operators:
+                      - ">="
+                      - "!="
+                      - between
+            """.trimIndent()
+        )
+
+        assertEquals(expected = 2, actual = schema.fields.size)
+    }
+
+    @Test
+    fun `datetime and timestamp are aliases for date_time`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: temporal-aliases-v1
+                fields:
+                  a:
+                    type: date_time
+                  b:
+                    type: datetime
+                  c:
+                    type: timestamp
+            """.trimIndent()
+        )
+
+        assertEquals(expected = FieldType.DATE_TIME, actual = schema.fields[FieldId(value = "a")]!!.type)
+        assertEquals(expected = FieldType.DATE_TIME, actual = schema.fields[FieldId(value = "b")]!!.type)
+        assertEquals(expected = FieldType.DATE_TIME, actual = schema.fields[FieldId(value = "c")]!!.type)
+    }
+
+    @Test
+    fun `format is loaded for date and date_time fields`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: formats-v1
+                fields:
+                  dueDate:
+                    type: date
+                    format: "dd.MM.yyyy"
+                  eventAt:
+                    type: date_time
+                    format: "dd.MM.yyyy HH:mm"
+                  createdAt:
+                    type: date
+            """.trimIndent()
+        )
+
+        assertEquals(expected = "dd.MM.yyyy", actual = schema.fields[FieldId(value = "dueDate")]!!.format)
+        assertEquals(expected = "dd.MM.yyyy HH:mm", actual = schema.fields[FieldId(value = "eventAt")]!!.format)
+        assertNull(actual = schema.fields[FieldId(value = "createdAt")]!!.format)
+    }
+
+    @Test
+    fun `format on a nested date member is loaded`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: nested-format-v1
+                fields:
+                  orders:
+                    type: collection
+                    fields:
+                      placedOn:
+                        type: date
+                        format: "dd.MM.yyyy"
+            """.trimIndent()
+        )
+
+        val placedOn = schema.fields[FieldId(value = "orders")]!!.fields[FieldId(value = "placedOn")]!!
+        assertEquals(expected = "dd.MM.yyyy", actual = placedOn.format)
+    }
+
+    @Test
+    fun `format on a non-date field throws SchemaLoadException`() {
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: bad-format-target
+                    fields:
+                      purpose:
+                        type: text
+                        format: "dd.MM.yyyy"
+                """.trimIndent()
+            )
+        }
+
+        assertTrue(
+            actual = exception.details.contains(other = "only valid on 'date' and 'date_time'"),
+            message = exception.details,
+        )
+    }
+
+    @Test
+    fun `an empty format throws SchemaLoadException`() {
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: blank-format
+                    fields:
+                      dueDate:
+                        type: date
+                        format: "  "
+                """.trimIndent()
+            )
+        }
+
+        assertTrue(actual = exception.details.contains(other = "empty 'format'"), message = exception.details)
+    }
+
+    @Test
+    fun `a malformed format pattern throws SchemaLoadException`() {
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: malformed-format
+                    fields:
+                      dueDate:
+                        type: date
+                        format: "QQQQQQ"
+                """.trimIndent()
+            )
+        }
+
+        assertTrue(actual = exception.details.contains(other = "invalid 'format' pattern"), message = exception.details)
+    }
+
+    @Test
+    fun `a format that cannot represent the field type throws SchemaLoadException`() {
+        val incompleteDate = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: incomplete-date
+                    fields:
+                      dueDate:
+                        type: date
+                        format: "MM-dd"
+                """.trimIndent()
+            )
+        }
+        assertTrue(actual = incompleteDate.details.contains(other = "complete date"), message = incompleteDate.details)
+
+        val missingTime = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: missing-time
+                    fields:
+                      eventAt:
+                        type: date_time
+                        format: "yyyy-MM-dd"
+                """.trimIndent()
+            )
+        }
+        assertTrue(
+            actual = missingTime.details.contains(other = "complete date and time"),
+            message = missingTime.details,
+        )
     }
 }
 

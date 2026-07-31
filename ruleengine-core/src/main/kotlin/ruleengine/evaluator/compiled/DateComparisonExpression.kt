@@ -2,16 +2,15 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
-import ruleengine.evaluator.context.dto.PreparedDate
+import ruleengine.evaluator.context.dto.PreparedTemporal
 import ruleengine.evaluator.trace.TraceCollector
 import ruleengine.evaluator.trace.dto.NodeMeta
 import ruleengine.evaluator.trace.dto.NodeType
-import java.time.LocalDate
 
-/** Compares a date field to a fixed calendar date. */
+/** Compares a `date` or `date_time` field to a fixed value of the same type. */
 class DateComparisonExpression(
     private val field: FieldId,
-    private val expected: LocalDate,
+    private val expected: PreparedTemporal<*>,
     private val op: DateComparisonOperator
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.VERY_CHEAP
@@ -22,17 +21,17 @@ class DateComparisonExpression(
                 type = NodeType.CONDITION,
                 field = field.value,
                 operator = op.name,
-                expected = expected.toString()
+                expected = expected.value.toString()
             )
         )
 
-        val value = context.get(field) as? PreparedDate
+        val value = context.get(field) as? PreparedTemporal<*>
         if (value == null) {
             trace?.exit(result = false)
             return false
         }
 
-        val cmp = value.value.compareTo(expected)
+        val cmp = value.compareWith(other = expected)
         val result = when (op) {
             DateComparisonOperator.EQ -> cmp == 0
             DateComparisonOperator.GT -> cmp > 0

@@ -175,40 +175,7 @@ private fun AddFieldDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            val templates = listOf(
-                "Blank field" to EditableField(),
-                "Text field" to EditableField(
-                    path = "field",
-                    type = SchemaFieldType.TEXT,
-                    operators = listOf("equals", "contains"),
-                ),
-                "Integer field" to EditableField(
-                    path = "count",
-                    type = SchemaFieldType.INTEGER,
-                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
-                ),
-                "Decimal field" to EditableField(
-                    path = "amount",
-                    type = SchemaFieldType.DECIMAL,
-                    operators = listOf("equals", "gt", "gte", "lt", "lte", "between"),
-                ),
-                "Boolean field" to EditableField(
-                    path = "flag",
-                    type = SchemaFieldType.BOOLEAN,
-                    operators = listOf("equals"),
-                ),
-                "Collection (list of objects)" to EditableField(
-                    path = "items",
-                    type = SchemaFieldType.COLLECTION,
-                    fields = listOf(EditableField(path = "amount", type = SchemaFieldType.DECIMAL)),
-                ),
-                "Object (nested fields)" to EditableField(
-                    path = "customer",
-                    type = SchemaFieldType.OBJECT,
-                    fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
-                ),
-            )
-            templates.forEach { (label, template) ->
+            FieldTemplates.forEach { (label, template) ->
                 DropdownMenuItem(onClick = {
                     onAdd(template)
                     expanded = false
@@ -289,7 +256,9 @@ private fun FieldRow(
             )
             TypeDropdown(
                 selected = field.type,
-                onSelect = { onFieldChange(field.copy(type = it)) },
+                // A format only means something on a date type; carrying a stale one over to another type
+                // would emit YAML the loader rejects.
+                onSelect = { onFieldChange(field.copy(type = it, format = if (it.isTemporal) field.format else "")) },
                 modifier = Modifier.weight(weight = 1.5f),
             )
             if (editable) {
@@ -310,31 +279,59 @@ private fun FieldRow(
             return@Column
         }
 
+        // ── date format ───────────────────────────────────────────────────
+        if (field.type.isTemporal) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Format",
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                    modifier = Modifier.width(80.dp),
+                )
+                OutlinedTextField(
+                    value = field.format,
+                    onValueChange = { onFieldChange(field.copy(format = it)) },
+                    modifier = Modifier.weight(1f),
+                    enabled = editable,
+                    singleLine = true,
+                    placeholder = { Text(formatPlaceholder(type = field.type), color = TextMuted) },
+                    colors = fieldColors,
+                )
+            }
+        }
+
         // ── normalizers ───────────────────────────────────────────────────
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = "Normalizers",
-                style = MaterialTheme.typography.caption,
-                color = TextMuted,
-                modifier = Modifier.width(80.dp).padding(top = 6.dp),
-            )
-            NormalizerSelector(
-                selected = field.normalizers,
-                onToggle = { norm ->
-                    val updated = if (norm in field.normalizers) {
-                        field.normalizers - norm
-                    } else {
-                        field.normalizers + norm
-                    }
-                    onFieldChange(field.copy(normalizers = updated))
-                },
-                enabled = editable,
-                modifier = Modifier.weight(1f),
-            )
+        // Only text values are normalized by the engine, so the row would be inert on other types.
+        if (field.type.isNormalizable) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Normalizers",
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                    modifier = Modifier.width(80.dp).padding(top = 6.dp),
+                )
+                NormalizerSelector(
+                    selected = field.normalizers,
+                    onToggle = { norm ->
+                        val updated = if (norm in field.normalizers) {
+                            field.normalizers - norm
+                        } else {
+                            field.normalizers + norm
+                        }
+                        onFieldChange(field.copy(normalizers = updated))
+                    },
+                    enabled = editable,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         // ── operators ─────────────────────────────────────────────────────
@@ -350,6 +347,7 @@ private fun FieldRow(
                 modifier = Modifier.width(80.dp).padding(top = 6.dp),
             )
             OperatorSelector(
+                type = field.type,
                 selected = field.operators,
                 onToggle = { op ->
                     val updated = if (op in field.operators) {
@@ -363,6 +361,15 @@ private fun FieldRow(
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/** Hint shown in the empty format box: a pattern example, plus what leaving it empty means. */
+private fun formatPlaceholder(type: SchemaFieldType): String {
+    return if (type == SchemaFieldType.DATE_TIME) {
+        "dd.MM.yyyy HH:mm — optional, ISO if empty"
+    } else {
+        "dd.MM.yyyy — optional, ISO if empty"
     }
 }
 

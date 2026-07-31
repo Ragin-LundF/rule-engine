@@ -80,7 +80,7 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 - **Aggregate functions** — `sum`, `count`, `avg`, `median`, `max`, `min`, `subtract` over nested lists
 - **Filtered array paths** — `orders[status == "paid"].items[price > 0].price` filters at every level
 - **Arithmetic** — combine aggregates with `+`, `-`, `*`, `/`
-- **Text, numbers, flags and dates** — normalized text matching, numeric ranges, `true`/`false` flags, and ISO date comparisons
+- **Text, numbers, flags and dates** — normalized text matching, numeric ranges, `true`/`false` flags, and date / date-time comparisons with an optional per-field date format
 - **Manifest** — a single YAML file that ties schema, actions, and rule files together
 - **CLI tools** — validate and evaluate rules from the command line
 - **Visual editor** — desktop app for editing, validating, and visualising rules, including aggregates and calculations

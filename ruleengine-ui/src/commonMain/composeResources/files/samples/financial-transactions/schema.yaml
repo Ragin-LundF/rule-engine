@@ -100,6 +100,18 @@ fields:
       - lte
       - between
 
+  # A date with a time of day — compared with quoted ISO values, e.g. `bookedAt >= "2024-01-01T09:00:00"`.
+  # Add `format: "dd.MM.yyyy HH:mm"` to read a different pattern; the rule literals then use it too.
+  bookedAt:
+    type: date_time
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
   # A collection declares its element members, which lets the Builder offer
   # `transactions ▸ amount` in aggregate paths and type-check filters.
   transactions:

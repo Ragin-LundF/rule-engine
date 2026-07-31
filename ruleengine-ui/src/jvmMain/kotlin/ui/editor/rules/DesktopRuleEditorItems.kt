@@ -30,6 +30,7 @@ import ruleengine.core.domain.ActionDefinition
 import ruleengine.core.domain.FieldDefinition
 import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldType
+import ui.autocompletion.valuePlaceholderForOperator
 import ui.AccentGreen
 import ui.AccentPurple
 import ui.BgHover
@@ -83,7 +84,7 @@ private fun fieldTypeColor(type: FieldType): Color {
         FieldType.TEXT -> TextPrimary
         FieldType.BOOLEAN -> AccentPurple
         FieldType.STRING_SET -> AccentGreen
-        FieldType.DATE -> TextSecondary
+        FieldType.DATE, FieldType.DATE_TIME -> TextSecondary
         FieldType.COLLECTION, FieldType.OBJECT -> AccentGreen
     }
 }
@@ -210,16 +211,9 @@ fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
                             .background(color = BgHover)
                             .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 3.dp))
                             .clickable {
-                                val ph = when (def.type) {
-                                    FieldType.TEXT -> " \"value\""
-                                    FieldType.STRING_SET -> " [\"a\", \"b\"]"
-                                    FieldType.INTEGER -> " 0"
-                                    FieldType.DECIMAL -> " 0.0"
-                                    FieldType.BOOLEAN -> " true"
-                                    FieldType.DATE -> " \"2024-01-01\""
-                                    FieldType.COLLECTION, FieldType.OBJECT -> ""
-                                }
-                                onInsert("$displayName $opText$ph")
+                                // Shared with the autocomplete so a declared date format is honoured here too.
+                                val ph = valuePlaceholderForOperator(op = opText, def = def)
+                                onInsert("$displayName $opText $ph".trimEnd())
                             }
                             .padding(horizontal = 5.dp, vertical = 2.dp),
                     ) {

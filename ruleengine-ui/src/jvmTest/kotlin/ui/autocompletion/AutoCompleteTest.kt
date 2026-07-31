@@ -1,6 +1,10 @@
 package ui.autocompletion
 
+import ruleengine.core.domain.FieldDefinition
+import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.FieldType
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AutoCompleteTest {
@@ -49,5 +53,62 @@ class AutoCompleteTest {
                 message = "Expected OPERATOR kind for ${item.label}, got: ${item.kind}"
             )
         }
+    }
+
+    // --- value placeholders ---
+
+    @Test
+    fun `date placeholder is a quoted ISO value when no format is declared`() {
+        val def = FieldDefinition(id = FieldId(value = "createdAt"), type = FieldType.DATE)
+        val placeholder = valuePlaceholderForOperator(op = "equals", def = def)
+        assertEquals(expected = "\"2024-01-31\"", actual = placeholder)
+    }
+
+    @Test
+    fun `date placeholder follows the declared format`() {
+        val def = FieldDefinition(id = FieldId(value = "dueDate"), type = FieldType.DATE, format = "dd.MM.yyyy")
+        assertEquals(
+            expected = "\"31.01.2024\"",
+            actual = valuePlaceholderForOperator(op = "equals", def = def),
+        )
+    }
+
+    @Test
+    fun `date_time placeholder carries a time component`() {
+        val def = FieldDefinition(id = FieldId(value = "bookedAt"), type = FieldType.DATE_TIME)
+        assertTrue(
+            actual = valuePlaceholderForOperator(op = "gt", def = def).contains("T"),
+            message = "expected an ISO date-time placeholder",
+        )
+    }
+
+    /** `between` used to insert the numeric `0 100` for every type, which no date field can compile. */
+    @Test
+    fun `between placeholder on a date field is a pair of quoted dates`() {
+        val def = FieldDefinition(id = FieldId(value = "dueDate"), type = FieldType.DATE, format = "dd.MM.yyyy")
+        assertEquals(
+            expected = "\"31.01.2024\" \"31.01.2024\"",
+            actual = valuePlaceholderForOperator(op = "between", def = def),
+        )
+    }
+
+    @Test
+    fun `between placeholder on a numeric field stays numeric`() {
+        val def = FieldDefinition(id = FieldId(value = "amount"), type = FieldType.DECIMAL)
+        assertEquals(expected = "0 100", actual = valuePlaceholderForOperator(op = "between", def = def))
+    }
+
+    @Test
+    fun `date_time gets the date operator defaults`() {
+        assertEquals(expected = DATE_OPS, actual = defaultOperatorsForType(fieldType = FieldType.DATE_TIME))
+    }
+
+    /** The engine tests a string set for membership only; `contains` is rejected at compile time. */
+    @Test
+    fun `string set defaults are membership operators only`() {
+        assertEquals(
+            expected = listOf("containsAny", "containsAll"),
+            actual = defaultOperatorsForType(fieldType = FieldType.STRING_SET),
+        )
     }
 }

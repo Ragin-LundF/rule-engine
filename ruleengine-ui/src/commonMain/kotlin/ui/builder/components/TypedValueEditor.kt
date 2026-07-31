@@ -27,18 +27,22 @@ import ui.builder.OperatorOptions
  * - Single-value operators show one text field.
  * - `between` shows two text fields (low / high).
  * - List operators show an addable chip list.
+ *
+ * @param valueHint shape the value must have, shown as a placeholder — a date field's declared `format`.
  */
 @Composable
 fun TypedValueEditor(
     condition: MutableBuilderCondition,
     onChanged: () -> Unit,
     fieldType: String = "text",
+    valueHint: String = "",
     modifier: Modifier = Modifier,
 ) {
     when {
         OperatorOptions.isBetween(condition.operator) -> BetweenValueEditor(
             condition = condition,
             onChanged = onChanged,
+            valueHint = valueHint,
             modifier = modifier,
         )
         OperatorOptions.isList(condition.operator) -> ListValueEditor(
@@ -55,6 +59,7 @@ fun TypedValueEditor(
         else -> SingleValueEditor(
             condition = condition,
             onChanged = onChanged,
+            valueHint = valueHint,
             modifier = modifier,
         )
     }
@@ -82,6 +87,7 @@ private fun BooleanValueEditor(
 private fun SingleValueEditor(
     condition: MutableBuilderCondition,
     onChanged: () -> Unit,
+    valueHint: String = "",
     modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
@@ -91,6 +97,9 @@ private fun SingleValueEditor(
             onChanged()
         },
         singleLine = true,
+        placeholder = if (valueHint.isBlank()) null else {
+            { Text(text = valueHint, style = MaterialTheme.typography.body2) }
+        },
         modifier = modifier.defaultMinSize(minWidth = 120.dp),
     )
 }
@@ -99,8 +108,16 @@ private fun SingleValueEditor(
 private fun BetweenValueEditor(
     condition: MutableBuilderCondition,
     onChanged: () -> Unit,
+    valueHint: String = "",
     modifier: Modifier = Modifier,
 ) {
+    // The bound boxes are narrow, so the hint goes in the placeholder rather than into the label.
+    val hint: (@Composable () -> Unit)? = if (valueHint.isBlank()) {
+        null
+    } else {
+        { Text(text = valueHint, style = MaterialTheme.typography.caption) }
+    }
+    val boundWidth = if (valueHint.isBlank()) 100.dp else 140.dp
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -114,7 +131,8 @@ private fun BetweenValueEditor(
             },
             singleLine = true,
             label = { Text(text = "from") },
-            modifier = Modifier.width(width = 100.dp),
+            placeholder = hint,
+            modifier = Modifier.width(width = boundWidth),
         )
         Text(text = "..", style = MaterialTheme.typography.body2)
         OutlinedTextField(
@@ -125,7 +143,8 @@ private fun BetweenValueEditor(
             },
             singleLine = true,
             label = { Text(text = "to") },
-            modifier = Modifier.width(width = 100.dp),
+            placeholder = hint,
+            modifier = Modifier.width(width = boundWidth),
         )
     }
 }

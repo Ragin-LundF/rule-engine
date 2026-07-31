@@ -219,31 +219,37 @@ object Validator {
                     message = "Field '${cond.field}' expects 'true' or 'false'"
                 )
 
-            FieldType.DATE -> validateDateLiteral(cond = cond, op = op, diagnostics = diagnostics)
+            FieldType.DATE, FieldType.DATE_TIME ->
+                validateDateLiteral(cond = cond, def = def, op = op, diagnostics = diagnostics)
         }
     }
 
-    /** Date literals are quoted ISO-8601 calendar dates; `between` needs two of them. */
+    /**
+     * Date literals are quoted: ISO-8601 by default, or the field's declared `format` when it has one.
+     * `between` needs two of them.
+     */
     private fun validateDateLiteral(
         cond: ConditionAst,
+        def: FieldDefinition,
         op: String,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
+        val expected = DateOperator.expectedFormatText(def = def)
         if (op == "between") {
             val between = cond.value as? BetweenLiteral ?: run {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' with 'between' expects two quoted ISO dates"
+                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected"
                 )
                 return
             }
             listOf(between.low, between.high)
-                .filterNot { DateOperator.isIsoDate(text = it) }
+                .filterNot { DateOperator.isValidLiteral(text = it, def = def) }
                 .forEach { invalid ->
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
                         message = "Invalid date bound '$invalid' for field '${cond.field}'; " +
-                                "expected ISO format YYYY-MM-DD"
+                                "expected $expected"
                     )
                 }
             return
@@ -252,15 +258,15 @@ object Validator {
         val literal = cond.value as? StringLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects a quoted ISO date literal"
+                message = "Field '${cond.field}' expects a quoted date literal in $expected"
             )
             return
         }
-        if (!DateOperator.isIsoDate(text = literal.value)) {
+        if (!DateOperator.isValidLiteral(text = literal.value, def = def)) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Invalid date '${literal.value}' for field '${cond.field}'; " +
-                        "expected ISO format YYYY-MM-DD"
+                        "expected $expected"
             )
         }
     }
@@ -400,7 +406,7 @@ private fun supportedOperatorsFor(type: FieldType): Set<String> {
         FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
         FieldType.STRING_SET -> setOf("containsAny", "containsAll")
         FieldType.BOOLEAN -> setOf("equals")
-        FieldType.DATE -> setOf("equals", "gt", "gte", "lt", "lte", "between")
+        FieldType.DATE, FieldType.DATE_TIME -> setOf("equals", "gt", "gte", "lt", "lte", "between")
         // COLLECTION and OBJECT are navigated or aggregated, never compared directly.
         else -> emptySet()
     }

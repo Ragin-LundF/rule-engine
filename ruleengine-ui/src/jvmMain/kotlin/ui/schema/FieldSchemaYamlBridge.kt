@@ -9,7 +9,7 @@ import ruleengine.schema.FieldSchemaLoader
  *
  * YAML remains the source of truth. The bridge only handles the common subset:
  * - schema name
- * - fields with type, alias, normalizers, operators
+ * - fields with type, alias, date format, normalizers, operators
  *
  * If the YAML contains unsupported constructs (e.g. top-level normalizer groups),
  * [fromYaml] returns a read-only state so the user can still see the data.
@@ -68,6 +68,10 @@ object FieldSchemaYamlBridge {
             if (field.alias.isNotBlank()) {
                 sb.appendLine("${body}alias: ${field.alias}")
             }
+            // Quoted: a pattern can contain ':' (HH:mm) and quoted literals, which bare YAML would misread.
+            if (field.type.isTemporal && field.format.isNotBlank()) {
+                sb.appendLine("${body}format: \"${field.format}\"")
+            }
             if (field.normalizers.isNotEmpty()) {
                 sb.appendLine("${body}normalizers:")
                 field.normalizers.forEach { sb.appendLine("$body  - $it") }
@@ -90,6 +94,7 @@ private fun FieldDefinition.toEditableField(): EditableField = EditableField(
     alias = alias ?: "",
     type = SchemaFieldType.entries.firstOrNull { it.yamlValue == type.name.lowercase() }
         ?: SchemaFieldType.TEXT,
+    format = format ?: "",
     normalizers = normalizers.map { it.value },
     operators = operators.map { it.value },
     fields = fields.values.map { it.toEditableField() },

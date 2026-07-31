@@ -110,6 +110,8 @@ isActive equals false
 
 ### Date Conditions
 
+There is no `before` or `after` operator: **`lt` means before and `gt` means after.**
+
 | Operator | Symbolic form | Example | Meaning |
 |---|---|---|---|
 | `equals` | `==` | `bookingDate equals "2024-06-15"` | Same day |
@@ -119,8 +121,23 @@ isActive equals false
 | `lte` | `<=` | `bookingDate <= "2024-12-31"` | On or before |
 | `between` | — | `bookingDate between "2024-01-01" "2024-12-31"` | Inclusive date range |
 
-Dates are always quoted ISO values (`YYYY-MM-DD`). `bookingDate > 20240101` and
+A `date_time` field uses the same operators and compares the time of day too:
+
+```
+bookedAt gt "2024-06-15T09:00:00"
+bookedAt between "2024-06-15T09:00:00" "2024-06-15T17:00:00"
+```
+
+Dates are always quoted. Without a declared format they are ISO — `YYYY-MM-DD` for a `date`,
+`YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
 `bookingDate equals "15.06.2024"` are both rejected when the rules load.
+
+When the schema declares a [`format`](field-schema.md#date-formats) for the field, that pattern is what
+the rule must use instead:
+
+```
+dueDate lt "31.01.2024"
+```
 
 ### Conditions on Nested Data
 
@@ -610,10 +627,11 @@ rule "flagged-customer" {
 | Using an operator not allowed for a field | `Operator 'contains' is not allowed for field 'amount'` | Use a numeric operator like `gt`, `gte`, `lt`, `lte`, `between` |
 | Using an action not defined in the action schema | `Unknown action 'notify'` | Add `notify` to the action schema YAML |
 | Two rules with the same ID | `Duplicate rule id: rent-payment` | Give each rule a unique ID |
-| `between` used on a text field | `Operator 'between' is not applicable to text field` | Use `between` only on `integer`, `decimal` or `date` fields |
+| `between` used on a text field | `Operator 'between' is not applicable to text field` | Use `between` only on `integer`, `decimal`, `date` or `date_time` fields |
 | Wrong argument type for an action | `Action 'score' argument 0 expects INTEGER` | Use a number, not a quoted string: `score 10` not `score "10"` |
 | Quoting a boolean value | `Field 'isActive' expects 'true' or 'false'` | Write `isActive equals true`, without quotes |
 | A date in the wrong format | `Invalid date '15.06.2024' … expected ISO format YYYY-MM-DD` | Use `"2024-06-15"` |
+| An ISO date on a field that declares a format | `Invalid date '2024-01-31' … expected format 'dd.MM.yyyy' (e.g. "31.01.2024")` | Write the value in the field's own format |
 | Comparing a collection or object directly | `Field 'orders' is a collection and cannot be compared directly` | Navigate into it (`orders.total`) or aggregate over it (`sum(orders.total)`) |
 | Misspelling a member of a declared collection | `Unknown field 'totl' in 'orders.totl'` | Check the nested `fields:` block in the schema |
 | `and` inside a path filter | `Only comparison expressions are supported in filter segments` | Chain filters: `orders[status == "paid"][total > 100]` |

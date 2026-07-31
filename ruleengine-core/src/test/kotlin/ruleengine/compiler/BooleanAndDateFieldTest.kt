@@ -30,6 +30,13 @@ class BooleanAndDateFieldTest {
             FieldDefinition(id = FieldId(value = "isActive"), type = FieldType.BOOLEAN),
             FieldDefinition(id = FieldId(value = "verified"), type = FieldType.BOOLEAN),
             FieldDefinition(id = FieldId(value = "createdAt"), type = FieldType.DATE),
+            FieldDefinition(id = FieldId(value = "bookedAt"), type = FieldType.DATE_TIME),
+            FieldDefinition(id = FieldId(value = "dueDate"), type = FieldType.DATE, format = "dd.MM.yyyy"),
+            FieldDefinition(
+                id = FieldId(value = "eventAt"),
+                type = FieldType.DATE_TIME,
+                format = "dd.MM.yyyy HH:mm",
+            ),
         ).associateBy { it.id },
     )
 
@@ -228,5 +235,142 @@ class BooleanAndDateFieldTest {
     @Test
     fun `text operators are not allowed on dates`() {
         assertFalse(actual = validate(condition = """createdAt contains "2024"""").isValid)
+    }
+
+    // ── date_time ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `all date_time comparison operators work`() {
+        val cases = listOf(
+            """bookedAt equals "2024-06-15T09:00:00"""" to true,
+            """bookedAt equals "2024-06-15T09:00:01"""" to false,
+            """bookedAt gt "2024-06-15T08:59:59"""" to true,
+            """bookedAt gte "2024-06-15T09:00:00"""" to true,
+            """bookedAt lt "2024-06-15T09:00:01"""" to true,
+            """bookedAt lte "2024-06-15T09:00:00"""" to true,
+        )
+        cases.forEach { (condition, expected) ->
+            assertValid(condition = condition)
+            val actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:00:00")
+            assertTrue(
+                actual = actual == expected,
+                message = "'$condition' expected $expected but was $actual",
+            )
+        }
+    }
+
+    /** The behaviour that separates `date_time` from `date`: the time of day decides the outcome. */
+    @Test
+    fun `date_time compares the time of day, unlike date`() {
+        val condition = """bookedAt gt "2024-06-15T09:00:00""""
+        assertFalse(actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:00:00"))
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:00:01"))
+
+        // the same instant on a `date` field is truncated, so the time cannot decide anything
+        assertFalse(
+            actual = matches(condition = """createdAt gt "2024-06-15"""", "createdAt" to "2024-06-15T09:00:01")
+        )
+    }
+
+    @Test
+    fun `date_time between is inclusive on both bounds`() {
+        val condition = """bookedAt between "2024-06-15T09:00:00" "2024-06-15T17:00:00""""
+        assertValid(condition = condition)
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:00:00"))
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T17:00:00"))
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T12:30:00"))
+        assertFalse(actual = matches(condition = condition, "bookedAt" to "2024-06-15T08:59:59"))
+        assertFalse(actual = matches(condition = condition, "bookedAt" to "2024-06-15T17:00:01"))
+    }
+
+    @Test
+    fun `date_time accepts string, LocalDate, LocalDateTime and Instant input`() {
+        val condition = """bookedAt equals "2024-06-15T09:30:00""""
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:30:00"))
+        assertTrue(
+            actual = matches(condition = condition, "bookedAt" to LocalDateTime.of(2024, 6, 15, 9, 30))
+        )
+        assertTrue(
+            actual = matches(condition = condition, "bookedAt" to Instant.parse("2024-06-15T09:30:00Z"))
+        )
+        // a date-only input starts at midnight
+        assertTrue(
+            actual = matches(
+                condition = """bookedAt equals "2024-06-15T00:00:00"""",
+                "bookedAt" to LocalDate.of(2024, 6, 15),
+            )
+        )
+    }
+
+    @Test
+    fun `text operators are not allowed on date_time`() {
+        assertFalse(actual = validate(condition = """bookedAt contains "2024"""").isValid)
+    }
+
+    // ── declared format ───────────────────────────────────────────────────────
+
+    @Test
+    fun `a formatted date field reads input and literals in its own format`() {
+        val condition = """dueDate equals "31.01.2024""""
+        assertValid(condition = condition)
+        assertTrue(actual = matches(condition = condition, "dueDate" to "31.01.2024"))
+        assertFalse(actual = matches(condition = condition, "dueDate" to "01.02.2024"))
+    }
+
+    @Test
+    fun `a formatted date field does not accept ISO input`() {
+        assertFalse(actual = matches(condition = """dueDate equals "31.01.2024"""", "dueDate" to "2024-01-31"))
+    }
+
+    @Test
+    fun `an ISO literal on a formatted field is rejected at validation time`() {
+        val result = validate(condition = """dueDate equals "2024-01-31"""")
+        assertFalse(actual = result.isValid)
+        assertTrue(
+            actual = result.diagnostics.any { it.message.contains(other = "format 'dd.MM.yyyy'") },
+            message = "Expected a declared-format diagnostic, got: ${result.diagnostics.map { it.message }}",
+        )
+    }
+
+    @Test
+    fun `a typed input value is accepted on a formatted field`() {
+        // an already-typed value carries no text, so the declared pattern does not apply to it
+        assertTrue(
+            actual = matches(condition = """dueDate equals "31.01.2024"""", "dueDate" to LocalDate.of(2024, 1, 31))
+        )
+    }
+
+    @Test
+    fun `unparseable input on a formatted field does not match`() {
+        val condition = """dueDate equals "31.01.2024""""
+        assertFalse(actual = matches(condition = condition, "dueDate" to "31/01/2024"))
+        assertFalse(actual = matches(condition = condition))
+    }
+
+    @Test
+    fun `a formatted date field supports ranges in its own format`() {
+        val condition = """dueDate between "01.01.2024" "31.12.2024""""
+        assertValid(condition = condition)
+        assertTrue(actual = matches(condition = condition, "dueDate" to "31.01.2024"))
+        assertFalse(actual = matches(condition = condition, "dueDate" to "01.01.2025"))
+    }
+
+    @Test
+    fun `an invalid bound on a formatted field is rejected`() {
+        val result = validate(condition = """dueDate between "01.01.2024" "2024-12-31"""")
+        assertFalse(actual = result.isValid)
+        assertTrue(
+            actual = result.diagnostics.any { it.message.contains(other = "format 'dd.MM.yyyy'") },
+            message = "Expected a declared-format diagnostic, got: ${result.diagnostics.map { it.message }}",
+        )
+    }
+
+    @Test
+    fun `a formatted date_time field compares the time of day`() {
+        val condition = """eventAt gt "15.06.2024 09:00""""
+        assertValid(condition = condition)
+        assertTrue(actual = matches(condition = condition, "eventAt" to "15.06.2024 09:01"))
+        assertFalse(actual = matches(condition = condition, "eventAt" to "15.06.2024 09:00"))
+        assertFalse(actual = matches(condition = condition, "eventAt" to "2024-06-15T09:01:00"))
     }
 }

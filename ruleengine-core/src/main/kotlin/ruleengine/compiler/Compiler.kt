@@ -12,6 +12,7 @@ import ruleengine.core.domain.FieldId
 import ruleengine.core.domain.FieldSchema
 import ruleengine.core.domain.FieldType.BOOLEAN
 import ruleengine.core.domain.FieldType.DATE
+import ruleengine.core.domain.FieldType.DATE_TIME
 import ruleengine.core.domain.FieldType.DECIMAL
 import ruleengine.core.domain.FieldType.INTEGER
 import ruleengine.core.domain.FieldType.STRING_SET
@@ -300,10 +301,11 @@ object Compiler {
                 fieldId = fieldId
             )
 
-            DATE -> DateOperator.compile(
+            DATE, DATE_TIME -> DateOperator.compile(
                 ruleId = ruleIdOrNull(cond = cond),
                 cond = cond,
-                fieldId = fieldId
+                fieldId = fieldId,
+                def = def
             )
 
             else -> throw CompilationException(
