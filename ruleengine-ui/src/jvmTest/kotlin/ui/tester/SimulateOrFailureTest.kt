@@ -26,7 +26,6 @@ class SimulateOrFailureTest {
 
         val outcome = assertIs<SimulationOutcome.ValidationFailed>(value = result.outcome)
         assertEquals(expected = "trace blew up", actual = outcome.reason)
-        assertEquals(expected = emptyList(), actual = result.traceRows)
     }
 
     @Test
@@ -48,8 +47,18 @@ class SimulateOrFailureTest {
     @Test
     fun `a successful run is passed through untouched`() {
         val expected = SimulationResult(
-            outcome = SimulationOutcome.Matched(actions = listOf("""assessment "green"""")),
-            traceRows = listOf(TraceRow(label = "reports.income.daysOfReport GTE 90", result = true)),
+            outcome = SimulationOutcome.Completed(
+                ruleResults = listOf(
+                    RuleResult(
+                        ruleId = "history-at-least-three-months",
+                        matched = true,
+                        actions = listOf("""assessment "green""""),
+                        traceRows = listOf(
+                            TraceRow(label = "reports.income.daysOfReport GTE 90", result = true),
+                        ),
+                    ),
+                ),
+            ),
         )
 
         val result = FixedSimulationService(result = expected).simulateOrFailure(

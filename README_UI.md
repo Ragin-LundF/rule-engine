@@ -40,7 +40,7 @@ Build everything:
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
 | **Diagram view** | See a rule's condition tree |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
-| **Test panel** | Evaluate the rule set against JSON input and inspect the decision tree |
+| **Test panel** | Evaluate the rule set against JSON input: every action the run emitted grouped by the rule that emitted it, plus one row per rule — matched or not — whose condition trace expands on click |
 
 ### Advanced conditions in the builder
 

@@ -2,12 +2,15 @@ package ui.tester
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
+import ruleengine.core.domain.dto.RuleAction
+import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.MapRuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.dto.DecisionNode
+import ruleengine.evaluator.trace.dto.DecisionTree
 import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.ActionSchemaLoader
@@ -129,39 +132,79 @@ class JvmRuleSimulationService : RuleSimulationService {
             )
         }
 
-        // 8. Extract trace rows — a trace we cannot read must not cost the caller its result.
-        val traceRows = runCatching { extractTraceRows(evalResult.trace) }.getOrElse { emptyList() }
+        // 8. Report what every evaluated rule decided.
+        //    A trace we cannot read must not cost the caller its result.
+        val tracesByRule = runCatching { traceRowsByRule(trace = evalResult.trace) }
+            .getOrElse { emptyMap() }
 
-        // 9. Build outcome
-        val targetRuleId = targetAsts.first().id
-        val match = evalResult.matches.firstOrNull { it.ruleId == targetRuleId }
-            ?: evalResult.matches.firstOrNull()
+        return SimulationResult(
+            outcome = SimulationOutcome.Completed(
+                ruleResults = buildRuleResults(
+                    ruleIds = targetAsts.map { ast -> ast.id },
+                    matches = evalResult.matches,
+                    tracesByRule = tracesByRule,
+                ),
+            ),
+        )
+    }
 
-        return if (match != null) {
-            val actionStrings = match.actions.map { action ->
-                val args = action.arguments.joinToString(", ") { "\"$it\"" }
-                "${action.name} $args".trim()
-            }
-            SimulationResult(
-                outcome = SimulationOutcome.Matched(actions = actionStrings),
-                traceRows = traceRows,
-            )
-        } else {
-            SimulationResult(
-                outcome = SimulationOutcome.NotMatched,
-                traceRows = traceRows,
+    // ── result helpers ────────────────────────────────────────────────────────
+
+    /**
+     * One [RuleResult] per evaluated rule, driven by the compiled rule ids rather than by the engine's
+     * match list: only matched rules appear in `matches`, so iterating that would silently drop every
+     * rule that legitimately did not fire — most of a rule set built from mutually exclusive pairs.
+     * Iterating [ruleIds] also keeps DSL declaration order.
+     */
+    private fun buildRuleResults(
+        ruleIds: List<String>,
+        matches: List<RuleMatch>,
+        tracesByRule: Map<String, List<TraceRow>>,
+    ): List<RuleResult> {
+        val matchesById = matches.associateBy { match -> match.ruleId }
+        return ruleIds.map { id ->
+            val match = matchesById[id]
+            RuleResult(
+                ruleId = id,
+                matched = match != null,
+                actions = match?.actions?.map { action -> formatAction(action = action) }.orEmpty(),
+                traceRows = tracesByRule[id].orEmpty(),
             )
         }
     }
 
+    private fun formatAction(action: RuleAction): String {
+        val args = action.arguments.joinToString(separator = ", ") { argument -> "\"$argument\"" }
+        return "${action.name} $args".trim()
+    }
+
     // ── trace helpers ─────────────────────────────────────────────────────────
 
-    private fun extractTraceRows(trace: Any?): List<TraceRow> {
-        val tree = trace as? ruleengine.evaluator.trace.dto.DecisionTree ?: return emptyList()
-        val root = tree.root ?: return emptyList()
-        val rows = mutableListOf<TraceRow>()
-        collectConditionRows(node = root, rows = rows)
-        return rows
+    /**
+     * Condition rows grouped by the rule that produced them.
+     *
+     * The engine already wraps each rule in a [NodeType.RULE] node carrying its `ruleId`, so the
+     * attribution is present in the tree. Flattening the whole tree into a single list threw it away,
+     * which made an unrelated rule's failing condition look like part of the selected rule's verdict.
+     */
+    private fun traceRowsByRule(trace: Any?): Map<String, List<TraceRow>> {
+        val root = (trace as? DecisionTree)?.root ?: return emptyMap()
+        val rowsByRule = mutableMapOf<String, MutableList<TraceRow>>()
+        collectRuleNodes(node = root, rowsByRule = rowsByRule)
+        return rowsByRule
+    }
+
+    private fun collectRuleNodes(
+        node: DecisionNode,
+        rowsByRule: MutableMap<String, MutableList<TraceRow>>,
+    ) {
+        val ruleId = node.ruleId
+        if (node.type == NodeType.RULE && ruleId != null) {
+            val rows = rowsByRule.getOrPut(key = ruleId) { mutableListOf() }
+            collectConditionRows(node = node, rows = rows)
+            return
+        }
+        node.children.forEach { child -> collectRuleNodes(node = child, rowsByRule = rowsByRule) }
     }
 
     private fun collectConditionRows(node: DecisionNode, rows: MutableList<TraceRow>) {

@@ -56,6 +56,8 @@ fun TraceView(
             modifier = Modifier.padding(bottom = 4.dp),
         )
         rows.forEach { row ->
+            // A literal true/false read. Whether a false condition here is expected or a problem is
+            // said by the rule row above, which is green, yellow or red for the rule as a whole.
             val dotColor = if (row.result) AccentGreen else AccentRed
             Row(
                 verticalAlignment = Alignment.CenterVertically,

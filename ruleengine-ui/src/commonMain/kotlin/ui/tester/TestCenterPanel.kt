@@ -23,7 +23,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ui.AccentGreen
-import ui.AccentRed
 import ui.Bg
 import ui.BorderColor
 import ui.PrimaryBlue
@@ -99,7 +98,7 @@ fun TestCenterPanel(
             ),
         )
 
-        if (state.outcome !is SimulationOutcome.Idle || state.traceRows.isNotEmpty()) {
+        if (state.outcome !is SimulationOutcome.Idle) {
             ResultArea(state = state, modifier = Modifier.weight(weight = 1f))
         }
 
@@ -127,9 +126,6 @@ private fun ResultArea(state: TestInputState, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(space = 8.dp),
     ) {
         ResultSection(state = state)
-        if (state.traceRows.isNotEmpty()) {
-            TraceView(rows = state.traceRows)
-        }
     }
 }
 
@@ -212,13 +208,13 @@ private fun RunBar(
     }
 }
 
-/** One-word summary of the last run. Renders nothing while idle. */
+/** One-line summary of the last run. Renders nothing while idle. */
 @Composable
 private fun VerdictText(outcome: SimulationOutcome) {
     val (text, color) = when (outcome) {
         is SimulationOutcome.Idle -> return
-        is SimulationOutcome.Matched -> "✓ Matched" to AccentGreen
-        is SimulationOutcome.NotMatched -> "✕ Not matched" to AccentRed
+        is SimulationOutcome.Completed -> verdictSummary(outcome = outcome) to
+            if (outcome.matchedCount > 0) AccentGreen else TextMuted
         is SimulationOutcome.ValidationFailed -> "Validation failed" to MaterialTheme.colors.error
         is SimulationOutcome.InvalidJson -> "Invalid JSON" to MaterialTheme.colors.error
     }
@@ -229,33 +225,15 @@ private fun VerdictText(outcome: SimulationOutcome) {
     )
 }
 
+private fun verdictSummary(outcome: SimulationOutcome.Completed): String {
+    return "${outcome.matchedCount} of ${outcome.ruleResults.size} matched · ${outcome.actionCount} action(s)"
+}
+
 @Composable
 private fun ResultSection(state: TestInputState) {
     when (val outcome = state.outcome) {
         is SimulationOutcome.Idle -> Unit
-        is SimulationOutcome.Matched -> {
-            ResultBlock(text = "✓ Matched", color = AccentGreen)
-            if (outcome.actions.isNotEmpty()) {
-                Text(
-                    text = "Actions emitted:",
-                    style = MaterialTheme.typography.caption,
-                    color = TextMuted,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-                outcome.actions.forEach { action ->
-                    Text(
-                        text = action,
-                        style = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            color = TextPrimary,
-                        ),
-                    )
-                }
-            }
-        }
-
-        is SimulationOutcome.NotMatched -> ResultBlock(text = "✕ Not matched", color = AccentRed)
+        is SimulationOutcome.Completed -> RuleResultsView(results = outcome.ruleResults)
         is SimulationOutcome.ValidationFailed -> ResultBlock(
             text = "Validation failed: ${outcome.reason}",
             color = MaterialTheme.colors.error,

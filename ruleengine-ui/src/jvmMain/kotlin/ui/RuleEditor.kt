@@ -170,13 +170,15 @@ actual fun RuleEditor() {
                 schemaText = state.schemaText.value,
                 actionsText = state.actionSchemaText.value,
                 ruleText = ruleText,
-                ruleId = testInputState.selectedRuleId,
+                // All-files mode disables the rule selector without clearing its value, so a rule picked
+                // earlier would keep filtering the run while the panel reads "All rules". The rule text
+                // and the rule filter have to agree, and this is the one place both are read.
+                ruleId = if (state.showAllRules.value) "" else testInputState.selectedRuleId,
                 inputJson = testInputState.inputJson,
             )
             testInputState = testInputState.copy(
                 isRunning = false,
                 outcome = result.outcome,
-                traceRows = result.traceRows,
             )
             state.setStatus(
                 msg = runStatusMessage(outcome = result.outcome),
@@ -636,8 +638,10 @@ actual fun RuleEditor() {
 /** Status-bar text for a finished run, so the verdict is visible even with the panel scrolled away. */
 private fun runStatusMessage(outcome: SimulationOutcome): String {
     return when (outcome) {
-        is SimulationOutcome.Matched -> "Test matched — ${outcome.actions.size} action(s)"
-        is SimulationOutcome.NotMatched -> "Test did not match"
+        is SimulationOutcome.Completed ->
+            "${outcome.matchedCount} of ${outcome.ruleResults.size} rules matched — " +
+                "${outcome.actionCount} action(s)"
+
         is SimulationOutcome.ValidationFailed -> "Test not run: ${outcome.reason}"
         is SimulationOutcome.InvalidJson -> "Test not run: invalid JSON — ${outcome.reason}"
         is SimulationOutcome.Idle -> "Ready"
@@ -646,8 +650,7 @@ private fun runStatusMessage(outcome: SimulationOutcome): String {
 
 private fun runStatusKind(outcome: SimulationOutcome): StatusKind {
     return when (outcome) {
-        is SimulationOutcome.Matched -> StatusKind.SUCCESS
-        is SimulationOutcome.NotMatched -> StatusKind.IDLE
+        is SimulationOutcome.Completed -> if (outcome.matchedCount > 0) StatusKind.SUCCESS else StatusKind.IDLE
         is SimulationOutcome.ValidationFailed, is SimulationOutcome.InvalidJson -> StatusKind.ERROR
         is SimulationOutcome.Idle -> StatusKind.IDLE
     }

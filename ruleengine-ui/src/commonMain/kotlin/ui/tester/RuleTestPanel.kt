@@ -3,7 +3,6 @@ package ui.tester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -106,38 +105,14 @@ fun RuleTestPanel(
             when (val outcome = state.outcome) {
                 is SimulationOutcome.Idle -> Unit
 
-                is SimulationOutcome.Matched -> {
+                is SimulationOutcome.Completed -> {
                     OutcomeBlock(
-                        icon = "✓",
-                        label = "Matched",
-                        color = AccentGreen,
+                        icon = if (outcome.matchedCount > 0) "✓" else "○",
+                        label = "${outcome.matchedCount} of ${outcome.ruleResults.size} rules matched",
+                        color = if (outcome.matchedCount > 0) AccentGreen else TextMuted,
                     )
-                    if (outcome.actions.isNotEmpty()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Actions:",
-                            style = MaterialTheme.typography.caption,
-                            color = TextMuted,
-                        )
-                        outcome.actions.forEach { action ->
-                            Text(
-                                text = action,
-                                style = TextStyle(
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 12.sp,
-                                    color = TextPrimary,
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                is SimulationOutcome.NotMatched -> {
-                    OutcomeBlock(
-                        icon = "✕",
-                        label = "Not matched",
-                        color = AccentRed,
-                    )
+                    Spacer(Modifier.height(6.dp))
+                    RuleResultsView(results = outcome.ruleResults)
                 }
 
                 is SimulationOutcome.ValidationFailed -> {
@@ -172,10 +147,6 @@ fun RuleTestPanel(
                     )
                 }
             }
-        }
-
-        if (state.traceRows.isNotEmpty()) {
-            item { TraceView(rows = state.traceRows) }
         }
     }
 }
