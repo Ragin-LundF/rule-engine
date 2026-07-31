@@ -30,6 +30,7 @@ import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.ValueExpressionRenderer
 
 /** Recursively renders an [ExpressionAst] node. */
 @Composable
@@ -176,7 +177,7 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text     = expr.left.toString(),
+            text     = ValueExpressionRenderer.render(expr = expr.left),
             style    = TextStyle(
                 fontSize   = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -191,7 +192,7 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
         OperatorBadge(operator = comparisonSymbol(op = expr.operator), ignoreCase = false)
 
         Text(
-            text     = expr.right.toString(),
+            text     = ValueExpressionRenderer.render(expr = expr.right),
             style    = TextStyle(
                 fontSize   = 12.sp,
                 color      = LabelValue,

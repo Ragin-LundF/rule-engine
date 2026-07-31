@@ -94,6 +94,56 @@ class TraceJsonTest {
         assertNotNull(actual = root)
         val children = root.get("children")
         assertNotNull(actual = children)
+
+        // These leaves report no actual value, and the mapper's NON_NULL inclusion must therefore keep
+        // "actual" out of the JSON entirely — existing consumers see byte-identical output.
+        assertTrue(
+            actual = "actual" !in json,
+            message = "Expected no 'actual' key when nothing set one, got: $json",
+        )
+    }
+
+    @Test
+    fun `an aggregate condition serializes its actual value`() {
+        val txt = """
+            rule "busy-basket" {
+              when
+                count(items) >= 5
+
+              then
+                label "busy"
+            }
+        """.trimIndent()
+
+        val schema = FieldSchema(
+            name = "basket-v1",
+            fields = mapOf(
+                FieldId(value = "items") to FieldDefinition(
+                    id = FieldId(value = "items"),
+                    type = FieldType.STRING_SET
+                )
+            )
+        )
+
+        val compiled = Compiler.compileRules(asts = Parser(input = txt).parseRules(), schema = schema)
+        val prepared = PreparedRuleContext.prepare(
+            ctx = RuleContext.of("items" to listOf(mapOf("sku" to "a"), mapOf("sku" to "b"))),
+            schema = schema
+        )
+        val result = RuleEngine(compiledRules = compiled).evaluate(prepared = prepared, includeTrace = true)
+
+        val json = JacksonUtil.jsonMapper.writeValueAsString(result.trace)
+        // root (EVALUATION) → children[0] (RULE) → children[0] (CONDITION)
+        val condition = JacksonUtil.jsonMapper.readTree(json)
+            .get("root").get("children").get(0)
+            .get("children").get(0)
+
+        assertNotNull(actual = condition)
+        assertTrue(actual = condition.get("field").asString() == "count(items)")
+        assertTrue(
+            actual = condition.get("actual").asInt() == 2,
+            message = "Expected the recorded count in the JSON, got: $json",
+        )
     }
 }
 

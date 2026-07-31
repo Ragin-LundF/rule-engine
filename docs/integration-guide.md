@@ -615,8 +615,8 @@ The trace is available as `result.trace`, which is a `DecisionTree` object.
 You can serialise it to JSON:
 
 ```kotlin
-import ruleengine.evaluator.trace.DecisionTree
-import ruleengine.evaluator.trace.toJson
+import ruleengine.evaluator.trace.dto.DecisionTree
+import ruleengine.evaluator.trace.dto.toJson
 
 val tree = result.trace as? DecisionTree
 if (tree != null) {
@@ -670,12 +670,21 @@ Example JSON output:
 
 `DecisionNode`:
 - `id` — unique node identifier within the trace
-- `type` — one of `RULE`, `AND`, `OR`, `NOT`, `CONDITION`
-- `field` / `operator` / `expected` — present on `CONDITION` nodes
+- `type` — one of `EVALUATION` (the synthetic root), `RULE`, `AND`, `OR`, `NOT`, `CONDITION`
+- `field` / `operator` / `expected` — present on `CONDITION` nodes. For a condition whose operand is
+  an expression (an aggregate, arithmetic, or another field), `field` is that operand rendered back
+  to DSL text — e.g. `count(orders[status equals "paid"])` — and `expected` is the *evaluated* right
+  operand, so a comparison against another field shows the concrete value it was measured against
+- `actual: Any?` — the value actually found. Present on aggregate, arithmetic and field-to-field
+  conditions; omitted from the JSON on nodes that do not report one
 - `result: Boolean` — whether this node evaluated to `true`
 - `evaluationTimeMs: Long?` — how long this node took to evaluate
 - `ruleId: String?` — present on `RULE` nodes
 - `children: List<DecisionNode>` — child nodes
+
+A filter predicate inside a path (`orders[status equals "paid"]`) is evaluated once per element and
+is deliberately **not** traced; the enclosing comparison contributes a single node regardless of how
+many elements the collection holds.
 
 ---
 
@@ -856,7 +865,8 @@ fields:
 | `ruleengine.compiler` | `Validator`, `Compiler` |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule` |
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext` |
-| `ruleengine.evaluator.trace` | `TraceCollector`, `DecisionTree`, `DecisionNode`, `toJson()` |
+| `ruleengine.evaluator.trace` | `TraceCollector` |
+| `ruleengine.evaluator.trace.dto` | `DecisionTree`, `DecisionNode`, `toJson()` |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader` |
 | `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry`, `ManifestPathResolver` |
 | `ruleengine.jackson` | `JacksonUtil` — shared `ObjectMapper` instance |

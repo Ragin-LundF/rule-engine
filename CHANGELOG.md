@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased]
+
+### Added
+
+- `DecisionNode.actual` — the value a condition actually found, alongside the `expected` it was
+  compared against. Omitted from the JSON on nodes that do not report one, so existing trace output
+  is unchanged for them.
+- `ValueExpressionRenderer` (`ruleengine.dsl.ast`) — renders a parsed expression back to DSL-like
+  text. Used to label traced conditions and to display them in the UI diagram view.
+
+### Fixed
+
+- Conditions whose operand is an expression — an aggregate (`count(...)`, `sum(...)`, `min(...)`),
+  arithmetic, or another field — are now recorded in the decision tree. `ComparisonCompiledExpression`
+  accepted a `TraceCollector` and never called it, so those conditions were missing entirely and a
+  rule built only from them produced a verdict with an empty trace. Filter predicates inside a path
+  remain untraced by design: they run once per element, so tracing them would emit one node per row.
+
+
 ## 1.5.0
 
 ### Changed

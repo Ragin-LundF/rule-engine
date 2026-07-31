@@ -269,8 +269,8 @@ private fun RuleResultDetail(result: RuleResult) {
             .padding(start = 22.dp, bottom = 4.dp),
     ) {
         if (result.traceRows.isEmpty()) {
-            // Aggregate and field-to-field comparisons are not instrumented by the evaluator, so a
-            // rule built only from those has a verdict but no traced conditions to show for it.
+            // Rare now that comparisons are instrumented, but still reachable — a rule can be
+            // short-circuited before any condition is evaluated.
             Text(
                 text = "No traced conditions for this rule.",
                 style = MaterialTheme.typography.caption,

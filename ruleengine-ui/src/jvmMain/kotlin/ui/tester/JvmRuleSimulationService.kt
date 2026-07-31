@@ -210,8 +210,11 @@ class JvmRuleSimulationService : RuleSimulationService {
     private fun collectConditionRows(node: DecisionNode, rows: MutableList<TraceRow>) {
         when (node.type) {
             NodeType.CONDITION -> {
-                val label = buildConditionLabel(node)
-                rows += TraceRow(label = label, result = node.result)
+                rows += TraceRow(
+                    label = buildConditionLabel(node),
+                    result = node.result,
+                    actual = node.actual?.toString(),
+                )
             }
             else -> node.children.forEach { collectConditionRows(node = it, rows = rows) }
         }

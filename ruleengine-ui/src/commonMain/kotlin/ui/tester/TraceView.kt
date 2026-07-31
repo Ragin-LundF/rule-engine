@@ -80,6 +80,19 @@ fun TraceView(
                         color = TextPrimary,
                     ),
                 )
+                // The value that was actually there. Without it a red row says a condition failed but
+                // not by how much, which is most of what you want from a trace.
+                row.actual?.let { actual ->
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "was $actual",
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = TextMuted,
+                        ),
+                    )
+                }
             }
         }
     }

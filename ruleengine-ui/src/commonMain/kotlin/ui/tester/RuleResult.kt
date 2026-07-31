@@ -26,13 +26,9 @@ data class RuleResult(
      * branches that did not hold, and a rule that fired is a match however it got there.
      *
      * [PARTIAL] deliberately means "the trace has something green in it", not "part of this rule is
-     * satisfiable". Two things in the evaluator keep those apart, and both make [PARTIAL] rarer than
-     * the rule text suggests:
-     *
-     * - `AndExpression` sorts children by cost and stops at the first failure, so a condition that
-     *   would have held is never evaluated and never recorded when a cheaper one fails first.
-     * - Aggregate and field-to-field comparisons are not instrumented at all, so a rule built only
-     *   from those has no trace rows whatsoever.
+     * satisfiable". `AndExpression` sorts children by cost and stops at the first failure, so a
+     * condition that would have held is never evaluated and never recorded when a cheaper one fails
+     * first — which makes [PARTIAL] rarer than the rule text suggests.
      *
      * Tying the status to the recorded trace rather than to the rule text is the safer of the two:
      * the badge can never claim more than the trace the user can expand and read underneath it.

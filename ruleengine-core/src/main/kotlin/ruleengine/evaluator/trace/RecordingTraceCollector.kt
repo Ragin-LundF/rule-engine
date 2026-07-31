@@ -23,7 +23,8 @@ class RecordingTraceCollector : TraceCollector {
             type = meta.type,
             field = meta.field,
             operator = meta.operator,
-            expected = meta.expected
+            expected = meta.expected,
+            actual = meta.actual
         )
         node.startNs = System.nanoTime()
         node.ruleId = meta.ruleId

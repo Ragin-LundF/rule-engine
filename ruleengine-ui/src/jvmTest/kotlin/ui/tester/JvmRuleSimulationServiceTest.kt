@@ -273,13 +273,13 @@ class JvmRuleSimulationServiceTest {
     }
 
     /**
-     * Aggregate and field-to-field comparisons are not instrumented, so most real rules produce no
-     * trace rows at all. Those must land in NO_MATCH rather than throwing or reporting PARTIAL.
+     * A rule can still end up with no rows — short-circuited before any condition was evaluated.
+     * Those must land in NO_MATCH rather than throwing or reporting PARTIAL.
      */
     @Test
     fun `a non-matching rule with no trace rows is NO_MATCH`() {
         val ruleResult = RuleResult(
-            ruleId = "aggregate-only",
+            ruleId = "never-evaluated",
             matched = false,
             actions = emptyList(),
             traceRows = emptyList(),

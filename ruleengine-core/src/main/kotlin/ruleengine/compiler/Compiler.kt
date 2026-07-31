@@ -40,6 +40,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.AndExpression
@@ -305,7 +306,10 @@ object Compiler {
             left = left,
             operator = expr.operator,
             right = right,
-            cost = cost
+            cost = cost,
+            // Rendered from the AST because it is the last point where the author's text can still be
+            // reconstructed: the compiled operands have already rewritten path roots alias → canonical.
+            label = ValueExpressionRenderer.render(expr = expr.left)
         )
     }
 

@@ -3,17 +3,57 @@ package ruleengine.evaluator.compiled
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.TraceCollector
+import ruleengine.evaluator.trace.dto.NodeMeta
+import ruleengine.evaluator.trace.dto.NodeType
 
+/**
+ * The comparison used whenever an operand is an expression rather than a bare field — an aggregate
+ * (`count(...)`, `sum(...)`), arithmetic, or another field. Plain `field op literal` conditions
+ * compile to the dedicated leaves instead ([IntegerComparisonExpression] and friends).
+ *
+ * @param label Rendered text of the left operand, used to name the condition in the trace. Empty for
+ *   the per-element predicate inside a filter segment, which is evaluated with no collector at all.
+ */
 class ComparisonCompiledExpression(
     private val left: CompiledValueExpression,
     private val operator: ComparisonOperatorAst,
     private val right: CompiledValueExpression,
-    override val cost: EvaluationCost
+    override val cost: EvaluationCost,
+    private val label: String = ""
 ) : CompiledExpression {
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         val leftValue = left.evaluate(context = context)
         val rightValue = right.evaluate(context = context)
-        return compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
+
+        // Entered after both operands are evaluated, unlike the other leaves: the values being
+        // compared are what make the node worth reading, and they are not known any earlier.
+        trace?.enter(
+            meta = NodeMeta(
+                type = NodeType.CONDITION,
+                field = label,
+                operator = operator.name,
+                expected = plainValue(value = rightValue),
+                actual = plainValue(value = leftValue)
+            )
+        )
+        val result = compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
+        trace?.exit(result = result)
+        return result
+    }
+
+    /**
+     * Unwraps to the value Jackson should see. An [ExpressionValue] is a wrapper, so handing one
+     * straight to the trace would serialize as `{"value":500}` and display as
+     * `NumberExpressionValue(value=500)`.
+     */
+    private fun plainValue(value: ExpressionValue): Any? {
+        return when (value) {
+            is NumberExpressionValue -> value.value
+            is TextExpressionValue -> value.value
+            is BooleanExpressionValue -> value.value
+            is ArrayExpressionValue -> value.values.map { element -> plainValue(value = element) }
+            MissingExpressionValue, ObjectExpressionValue -> null
+        }
     }
 
     @Suppress("CyclomaticComplexMethod")

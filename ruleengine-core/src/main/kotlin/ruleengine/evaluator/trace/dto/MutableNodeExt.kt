@@ -7,6 +7,7 @@ fun MutableNode.toDecisionNode(): DecisionNode {
         field = field,
         operator = operator,
         expected = expected,
+        actual = actual,
         result = result ?: false,
         evaluationTimeMs = elapsedMs,
         ruleId = ruleId,
