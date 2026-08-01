@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ruleengine.core.domain.dto.field.FieldType
 import ui.components.ToggleChip
 
 /**
@@ -20,7 +21,7 @@ import ui.components.ToggleChip
 @Suppress("FunctionNaming")
 @Composable
 fun OperatorSelector(
-    type: SchemaFieldType,
+    type: FieldType,
     selected: List<String>,
     onToggle: (String) -> Unit,
     enabled: Boolean = true,

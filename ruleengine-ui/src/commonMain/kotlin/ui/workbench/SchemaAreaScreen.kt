@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import ui.schema.SchemaEditorPanel
-import ui.schema.SchemaEditorState
+import ui.schema.model.SchemaEditorState
 
 /**
  * Field Schema editor area.
@@ -18,6 +18,7 @@ fun SchemaAreaScreen(
     toYaml: (SchemaEditorState) -> String,
     onSchemaYamlChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    usagesContent: (@Composable () -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -37,6 +38,7 @@ fun SchemaAreaScreen(
         toYaml = toYaml,
         onYamlChange = onSchemaYamlChange,
         modifier = modifier,
+        usagesContent = usagesContent,
         yamlEditor = yamlEditor,
     )
 }

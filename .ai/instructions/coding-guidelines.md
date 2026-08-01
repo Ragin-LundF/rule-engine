@@ -31,6 +31,26 @@ Use these rules for all Kotlin code unless a more specific instruction file says
 - No God classes or methods.
 - Avoid code duplication.
 
+## Package layout
+
+- Keep at most 8 Kotlin files per directory. When a directory grows past 8, split it into subpackages by responsibility.
+- Direct subclasses of a `sealed` type must stay in the same package as the sealed declaration. Never split a sealed hierarchy across packages — Kotlin forbids it.
+- An `actual` declaration must stay in the same package as its `expect`.
+- Mirror the main package structure in tests. A test moves only when the type it covers moves.
+
+## Models and DTOs
+
+A **model** is a pure data declaration with no behavior: `data class`, `enum class`, `sealed interface` / `sealed class` hierarchies of data, `@JvmInline value class`, and `data object`.
+
+- **`ruleengine-ui`:** every model and every enum lives in a `model` subpackage of its feature package — `ui.tester.model`, `ui.project.model`, `ui.builder.model`. Never leave a model beside composables or services.
+  - Group inside `model` when it exceeds 8 files: `ui.workbench.model.mode`, `ui.project.model.dialog`.
+  - Composables, services, controllers, mappers, and objects holding logic never go in a `model` package.
+  - Extension functions belong next to the type they extend, including inside a `model` package.
+- **`ruleengine-core` / `ruleengine-model`:** models live in `dto` packages, grouped by subject — `ruleengine.core.domain.dto.field`, `ruleengine.core.domain.dto.action`.
+- One top-level declaration per file, named after the declaration.
+- Models are immutable. Wrap primitive identifiers in `@JvmInline value class` (`FieldId`, `OperatorId`), never pass raw strings where a typed id is expected.
+- `ruleengine.core.domain.dto.*` is published API. Moving or renaming anything there is a breaking change — record it in `CHANGELOG.md` and update `docs/integration-guide.md`.
+
 ## Tests
 
 - Use `kotlin.test` annotations and assertions when possible.

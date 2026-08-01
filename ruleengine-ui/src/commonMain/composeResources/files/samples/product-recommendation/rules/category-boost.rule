@@ -1,4 +1,5 @@
 rule "electronics-featured" {
+  description "A well-rated new or trending electronics product for the homepage."
   when
     category equals "electronics"
     and rating >= 4.0
@@ -11,6 +12,7 @@ rule "electronics-featured" {
 }
 
 rule "seasonal-promotion" {
+  description "A seasonal or sale product that is still in stock."
   when
     tags containsAny ["seasonal", "holiday", "sale"]
     and stock >= 10
@@ -21,6 +23,7 @@ rule "seasonal-promotion" {
 }
 
 rule "books-staff-pick" {
+  description "An exceptionally well-reviewed book worth featuring as a staff pick."
   when
     category equals "books"
     and rating >= 4.8

@@ -1,11 +1,11 @@
 package ruleengine.compiler.operators
 
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.TextRegexExpression
+import ruleengine.evaluator.compiled.text.TextRegexExpression
 
 object TextRegexOperator {
     fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId): CompiledExpression {

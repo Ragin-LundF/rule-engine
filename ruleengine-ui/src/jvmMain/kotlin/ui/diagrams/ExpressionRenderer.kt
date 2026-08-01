@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -25,11 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.ValueExpressionRenderer
 
 /** Recursively renders an [ExpressionAst] node. */
 @Composable
@@ -176,7 +175,7 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
-            text     = expr.left.toString(),
+            text     = ValueExpressionRenderer.render(expr = expr.left),
             style    = TextStyle(
                 fontSize   = 13.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -188,10 +187,10 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
             overflow = TextOverflow.Ellipsis,
         )
 
-        OperatorBadge(operator = comparisonSymbol(op = expr.operator), ignoreCase = false)
+        OperatorBadge(operator = ValueExpressionRenderer.symbol(operator = expr.operator), ignoreCase = false)
 
         Text(
-            text     = expr.right.toString(),
+            text     = ValueExpressionRenderer.render(expr = expr.right),
             style    = TextStyle(
                 fontSize   = 12.sp,
                 color      = LabelValue,
@@ -204,24 +203,13 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
     }
 }
 
-private fun comparisonSymbol(op: ComparisonOperatorAst): String {
-    return when (op) {
-        ComparisonOperatorAst.EQ  -> "=="
-        ComparisonOperatorAst.NEQ -> "!="
-        ComparisonOperatorAst.GT  -> ">"
-        ComparisonOperatorAst.GTE -> ">="
-        ComparisonOperatorAst.LT  -> "<"
-        ComparisonOperatorAst.LTE -> "<="
-    }
-}
-
 @Composable
 internal fun OperatorBadge(operator: String, ignoreCase: Boolean) {
     val label = if (ignoreCase) "$operator (i)" else operator
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFF1F2D3D))
+            .background(LabelOp.copy(alpha = 0.12f))
             .border(1.dp, LabelOp.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,
@@ -237,8 +225,4 @@ internal fun OperatorBadge(operator: String, ignoreCase: Boolean) {
         )
     }
 }
-
-
-
-
 

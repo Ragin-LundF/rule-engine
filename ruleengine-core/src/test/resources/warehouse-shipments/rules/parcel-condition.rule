@@ -1,0 +1,57 @@
+# 2. Parcel condition and handling — aggregates and filters over the `parcels` collection.
+#
+# The two weight rules read `$totalWeightKg` and `$fragileWeightKg` instead of aggregating again:
+# both are published by shipment-totals.rule, which the manifest lists before this file.
+#
+# Schema: schema.yaml
+
+rule "all-parcels-intact" {
+  description "Every parcel arrived intact - nothing in the shipment is flagged as damaged."
+  when
+    count(parcels[damaged == true]) == 0
+
+  then
+    assessment "condition:green"
+    reason "no-damaged-parcel-reported"
+}
+
+rule "damaged-parcels-reported" {
+  description "At least one parcel in the shipment is flagged as damaged."
+  when
+    count(parcels[damaged == true]) > 0
+
+  then
+    assessment "condition:red"
+    reason "at-least-one-damaged-parcel"
+}
+
+rule "two-person-lift" {
+  description "The shipment is too heavy for one person to handle safely and must be lifted by two."
+  when
+    $totalWeightKg > 100
+
+  then
+    assessment "handling:two-person-lift"
+    reason "total-weight-above-one-hundred-kilograms"
+}
+
+rule "fragile-load" {
+  description "More than a quarter of the load is fragile, so the whole shipment is handled as fragile rather than only the individual parcels."
+  when
+    $fragileWeightKg > $totalWeightKg * 0.25
+
+  then
+    assessment "handling:fragile-load"
+    reason "fragile-parcels-exceed-a-quarter-of-the-weight"
+}
+
+# A filter may read a nested member of the element it filters.
+rule "consolidate-at-hamburg-hub" {
+  description "Two or more parcels start at the Hamburg hub, so they are consolidated into one handling unit."
+  when
+    count(parcels[origin.hub == "HAM"]) >= 2
+
+  then
+    assessment "consolidation:hub-ham"
+    reason "two-or-more-parcels-originate-in-hamburg"
+}

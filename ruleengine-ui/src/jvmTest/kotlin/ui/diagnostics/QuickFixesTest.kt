@@ -1,5 +1,6 @@
 package ui.diagnostics
 
+import ui.diagnostics.model.QuickFix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -21,6 +21,8 @@ The syntax is intentionally simple and close to natural language, so that busine
 
 ```
 rule "rule-id" {
+  description "<what this rule is for, in one sentence>"
+
   when
     <condition>
 
@@ -34,6 +36,7 @@ rule "rule-id" {
 | Part | Required | Description |
 |---|---|---|
 | `rule "id"` | ✅ | Unique identifier for this rule |
+| `description "..."` | ⬜ | One sentence explaining what the rule is for. Must come first, before `when` |
 | `when` | ✅ | One or more conditions that must be true |
 | `then` | ✅ | One or more actions to return when the rule matches |
 
@@ -49,6 +52,42 @@ rule "rent-payment" {
     label "rent"
 }
 ```
+
+---
+
+## Descriptions
+
+A rule may open with a `description` clause: one sentence, in the reader's language, saying **what the rule is for** — not what it technically compares.
+
+```
+rule "rent-payment" {
+  description "A recurring payment of at least 500 whose purpose mentions rent."
+
+  when
+    purpose contains "rent"
+    and amount >= 500
+
+  then
+    label "rent"
+}
+```
+
+- The clause is **optional**, and must appear **directly after the opening `{`**, before `when`.
+- It takes exactly one double-quoted string. Writing it twice is an error.
+- It has **no effect on evaluation** — the engine ignores it when matching rules.
+- Leaving it out produces a **warning** from the validator, never an error. Existing rule files keep working unchanged.
+
+Why it matters: the description is the only part of a rule written for a human rather than for the engine. It is what appears in an exported rule overview handed to a customer or published to a wiki, where the reader has never seen the DSL. Without it, such a reader gets only the rule id and the raw condition.
+
+Write it as a statement about the business, not about the syntax:
+
+| ✅ Good | ❌ Avoid |
+|---|---|
+| `"A valuable shipment needs a cover note."` | `"Checks declaredValue between 1000 and 25000."` |
+| `"Gold-tier customers on an express service get the premium assessment."` | `"tier equals gold AND service contains express"` |
+| `"Two or more parcels from the same hub travel together."` | `"A filter may read a nested member of the element it filters."` |
+
+> **Comments are not descriptions.** A `#` comment is stripped when the file is read and never reaches the engine, so it cannot appear in an export. Use `#` for notes to other rule authors, and `description` for the sentence the business reader needs.
 
 ---
 
@@ -141,17 +180,20 @@ dueDate lt "31.01.2024"
 
 ### Conditions on Nested Data
 
-When the schema declares a field as a `collection` or `object`, a condition can navigate into it:
+When the schema declares a field as an `object`, a condition navigates into it with a dotted path and
+compares it like any other field:
 
 ```
-orders.customer.country == "DE"
+shipment.customer.tier equals "gold"
+shipment.transitDays <= 2
 ```
 
-To reason about a whole list — a total, an average, a count of matching elements — use a
-[value expression](./expressions.md):
+A `collection` holds many records, so a path through it has one value per element and needs a
+[value expression](./expressions.md) — a total, an average, or a count of matching elements:
 
 ```
 sum(orders[status == "paid"].total) > 1000
+count(orders[customer.country == "DE"]) > 0
 ```
 
 ### Named Operators vs Symbolic Operators
@@ -175,6 +217,9 @@ Rules can use either the **full dot-notation path** or a **field alias** to refe
 
 #### Full Dot-Notation
 Use the complete path to a field as defined in the schema. This is highly explicit and avoids ambiguity.
+The schema may declare the path either as a single dotted field id or as nested `fields:` blocks — both
+spellings work with every operator (see [Nested Data](./field-schema.md#nested-data)). A path that reads
+through a `collection` is the one exception: aggregate or filter it instead.
 
 To understand how dot-notation works, consider the following input JSON:
 
@@ -372,6 +417,127 @@ then
 
 A rule can have **any number of actions**.
 All of them are returned when the rule matches.
+
+---
+
+## Variables — the `set` Clause
+
+A rule can publish a named value that the rules **after** it can read.
+Use it when several rules need the same computed value: work it out once, then refer to it by name.
+
+### Syntax
+
+Write the assignment in the `then` block:
+
+```
+then
+  set <name> = <expression>
+```
+
+Read it anywhere a value can stand, with a `$` in front of the name:
+
+```
+when
+  $<name> >= 1000
+```
+
+The right-hand side of `set` is a full [value expression](expressions.md) — a field, a literal, an
+aggregate, arithmetic, or another variable.
+
+### Example
+
+```
+# totals.rule — listed first in the manifest
+rule "account-totals" {
+  description "Computes the account turnover once for the rules that follow."
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+}
+
+# tiers.rule — listed after totals.rule
+rule "active-account" {
+  description "An account with meaningful turnover is treated as active."
+  when
+    $turnover >= 100
+
+  then
+    label "active"
+}
+
+rule "high-turnover-account" {
+  description "A very high turnover is reviewed by hand."
+  when
+    $turnover >= 100000
+
+  then
+    label "manual-review"
+    flag "high-turnover"
+}
+```
+
+A variable can also be an action argument:
+
+```
+rule "turnover-score" {
+  description "Reports the account turnover as a score."
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+    score $turnover
+}
+```
+
+### Scope and Ordering
+
+| Question | Answer |
+|---|---|
+| Who can read `$name`? | Only rules that come **after** the rule that sets it, within the same manifest entry. |
+| What is "after"? | Manifest rule-file order first, then declaration order inside each file. See [manifest.md](manifest.md). |
+| When does the assignment run? | Only if the rule **matched** — a `set` sits in `then`, like an action. |
+| Can the same rule's actions read it? | Yes. Assignments are applied before the rule's own actions resolve. |
+| What if nothing set it? | The read yields a missing value, so the condition is simply **false**. Evaluation never fails. |
+| Can two rules set the same name? | Yes; the last matching rule wins. The validator warns, because it is usually unintended. |
+| Does a variable change the input? | No. The engine never modifies input data; a variable lives only for the duration of one evaluation. |
+
+> **This makes rule order significant.**
+> Without variables, rules are independent and order only affects the order of the results. A rule that
+> reads `$name` depends on an earlier rule having run and matched, so moving rule files around in the
+> manifest can change the outcome.
+
+### Naming
+
+A variable name is written without the `$` in the `set` clause and with it everywhere else.
+It follows the same spelling rules as a field name — letters, digits, `_` and `-`, starting with a
+letter or `_`.
+
+`$1`, `$2`, … are **not** variables; an all-digit name is a capture group of an
+[`extract` clause](#extracting-values-into-actions--the-extract-clause).
+
+### Validation Rules
+
+| Rule | Severity |
+|---|---|
+| `$name` must be assigned by an earlier rule of the entry | ❌ error (with a "did you mean" suggestion) |
+| A variable must not be named like a schema field | ❌ error |
+| A `set` name must be written without the `$` prefix | ❌ parse error |
+| The `set` expression is checked like any other value expression (unknown fields, bad aggregates) | ❌ error |
+| Two rules assigning the same name | ⚠️ warning |
+
+The "assigned by an earlier rule" check is deliberately generous: it only asks that *some* earlier rule
+assigns the name, not that the rule will actually match at runtime. Catching typos and forward
+references is the point; proving a variable is always populated is not possible before the data arrives.
+
+### Not Compatible With `shortCircuitByOutput`
+
+`shortCircuitByOutput` groups rules by their output and stops each group at its first match, which
+reorders evaluation. That is incompatible with variables, so a build that combines the two fails with
+an explicit message rather than producing an order-dependent result. See
+[integration-guide.md](integration-guide.md).
 
 ---
 
@@ -634,6 +800,7 @@ rule "flagged-customer" {
 | An ISO date on a field that declares a format | `Invalid date '2024-01-31' … expected format 'dd.MM.yyyy' (e.g. "31.01.2024")` | Write the value in the field's own format |
 | Comparing a collection or object directly | `Field 'orders' is a collection and cannot be compared directly` | Navigate into it (`orders.total`) or aggregate over it (`sum(orders.total)`) |
 | Misspelling a member of a declared collection | `Unknown field 'totl' in 'orders.totl'` | Check the nested `fields:` block in the schema |
+| Comparing a path that reads through a collection | `Field 'orders.total' reads through collection 'orders' …` | Aggregate it (`sum(orders.total) > 100`) or filter it (`count(orders[total > 100]) > 0`) |
 | `and` inside a path filter | `Only comparison expressions are supported in filter segments` | Chain filters: `orders[status == "paid"][total > 100]` |
 | `equals` inside a path filter | `Operator 'equals' is not supported in filter segments` | Use `==` inside `[...]` |
 | `ignoreCase` after a symbolic operator | `Expected 'then' block` | Use the word form: `name equals "Acme" ignoreCase` |

@@ -1,78 +1,38 @@
 package ui.schema
 
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.normalizer.NormalizerRegistry
+import ui.builder.OperatorOptions
+import ui.schema.model.EditableField
+
 /**
- * Editable representation of a single field in the visual schema editor.
+ * The lowercase spelling of a field type, used both as the `type:` value written into schema YAML
+ * and as the label in the editor's type dropdown.
  *
- * All fields are plain strings so the composable layer stays in commonMain.
- * The bridge layer (jvmMain) converts between this model and [ruleengine.core.domain.FieldSchema].
+ * Derived rather than tabulated: the visual editor used to carry its own `SchemaFieldType` enum
+ * whose `yamlValue` had to equal the lowercased [FieldType] name, and the YAML bridge silently
+ * degraded a field to `TEXT` whenever the two drifted. There is nothing left to drift.
  */
-data class EditableField(
-    val path: String = "",
-    val alias: String = "",
-    val type: SchemaFieldType = SchemaFieldType.TEXT,
-    /**
-     * Date pattern for a [SchemaFieldType.DATE] / [SchemaFieldType.DATE_TIME] field, e.g. `dd.MM.yyyy`.
-     * Empty means ISO-8601. Always empty for every other type.
-     */
-    val format: String = "",
-    val normalizers: List<String> = emptyList(),
-    val operators: List<String> = emptyList(),
-    /**
-     * Members of a [SchemaFieldType.COLLECTION] or [SchemaFieldType.OBJECT] field.
-     *
-     * Recursive, mirroring [ruleengine.core.domain.FieldDefinition.fields], so a collection of objects
-     * that themselves contain collections is expressible to any depth.
-     */
-    val fields: List<EditableField> = emptyList(),
-)
+val FieldType.yamlValue: String
+    get() = name.lowercase()
 
 /**
- * Supported field types exposed in the visual editor.
- * Maps 1-to-1 with [ruleengine.core.domain.FieldType].
- */
-enum class SchemaFieldType(val displayName: String, val yamlValue: String) {
-    TEXT("text", "text"),
-    INTEGER("integer", "integer"),
-    DECIMAL("decimal", "decimal"),
-    BOOLEAN("boolean", "boolean"),
-    STRING_SET("string_set", "string_set"),
-    DATE("date", "date"),
-    DATE_TIME("date_time", "date_time"),
-    COLLECTION("collection", "collection"),
-    OBJECT("object", "object"),
-}
-
-/** True for the types whose [EditableField.fields] describe nested members. */
-val SchemaFieldType.isStructure: Boolean
-    get() = this == SchemaFieldType.COLLECTION || this == SchemaFieldType.OBJECT
-
-/** True for the date types that accept an [EditableField.format] pattern. */
-val SchemaFieldType.isTemporal: Boolean
-    get() = this == SchemaFieldType.DATE || this == SchemaFieldType.DATE_TIME
-
-/**
- * True for the types whose values are normalized before comparison.
+ * All normalizer ids known to the engine, in declaration order, used to populate the selector and
+ * the YAML completions.
  *
- * The engine applies normalizers to text values only, so offering them elsewhere would suggest an
- * effect that never happens.
+ * Read from [NormalizerRegistry] rather than restated: an id offered here that the registry does not
+ * have is a schema the engine refuses to load.
  */
-val SchemaFieldType.isNormalizable: Boolean
-    get() = this == SchemaFieldType.TEXT || this == SchemaFieldType.STRING_SET
+val KnownNormalizers: List<String> = NormalizerRegistry.ids.map { id -> id.value }
 
-/**
- * All normalizer ids known to the engine, used to populate the selector.
- *
- * Must stay in sync with `ruleengine.core.normalizer.NormalizerRegistry`, which lives in the JVM-only
- * core module and so cannot be referenced from `commonMain`. `SchemaEditorModelsTest` asserts every id
- * here is one the engine accepts.
- */
-val KnownNormalizers: List<String> = listOf(
-    "trim",
-    "lowercase",
-    "uppercase",
-    "collapse_whitespace",
-    "remove_punctuation",
-    "german_umlaut_fold",
+/** Numbers and dates are ordered, so the schema editor offers them the same comparisons. */
+private val ORDERED_OPERATORS: List<String> = listOf(
+    OperatorOptions.EQUALS,
+    OperatorOptions.GT,
+    OperatorOptions.GTE,
+    OperatorOptions.LT,
+    OperatorOptions.LTE,
+    OperatorOptions.BETWEEN,
 )
 
 /**
@@ -84,20 +44,27 @@ val KnownNormalizers: List<String> = listOf(
  *
  * A structure type is navigated into or aggregated over, never compared, so it has no operators.
  */
-val OperatorsByType: Map<SchemaFieldType, List<String>> = mapOf(
-    SchemaFieldType.TEXT to listOf("equals", "contains", "startsWith", "endsWith", "in", "regex"),
-    SchemaFieldType.INTEGER to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.DECIMAL to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.BOOLEAN to listOf("equals"),
-    SchemaFieldType.STRING_SET to listOf("containsAny", "containsAll"),
-    SchemaFieldType.DATE to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.DATE_TIME to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.COLLECTION to emptyList(),
-    SchemaFieldType.OBJECT to emptyList(),
+val OperatorsByType: Map<FieldType, List<String>> = mapOf(
+    FieldType.TEXT to listOf(
+        OperatorOptions.EQUALS,
+        OperatorOptions.CONTAINS,
+        OperatorOptions.STARTS_WITH,
+        OperatorOptions.ENDS_WITH,
+        OperatorOptions.IN,
+        OperatorOptions.REGEX,
+    ),
+    FieldType.INTEGER to ORDERED_OPERATORS,
+    FieldType.DECIMAL to ORDERED_OPERATORS,
+    FieldType.BOOLEAN to listOf(OperatorOptions.EQUALS),
+    FieldType.STRING_SET to listOf(OperatorOptions.CONTAINS_ANY, OperatorOptions.CONTAINS_ALL),
+    FieldType.DATE to ORDERED_OPERATORS,
+    FieldType.DATE_TIME to ORDERED_OPERATORS,
+    FieldType.COLLECTION to emptyList(),
+    FieldType.OBJECT to emptyList(),
 )
 
 /** Operators offered for [type]. Empty for a structure type. */
-fun operatorsFor(type: SchemaFieldType): List<String> {
+fun operatorsFor(type: FieldType): List<String> {
     return OperatorsByType[type] ?: emptyList()
 }
 
@@ -105,7 +72,7 @@ fun operatorsFor(type: SchemaFieldType): List<String> {
 val KnownOperators: List<String> = OperatorsByType.values.flatten().distinct()
 
 /**
- * Starting points offered by "+ Add field", one per [SchemaFieldType] plus a blank row.
+ * Starting points offered by "+ Add field", one per [FieldType] plus a blank row.
  *
  * Each template's `operators` are the full set the engine allows for that type, so a freshly added field
  * is usable without editing the chips. `SchemaEditorModelsTest` asserts the list covers every type, which
@@ -115,68 +82,50 @@ val FieldTemplates: List<Pair<String, EditableField>> = listOf(
     "Blank field" to EditableField(),
     "Text field" to EditableField(
         path = "field",
-        type = SchemaFieldType.TEXT,
+        type = FieldType.TEXT,
         normalizers = listOf("trim", "lowercase"),
-        operators = operatorsFor(type = SchemaFieldType.TEXT),
+        operators = operatorsFor(type = FieldType.TEXT),
     ),
     "Integer field" to EditableField(
         path = "count",
-        type = SchemaFieldType.INTEGER,
-        operators = operatorsFor(type = SchemaFieldType.INTEGER),
+        type = FieldType.INTEGER,
+        operators = operatorsFor(type = FieldType.INTEGER),
     ),
     "Decimal field" to EditableField(
         path = "amount",
-        type = SchemaFieldType.DECIMAL,
-        operators = operatorsFor(type = SchemaFieldType.DECIMAL),
+        type = FieldType.DECIMAL,
+        operators = operatorsFor(type = FieldType.DECIMAL),
     ),
     "Boolean field" to EditableField(
         path = "flag",
-        type = SchemaFieldType.BOOLEAN,
-        operators = operatorsFor(type = SchemaFieldType.BOOLEAN),
+        type = FieldType.BOOLEAN,
+        operators = operatorsFor(type = FieldType.BOOLEAN),
     ),
     "String set field (tags)" to EditableField(
         path = "tags",
-        type = SchemaFieldType.STRING_SET,
+        type = FieldType.STRING_SET,
         normalizers = listOf("trim", "lowercase"),
-        operators = operatorsFor(type = SchemaFieldType.STRING_SET),
+        operators = operatorsFor(type = FieldType.STRING_SET),
     ),
     // No `format`: ISO is the default, and the row's Format box shows the hint for changing it.
     "Date field" to EditableField(
         path = "bookingDate",
-        type = SchemaFieldType.DATE,
-        operators = operatorsFor(type = SchemaFieldType.DATE),
+        type = FieldType.DATE,
+        operators = operatorsFor(type = FieldType.DATE),
     ),
     "Date-time field" to EditableField(
         path = "bookedAt",
-        type = SchemaFieldType.DATE_TIME,
-        operators = operatorsFor(type = SchemaFieldType.DATE_TIME),
+        type = FieldType.DATE_TIME,
+        operators = operatorsFor(type = FieldType.DATE_TIME),
     ),
     "Collection (list of objects)" to EditableField(
         path = "items",
-        type = SchemaFieldType.COLLECTION,
-        fields = listOf(EditableField(path = "amount", type = SchemaFieldType.DECIMAL)),
+        type = FieldType.COLLECTION,
+        fields = listOf(EditableField(path = "amount", type = FieldType.DECIMAL)),
     ),
     "Object (nested fields)" to EditableField(
         path = "customer",
-        type = SchemaFieldType.OBJECT,
-        fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
+        type = FieldType.OBJECT,
+        fields = listOf(EditableField(path = "country", type = FieldType.TEXT)),
     ),
 )
-
-/**
- * Immutable snapshot of the visual schema editor state.
- *
- * @param schemaName  Name of the schema (maps to the `schema:` YAML key).
- * @param fields      Ordered list of editable field rows.
- * @param isReadOnly  True when the loaded YAML contains unsupported constructs
- *                    (e.g. custom normalizer groups); editing is disabled.
- */
-data class SchemaEditorState(
-    val schemaName: String = "",
-    val fields: List<EditableField> = emptyList(),
-    val isReadOnly: Boolean = false,
-) {
-    companion object {
-        val Empty = SchemaEditorState()
-    }
-}

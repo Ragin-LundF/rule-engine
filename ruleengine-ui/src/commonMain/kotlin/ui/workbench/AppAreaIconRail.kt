@@ -24,6 +24,7 @@ import ui.BgElevated
 import ui.BgHover
 import ui.PrimaryBlue
 import ui.TextSecondary
+import ui.workbench.model.mode.AppArea
 
 /**
  * Narrow vertical rail that switches the active [AppArea].

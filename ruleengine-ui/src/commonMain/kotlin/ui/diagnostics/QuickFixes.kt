@@ -1,5 +1,7 @@
 package ui.diagnostics
 
+import ui.diagnostics.model.QuickFix
+
 /**
  * Applies a [QuickFix] to the current rule text and returns the updated text.
  *

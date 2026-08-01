@@ -1,5 +1,10 @@
 package ui.builder
 
+import ui.builder.OperandText.LABEL_MAX_SEGMENTS
+import ui.builder.model.BuilderFilter
+import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
+
 /**
  * Renders [BuilderOperand] trees as text.
  *
@@ -35,10 +40,16 @@ object OperandText {
         }
     }
 
+    /**
+     * A literal operand as DSL.
+     *
+     * Goes through [quoteUnlessNumeric] rather than quoting outright, so a boolean and a variable
+     * read stay bare — quoting either would silently change what the comparison means.
+     */
     private fun literalToDsl(literal: BuilderOperand.Literal): String {
         val trimmed = literal.text.trim()
         if (literal.numeric) return trimmed
-        return quote(value = trimmed)
+        return quoteUnlessNumeric(value = trimmed)
     }
 
     private fun pathToDsl(path: List<BuilderPathStep>): String =
@@ -95,12 +106,30 @@ object OperandText {
         return "\"$value\""
     }
 
-    /** Leaves numeric and boolean literals bare; quotes everything else. */
+    /**
+     * A number in canonical form, i.e. what the DSL writes back out as a number literal.
+     *
+     * Deliberately stricter than `toDoubleOrNull`, which accepts `10.`, `1e5` and `Infinity`. The
+     * lexer reads `10.` as a number too, so emitting the text of `ip startsWith "10."` unquoted would
+     * turn a text literal into a numeric one on the next parse.
+     */
+    private val CANONICAL_NUMBER = Regex(pattern = """-?\d+(\.\d+)?""")
+
+    /**
+     * A variable read, i.e. `$` followed by a name that starts with a letter or underscore.
+     *
+     * Deliberately excludes `$1`: an all-digit name is an extraction reference, and a value such as
+     * `$100` is a currency string the author means literally. Both must stay quoted.
+     */
+    private val VARIABLE_REFERENCE = Regex(pattern = """\$[A-Za-z_][A-Za-z0-9_-]*""")
+
+    /** Leaves numeric literals, booleans and variable reads bare; quotes everything else. */
     fun quoteUnlessNumeric(value: String): String {
         val trimmed = value.trim()
         if (trimmed.startsWith(prefix = "\"") && trimmed.endsWith(suffix = "\"")) return trimmed
-        if (trimmed.toDoubleOrNull() != null) return trimmed
+        if (CANONICAL_NUMBER.matches(input = trimmed)) return trimmed
         if (trimmed == "true" || trimmed == "false") return trimmed
+        if (VARIABLE_REFERENCE.matches(input = trimmed)) return trimmed
         return quote(value = trimmed)
     }
 }

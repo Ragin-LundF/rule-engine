@@ -2,8 +2,8 @@ package ruleengine.builder
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
@@ -39,6 +39,7 @@ import java.nio.file.Path
  * individual loaders (`FieldSchemaLoader`, `ActionSchemaLoader`, `Parser`, `Validator`, `Compiler`)
  * directly.
  */
+@Suppress("TooManyFunctions")
 object RuleEngineBuilder {
     /**
      * Loads every entry of the manifest at [manifestPath], or only the entry named [entryId].
@@ -155,6 +156,22 @@ object RuleEngineBuilder {
             Compiler.compileRules(asts = asts, schema = schema, normalizerRegistry = normalizerRegistry)
         }.getOrElse { cause ->
             fail(manifestPath = manifestPath, entryId = entry.id, details = "rule compilation failed", cause = cause)
+        }
+
+        // Short-circuiting groups rules by output and so reorders them, while a `set` clause only
+        // reaches the rules declared after it. Combining the two would make which variable a rule
+        // sees depend on grouping, so the build fails instead of quietly changing the outcome.
+        if (shortCircuitByOutput) {
+            val assigningRules = compiledRules.filter { rule -> rule.assignments.isNotEmpty() }
+            if (assigningRules.isNotEmpty()) {
+                fail(
+                    manifestPath = manifestPath,
+                    entryId = entry.id,
+                    details = "shortCircuitByOutput cannot be used with variables, because it evaluates " +
+                            "rules by output group rather than in declaration order; " +
+                            "rules with a 'set' clause: ${assigningRules.joinToString { rule -> rule.id }}",
+                )
+            }
         }
 
         return LoadedRuleEngine(

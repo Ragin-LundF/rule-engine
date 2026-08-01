@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -35,6 +33,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ui.AccentCyan
+import ui.AccentCyanSoft
 import ui.AccentGreen
 import ui.AccentGreenSoft
 import ui.AccentOrange
@@ -45,11 +45,12 @@ import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.PrimaryBlueDim
 import ui.PrimaryGlow
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.samples.model.SampleCategory
+import ui.samples.model.SampleDescriptor
 
 @Composable
 fun SampleGalleryScreen(
@@ -89,42 +90,59 @@ fun SampleGalleryScreen(
     }
 
     pendingDescriptor?.let { descriptor ->
-        AlertDialog(
-            onDismissRequest = { pendingDescriptor = null },
-            title = {
-                Text(
-                    text = "Load \"${descriptor.name}\"?",
-                    style = MaterialTheme.typography.subtitle1,
-                )
+        ConfirmLoadSampleDialog(
+            descriptor = descriptor,
+            onDismiss = { pendingDescriptor = null },
+            onConfirm = {
+                pendingDescriptor = null
+                onSampleSelected(descriptor)
             },
-            text = {
-                Text(
-                    text = "This will replace your current schema, actions, and rules.",
-                    style = MaterialTheme.typography.body2,
-                    color = TextSecondary,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val d = descriptor
-                        pendingDescriptor = null
-                        onSampleSelected(d)
-                    },
-                    colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBlue),
-                ) {
-                    Text(text = "Load Sample", color = TextPrimary)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDescriptor = null }) {
-                    Text(text = "Cancel", color = TextSecondary)
-                }
-            },
-            backgroundColor = BgElevated,
-            shape = MaterialTheme.shapes.medium,
         )
     }
+}
+
+/**
+ * Asked before loading, because loading a sample replaces everything currently in the editor and
+ * there is no undo across all three documents.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun ConfirmLoadSampleDialog(
+    descriptor: SampleDescriptor,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Load \"${descriptor.name}\"?",
+                style = MaterialTheme.typography.subtitle1,
+            )
+        },
+        text = {
+            Text(
+                text = "This will replace your current schema, actions, and rules.",
+                style = MaterialTheme.typography.body2,
+                color = TextSecondary,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBlue),
+            ) {
+                Text(text = "Load Sample", color = TextPrimary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel", color = TextSecondary)
+            }
+        },
+        backgroundColor = BgElevated,
+        shape = MaterialTheme.shapes.medium,
+    )
 }
 
 @Composable
@@ -221,4 +239,5 @@ private fun SampleCategory.colors(): Pair<Color, Color> = when (this) {
     SampleCategory.LOGGING -> AccentOrange to AccentOrangeSoft
     SampleCategory.ECOMMERCE -> AccentGreen to AccentGreenSoft
     SampleCategory.SECURITY -> AccentPurple to AccentPurpleSoft
+    SampleCategory.LOGISTICS -> AccentCyan to AccentCyanSoft
 }

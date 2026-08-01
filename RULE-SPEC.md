@@ -52,8 +52,9 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 ### Key Principles
 
 - The engine **validates everything at load time**. Typos, unknown fields, wrong operators, and wrong argument types are all caught before any rule runs.
-- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
-- The engine **never modifies** input data. It only reads it and returns results.
+- Rules are **independent by default** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
+- The one exception is a **variable**: a rule's `then` block may `set` a named value that the rules after it read as `$name` (see §5.6). Order is then part of the meaning, not just of the output.
+- The engine **never modifies** input data. It only reads it and returns results. A variable lives for the duration of one evaluation and is never written back into the input.
 
 ---
 
@@ -273,8 +274,9 @@ rule "overdue-invoice" {
 | Applies to text values | An input already typed as a date (a `LocalDate`, `LocalDateTime` or `Instant` handed to the engine by the host application) carries no text, so no pattern applies to it |
 | Prefer separators | An all-digit pattern such as `yyyyMMdd` works in a hand-written rule but is not round-trip-safe in the visual Builder, which cannot tell that value from a number |
 
-> **Note:** A `format` on a **nested** member of a `collection` / `object` is accepted and checked, but
-> has no effect at runtime: nested paths are compared as raw text (see
+> **Note:** A `format` on a member of a **`collection`** is accepted and checked, but has no effect at
+> runtime: a path that reads through a list is projected and compared as raw text. A member of an
+> **`object`** is a normal typed field, so its `format` does apply (see
 > [3.5 Nested Data](#35-nested-data--collections-and-objects)).
 
 #### Named operators vs. symbolic operators — important
@@ -433,11 +435,62 @@ fields:
 Given that schema, rules can navigate and aggregate to any declared depth:
 
 ```
-orders.customer.country == "DE"
 count(orders) > 3
 sum(orders.total) > 1000
 sum(orders[status == "paid"].items[price > 0].price) > 500
+count(orders[customer.country == "DE"]) > 0
 ```
+
+#### A path into an `object` is a normal field; a path through a `collection` is not
+
+An `object` holds exactly one record, so a path into it has exactly one value. Such a path is used like any
+other field — every operator, its declared `normalizers:` and its `format` all apply:
+
+```yaml
+schema: shipments-v1
+
+fields:
+  shipment:
+    type: object
+    fields:
+      transitDays:
+        type: integer
+      pickedUpAt:
+        type: date
+        format: dd.MM.yyyy
+      customer:
+        type: object
+        fields:
+          tier:
+            type: text
+            normalizers:
+              - trim
+              - lowercase
+```
+
+```
+rule "fast-gold-shipment" {
+  when
+    shipment.transitDays <= 2
+    and shipment.customer.tier equals "gold"
+    and shipment.pickedUpAt >= "01.03.2026"
+
+  then
+    label "premium-on-time"
+}
+```
+
+A `collection` holds many records, so a path through it yields **one value per element** and cannot be
+compared to a single literal. The engine rejects it and names the collection:
+
+```text
+Field 'orders.total' reads through collection 'orders', which yields one value per element and cannot be
+compared directly; use an aggregate function such as count(orders), sum(orders.total) or a filter such as
+orders[...]
+```
+
+> **Rule:** Compare a path into an `object` directly. Wrap a path through a `collection` in an aggregate
+> function or a filter.
 
 #### Declaring nested members is optional but recommended
 
@@ -452,6 +505,13 @@ sum(orders[status == "paid"].items[price > 0].price) > 500
 
 > **Rule:** `normalizers:` and `operators:` are not valid on a `collection` or `object` field itself.
 > Declare them on the nested scalar members instead.
+
+#### Worked example
+
+[`ruleengine-core/src/test/resources/warehouse-shipments`](ruleengine-core/src/test/resources/warehouse-shipments)
+is a complete bundle built on both shapes: a `shipment` object read by plain conditions, and `parcels` and
+`checkpoints` collections read by aggregates and filters. It ships two input files and is executed by
+`WarehouseShipmentsIntegrationTest`, so every path in it is known to work.
 
 ---
 
@@ -535,6 +595,8 @@ You may define any action names that fit the domain. These are widely used conve
 
 ```
 rule "<rule-id>" {
+  description "<one sentence explaining what the rule is for>"
+
   when
     <condition>
 
@@ -548,8 +610,35 @@ rule "<rule-id>" {
 | Part | Required | Notes |
 |---|---|---|
 | `rule "<id>"` | ✅ | ID must be unique across all loaded rule files. Use lowercase-hyphenated or UPPER_UNDERSCORE identifiers. |
+| `description "<text>"` | ⬜ | One double-quoted sentence. If present it must be the **first** thing inside `{`, before `when`. May appear at most once per rule. |
 | `when` | ✅ | Keyword, followed by one or more conditions. |
-| `then` | ✅ | Keyword, followed by one or more actions. |
+| `then` | ✅ | Keyword, followed by one or more actions and/or `set` clauses (§5.6). |
+
+**No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags`, `salience` or `else` — the engine rejects them.
+
+#### The `description` clause
+
+Always emit a `description` when translating a business statement into a rule: the business analyst's own sentence is exactly what belongs there. It is the only part of the rule written for a human rather than the engine, and it is what appears in an exported rule overview handed to someone who has never seen this DSL.
+
+```
+rule "rent-payment" {
+  description "A recurring payment of at least 300 whose purpose mentions rent."
+
+  when
+    purpose contains "rent"
+    and amount >= 300
+
+  then
+    label "rent"
+}
+```
+
+Rules:
+
+- Optional — omitting it produces a **warning**, never an error, and the rule still loads, compiles and evaluates.
+- Has **no effect on matching**. Never encode logic in it.
+- Describe the **business intent**, not the mechanics. Write `"A valuable shipment needs a cover note."`, not `"Checks declaredValue between 1000 and 25000."`
+- A `#` comment is **not** a description: comments are stripped when the file is read and never reach the engine. Use `#` for notes to other rule authors and `description` for the business reader.
 
 ### 5.3 Conditions
 
@@ -616,13 +705,22 @@ dueDate lt "31.01.2024"
 
 #### Nested path condition examples
 
-When a field is declared `collection` or `object`, navigate into it with a dotted path:
+When a field is declared `object`, navigate into it with a dotted path and compare it like any other field —
+named and symbolic operators both work:
 
 ```
-orders.customer.country == "DE"
+shipment.customer.tier equals "gold"
+shipment.transitDays <= 2
 ```
 
-For anything that aggregates over a collection, see [5.8 Value Expressions](#58-value-expressions--aggregate-functions-and-arithmetic).
+A path that reads through a `collection` cannot be compared directly, because it yields one value per
+element. Aggregate or filter it instead — see
+[5.8 Value Expressions](#58-value-expressions--aggregate-functions-and-arithmetic):
+
+```
+count(orders[customer.country == "DE"]) > 0
+sum(orders.total) > 1000
+```
 
 #### The `ignoreCase` modifier
 
@@ -747,7 +845,73 @@ then
 - A rule may have **any number of actions**.
 - All declared actions are returned when the rule matches.
 
-### 5.6 Rule ID conventions
+### 5.6 Variables — the `set` clause
+
+A rule's `then` block may publish a named value that the rules **after** it read. Use it when several
+rules need the same computed value, so it is expressed and evaluated once.
+
+```
+then
+  set <name> = <value expression>
+```
+
+Read it with a `$` prefix, anywhere a value expression may stand (§5.9):
+
+```
+when
+  $<name> >= 1000
+```
+
+Worked example — the setter must come first:
+
+```
+rule "account-totals" {
+  description "Computes the account turnover once for the tier rules that follow."
+
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+}
+
+rule "high-turnover-account" {
+  description "An account with a very high turnover is reviewed by hand."
+
+  when
+    $turnover >= 100000
+
+  then
+    label "manual-review"
+    flag "high-turnover"
+}
+```
+
+Rules:
+
+| Aspect | Behaviour |
+|---|---|
+| Visibility | Only rules **after** the assigning rule, in the same manifest entry. "After" means manifest `rules:` file order, then declaration order within the file. |
+| When it runs | Only if the rule matched — `set` sits in `then`, like an action. |
+| Own actions | Assignments are applied **before** the same rule's actions resolve, so `score $turnover` in that rule works. |
+| Never set | Reading it yields a missing value, so the condition is **false**. Evaluation never fails. |
+| Re-assignment | Allowed; the last matching rule wins. Produces a **warning**. |
+| Type | None declared — a variable carries whatever its expression produced, and the operand type check is skipped for it. |
+| Lifetime | One evaluation of one entry. Never written back into the input; never carried to the next record. |
+
+Writing rules:
+
+- The name is written **without** `$` after `set`, and **with** `$` everywhere it is read.
+- Name spelling follows field names: letters, digits, `_`, `-`; must not start with a digit.
+- `$1`, `$2`, … are **not** variables — an all-digit name is a regex capture group of an `extract`
+  clause (see `docs/rules.md`).
+- A variable must not be named like a schema field.
+- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is only
+  valid with a symbolic comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
+- Variables make rule order semantically significant. Say so in the manifest with a comment when you
+  generate one (§6).
+
+### 5.7 Rule ID conventions
 
 - Must be **unique across all rule files** in the same manifest entry.
 - Recommended formats:
@@ -755,13 +919,14 @@ then
   - Uppercase underscore for formal codes: `LEGAL_1`, `AML_HIGH_RISK`
 - Be descriptive — the ID appears in evaluation results and logs.
 
-### 5.7 Complete rule file example
+### 5.8 Complete rule file example
 
 ```
 # transaction-classification.rule
 # Classifies bank transactions by purpose and amount
 
 rule "direct-debit" {
+  description "The transaction carries one of the SEPA direct-debit codes."
   when
     sepaCode in ["DMCT", "DRNL", "PRCT"]
   then
@@ -770,6 +935,7 @@ rule "direct-debit" {
 }
 
 rule "salary-credit" {
+  description "An incoming payment carrying the SEPA salary code."
   when
     sepaCode equals "SALA"
     and amount > 0
@@ -779,6 +945,7 @@ rule "salary-credit" {
 }
 
 rule "rent-payment" {
+  description "A payment of at least 300 whose purpose mentions rent."
   when
     (purpose contains "miete"
     or purpose contains "rent"
@@ -790,6 +957,7 @@ rule "rent-payment" {
 }
 
 rule "premium-customer-transfer" {
+  description "A verified premium customer made an incoming transfer."
   when
     tags containsAll ["premium", "verified"]
     and amount > 0
@@ -799,7 +967,7 @@ rule "premium-customer-transfer" {
 }
 ```
 
-### 5.8 Value expressions — aggregate functions and arithmetic
+### 5.9 Value expressions — aggregate functions and arithmetic
 
 Value expressions allow conditions to aggregate data from **nested lists of objects**.
 Use them when a rule must reason about a collection (e.g. all transactions on an account) rather than a single field.
@@ -853,7 +1021,7 @@ Paths may be **any depth**, following the nested `fields:` you declared in the s
 
 ```
 sum(orders.items.price)
-orders.customer.country
+count(orders[customer.country == "DE"])
 ```
 
 > **Important — projection flattens.** `sum(orders.items.price)` is the sum across **all items of all
@@ -1204,6 +1372,8 @@ actions:
 # classification.rule — transaction classification rules
 
 rule "rent-payment" {
+  description "A payment of at least 300 whose purpose mentions rent."
+
   when
     (purpose contains "miete"
     or purpose contains "rent"
@@ -1215,6 +1385,8 @@ rule "rent-payment" {
 }
 
 rule "salary-credit" {
+  description "An incoming payment carrying the SEPA salary code."
+
   when
     sepaCode equals "SALA"
     and amount > 0
@@ -1232,6 +1404,8 @@ rule "salary-credit" {
 # fraud-detection.rule — fraud and AML detection rules
 
 rule "non-dach-iban" {
+  description "The counterparty IBAN is not German, Austrian or Swiss."
+
   when
     not iban regex "^(DE|AT|CH)"
 
@@ -1240,6 +1414,8 @@ rule "non-dach-iban" {
 }
 
 rule "structuring-suspicion" {
+  description "Repeated payments just under the reporting threshold look like structuring."
+
   when
     count between 5 20
     and amount between 8000 9999
@@ -1250,6 +1426,8 @@ rule "structuring-suspicion" {
 }
 
 rule "blocked-customer" {
+  description "The customer is blocked or sanctioned, so the transaction is rejected."
+
   when
     tags containsAny ["blocked", "sanctioned"]
 
@@ -1335,6 +1513,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | Named `equals` inside a filter | `transactions[label equals "risk"]` (use `==`) |
 | Text operator inside a filter | `transactions[label contains "risk"]` |
 | `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
+| Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
+| Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
+| Writing `$` on the left of `set` | `set $turnover = …` (the name is written bare after `set`) |
 
 > **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
 > produces a warning and the rule still loads, because the root may be an undeclared structure read

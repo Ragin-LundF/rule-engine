@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,24 +41,31 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ruleengine.core.analysis.VariableUsage
 import ruleengine.dsl.parser.Parser
-import ui.AutoCompleteDropdown
 import ui.Bg
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.RuleDiagramView
 import ui.TextMuted
 import ui.TextPrimary
-import ui.annotateRule
-import ui.buildContextualCompletions
+import ui.autocompletion.AutoCompleteDropdown
+import ui.autocompletion.buildContextualCompletions
+import ui.dsl.annotateRule
+import ui.editor.AUTOCOMPLETE_HINT
+import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.ViewMode
 import ui.editor.rules.autoClosingBraceDedent
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
+import ui.settings.SettingsController
+import ui.theme.ThemeController
+import ui.workbench.diagram.DiagramModeHost
+import ui.workbench.diagram.diagramDataFor
+
+/** The rule DSL indents four spaces per level. */
+private const val DSL_INDENT = "    "
 
 /** Main editor content: the code editor with line numbers and autocomplete, or the diagram view. */
 @Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod")
@@ -84,16 +92,27 @@ fun ColumnScope.MainEditorContentSection(
     // ── Parsed rules for live diagram view ────────────────────────────────────
     val showAllRules by state.showAllRules
     val allRulesText by state.allRulesText
+    val diagramView by state.diagramView
     val diagramRules = remember(ruleValue.text, showAllRules, allRulesText) {
         val text = if (showAllRules && isDiagram) allRulesText else ruleValue.text
         runCatching { Parser(input = text).parseRules() }.getOrElse { emptyList() }
     }
 
     // ── Syntax-highlighted display value ──────────────────────────────────────
-    // Annotation is cached by text+schema only. The final TextFieldValue is
-    // NOT wrapped in remember so its selection always reflects the current cursor
-    // position — this fixes arrow-key navigation (stale-selection bug).
-    val annotatedRule = remember(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList) {
+    // The final TextFieldValue is NOT wrapped in remember so its selection always reflects the
+    // current cursor position — this fixes arrow-key navigation (stale-selection bug).
+    //
+    // `isDark` is a key, not incidental: the colours annotateRule bakes in come from the palette,
+    // and a snapshot read inside a remember block does not invalidate that block. Without the key
+    // the spans keep the palette that was active when the text last changed, so switching theme
+    // left dark-mode token colours on a light background.
+    val annotatedRule = remember(
+        ruleValue.text,
+        parsedSchema,
+        parsedActionSchema,
+        diagnosticsList,
+        ThemeController.isDark,
+    ) {
         annotateRule(
             text = ruleValue.text,
             schema = parsedSchema,
@@ -107,26 +126,28 @@ fun ColumnScope.MainEditorContentSection(
         composition = ruleValue.composition,
     )
 
+    // Variables the open buffer publishes. Derived from the text rather than from the saved entry so
+    // a `set` clause is offered as soon as it is typed, before the file is written to disk.
+    val variableNames = remember(ruleValue.text) {
+        runCatching {
+            Parser(input = ruleValue.text).parseRules().flatMap { rule -> VariableUsage.writesOf(rule = rule) }
+        }.getOrDefault(defaultValue = emptyList()).distinct()
+    }
+
     // ── Context-aware autocomplete suggestions ────────────────────────────────
-    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema) {
+    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema, variableNames) {
         val candidates = buildContextualCompletions(
             context = dslContext,
             schema = parsedSchema,
             actionSchema = parsedActionSchema,
+            variableNames = variableNames,
         )
-        if (autoCompleteWord.isEmpty()) {
-            candidates.take(n = 8)
-        } else {
-            candidates
-                .filter {
-                    it.label.startsWith(
-                        prefix = autoCompleteWord,
-                        ignoreCase = true
-                    ) && it.label != autoCompleteWord
-                }
-                .sortedWith(comparator = compareBy({ it.kind.ordinal }, { it.label }))
-                .take(n = 8)
-        }
+        CodeEditing.filterSuggestions(
+            candidates = candidates,
+            word = autoCompleteWord,
+            label = { item -> item.label },
+            kindOrder = { item -> item.kind.ordinal },
+        )
     }
 
     // ── Code Editor or Diagram view ───────────────────────────────
@@ -140,8 +161,9 @@ fun ColumnScope.MainEditorContentSection(
         ) {
             // Pass the capture layer down so recording happens on the
             // full-height content column, not on this clipped viewport box.
-            RuleDiagramView(
-                rules = diagramRules,
+            DiagramModeHost(
+                view = diagramView,
+                data = diagramDataFor(state = state, rules = diagramRules),
                 captureLayer = diagramGraphicsLayer,
             )
         }
@@ -212,6 +234,16 @@ fun ColumnScope.MainEditorContentSection(
                     BasicTextField(
                         value = highlightedValue,
                         onValueChange = { newVal ->
+                            // A space-based shortcut can also arrive as text input, which the key
+                            // handler never sees; drop that one space rather than let it through.
+                            val stray = state.swallowShortcutSpace.value && CodeEditing.isStraySpaceInsertion(
+                                current = ruleValue.text,
+                                caret = ruleValue.selection.start,
+                                candidate = newVal.text,
+                            )
+                            state.swallowShortcutSpace.value = false
+                            if (stray) return@BasicTextField
+
                             val isNewChar = newVal.text.length == ruleValue.text.length + 1
                             val cursorPos = newVal.selection.start
                             // Auto-dedent `}` when typed on an otherwise-whitespace line.
@@ -248,6 +280,15 @@ fun ColumnScope.MainEditorContentSection(
                             .onPreviewKeyEvent { event ->
                                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                                 when {
+                                    // ── Open the completion popup on demand ───────────
+                                    SettingsController.autoCompleteShortcut.matches(event = event) -> {
+                                        state.autoCompleteAnchor.value = state.autoCompleteWordStart.value
+                                        state.swallowShortcutSpace.value =
+                                            SettingsController.autoCompleteShortcut.insertsCharacter
+                                        showAutoComplete = true
+                                        true
+                                    }
+
                                     // ── Autocomplete navigation ───────────────────────
                                     // Only consume direction keys when suggestions are available.
                                     event.key == Key.Escape && showAutoComplete -> {
@@ -278,65 +319,37 @@ fun ColumnScope.MainEditorContentSection(
                                     // ── Enter: smart DSL indentation ──────────────────────
                                     event.key == Key.Enter -> {
                                         if (showAutoComplete) showAutoComplete = false
-                                        val text = ruleValue.text
-                                        val selStart = ruleValue.selection.start
-                                        val selEnd = ruleValue.selection.end
-                                        val lineStart = text.lastIndexOf(
-                                            char = '\n',
-                                            startIndex = selStart - 1
-                                        ) + 1
-                                        val currentLine = text.substring(lineStart, selStart)
-                                        val indent = currentLine.takeWhile { it == ' ' || it == '\t' }
-                                        // Add one extra indent level after block-opening lines.
-                                        val extra = if (
-                                            dslLineOpensBlock(trimmedLine = currentLine.trim())
-                                        ) {
-                                            "    "
-                                        } else ""
-                                        val newText =
-                                            text.substring(0, selStart) + "\n" + indent + extra +
-                                                    text.substring(selEnd)
+                                        val edit = CodeEditing.breakLine(
+                                            text = ruleValue.text,
+                                            selectionStart = ruleValue.selection.start,
+                                            selectionEnd = ruleValue.selection.end,
+                                            indentUnit = DSL_INDENT,
+                                            opensBlock = { line -> dslLineOpensBlock(trimmedLine = line) },
+                                        )
                                         ruleValue = TextFieldValue(
-                                            newText,
-                                            selection = TextRange(
-                                                index = selStart + 1 + indent.length + extra.length
-                                            )
+                                            edit.text,
+                                            selection = TextRange(index = edit.cursor),
                                         )
                                         true
                                     }
                                     // ── Tab: indent / dedent ──────────────────────────
                                     event.key == Key.Tab -> {
-                                        val text = ruleValue.text
-                                        val selStart = ruleValue.selection.start
-                                        val selEnd = ruleValue.selection.end
-                                        if (event.isShiftPressed) {
-                                            val lineStart = text.lastIndexOf(
-                                                char = '\n',
-                                                startIndex = selStart - 1
-                                            ) + 1
-                                            val spaces = text.substring(startIndex = lineStart)
-                                                .takeWhile { it == ' ' }.length.coerceAtMost(
-                                                    maximumValue = 4
-                                                )
-                                            if (spaces > 0) {
-                                                val newText = text.substring(0, lineStart) +
-                                                        text.substring(startIndex = lineStart + spaces)
-                                                ruleValue = TextFieldValue(
-                                                    newText,
-                                                    selection = TextRange(
-                                                        index = (selStart - spaces).coerceAtLeast(
-                                                            minimumValue = lineStart
-                                                        )
-                                                    )
-                                                )
-                                            }
-                                        } else {
-                                            val newText = text.substring(0, selStart) + "    " +
-                                                    text.substring(startIndex = selEnd)
-                                            ruleValue = TextFieldValue(
-                                                newText,
-                                                selection = TextRange(index = selStart + 4)
+                                        val edit = if (event.isShiftPressed) {
+                                            CodeEditing.dedent(
+                                                text = ruleValue.text,
+                                                selectionStart = ruleValue.selection.start,
+                                                indentUnit = DSL_INDENT,
                                             )
+                                        } else {
+                                            CodeEditing.indent(
+                                                text = ruleValue.text,
+                                                selectionStart = ruleValue.selection.start,
+                                                selectionEnd = ruleValue.selection.end,
+                                                indentUnit = DSL_INDENT,
+                                            )
+                                        }
+                                        edit?.let {
+                                            ruleValue = TextFieldValue(it.text, TextRange(index = it.cursor))
                                         }
                                         true
                                     }
@@ -387,17 +400,16 @@ fun ColumnScope.MainEditorContentSection(
                     suggestions = filteredSuggestions,
                     selectedIndex = autoCompleteIndex,
                     onSelect = { state.acceptSuggestion(item = it) },
-                    onDismiss = { showAutoComplete = false },
                 )
             }
         }
+
+        Text(
+            text = AUTOCOMPLETE_HINT,
+            style = MaterialTheme.typography.caption,
+            color = TextMuted,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     } // end CODE view
 }
-
-
-
-
-
-
-
 

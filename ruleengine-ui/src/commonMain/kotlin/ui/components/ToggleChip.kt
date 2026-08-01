@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import ui.AccentGreen
 import ui.BgElevated
 import ui.BorderColor
-import ui.TextPrimary
 import ui.TextSecondary
 
 /**

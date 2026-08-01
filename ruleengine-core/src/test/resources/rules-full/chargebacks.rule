@@ -11,6 +11,7 @@
 # ── Chargeback / reversal detection ─────────────────────────────────────────
 
 rule "chargeback-small" {
+  description "An outgoing booking whose purpose text names a chargeback, reversal or cancellation."
   when
     (purpose contains "chargeback" ignoreCase
     or purpose contains "amount not covered" ignoreCase
@@ -23,6 +24,7 @@ rule "chargeback-small" {
 }
 
 rule "chargeback-high-value" {
+  description "A returned payment of more than 500 units, which is escalated rather than only reviewed."
   when
     (purpose contains "payment returns" ignoreCase
     or purpose contains "not covered" ignoreCase)
@@ -33,8 +35,8 @@ rule "chargeback-high-value" {
     alert "high-value-chargeback"
 }
 
-# Micro-transactions are often test or fee transactions
 rule "micro-transaction" {
+  description "A booking of at most five units either way that is not a fee — usually a test transaction."
   when
     amount between -5 5
     and not purpose contains "fee" ignoreCase
@@ -44,8 +46,8 @@ rule "micro-transaction" {
     flag "low-value"
 }
 
-# Batch payment window: between 100 and 5000 inclusive
 rule "batch-payment" {
+  description "A bulk transfer inside the batch payment window of 100 to 5000 units, inclusive."
   when
     amount between 100 5000
     and purpose startsWith "bulk transfer" ignoreCase
@@ -54,4 +56,3 @@ rule "batch-payment" {
     label "batch"
     category "bulk-transfer"
 }
-

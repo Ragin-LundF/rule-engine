@@ -6,7 +6,11 @@ plugins {
 apply plugin: "java"
 apply plugin: "java-library"
 
+ext.publishName = "ruleengine-core"
+ext.publishDescription = "Rule engine core: DSL lexer, parser, validator, compiler and evaluator"
+
 dependencies {
+    api project(":ruleengine-model")
     implementation libs.bundles.jackson
     testImplementation libs.kotlin.test
 }

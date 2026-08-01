@@ -1,5 +1,8 @@
 package ui.schema
 
+import ruleengine.core.domain.dto.field.FieldType
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,12 +46,12 @@ class FieldSchemaYamlBridgeTest {
         assertEquals(2, state.fields.size)
 
         val purpose = state.fields.first { it.path == "purpose" }
-        assertEquals(SchemaFieldType.TEXT, purpose.type)
+        assertEquals(FieldType.TEXT, purpose.type)
         assertEquals(listOf("trim", "lowercase"), purpose.normalizers)
         assertEquals(listOf("equals", "contains"), purpose.operators)
 
         val amount = state.fields.first { it.path == "amount" }
-        assertEquals(SchemaFieldType.DECIMAL, amount.type)
+        assertEquals(FieldType.DECIMAL, amount.type)
         assertTrue(amount.normalizers.isEmpty())
     }
 
@@ -89,13 +92,13 @@ class FieldSchemaYamlBridgeTest {
             fields = listOf(
                 EditableField(
                     path = "purpose",
-                    type = SchemaFieldType.TEXT,
+                    type = FieldType.TEXT,
                     normalizers = listOf("trim", "lowercase"),
                     operators = listOf("equals", "contains"),
                 ),
                 EditableField(
                     path = "amount",
-                    type = SchemaFieldType.DECIMAL,
+                    type = FieldType.DECIMAL,
                     operators = listOf("gte", "lte"),
                 ),
             ),
@@ -110,7 +113,7 @@ class FieldSchemaYamlBridgeTest {
         assertEquals(2, reloaded.fields.size)
 
         val purpose = reloaded.fields.first { it.path == "purpose" }
-        assertEquals(SchemaFieldType.TEXT, purpose.type)
+        assertEquals(FieldType.TEXT, purpose.type)
         assertEquals(listOf("trim", "lowercase"), purpose.normalizers)
         assertEquals(listOf("equals", "contains"), purpose.operators)
     }
@@ -120,8 +123,8 @@ class FieldSchemaYamlBridgeTest {
         val state = SchemaEditorState(
             schemaName = "s",
             fields = listOf(
-                EditableField(path = "", type = SchemaFieldType.TEXT),
-                EditableField(path = "amount", type = SchemaFieldType.DECIMAL),
+                EditableField(path = "", type = FieldType.TEXT),
+                EditableField(path = "amount", type = FieldType.DECIMAL),
             ),
         )
         val yaml = FieldSchemaYamlBridge.toYaml(state)
@@ -133,7 +136,7 @@ class FieldSchemaYamlBridgeTest {
     fun `alias is included in generated yaml when non-blank`() {
         val state = SchemaEditorState(
             fields = listOf(
-                EditableField(path = "purpose", alias = "desc", type = SchemaFieldType.TEXT),
+                EditableField(path = "purpose", alias = "desc", type = FieldType.TEXT),
             ),
         )
         val yaml = FieldSchemaYamlBridge.toYaml(state)
@@ -152,22 +155,22 @@ class FieldSchemaYamlBridgeTest {
             fields = listOf(
                 EditableField(
                     path = "orders",
-                    type = SchemaFieldType.COLLECTION,
+                    type = FieldType.COLLECTION,
                     fields = listOf(
                         EditableField(
                             path = "status",
-                            type = SchemaFieldType.TEXT,
+                            type = FieldType.TEXT,
                             operators = listOf("equals"),
                         ),
                         EditableField(
                             path = "customer",
-                            type = SchemaFieldType.OBJECT,
-                            fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
+                            type = FieldType.OBJECT,
+                            fields = listOf(EditableField(path = "country", type = FieldType.TEXT)),
                         ),
                         EditableField(
                             path = "items",
-                            type = SchemaFieldType.COLLECTION,
-                            fields = listOf(EditableField(path = "price", type = SchemaFieldType.DECIMAL)),
+                            type = FieldType.COLLECTION,
+                            fields = listOf(EditableField(path = "price", type = FieldType.DECIMAL)),
                         ),
                     ),
                 ),
@@ -178,16 +181,16 @@ class FieldSchemaYamlBridgeTest {
         val reloaded = FieldSchemaYamlBridge.fromYaml(yaml)
 
         val orders = reloaded.fields.single()
-        assertEquals(SchemaFieldType.COLLECTION, orders.type)
+        assertEquals(FieldType.COLLECTION, orders.type)
         assertEquals(setOf("status", "customer", "items"), orders.fields.map { it.path }.toSet())
 
         val items = orders.fields.first { it.path == "items" }
-        assertEquals(SchemaFieldType.COLLECTION, items.type)
-        assertEquals(SchemaFieldType.DECIMAL, items.fields.single().type)
+        assertEquals(FieldType.COLLECTION, items.type)
+        assertEquals(FieldType.DECIMAL, items.fields.single().type)
         assertEquals("price", items.fields.single().path)
 
         val customer = orders.fields.first { it.path == "customer" }
-        assertEquals(SchemaFieldType.OBJECT, customer.type)
+        assertEquals(FieldType.OBJECT, customer.type)
         assertEquals("country", customer.fields.single().path)
     }
 
@@ -197,10 +200,10 @@ class FieldSchemaYamlBridgeTest {
             fields = listOf(
                 EditableField(
                     path = "amount",
-                    type = SchemaFieldType.DECIMAL,
+                    type = FieldType.DECIMAL,
                     // A leftover nested list from a type change must not be written out, because the
                     // loader rejects nested fields on a scalar type.
-                    fields = listOf(EditableField(path = "stale", type = SchemaFieldType.TEXT)),
+                    fields = listOf(EditableField(path = "stale", type = FieldType.TEXT)),
                 ),
             ),
         )
@@ -222,7 +225,7 @@ class FieldSchemaYamlBridgeTest {
                 type: date_time
         """.trimIndent()
 
-        assertEquals(SchemaFieldType.DATE_TIME, FieldSchemaYamlBridge.fromYaml(yaml).fields.single().type)
+        assertEquals(FieldType.DATE_TIME, FieldSchemaYamlBridge.fromYaml(yaml).fields.single().type)
     }
 
     @Test
@@ -230,9 +233,9 @@ class FieldSchemaYamlBridgeTest {
         val state = SchemaEditorState(
             schemaName = "formats",
             fields = listOf(
-                EditableField(path = "dueDate", type = SchemaFieldType.DATE, format = "dd.MM.yyyy"),
-                EditableField(path = "eventAt", type = SchemaFieldType.DATE_TIME, format = "dd.MM.yyyy HH:mm"),
-                EditableField(path = "createdAt", type = SchemaFieldType.DATE),
+                EditableField(path = "dueDate", type = FieldType.DATE, format = "dd.MM.yyyy"),
+                EditableField(path = "eventAt", type = FieldType.DATE_TIME, format = "dd.MM.yyyy HH:mm"),
+                EditableField(path = "createdAt", type = FieldType.DATE),
             ),
         )
 
@@ -249,7 +252,7 @@ class FieldSchemaYamlBridgeTest {
             fields = listOf(
                 // A leftover format from a type change must not be written out, because the loader
                 // rejects `format` on anything but a date type.
-                EditableField(path = "purpose", type = SchemaFieldType.TEXT, format = "dd.MM.yyyy"),
+                EditableField(path = "purpose", type = FieldType.TEXT, format = "dd.MM.yyyy"),
             ),
         )
 

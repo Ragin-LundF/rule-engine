@@ -1,0 +1,70 @@
+schema: warehouse-shipments-v1
+
+# Input contract of a parcel carrier's delivery assessment.
+#
+# The schema mirrors the shape of the incoming JSON: one `shipment` record with a nested `customer`,
+# a list of `parcels` and a list of scan `checkpoints`. No flattening and no adapter object are needed —
+# a nested path such as `shipment.customer.tier` is usable in a plain condition and inside an aggregate.
+
+fields:
+
+  # ── A single nested record: navigated with dotted paths ─────────────────────
+  shipment:
+    type: object
+    fields:
+      reference:
+        type: text
+      service:
+        type: text
+        normalizers:
+          - trim
+          - uppercase
+      transitDays:
+        type: integer
+      declaredValue:
+        type: decimal
+      pickedUpAt:
+        type: date
+        format: dd.MM.yyyy
+      customer:
+        type: object
+        fields:
+          tier:
+            type: text
+            normalizers:
+              - trim
+              - lowercase
+          country:
+            type: text
+            normalizers:
+              - trim
+              - uppercase
+
+  # ── A list of records: aggregated and filtered ──────────────────────────────
+  parcels:
+    type: collection
+    fields:
+      code:
+        type: text
+      weightKg:
+        type: decimal
+      category:
+        type: text
+      damaged:
+        type: boolean
+      # An object inside a collection: usable inside a filter, e.g. parcels[origin.hub == "HAM"]
+      origin:
+        type: object
+        fields:
+          hub:
+            type: text
+
+  checkpoints:
+    type: collection
+    fields:
+      site:
+        type: text
+      delayMinutes:
+        type: integer
+      scanned:
+        type: boolean

@@ -18,8 +18,16 @@ def configurePublication = { publicationComponent ->
                 // Add Dokka-generated Javadoc jar (lazy reference)
                 artifact(project.provider { tasks.named("dokkaGenerateHtmlJar").get() })
                 pom {
-                    name = project.ext.has("publishName") ? project.ext.publishName : project.name
-                    description = project.ext.has("publishDescription") ? project.ext.publishDescription : "Cucumber BDD library for simpler e2e tests"
+                    // Deferred: `pluginManager.withPlugin('java')` fires while the subproject's own
+                    // build.gradle is still being evaluated, so `ext.publishName` is not set yet.
+                    name.set(project.provider {
+                        project.ext.has("publishName") ? project.ext.publishName : project.name
+                    })
+                    description.set(project.provider {
+                        project.ext.has("publishDescription")
+                                ? project.ext.publishDescription
+                                : "Rule engine module: ${project.name}"
+                    })
                     url = "https://github.com/Ragin-LundF/rule-engine"
                     scm {
                         connection = "scm:git:git@github.com:Ragin-LundF/rule-engine.git"

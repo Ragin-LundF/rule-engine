@@ -33,9 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isNormalizable
+import ruleengine.core.domain.dto.field.isStructure
+import ruleengine.core.domain.dto.field.isTemporal
 import ui.BgElevated
 import ui.BgSurface
 import ui.BorderColor
@@ -43,7 +45,10 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.builder.components.DropdownSelector
+import ui.builder.components.dropdown.DropdownSelector
+import ui.components.HeaderCell
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 
 /**
  * Renders a composable table for editing a schema, displaying fields with their respective
@@ -187,18 +192,6 @@ private fun AddFieldDropdown(
     }
 }
 
-@Suppress("FunctionNaming")
-@Composable
-private fun HeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        modifier = modifier,
-        style = MaterialTheme.typography.caption,
-        fontWeight = FontWeight.SemiBold,
-        color = TextSecondary,
-        fontSize = 11.sp,
-    )
-}
 
 @Suppress("FunctionNaming", "LongMethod")
 @Composable
@@ -365,8 +358,8 @@ private fun FieldRow(
 }
 
 /** Hint shown in the empty format box: a pattern example, plus what leaving it empty means. */
-private fun formatPlaceholder(type: SchemaFieldType): String {
-    return if (type == SchemaFieldType.DATE_TIME) {
+private fun formatPlaceholder(type: FieldType): String {
+    return if (type == FieldType.DATE_TIME) {
         "dd.MM.yyyy HH:mm — optional, ISO if empty"
     } else {
         "dd.MM.yyyy — optional, ISO if empty"
@@ -444,17 +437,17 @@ private val NESTED_INDENT = 16.dp
 @Suppress("FunctionNaming")
 @Composable
 private fun TypeDropdown(
-    selected: SchemaFieldType,
-    onSelect: (SchemaFieldType) -> Unit,
+    selected: FieldType,
+    onSelect: (FieldType) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val options = SchemaFieldType.entries.map { it.displayName }
+    val options = FieldType.entries.map { it.yamlValue }
     DropdownSelector(
-        selected = selected.displayName,
+        selected = selected.yamlValue,
         options = options,
-        onSelected = { displayName ->
-            SchemaFieldType.entries
-                .firstOrNull { it.displayName == displayName }
+        onSelected = { label ->
+            FieldType.entries
+                .firstOrNull { it.yamlValue == label }
                 ?.let { onSelect(it) }
         },
         modifier = modifier,

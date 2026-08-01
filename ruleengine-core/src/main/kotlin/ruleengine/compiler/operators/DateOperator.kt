@@ -1,17 +1,18 @@
 package ruleengine.compiler.operators
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.TemporalFormat
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.DateBetweenExpression
-import ruleengine.evaluator.compiled.DateComparisonExpression
-import ruleengine.evaluator.compiled.DateComparisonOperator
+import ruleengine.evaluator.compiled.temporal.DateBetweenExpression
+import ruleengine.evaluator.compiled.temporal.DateComparisonExpression
+import ruleengine.evaluator.compiled.temporal.DateComparisonOperator
 import ruleengine.evaluator.context.dto.PreparedDate
 import ruleengine.evaluator.context.dto.PreparedDateTime
 import ruleengine.evaluator.context.dto.PreparedTemporal
@@ -25,11 +26,18 @@ import ruleengine.evaluator.context.dto.PreparedTemporal
  */
 object DateOperator {
 
-    fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId, def: FieldDefinition): CompiledExpression {
-        return if (cond.operator.lowercase() == "between") {
+    /** [op] is the canonical operator name; aliases are already resolved by the caller. */
+    fun compile(
+        ruleId: String?,
+        cond: ConditionAst,
+        fieldId: FieldId,
+        def: FieldDefinition,
+        op: String,
+    ): CompiledExpression {
+        return if (op == OperatorNames.BETWEEN) {
             compileBetween(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def)
         } else {
-            compileComparison(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def)
+            compileComparison(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def, op = op)
         }
     }
 
@@ -67,14 +75,15 @@ object DateOperator {
         ruleId: String?,
         cond: ConditionAst,
         fieldId: FieldId,
-        def: FieldDefinition
+        def: FieldDefinition,
+        op: String,
     ): CompiledExpression {
         val literal = cond.value as? StringLiteral ?: throw CompilationException(
             ruleId = ruleId,
             details = "Expected a quoted literal in ${expectedFormatText(def = def)} " +
                 "for ${typeName(def = def)} field '${cond.field}'"
         )
-        val operator = OPERATORS[cond.operator.lowercase()] ?: throw CompilationException(
+        val operator = OPERATORS[op] ?: throw CompilationException(
             ruleId = ruleId,
             details = "Unsupported operator '${cond.operator}' for ${typeName(def = def)} field '${cond.field}'"
         )
@@ -91,19 +100,13 @@ object DateOperator {
         )
     }
 
+    /** Keyed by canonical name only — the caller normalises every alias before it gets here. */
     private val OPERATORS: Map<String, DateComparisonOperator> = mapOf(
-        "equals" to DateComparisonOperator.EQ,
-        "==" to DateComparisonOperator.EQ,
-        "=" to DateComparisonOperator.EQ,
-        "eq" to DateComparisonOperator.EQ,
-        "gt" to DateComparisonOperator.GT,
-        ">" to DateComparisonOperator.GT,
-        "gte" to DateComparisonOperator.GTE,
-        ">=" to DateComparisonOperator.GTE,
-        "lt" to DateComparisonOperator.LT,
-        "<" to DateComparisonOperator.LT,
-        "lte" to DateComparisonOperator.LTE,
-        "<=" to DateComparisonOperator.LTE,
+        OperatorNames.EQUALS to DateComparisonOperator.EQ,
+        OperatorNames.GT to DateComparisonOperator.GT,
+        OperatorNames.GTE to DateComparisonOperator.GTE,
+        OperatorNames.LT to DateComparisonOperator.LT,
+        OperatorNames.LTE to DateComparisonOperator.LTE,
     )
 
     /** Reads a literal in the field's own format, or reports where the bad value came from. */

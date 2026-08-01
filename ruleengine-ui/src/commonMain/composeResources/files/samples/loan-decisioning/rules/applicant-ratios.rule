@@ -1,0 +1,37 @@
+# 1. Affordability basis — the figures every rule below is written in.
+#
+# A `set` clause publishes a value under a name that later rules read as `$name`. Debt-to-income,
+# disposable income and loan-to-value are what a credit policy is actually phrased in, and none of
+# them arrive in the input: they are derived. Deriving them here, once, is what keeps the policy
+# rules readable and keeps a change to a definition — say, counting the new instalment in the
+# ratio — to a single place.
+#
+# Two things to know about the scope:
+#   * a variable only exists if the rule that sets it matched, and reading one that was never set
+#     makes the reading condition false rather than failing the run. That is exactly what
+#     "collateral-basis" relies on: an unsecured application never publishes $loanToValueRatio, so
+#     the loan-to-value rules simply do not fire;
+#   * only rules *after* this one can read it, where "after" follows the manifest's rule file order.
+#     That is why this file is listed first in manifest.yaml.
+#
+# Schema: schema.yaml
+
+rule "affordability-basis" {
+  description "Derives the applicant's existing debt load, debt-to-income ratio and remaining disposable income."
+  when
+    monthlyNetIncome > 0
+
+  then
+    set monthlyDebtLoad = sum(existingLoans.monthlyPayment)
+    set debtToIncomeRatio = ($monthlyDebtLoad + requestedMonthlyPayment) / monthlyNetIncome
+    set disposableIncome = monthlyNetIncome - $monthlyDebtLoad - requestedMonthlyPayment
+}
+
+rule "collateral-basis" {
+  description "Derives the loan-to-value ratio of a secured application; an unsecured one never sets it."
+  when
+    propertyValue > 0
+
+  then
+    set loanToValueRatio = requestedAmount / propertyValue
+}

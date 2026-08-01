@@ -1,4 +1,5 @@
 rule "high-risk-country" {
+  description "A large payment to a high-risk country is held for manual review."
   when
     country equals "ng" and amount >= 10000
 

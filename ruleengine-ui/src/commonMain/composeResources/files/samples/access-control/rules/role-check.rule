@@ -1,4 +1,5 @@
 rule "admin-full-access" {
+  description "Administrators have unrestricted access and every action is logged."
   when
     role equals "admin"
 
@@ -8,6 +9,7 @@ rule "admin-full-access" {
 }
 
 rule "readonly-restriction" {
+  description "A viewer may not perform any write operation."
   when
     role equals "viewer"
     and method in ["POST", "PUT", "PATCH", "DELETE"]
@@ -18,6 +20,7 @@ rule "readonly-restriction" {
 }
 
 rule "service-account-api" {
+  description "Service accounts may call the internal API at a high rate limit."
   when
     role equals "service-account"
     and path startsWith "/api/internal/"

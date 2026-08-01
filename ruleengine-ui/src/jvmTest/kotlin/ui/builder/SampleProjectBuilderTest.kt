@@ -2,9 +2,18 @@ package ui.builder
 
 import ruleengine.compiler.Validator
 import ruleengine.core.errors.Severity
+import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.NotAst
+import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.parser.Parser
+import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -25,48 +34,87 @@ class SampleProjectBuilderTest {
 
     private fun sample(name: String): Path = samplesDir.resolve(name)
 
-    private fun ruleFiles(sample: Path): List<Path> =
-        Files.list(sample.resolve("rules")).use { stream ->
-            stream.filter { it.toString().endsWith(suffix = ".rule") }.sorted().toList()
-        }
+    /**
+     * The sample's rule files in manifest order, which is the order the engine evaluates them in.
+     *
+     * Alphabetical order would do for rules that are independent of each other, but a rule reading a
+     * variable an earlier rule publishes is only valid in the declared order — so validating a
+     * differently-ordered concatenation would report forward references the shipped sample does not
+     * have.
+     */
+    private fun ruleFiles(sample: Path): List<Path> {
+        val manifest = ManifestLoader.load(path = sample.resolve("manifest.yaml"))
 
+        return manifest.entries.flatMap { entry -> entry.rules }.map { relativePath -> sample.resolve(relativePath) }
+    }
+
+    /**
+     * Rewrites word-form operators to the symbols the Builder's dropdowns offer, so `hour lt 8` and
+     * `hour < 8` compare equal. That normalisation is deliberate — see
+     * [RuleAstToBuilderMapper.normalizeOperator] — and is the one difference a faithful round-trip is
+     * allowed to introduce. Everything else must survive untouched.
+     */
+    private fun canonical(expr: ExpressionAst): ExpressionAst = when (expr) {
+        is ConditionAst -> expr.copy(operator = RuleAstToBuilderMapper.normalizeOperator(expr.operator))
+        is AndAst -> AndAst(children = expr.children.map { canonical(expr = it) })
+        is OrAst -> OrAst(children = expr.children.map { canonical(expr = it) })
+        is NotAst -> NotAst(child = canonical(expr = expr.child))
+        is ComparisonExpressionAst -> expr
+    }
+
+    /**
+     * Every sample, not just one: a rule that validates but locks the Builder — as
+     * `warehouse-shipments`' `count(parcels[origin.hub == "HAM"])` did — is only caught by running
+     * both checks over all of them.
+     */
     @Test
-    fun `financial transactions sample validates and is fully editable in the builder`() {
-        val sample = sample(name = "financial-transactions")
-        val schema = FieldSchemaLoader.load(path = sample.resolve("schema.yaml"))
-        val actions = ActionSchemaLoader.load(path = sample.resolve("actions.yaml"))
+    fun `every sample validates and is fully editable in the builder`() {
+        Files.list(samplesDir).use { stream ->
+            stream.filter { Files.isDirectory(it) }.sorted().toList()
+        }.forEach { sample ->
+            val name = sample.fileName
+            val schema = FieldSchemaLoader.load(path = sample.resolve("schema.yaml"))
+            val actions = ActionSchemaLoader.load(path = sample.resolve("actions.yaml"))
 
-        val dsl = ruleFiles(sample = sample).joinToString(separator = "\n\n") { Files.readString(it) }
-        val asts = Parser(input = dsl).parseRules()
-        assertTrue(actual = asts.isNotEmpty(), message = "Sample should contain rules")
+            val dsl = ruleFiles(sample = sample).joinToString(separator = "\n\n") { Files.readString(it) }
+            val asts = Parser(input = dsl).parseRules()
+            assertTrue(actual = asts.isNotEmpty(), message = "Sample '$name' should contain rules")
 
-        val errors = Validator.validate(asts = asts, schema = schema, actions = actions)
-            .diagnostics.filter { it.severity == Severity.ERROR }
-        assertTrue(
-            actual = errors.isEmpty(),
-            message = "Sample rules must validate, got: ${errors.map { it.message }}",
-        )
-
-        asts.forEach { ast ->
-            val builderRule = RuleAstToBuilderMapper.map(rule = ast)
+            val errors = Validator.validate(asts = asts, schema = schema, actions = actions)
+                .diagnostics.filter { it.severity == Severity.ERROR }
             assertTrue(
-                actual = builderRule is BuilderRule.Supported,
-                message = "Rule '${ast.id}' should be editable in Builder mode, but was locked: " +
-                    (builderRule as? BuilderRule.Unsupported)?.reason.orEmpty(),
+                actual = errors.isEmpty(),
+                message = "Sample '$name' has validation errors: ${errors.map { it.message }}",
             )
 
-            // Round-trip the rule and confirm the condition still means the same thing.
-            val state = BuilderEditorState.fromBuilderRule(rule = builderRule)
-            val generated = assertNotNull(
-                actual = BuilderToRuleDsl.generate(state = state),
-                message = "Rule '${ast.id}' produced no DSL",
-            )
-            val reparsed = Parser(input = generated).parseRules().single()
-            assertEquals(
-                expected = ast.condition,
-                actual = reparsed.condition,
-                message = "Round-trip changed rule '${ast.id}'.\nGenerated:\n$generated",
-            )
+            asts.forEach { ast ->
+                val builderRule = RuleAstToBuilderMapper.map(rule = ast)
+                assertTrue(
+                    actual = builderRule is BuilderRule.Supported,
+                    message = "Rule '${ast.id}' of '$name' should be editable in Builder mode, " +
+                        "but was locked: " + (builderRule as? BuilderRule.Unsupported)?.reason.orEmpty(),
+                )
+
+                // Round-trip the rule and confirm the condition still means the same thing.
+                val state = BuilderEditorState.fromBuilderRule(rule = builderRule)
+                val generated = assertNotNull(
+                    actual = BuilderToRuleDsl.generate(state = state),
+                    message = "Rule '${ast.id}' of '$name' produced no DSL",
+                )
+                val reparsed = Parser(input = generated).parseRules().single()
+                assertEquals(
+                    expected = canonical(expr = ast.condition),
+                    actual = canonical(expr = reparsed.condition),
+                    message = "Round-trip changed rule '${ast.id}' of '$name'.\nGenerated:\n$generated",
+                )
+                // The generated text replaces the rule in the editor, so anything the Builder does
+                // not carry is deleted from the file — not merely absent from the Builder view.
+                assertEquals(
+                    expected = ast.description,
+                    actual = reparsed.description,
+                    message = "Round-trip dropped the description of rule '${ast.id}' of '$name'.",
+                )
+            }
         }
     }
 
@@ -91,27 +139,5 @@ class SampleProjectBuilderTest {
             expected = listOf("iban", "country"),
             actual = counterparty.nestedFields.map { it.id },
         )
-    }
-
-    @Test
-    fun `all samples validate`() {
-        Files.list(samplesDir).use { stream ->
-            stream.filter { Files.isDirectory(it) }.sorted().toList()
-        }.forEach { sample ->
-            val schema = FieldSchemaLoader.load(path = sample.resolve("schema.yaml"))
-            val actions = ActionSchemaLoader.load(path = sample.resolve("actions.yaml"))
-            val dsl = ruleFiles(sample = sample).joinToString(separator = "\n\n") { Files.readString(it) }
-
-            val errors = Validator.validate(
-                asts = Parser(input = dsl).parseRules(),
-                schema = schema,
-                actions = actions,
-            ).diagnostics.filter { it.severity == Severity.ERROR }
-
-            assertTrue(
-                actual = errors.isEmpty(),
-                message = "Sample '${sample.fileName}' has validation errors: ${errors.map { it.message }}",
-            )
-        }
     }
 }

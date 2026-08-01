@@ -2,6 +2,7 @@ package ui.editor.rules.sections
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import ruleengine.core.errors.Severity
+import ruleengine.core.errors.ValidationDiagnostic
 import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentRed
@@ -33,9 +35,10 @@ import ui.TextSecondary
 import ui.components.StatusBadge
 import ui.diagnostics.DiagnosticMapper
 import ui.diagnostics.DiagnosticsPanel
-import ui.diagnostics.QuickFix
 import ui.diagnostics.QuickFixes
+import ui.diagnostics.model.QuickFix
 import ui.editor.rules.RuleEditorState
+import ui.util.Plurals
 
 /** Diagnostics section: displays validation errors and warnings below the editor panels. */
 @Suppress("FunctionNaming", "LongMethod")
@@ -44,16 +47,13 @@ fun DiagnosticsSection(state: RuleEditorState) {
     val diagnosticsList by state.diagnosticsList
     val diagnosticsText by state.diagnosticsText
     var ruleValue by state.ruleValue
+    var expanded by state.diagnosticsExpanded
 
     // Map raw ValidationDiagnostic list to enriched UiDiagnosticWithFix list
     val enriched = remember(diagnosticsList) {
         diagnosticsList.map { d ->
             DiagnosticMapper.map(
-                severity = when (d.severity) {
-                    Severity.ERROR -> "error"
-                    Severity.WARNING -> "warning"
-                    else -> "info"
-                },
+                severity = d.severity,
                 message = d.message,
                 suggestion = d.suggestion,
                 line = d.line,
@@ -76,36 +76,15 @@ fun DiagnosticsSection(state: RuleEditorState) {
             )
             .padding(all = 14.dp),
     ) {
-        // Header row
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        ) {
-            Text(
-                text = "Diagnostics",
-                style = MaterialTheme.typography.subtitle1,
-                color = TextPrimary,
-            )
-            Spacer(modifier = Modifier.weight(weight = 1f))
-            if (diagnosticsList.isNotEmpty()) {
-                val errors = diagnosticsList.count { it.severity == Severity.ERROR }
-                val warnings = diagnosticsList.count { it.severity == Severity.WARNING }
-                if (errors > 0) {
-                    StatusBadge(
-                        label = "$errors error${if (errors > 1) "s" else ""}",
-                        color = AccentRed,
-                    )
-                }
-                if (warnings > 0) {
-                    StatusBadge(
-                        label = "$warnings warning${if (warnings > 1) "s" else ""}",
-                        color = AccentOrange,
-                    )
-                }
-            }
-            if (diagnosticsList.isEmpty() && diagnosticsText.isNotBlank()) {
-                StatusBadge(label = "No issues", color = AccentGreen)
-            }
+        DiagnosticsHeader(
+            expanded = expanded,
+            diagnostics = diagnosticsList,
+            hasValidationText = diagnosticsText.isNotBlank(),
+            onToggle = { expanded = !expanded },
+        )
+
+        if (!expanded) {
+            return@Column
         }
 
         Spacer(modifier = Modifier.height(height = 10.dp))
@@ -146,5 +125,53 @@ fun DiagnosticsSection(state: RuleEditorState) {
                 }
             },
         )
+    }
+}
+
+/**
+ * The collapsible header: a disclosure arrow, the title, and a count badge per severity.
+ *
+ * The whole row toggles rather than just the arrow, so the panel can hand its height back to the
+ * centre panel with one click anywhere along it.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun DiagnosticsHeader(
+    expanded: Boolean,
+    diagnostics: List<ValidationDiagnostic>,
+    hasValidationText: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggle),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+    ) {
+        Text(
+            text = if (expanded) "▼" else "▶",
+            style = MaterialTheme.typography.caption,
+            color = TextSecondary,
+        )
+        Text(
+            text = "Diagnostics",
+            style = MaterialTheme.typography.subtitle1,
+            color = TextPrimary,
+        )
+        Spacer(modifier = Modifier.weight(weight = 1f))
+
+        val errors = diagnostics.count { it.severity == Severity.ERROR }
+        val warnings = diagnostics.count { it.severity == Severity.WARNING }
+        if (errors > 0) {
+            StatusBadge(label = "$errors error${Plurals.suffix(count = errors)}", color = AccentRed)
+        }
+        if (warnings > 0) {
+            StatusBadge(label = "$warnings warning${Plurals.suffix(count = warnings)}", color = AccentOrange)
+        }
+        // Only after a validation has actually run: an untouched editor has no diagnostics either.
+        if (diagnostics.isEmpty() && hasValidationText) {
+            StatusBadge(label = "No issues", color = AccentGreen)
+        }
     }
 }

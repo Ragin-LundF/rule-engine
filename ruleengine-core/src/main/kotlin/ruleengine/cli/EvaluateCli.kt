@@ -4,13 +4,13 @@ import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
+import ruleengine.core.io.FileInputSupport
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
-import ruleengine.core.io.FileInputSupport
 import ruleengine.jackson.JacksonUtil
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.FieldSchemaLoader
@@ -30,6 +30,7 @@ import kotlin.system.exitProcess
  *     --schema <schema.yaml> --rules <rules-dir> --input-file <input.json> [--trace]
  *       [--format json|pretty-json]
  */
+@Suppress("TooManyFunctions")
 object EvaluateCli {
     @JvmStatic
     fun main(args: Array<String>) {
@@ -51,7 +52,7 @@ object EvaluateCli {
     }
 
     private fun executeCli(args: Array<String>, out: Appendable): Int {
-        val parsedArguments = parseArguments(args = args)
+        val parsedArguments = CliArguments.parse(args = args)
         val cliOptions = readCliOptions(parsedArguments = parsedArguments, out = out) ?: return 2
 
         val outcome = loadEngine(cliOptions = cliOptions, out = out)
@@ -72,25 +73,6 @@ object EvaluateCli {
             out = out,
         )
         return 0
-    }
-
-    private fun parseArguments(args: Array<String>): Map<String, String?> {
-        // simple args parser that supports flags (no value) and key value pairs
-        val argumentsByFlag = mutableMapOf<String, String?>()
-        var index = 0
-        while (index < args.size) {
-            val flagName = args[index]
-            val flagValue = if (index + 1 < args.size && !args[index + 1].startsWith(prefix = "--")) {
-                args[index + 1]
-            } else {
-                null
-            }
-
-            argumentsByFlag[flagName] = flagValue
-            index += if (flagValue != null) 2 else 1
-        }
-
-        return argumentsByFlag
     }
 
     private fun readCliOptions(parsedArguments: Map<String, String?>, out: Appendable): CliOptions? {

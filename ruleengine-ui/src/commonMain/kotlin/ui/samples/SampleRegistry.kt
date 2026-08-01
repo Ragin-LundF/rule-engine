@@ -1,12 +1,16 @@
 package ui.samples
 
+import ui.samples.model.SampleCategory
+import ui.samples.model.SampleDescriptor
+
 object SampleRegistry {
 
     val all: List<SampleDescriptor> = listOf(
         SampleDescriptor(
             id = "financial-transactions",
             name = "Financial Transactions",
-            description = "Classify bank payments by purpose, detect fraud signals, and identify VIP customers based on amount and tags.",
+            description = "Classify bank payments by purpose, detect fraud signals, " +
+                    "and identify VIP customers based on amount and tags.",
             category = SampleCategory.FINANCE,
             schemaResPath = "files/samples/financial-transactions/schema.yaml",
             actionsResPath = "files/samples/financial-transactions/actions.yaml",
@@ -17,9 +21,25 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "loan-decisioning",
+            name = "Loan Decisioning",
+            description = "Underwrite a retail loan application: rule variables derive debt-to-income, " +
+                "disposable income and loan-to-value once, and the policy and pricing rules read them back.",
+            category = SampleCategory.FINANCE,
+            schemaResPath = "files/samples/loan-decisioning/schema.yaml",
+            actionsResPath = "files/samples/loan-decisioning/actions.yaml",
+            ruleResPaths = listOf(
+                // First: the rules that follow are written in the ratios it publishes.
+                "files/samples/loan-decisioning/rules/applicant-ratios.rule",
+                "files/samples/loan-decisioning/rules/underwriting-decision.rule",
+                "files/samples/loan-decisioning/rules/risk-pricing.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "log-filter",
             name = "Log Filter",
-            description = "Route, suppress, and escalate application log events by severity level, response time, and originating service.",
+            description = "Route, suppress, and escalate application log events by severity level, " +
+                    "response time, and originating service.",
             category = SampleCategory.LOGGING,
             schemaResPath = "files/samples/log-filter/schema.yaml",
             actionsResPath = "files/samples/log-filter/actions.yaml",
@@ -32,7 +52,8 @@ object SampleRegistry {
         SampleDescriptor(
             id = "product-recommendation",
             name = "Product Recommendation",
-            description = "Boost, badge, and discount products for recommendation engines based on category, price, rating, and inventory.",
+            description = "Boost, badge, and discount products for recommendation engines " +
+                    "based on category, price, rating, and inventory.",
             category = SampleCategory.ECOMMERCE,
             schemaResPath = "files/samples/product-recommendation/schema.yaml",
             actionsResPath = "files/samples/product-recommendation/actions.yaml",
@@ -43,9 +64,26 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "warehouse-shipments",
+            name = "Warehouse Shipments",
+            description = "Assess parcel deliveries from nested shipment data: dotted paths into the " +
+                "shipment record, plus aggregates and filters over the parcel and checkpoint collections.",
+            category = SampleCategory.LOGISTICS,
+            schemaResPath = "files/samples/warehouse-shipments/schema.yaml",
+            actionsResPath = "files/samples/warehouse-shipments/actions.yaml",
+            ruleResPaths = listOf(
+                // First: the rules that follow read the variables it publishes.
+                "files/samples/warehouse-shipments/rules/shipment-totals.rule",
+                "files/samples/warehouse-shipments/rules/delivery-quality.rule",
+                "files/samples/warehouse-shipments/rules/parcel-condition.rule",
+                "files/samples/warehouse-shipments/rules/route-risk.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "access-control",
             name = "Access Control",
-            description = "Enforce role-based permissions, IP allowlist/blocklist rules, and time-window restrictions on API routes.",
+            description = "Enforce role-based permissions, IP allowlist/blocklist rules, " +
+                    "and time-window restrictions on API routes.",
             category = SampleCategory.SECURITY,
             schemaResPath = "files/samples/access-control/schema.yaml",
             actionsResPath = "files/samples/access-control/actions.yaml",

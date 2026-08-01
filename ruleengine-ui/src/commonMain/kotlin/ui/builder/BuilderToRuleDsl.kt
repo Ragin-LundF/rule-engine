@@ -1,5 +1,13 @@
 package ui.builder
 
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.mutable.MutableBuilderAction
+import ui.builder.model.mutable.MutableBuilderComparison
+import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.mutable.MutableBuilderVariable
+import ui.builder.model.mutable.MutableConditionNode
+
+
 /**
  * Generates valid rule DSL text from a [BuilderEditorState].
  *
@@ -10,6 +18,7 @@ package ui.builder
  * Output format mirrors the rule DSL spec:
  * ```
  * rule "id" {
+ *   description "what the rule is for"
  *   when
  *     field operator value
  *     and field operator value
@@ -30,6 +39,14 @@ object BuilderToRuleDsl {
 
         val sb = StringBuilder()
         sb.appendLine("rule \"${state.ruleId}\" {")
+
+        // Emitted only when set: the clause is optional, and writing `description ""` for every
+        // rule the user never described would add noise to files and defeat the validator warning.
+        val description = state.description.trim()
+        if (description.isNotEmpty()) {
+            sb.appendLine("  description \"${escapeStringLiteral(text = description)}\"")
+        }
+
         sb.appendLine("  when")
 
         renderNodes(
@@ -39,12 +56,33 @@ object BuilderToRuleDsl {
         )
 
         sb.appendLine("  then")
+        // Assignments first: the engine applies them before it resolves the actions, so an action
+        // reading `$name` must be written after the `set` that publishes it.
+        state.variables.forEach { variable ->
+            sb.appendLine("    ${renderVariable(variable)}")
+        }
         state.actions.forEach { action ->
             sb.appendLine("    ${renderAction(action)}")
         }
         sb.appendLine("}")
 
         return sb.toString()
+    }
+
+    /**
+     * Makes [text] safe to place inside a double-quoted DSL string literal.
+     *
+     * The lexer treats a backslash as a generic escape (`\X` yields `X`), so both the backslash and
+     * the quote have to be escaped or a description containing either would terminate the literal
+     * early and corrupt the rule file. Line breaks are collapsed rather than escaped: a literal may
+     * span lines, but a multi-line clause makes the surrounding rule unreadable, and a description
+     * is one sentence by definition.
+     */
+    private fun escapeStringLiteral(text: String): String {
+        return text
+            .replace(oldValue = "\\", newValue = "\\\\")
+            .replace(oldValue = "\"", newValue = "\\\"")
+            .replace(regex = Regex(pattern = "\\s*\\R\\s*"), replacement = " ")
     }
 
     // ── recursive node rendering ──────────────────────────────────────────────
@@ -105,6 +143,9 @@ object BuilderToRuleDsl {
     }
 
     private fun ignoreCaseSuffix(ignoreCase: Boolean): String = if (ignoreCase) " ignoreCase" else ""
+
+    private fun renderVariable(variable: MutableBuilderVariable): String =
+        "set ${variable.name} = ${OperandText.toDsl(operand = variable.expression)}"
 
     private fun renderAction(action: MutableBuilderAction): String {
         val args = action.arguments.joinToString(" ") { quoteIfNeeded(it) }

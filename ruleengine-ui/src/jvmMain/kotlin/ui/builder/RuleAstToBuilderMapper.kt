@@ -1,29 +1,25 @@
 package ui.builder
 
+import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.core.domain.OperatorNames
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticOperatorAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
 import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.ValueExpressionRenderer
+import ui.builder.model.BuilderAction
+import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderRule
+import ui.builder.model.BuilderVariable
 
 /**
  * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
@@ -59,10 +55,21 @@ object RuleAstToBuilderMapper {
                 reason = unsupportedReason(expr = rule.condition),
             )
 
+        val variables = rule.assignments.map { assignment ->
+            val expression = mapValueExpression(expr = assignment.expression)
+                ?: return BuilderRule.Unsupported(
+                    id = rule.id,
+                    reason = "Rule assigns '${assignment.name}' from an expression the Builder cannot edit yet.",
+                )
+            BuilderVariable(id = nextId(prefix = "var"), name = assignment.name, expression = expression)
+        }
+
         return BuilderRule.Supported(
             id = rule.id,
+            description = rule.description.orEmpty(),
             conditionNodes = conditionNodes,
             actions = rule.actions.map { mapAction(action = it) },
+            variables = variables,
         )
     }
 
@@ -124,14 +131,12 @@ object RuleAstToBuilderMapper {
     }
 
     private fun negate(node: BuilderConditionNode): BuilderConditionNode = when (node) {
-        is BuilderCondition -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Condition -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Comparison -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Group -> node.copy(negated = !node.negated)
     }
 
     private fun withJoin(node: BuilderConditionNode, join: String): BuilderConditionNode = when (node) {
-        is BuilderCondition -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Condition -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Comparison -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Group -> node.copy(joinToPrevious = join)
@@ -141,7 +146,7 @@ object RuleAstToBuilderMapper {
      * Collects children of an And/Or container.
      *
      * Single-condition children are inlined. Multi-node children (from nested
-     * containers with a different join type) are wrapped in a [ui.builder.BuilderConditionNode.Group] so that
+     * containers with a different join type) are wrapped in a [ui.builder.model.BuilderConditionNode.Group] so that
      * parentheses are preserved in the DSL round-trip.
      */
     private fun collectGroupedChildren(
@@ -200,7 +205,7 @@ object RuleAstToBuilderMapper {
         return BuilderConditionNode.Comparison(
             nodeId = nextId(prefix = "cmp"),
             left = left,
-            operator = comparisonSymbol(operator = comparison.operator),
+            operator = ValueExpressionRenderer.symbol(operator = comparison.operator),
             right = right,
             ignoreCase = comparison.ignoreCase,
             joinToPrevious = joinToPrevious,
@@ -208,143 +213,6 @@ object RuleAstToBuilderMapper {
     }
 
     // ── value expressions ─────────────────────────────────────────────────────
-
-    /** Maps one side of a comparison. Returns null for shapes the Builder cannot represent. */
-    private fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = when (expr) {
-        is LiteralValueAst -> when (val literal = expr.literal) {
-            is StringLiteral -> BuilderOperand.Literal(text = literal.value, numeric = false)
-            is NumberLiteral -> BuilderOperand.Literal(text = literal.value, numeric = true)
-            else -> null
-        }
-
-        is FieldAccessAst -> mapFieldAccess(expr = expr)
-
-        is FunctionCallValueAst -> {
-            val argument = expr.arguments.singleOrNull() as? FieldAccessAst
-            val path = argument?.let { mapPath(segments = it.path) }
-            if (path == null) null else BuilderOperand.Aggregate(function = expr.name.lowercase(), path = path)
-        }
-
-        is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
-    }
-
-    /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
-    private fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? =
-        mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
-
-    /**
-     * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step and
-     * each following [FilterSegmentAst] attaches to the step it filters.
-     */
-    private fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
-        val steps = mutableListOf<BuilderPathStep>()
-        for (segment in segments) {
-            when (segment) {
-                is FieldSegmentAst -> steps.add(BuilderPathStep(name = segment.name))
-                is FilterSegmentAst -> {
-                    val target = steps.lastOrNull() ?: return null
-                    val filter = mapFilter(expr = segment.expression) ?: return null
-                    steps[steps.lastIndex] = target.copy(filters = target.filters + filter)
-                }
-            }
-        }
-        return steps.ifEmpty { null }
-    }
-
-    /** Maps a filter expression. Only single comparisons against a literal are representable. */
-    private fun mapFilter(expr: ExpressionAst): BuilderFilter? = when (expr) {
-        is ComparisonExpressionAst -> {
-            val field = (expr.left as? FieldAccessAst)?.let { access ->
-                (access.path.singleOrNull() as? FieldSegmentAst)?.name
-            }
-            val value = (expr.right as? LiteralValueAst)?.literal?.let { literalText(lit = it) }
-            if (field == null || value == null) {
-                null
-            } else {
-                BuilderFilter(
-                    field = field,
-                    operator = comparisonSymbol(operator = expr.operator),
-                    value = value,
-                )
-            }
-        }
-
-        is ConditionAst -> literalText(lit = expr.value)?.let { value ->
-            BuilderFilter(
-                field = expr.field,
-                operator = normalizeOperator(operator = expr.operator),
-                value = value,
-            )
-        }
-
-        else -> null
-    }
-
-    /**
-     * Flattens an arithmetic tree into a term list. A sub-expression that binds differently from its
-     * parent becomes a nested parenthesized [BuilderOperand.Calc] term, which is what preserves
-     * `(a + b) * c` through the round-trip.
-     */
-    private fun mapArithmetic(expr: ArithmeticValueAst, parenthesized: Boolean): BuilderOperand? {
-        val terms = mutableListOf<BuilderTerm>()
-        if (!flattenArithmetic(expr = expr, into = terms)) return null
-        return BuilderOperand.Calc(terms = terms, parenthesized = parenthesized)
-    }
-
-    private fun flattenArithmetic(
-        expr: ArithmeticValueAst,
-        into: MutableList<BuilderTerm>,
-    ): Boolean {
-        val symbol = arithmeticSymbol(operator = expr.operator)
-
-        // The parser is left-associative, so the left spine continues the same chain as long as the
-        // child binds at the same precedence; otherwise it has to be parenthesized to stay faithful.
-        val left = expr.left
-        if (left is ArithmeticValueAst && samePrecedence(a = left.operator, b = expr.operator)) {
-            if (!flattenArithmetic(expr = left, into = into)) return false
-        } else {
-            val operand = mapOperandTerm(expr = left) ?: return false
-            into.add(BuilderTerm(operator = "", operand = operand))
-        }
-
-        val right = mapOperandTerm(expr = expr.right) ?: return false
-        into.add(BuilderTerm(operator = symbol, operand = right))
-        return true
-    }
-
-    /** Maps a term of an arithmetic chain, parenthesizing a nested chain of different precedence. */
-    private fun mapOperandTerm(expr: ValueExpressionAst): BuilderOperand? =
-        if (expr is ArithmeticValueAst) {
-            mapArithmetic(expr = expr, parenthesized = true)
-        } else {
-            mapValueExpression(expr = expr)
-        }
-
-    private fun samePrecedence(a: ArithmeticOperatorAst, b: ArithmeticOperatorAst): Boolean =
-        precedence(operator = a) == precedence(operator = b)
-
-    private fun precedence(operator: ArithmeticOperatorAst): Int = when (operator) {
-        ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
-        ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
-    }
-
-    private fun arithmeticSymbol(operator: ArithmeticOperatorAst): String = when (operator) {
-        ArithmeticOperatorAst.ADD -> "+"
-        ArithmeticOperatorAst.SUBTRACT -> "-"
-        ArithmeticOperatorAst.MULTIPLY -> "*"
-        ArithmeticOperatorAst.DIVIDE -> "/"
-    }
-
-    private fun comparisonSymbol(operator: ComparisonOperatorAst): String = when (operator) {
-        ComparisonOperatorAst.EQ -> "=="
-        ComparisonOperatorAst.NEQ -> "!="
-        ComparisonOperatorAst.GT -> ">"
-        ComparisonOperatorAst.GTE -> ">="
-        ComparisonOperatorAst.LT -> "<"
-        ComparisonOperatorAst.LTE -> "<="
-    }
-
-    // ── actions ───────────────────────────────────────────────────────────────
 
     private fun mapAction(action: ActionAst): BuilderAction {
         val args = action.arguments.map { literalToValue(lit = it)?.value ?: "?" }
@@ -357,59 +225,40 @@ object RuleAstToBuilderMapper {
 
     // ── literals ──────────────────────────────────────────────────────────────
 
-    private fun literalToValue(lit: LiteralAst): LiteralValue? = when (lit) {
-        is StringLiteral -> LiteralValue(value = lit.value)
-        is NumberLiteral -> LiteralValue(value = lit.value)
-        is BooleanLiteral -> LiteralValue(value = lit.value.toString())
-        is ListLiteral -> {
-            val items = lit.items.map { item ->
-                when (item) {
-                    is StringLiteral -> item.value
-                    is NumberLiteral -> item.value
-                    else -> return null
-                }
-            }
-            LiteralValue(value = "", listItems = items)
-        }
-        is BetweenLiteral -> LiteralValue(value = lit.low, valueTo = lit.high)
-        else -> null
-    }
-
-    private fun literalText(lit: LiteralAst): String? = when (lit) {
-        is StringLiteral -> lit.value
-        is NumberLiteral -> lit.value
-        is BooleanLiteral -> lit.value.toString()
-        else -> null
-    }
-
     /**
      * Maps the DSL's word-form operators onto the symbols the Builder dropdowns offer, so a rule
      * written as `amount gt 5` selects the `>` entry instead of showing a value that is not in the list.
      */
-    private fun normalizeOperator(operator: String): String =
-        WORD_FORM_OPERATORS[operator.lowercase()] ?: operator
+    internal fun normalizeOperator(operator: String): String {
+        // The engine already knows every spelling of its own operators, so resolve to the canonical
+        // name first and only translate what the Builder displays differently.
+        val canonical = OperatorUtils.normalizeOperator(op = operator)
+        return DISPLAY_SYMBOLS[canonical]
+            ?: UNSUPPORTED_SPELLINGS[operator.lowercase()]
+            ?: canonical
+    }
 
-    private val WORD_FORM_OPERATORS: Map<String, String> = mapOf(
-        "gt" to ">",
-        "greater_than" to ">",
-        "gte" to ">=",
-        "greater_or_equal" to ">=",
-        "lt" to "<",
-        "less_than" to "<",
-        "lte" to "<=",
-        "less_or_equal" to "<=",
-        "ne" to "!=",
-        "neq" to "!=",
-        "not_equals" to "!=",
-        "eq" to "equals",
-        "==" to "equals",
-        "=" to "equals",
-        "matches" to "regex",
-        "regexp" to "regex",
-        "starts_with" to "startsWith",
-        "ends_with" to "endsWith",
-        "containsany" to "containsAny",
-        "containsall" to "containsAll",
+    /** Ordering comparisons are offered as symbols in the dropdowns, not as their DSL names. */
+    private val DISPLAY_SYMBOLS: Map<String, String> = mapOf(
+        OperatorNames.GT to OperatorNames.SYMBOL_GT,
+        OperatorNames.GTE to OperatorNames.SYMBOL_GTE,
+        OperatorNames.LT to OperatorNames.SYMBOL_LT,
+        OperatorNames.LTE to OperatorNames.SYMBOL_LTE,
+    )
+
+    /**
+     * Spellings the engine itself does not accept, mapped so a hand-written rule using one still
+     * opens in the Builder rather than locking it. The rule will not compile either way — the
+     * Builder just shows what the author meant instead of an operator missing from every dropdown.
+     */
+    private val UNSUPPORTED_SPELLINGS: Map<String, String> = mapOf(
+        "greater_than" to OperatorNames.SYMBOL_GT,
+        "greater_or_equal" to OperatorNames.SYMBOL_GTE,
+        "less_than" to OperatorNames.SYMBOL_LT,
+        "less_or_equal" to OperatorNames.SYMBOL_LTE,
+        "ne" to OperatorNames.SYMBOL_NOT_EQUALS,
+        "neq" to OperatorNames.SYMBOL_NOT_EQUALS,
+        "not_equals" to OperatorNames.SYMBOL_NOT_EQUALS,
     )
 
     /** Names the construct that prevented mapping, so the lock message is specific. */
@@ -446,10 +295,3 @@ object RuleAstToBuilderMapper {
 
     private fun nextId(prefix: String): String = "$prefix-${idCounter++}"
 }
-
-/** Internal holder for a decomposed literal value. */
-private data class LiteralValue(
-    val value: String = "",
-    val valueTo: String = "",
-    val listItems: List<String> = emptyList(),
-)

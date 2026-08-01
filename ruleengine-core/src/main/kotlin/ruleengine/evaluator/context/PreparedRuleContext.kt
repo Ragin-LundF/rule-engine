@@ -1,12 +1,14 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.TemporalFormat
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.compiled.EvaluationCache
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDate
 import ruleengine.evaluator.context.dto.PreparedDateTime
@@ -21,20 +23,46 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
+/**
+ * The evaluation context: input values typed and normalised against the field schema, plus the
+ * scratch state one evaluation needs.
+ *
+ * [values] is immutable — the engine never modifies input data. [variables] is not: it holds the
+ * values published by `set` clauses of rules that matched earlier in the same evaluation, and it is
+ * the one place where a rule can affect a later one. It is reset by `RuleEngine.evaluate`, so
+ * evaluating the same context twice starts from a clean slate both times.
+ *
+ * A context carries one record — [values] is a snapshot taken in [prepare] — so it belongs to a
+ * single evaluation and must not be shared between threads: [variables] and [cache] are plain maps,
+ * and concurrent evaluations would write to both. Sharing the [ruleengine.evaluator.RuleEngine]
+ * itself is safe; give each thread its own context.
+ */
 class PreparedRuleContext(
     private val values: Map<FieldId, PreparedValue>,
     val rawContext: RuleContext,
-    val cache: EvaluationCache = EvaluationCache()
+    val cache: EvaluationCache = EvaluationCache(),
+    /** Variables published by `set` clauses so far, keyed by name without the `$` prefix. */
+    val variables: MutableMap<String, ExpressionValue> = mutableMapOf()
 ) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
     }
 
+    /** Drops every variable, so the next evaluation starts from a clean slate. */
+    fun clearVariables() {
+        variables.clear()
+    }
+
+    /**
+     * A context scoped to one element of a filtered collection. It shares [cache] and [variables]
+     * with its parent so a filter predicate reads the same variables the surrounding rule does.
+     */
     fun child(element: Map<*, *>): PreparedRuleContext {
         return PreparedRuleContext(
             values = emptyMap(),
             rawContext = ElementRuleContext(element = element),
-            cache = cache
+            cache = cache,
+            variables = variables
         )
     }
 
@@ -47,36 +75,56 @@ class PreparedRuleContext(
             val map = mutableMapOf<FieldId, PreparedValue>()
 
             for ((fieldId, def) in schema.fields) {
-                val raw = ctx.get(fieldId) ?: continue
-                when (def.type) {
-                    FieldType.TEXT -> prepareText(
-                        fieldId = fieldId,
-                        def = def,
-                        raw = raw,
-                        map = map,
-                        registry = normalizerRegistry
-                    )
+                prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
+            }
 
-                    FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
-                    FieldType.DATE -> prepareDate(fieldId = fieldId, def = def, raw = raw, map = map)
-                    FieldType.DATE_TIME -> prepareDateTime(fieldId = fieldId, def = def, raw = raw, map = map)
-                    FieldType.STRING_SET -> prepareStringSet(
-                        fieldId = fieldId,
-                        def = def,
-                        raw = raw,
-                        map = map,
-                        registry = normalizerRegistry
-                    )
-
-                    else -> {
-                        // unsupported types for now
-                    }
+            // A scalar declared inside an `object` is read by its dotted path, which `RuleContext.get`
+            // already navigates. Collections are left out: projecting a list yields many values, which only
+            // the value expression path can compare. A dotted field id declared flat is prepared by the loop
+            // above and is not overwritten here.
+            for ((fieldId, def) in FieldPathResolver.scalarPaths(schema = schema)) {
+                if (!map.containsKey(fieldId)) {
+                    prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
                 }
             }
 
             return PreparedRuleContext(values = map, rawContext = ctx)
+        }
+
+        private fun prepareValue(
+            fieldId: FieldId,
+            def: FieldDefinition,
+            ctx: RuleContext,
+            map: MutableMap<FieldId, PreparedValue>,
+            registry: NormalizerRegistry
+        ) {
+            val raw = ctx.get(fieldId) ?: return
+            when (def.type) {
+                FieldType.TEXT -> prepareText(
+                    fieldId = fieldId,
+                    def = def,
+                    raw = raw,
+                    map = map,
+                    registry = registry
+                )
+
+                FieldType.INTEGER -> prepareInteger(fieldId = fieldId, raw = raw, map = map)
+                FieldType.DECIMAL -> prepareDecimal(fieldId = fieldId, raw = raw, map = map)
+                FieldType.BOOLEAN -> prepareBoolean(fieldId = fieldId, raw = raw, map = map)
+                FieldType.DATE -> prepareDate(fieldId = fieldId, def = def, raw = raw, map = map)
+                FieldType.DATE_TIME -> prepareDateTime(fieldId = fieldId, def = def, raw = raw, map = map)
+                FieldType.STRING_SET -> prepareStringSet(
+                    fieldId = fieldId,
+                    def = def,
+                    raw = raw,
+                    map = map,
+                    registry = registry
+                )
+
+                else -> {
+                    // Structure types carry no value of their own; their members are prepared instead.
+                }
+            }
         }
 
         private fun prepareText(
@@ -87,8 +135,7 @@ class PreparedRuleContext(
             registry: NormalizerRegistry
         ) {
             val s = raw.toString()
-            var normalized = s
-            for (n in def.normalizers) normalized = registry.get(n).normalize(value = normalized)
+            val normalized = registry.applyAll(value = s, normalizers = def.normalizers)
             map[fieldId] = PreparedText(original = s, normalized = normalized)
         }
 
@@ -186,14 +233,9 @@ class PreparedRuleContext(
                 is String -> setOf(raw)
                 else -> return
             }
-            var normalizedSet = set.map { it }.toSet()
-            if (def.normalizers.isNotEmpty()) {
-                normalizedSet = set.map { v ->
-                    var n = v
-                    for (nn in def.normalizers) n = registry.get(nn).normalize(value = n)
-                    n
-                }.toSet()
-            }
+            val normalizedSet = set.map { value ->
+                registry.applyAll(value = value, normalizers = def.normalizers)
+            }.toSet()
             map[fieldId] = PreparedStringSet(original = set, normalized = normalizedSet)
         }
     }

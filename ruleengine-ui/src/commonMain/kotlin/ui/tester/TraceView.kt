@@ -25,6 +25,7 @@ import ui.AccentRed
 import ui.Bg
 import ui.TextMuted
 import ui.TextPrimary
+import ui.tester.model.TraceRow
 
 /**
  * Renders a list of [TraceRow] items produced by the evaluator.
@@ -56,6 +57,8 @@ fun TraceView(
             modifier = Modifier.padding(bottom = 4.dp),
         )
         rows.forEach { row ->
+            // A literal true/false read. Whether a false condition here is expected or a problem is
+            // said by the rule row above, which is green, yellow or red for the rule as a whole.
             val dotColor = if (row.result) AccentGreen else AccentRed
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -78,6 +81,19 @@ fun TraceView(
                         color = TextPrimary,
                     ),
                 )
+                // The value that was actually there. Without it a red row says a condition failed but
+                // not by how much, which is most of what you want from a trace.
+                row.actual?.let { actual ->
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "was $actual",
+                        style = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = TextMuted,
+                        ),
+                    )
+                }
             }
         }
     }

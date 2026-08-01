@@ -1,16 +1,17 @@
 package ruleengine.compiler.operators
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.TextContainsExpression
-import ruleengine.evaluator.compiled.TextEndsWithExpression
-import ruleengine.evaluator.compiled.TextEqualsExpression
-import ruleengine.evaluator.compiled.TextStartsWithExpression
+import ruleengine.evaluator.compiled.text.TextContainsExpression
+import ruleengine.evaluator.compiled.text.TextEndsWithExpression
+import ruleengine.evaluator.compiled.text.TextEqualsExpression
+import ruleengine.evaluator.compiled.text.TextStartsWithExpression
 
 object TextComparisonOperators {
     @Suppress("LongParameterList")
@@ -26,32 +27,28 @@ object TextComparisonOperators {
             ruleId = ruleId,
             details = "Expected string literal for text field '${cond.field}'"
         )
-        var stringLiteral = literal.value
-        for (normalizer in def.normalizers) {
-            stringLiteral = registry.get(id = normalizer).normalize(value = stringLiteral)
-        }
-        val expected = stringLiteral
+        val expected = registry.applyAll(value = literal.value, normalizers = def.normalizers)
 
         return when (op) {
-            "equals" -> TextEqualsExpression(
+            OperatorNames.EQUALS -> TextEqualsExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "contains" -> TextContainsExpression(
+            OperatorNames.CONTAINS -> TextContainsExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "startsWith" -> TextStartsWithExpression(
+            OperatorNames.STARTS_WITH -> TextStartsWithExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "endsWith" -> TextEndsWithExpression(
+            OperatorNames.ENDS_WITH -> TextEndsWithExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
@@ -61,5 +58,4 @@ object TextComparisonOperators {
         }
     }
 }
-
 

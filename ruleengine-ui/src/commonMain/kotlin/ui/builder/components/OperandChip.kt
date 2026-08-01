@@ -28,10 +28,10 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.builder.BuilderOperand
-import ui.builder.CatalogFieldInfo
 import ui.builder.OperandRules
 import ui.builder.OperandText
+import ui.builder.model.BuilderOperand
+import ui.builder.model.catalog.CatalogFieldInfo
 
 /**
  * One side of a comparison, rendered as a chip: a kind badge, the operand's readable label, and a
@@ -78,38 +78,20 @@ fun OperandChip(
                 modifier = Modifier.clickable(onClick = { menuOpen = true }),
             )
 
-            DropdownMenu(
+            OperandKindMenu(
                 expanded = menuOpen,
-                onDismissRequest = { menuOpen = false },
-                modifier = Modifier
-                    .background(color = BgElevated)
-                    .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
-            ) {
-                kinds.forEach { option ->
-                    val isSelected = option == kind
-                    DropdownMenuItem(
-                        onClick = {
-                            menuOpen = false
-                            if (option != kind) {
-                                onKindChanged(
-                                    OperandRules.defaultOperand(
-                                        kind = option,
-                                        fields = fields,
-                                        previous = operand,
-                                    )
-                                )
-                            }
-                        },
-                    ) {
-                        Text(
-                            text = "${option.badge}  ${option.label}",
-                            style = MaterialTheme.typography.body2,
-                            color = if (isSelected) PrimaryBlue else TextPrimary,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                kinds = kinds,
+                current = kind,
+                onDismiss = { menuOpen = false },
+                onKindSelected = { option ->
+                    menuOpen = false
+                    if (option != kind) {
+                        onKindChanged(
+                            OperandRules.defaultOperand(kind = option, fields = fields, previous = operand),
                         )
                     }
-                }
-            }
+                },
+            )
         }
 
         Text(
@@ -126,6 +108,42 @@ fun OperandChip(
                 color = TextSecondary,
                 modifier = Modifier.clickable(onClick = onToggleExpanded),
             )
+        }
+    }
+}
+
+/**
+ * Picks what kind of thing this operand is — a field, a literal, an aggregate, a calculation.
+ *
+ * Choosing a kind replaces the operand with a default of that kind, carrying the previous one in so
+ * a field path survives a trip through, say, an aggregate and back.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun OperandKindMenu(
+    expanded: Boolean,
+    kinds: List<OperandRules.OperandKind>,
+    current: OperandRules.OperandKind,
+    onDismiss: () -> Unit,
+    onKindSelected: (OperandRules.OperandKind) -> Unit,
+) {
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .background(color = BgElevated)
+            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
+    ) {
+        kinds.forEach { option ->
+            val isSelected = option == current
+            DropdownMenuItem(onClick = { onKindSelected(option) }) {
+                Text(
+                    text = "${option.badge}  ${option.label}",
+                    style = MaterialTheme.typography.body2,
+                    color = if (isSelected) PrimaryBlue else TextPrimary,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                )
+            }
         }
     }
 }

@@ -36,11 +36,11 @@ Build everything:
 |---|---|
 | **Sample gallery** | Open a ready-made project (financial transactions, log filter, product recommendation, access control) without touching the file system |
 | **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
-| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands |
+| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands. The THEN block holds action rows and `set` rows |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
-| **Diagram view** | See a rule's condition tree |
+| **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
-| **Test panel** | Evaluate the rule set against JSON input and inspect the decision tree |
+| **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched or not — whose condition trace expands on click |
 
 ### Advanced conditions in the builder
 
@@ -54,6 +54,20 @@ literal value, an aggregate, or a calculation:
 Aggregates and calculations are numeric, so those two operand kinds are offered only when the
 comparison can be numeric — a text field will not let you build a sum against it. Rows carrying a
 computed operand are marked with an accent stripe and show the DSL they generate underneath.
+
+### Variables in the builder
+
+A rule can publish a value for the rules after it with a `set` clause. **+ Variable** in the THEN
+block adds a `set name = operand` row, whose right-hand side is the same operand chip a condition row
+uses — so a variable can hold a field, a literal, an aggregate or a calculation.
+
+Variables that are in scope at the rule you are editing appear in the operand pickers as `$name`,
+alongside the schema fields. "In scope" follows the engine: only variables published by a rule
+*earlier* in the manifest's rule order are offered, so the builder cannot produce a forward reference.
+The code view offers the same names through autocompletion, plus the `set` keyword itself.
+
+The rule inspector lists what the selected rule publishes, and the test panel shows the value each
+variable actually took for the input you ran.
 
 Only `then`-block `extract` clauses are still code-only; a rule using one opens read-only in the
 builder with an explanation.

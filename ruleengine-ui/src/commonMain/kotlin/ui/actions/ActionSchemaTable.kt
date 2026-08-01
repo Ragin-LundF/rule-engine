@@ -1,8 +1,8 @@
 package ui.actions
 
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,10 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import ui.BgElevated
 import ui.BgSurface
 import ui.BorderColor
@@ -44,6 +41,9 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.actions.model.ActionEditorState
+import ui.actions.model.EditableAction
+import ui.components.HeaderCell
 import ui.components.ToggleChip
 
 /**
@@ -281,15 +281,3 @@ private fun AddActionDropdown(
     }
 }
 
-@Suppress("FunctionNaming")
-@Composable
-private fun HeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        modifier = modifier,
-        style = MaterialTheme.typography.caption,
-        fontWeight = FontWeight.SemiBold,
-        color = TextSecondary,
-        fontSize = 11.sp,
-    )
-}

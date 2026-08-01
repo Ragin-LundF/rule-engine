@@ -1,0 +1,48 @@
+{
+  "shipment": {
+    "reference": "WS-10099",
+    "service": " Standard Ground ",
+    "transitDays": 6,
+    "declaredValue": 250.00,
+    "pickedUpAt": "12.01.2026",
+    "customer": {
+      "tier": "Silver",
+      "country": "pl"
+    }
+  },
+  "parcels": [
+    {
+      "code": "P-1",
+      "weightKg": 60.0,
+      "category": "fragile",
+      "damaged": true,
+      "origin": { "hub": "HAM" }
+    },
+    {
+      "code": "P-2",
+      "weightKg": 45.0,
+      "category": "standard",
+      "damaged": false,
+      "origin": { "hub": "HAM" }
+    },
+    {
+      "code": "P-3",
+      "weightKg": 8.0,
+      "category": "standard",
+      "damaged": false,
+      "origin": { "hub": "BER" }
+    },
+    {
+      "code": "P-4",
+      "weightKg": 5.0,
+      "category": "fragile",
+      "damaged": false,
+      "origin": { "hub": "MUC" }
+    }
+  ],
+  "checkpoints": [
+    { "site": "HAM-depot", "delayMinutes": 10, "scanned": true },
+    { "site": "POZ-hub", "delayMinutes": 180, "scanned": false },
+    { "site": "WAW-depot", "delayMinutes": 45, "scanned": true }
+  ]
+}

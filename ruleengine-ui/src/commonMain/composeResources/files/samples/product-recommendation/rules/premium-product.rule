@@ -1,4 +1,5 @@
 rule "luxury-item" {
+  description "An expensive, highly rated product with a substantial review count."
   when
     price >= 500
     and rating >= 4.5
@@ -11,6 +12,7 @@ rule "luxury-item" {
 }
 
 rule "high-rated-affordable" {
+  description "An affordable product with an outstanding rating and many reviews."
   when
     rating >= 4.7
     and price between 20 150
@@ -23,6 +25,7 @@ rule "high-rated-affordable" {
 }
 
 rule "out-of-stock-exclusion" {
+  description "The product is out of stock and must not be recommended."
   when
     stock equals 0
 

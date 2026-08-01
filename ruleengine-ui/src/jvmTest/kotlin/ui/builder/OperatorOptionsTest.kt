@@ -1,5 +1,6 @@
 package ui.builder
 
+import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -63,10 +64,25 @@ class OperatorOptionsTest {
     }
 
     @Test
-    fun `aggregate function list matches the engine enum`() {
+    fun `every offered operator name is canonical and known to the engine`() {
+        OperatorOptions.ALL.forEach { operator ->
+            assertTrue(
+                actual = OperatorUtils.isKnownOperator(op = operator),
+                message = "The engine does not know operator '$operator'",
+            )
+            assertEquals(
+                expected = operator,
+                actual = OperatorUtils.normalizeOperator(op = operator),
+                message = "'$operator' is not the canonical spelling",
+            )
+        }
+    }
+
+    @Test
+    fun `aggregate function names are offered in the engine's declaration order`() {
         assertEquals(
-            expected = AggregateFunctionName.entries.map { it.name.lowercase() }.sorted(),
-            actual = OperatorOptions.AGGREGATE_FUNCTIONS.sorted(),
+            expected = AggregateFunctionName.entries.map { it.name.lowercase() },
+            actual = OperatorOptions.AGGREGATE_FUNCTIONS,
         )
     }
 

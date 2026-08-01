@@ -3,6 +3,7 @@
 # a date field takes quoted ISO dates.
 
 rule "recurring-subscription" {
+  description "A small recurring payment is treated as a subscription."
   when
     recurring equals true
     amount between 5 100
@@ -13,6 +14,7 @@ rule "recurring-subscription" {
 }
 
 rule "one-off-large-payment" {
+  description "A large payment that is not part of a recurring series."
   when
     recurring equals false
     and amount > 5000
@@ -23,6 +25,7 @@ rule "one-off-large-payment" {
 }
 
 rule "current-year-booking" {
+  description "The transaction was booked in the 2024 fiscal year."
   when
     bookingDate between "2024-01-01" "2024-12-31"
 
@@ -31,6 +34,7 @@ rule "current-year-booking" {
 }
 
 rule "backdated-entry" {
+  description "The booking date is far in the past, which needs a manual check."
   when
     bookingDate < "2020-01-01"
 

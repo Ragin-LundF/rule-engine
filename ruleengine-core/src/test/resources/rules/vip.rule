@@ -1,4 +1,5 @@
 rule "vip-customer" {
+  description "The customer carries a vip or premium tag and is scored accordingly."
   when
     tags containsAny ["vip", "premium"]
 

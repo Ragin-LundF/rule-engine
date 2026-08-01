@@ -257,9 +257,9 @@ A few limits worth knowing:
 - **A format only applies to text input.** When the host application hands the engine a value that is
   already a `LocalDate`, `LocalDateTime` or `Instant`, there is no text to parse and the pattern is not
   consulted.
-- **A format on a nested member has no runtime effect.** It is accepted and validated, but members of a
-  `collection` / `object` are reached through a path and compared as raw text — see
-  [Nested Data](#nested-data).
+- **A format on a member of a `collection` has no runtime effect.** It is accepted and validated, but a path
+  that reads through a list is projected and compared as raw text. A member of an `object` is a normal
+  typed field, so its `format` applies — see [Nested Data](#nested-data).
 - **Prefer a pattern with separators.** An all-digit pattern such as `yyyyMMdd` works in a hand-written
   rule, but the visual Builder cannot tell such a value from a number and will emit it unquoted.
 
@@ -306,13 +306,67 @@ fields:
 navigate into a record and aggregate over a list:
 
 ```
-orders.customer.country == "DE"
 count(orders) > 3
 sum(orders.total) > 1000
 sum(orders[status == "paid"].items.price) > 500
+count(orders[customer.country == "DE"]) > 0
 ```
 
 See [Value Expressions](./expressions.md) for the full set of aggregate functions and filters.
+
+### A path into an `object` behaves like any other field
+
+A member of an `object` is reached with a dotted path and works with **every** operator, its declared
+normalizers, and its `format`:
+
+```yaml
+schema: shipments-v1
+
+fields:
+  shipment:
+    type: object
+    fields:
+      transitDays:
+        type: integer
+      pickedUpAt:
+        type: date
+        format: dd.MM.yyyy
+      customer:
+        type: object
+        fields:
+          tier:
+            type: text
+            normalizers: [trim, lowercase]
+  parcels:
+    type: collection
+    fields:
+      weightKg:
+        type: decimal
+      damaged:
+        type: boolean
+```
+
+```
+shipment.transitDays <= 2
+shipment.pickedUpAt >= "01.03.2026"
+shipment.customer.tier equals "gold"
+```
+
+A path that reads through a **`collection`** is different: it yields one value per element, so it cannot be
+compared to a single literal. Use an aggregate or a filter instead — the engine says so when a rule tries:
+
+```
+count(parcels[damaged == true]) > 0      # not: parcels.damaged equals true
+sum(parcels.weightKg) > 100              # not: parcels.weightKg > 100
+```
+
+### Worked example
+
+[`warehouse-shipments`](../ruleengine-core/src/test/resources/warehouse-shipments) is a complete bundle
+using both shapes: a `shipment` object read by plain conditions, plus `parcels` and `checkpoints`
+collections read by aggregates and filters. It ships with two input files and is executed by
+`WarehouseShipmentsIntegrationTest`, so every path in it is known to work. The same bundle is available in
+the UI sample gallery as **Warehouse Shipments**.
 
 ### `string_set` or `collection`?
 

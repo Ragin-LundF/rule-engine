@@ -1,5 +1,6 @@
 package ruleengine.core.domain
 
+import ruleengine.core.domain.dto.field.FieldType
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.Test

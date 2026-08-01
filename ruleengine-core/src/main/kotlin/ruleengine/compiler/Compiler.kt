@@ -7,16 +7,23 @@ import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.compiler.operators.TextComparisonOperators
 import ruleengine.compiler.operators.TextInOperator
 import ruleengine.compiler.operators.TextRegexOperator
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType.BOOLEAN
-import ruleengine.core.domain.FieldType.DATE
-import ruleengine.core.domain.FieldType.DATE_TIME
-import ruleengine.core.domain.FieldType.DECIMAL
-import ruleengine.core.domain.FieldType.INTEGER
-import ruleengine.core.domain.FieldType.STRING_SET
-import ruleengine.core.domain.FieldType.TEXT
+import ruleengine.compiler.support.FieldPathMessages
+import ruleengine.compiler.value.ValueExpressionCompiler
+import ruleengine.core.domain.FieldPathResolution
+import ruleengine.core.domain.FieldPathResolver
+import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType.BOOLEAN
+import ruleengine.core.domain.dto.field.FieldType.COLLECTION
+import ruleengine.core.domain.dto.field.FieldType.DATE
+import ruleengine.core.domain.dto.field.FieldType.DATE_TIME
+import ruleengine.core.domain.dto.field.FieldType.DECIMAL
+import ruleengine.core.domain.dto.field.FieldType.INTEGER
+import ruleengine.core.domain.dto.field.FieldType.OBJECT
+import ruleengine.core.domain.dto.field.FieldType.STRING_SET
+import ruleengine.core.domain.dto.field.FieldType.TEXT
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
@@ -29,31 +36,43 @@ import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ExtractionAst
 import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
+import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.evaluator.CompiledAction
+import ruleengine.evaluator.CompiledAssignment
 import ruleengine.evaluator.CompiledRule
-import ruleengine.evaluator.compiled.AndExpression
-import ruleengine.evaluator.compiled.BooleanEqualsExpression
-import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.CompiledFieldSegment
-import ruleengine.evaluator.compiled.CompiledValueExpression
 import ruleengine.evaluator.compiled.EvaluationCost
-import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
-import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
-import ruleengine.evaluator.compiled.NotExpression
-import ruleengine.evaluator.compiled.NumberExpressionValue
-import ruleengine.evaluator.compiled.OrExpression
-import ruleengine.evaluator.compiled.RegexExtractExpression
-import ruleengine.evaluator.compiled.StringSetContainsAllExpression
-import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
-import ruleengine.evaluator.compiled.TextExpressionValue
+import ruleengine.evaluator.compiled.bool.BooleanEqualsExpression
+import ruleengine.evaluator.compiled.logic.AndExpression
+import ruleengine.evaluator.compiled.logic.NotExpression
+import ruleengine.evaluator.compiled.logic.OrExpression
+import ruleengine.evaluator.compiled.stringset.StringSetContainsAllExpression
+import ruleengine.evaluator.compiled.stringset.StringSetContainsAnyExpression
+import ruleengine.evaluator.compiled.text.RegexExtractExpression
+import ruleengine.evaluator.compiled.value.ComparisonCompiledExpression
+import ruleengine.evaluator.compiled.value.CompiledValueExpression
+import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
+import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.result.TextExpressionValue
+import java.math.BigDecimal
 
+/**
+ * Turns validated [RuleAst]s into [CompiledRule]s.
+ *
+ * Every function that can fail takes the id of the rule being compiled and hands it to
+ * [CompilationException], so a failure names the offending rule instead of `<unknown>`.
+ */
 @Suppress("TooManyFunctions")
 object Compiler {
     fun compileRules(
@@ -69,58 +88,112 @@ object Compiler {
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
     ): CompiledRule {
-        val expr = compileExpression(expr = ast.condition, schema = schema, normalizerRegistry = normalizerRegistry)
+        val expr = compileExpression(
+            expr = ast.condition,
+            schema = schema,
+            normalizerRegistry = normalizerRegistry,
+            ruleId = ast.id
+        )
         val compiledActions = ast.actions.map { action ->
-            compileAction(action = action, schema = schema)
+            compileAction(action = action, schema = schema, ruleId = ast.id)
         }
-        return CompiledRule(id = ast.id, expression = expr, actions = compiledActions)
+        val compiledAssignments = ast.assignments.map { assignment ->
+            compileAssignment(assignment = assignment, schema = schema, ruleId = ast.id)
+        }
+        return CompiledRule(
+            id = ast.id,
+            expression = expr,
+            actions = compiledActions,
+            assignments = compiledAssignments
+        )
     }
 
-    private fun compileAction(action: ActionAst, schema: FieldSchema): CompiledAction {
+    private fun compileAssignment(
+        assignment: VariableAssignmentAst,
+        schema: FieldSchema,
+        ruleId: String?
+    ): CompiledAssignment {
+        val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
+            compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
+        }
+        return CompiledAssignment(
+            name = assignment.name,
+            expression = ValueExpressionCompiler.compile(
+                expr = assignment.expression,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+        )
+    }
+
+    private fun compileAction(action: ActionAst, schema: FieldSchema, ruleId: String?): CompiledAction {
         val compiledExtraction = action.extraction?.let { extraction ->
-            compileExtraction(extraction = extraction, schema = schema)
+            compileExtraction(extraction = extraction, schema = schema, ruleId = ruleId)
         }
 
         val compiledArguments = action.arguments.map { literal ->
-            when {
-                literal is ExtractionRefLiteral -> {
-                    if (compiledExtraction == null) {
-                        throw CompilationException(
-                            ruleId = null,
-                            details = "Action '${action.name}' uses extraction reference but has no 'extract' clause"
-                        )
-                    }
-                    CompiledActionArgument.ExtractionRef(extraction = compiledExtraction)
+            when (literal) {
+                is ExtractionRefLiteral -> {
+                    val extraction = compiledExtraction ?: throw CompilationException(
+                        ruleId = ruleId,
+                        details = "Action '${action.name}' uses extraction reference but has no 'extract' clause"
+                    )
+                    CompiledActionArgument.ExtractionRef(extraction = extraction)
                 }
 
-                literal is StringLiteral -> CompiledActionArgument.Static(value = literal.value)
-                literal is NumberLiteral -> CompiledActionArgument.Static(value = literal.value)
-                literal is ListLiteral -> CompiledActionArgument.Static(
-                    value = literal.items.map { (it as? StringLiteral)?.value ?: it.toString() }
-                )
+                is VariableRefLiteral -> CompiledActionArgument.VariableRef(name = literal.name)
 
-                else -> CompiledActionArgument.Static(value = null)
+                else -> CompiledActionArgument.Static(
+                    value = staticArgumentValue(literal = literal, actionName = action.name, ruleId = ruleId)
+                )
             }
         }
 
         return CompiledAction(name = action.name, arguments = compiledArguments)
     }
 
-    private fun compileExtraction(extraction: ExtractionAst, schema: FieldSchema): RegexExtractExpression {
+    /**
+     * Compile-time value of an action argument literal.
+     *
+     * A number keeps its literal text, which is what the action layer already expects for a top-level numeric
+     * argument. List items go through the same conversion so a non-string element stays a value instead of
+     * becoming the AST node's `toString()`.
+     */
+    private fun staticArgumentValue(literal: LiteralAst, actionName: String, ruleId: String?): Any {
+        return when (literal) {
+            is StringLiteral -> literal.value
+            is NumberLiteral -> literal.value
+            is BooleanLiteral -> literal.value
+            is ListLiteral -> literal.items.map { item ->
+                staticArgumentValue(literal = item, actionName = actionName, ruleId = ruleId)
+            }
+
+            else -> throw CompilationException(
+                ruleId = ruleId,
+                details = "Action '$actionName' does not support a ${literal::class.simpleName} argument"
+            )
+        }
+    }
+
+    private fun compileExtraction(
+        extraction: ExtractionAst,
+        schema: FieldSchema,
+        ruleId: String?
+    ): RegexExtractExpression {
         return when (extraction) {
             is ExtractionAst.RegexExtraction -> {
-                val fieldId = FieldId(value = extraction.sourceField)
-                if (schema.fields[fieldId] == null) {
-                    throw CompilationException(
-                        ruleId = null,
+                val resolution = FieldPathResolver.resolve(identifier = extraction.sourceField, schema = schema)
+                val fieldId = (resolution as? FieldPathResolution.Resolved)?.id
+                    ?: throw CompilationException(
+                        ruleId = ruleId,
                         details = "Extraction references unknown field '${extraction.sourceField}'"
                     )
-                }
                 val compiledPattern = runCatching {
                     Regex(pattern = extraction.pattern)
                 }.getOrElse { cause ->
                     throw CompilationException(
-                        ruleId = null,
+                        ruleId = ruleId,
                         details = "Invalid regex pattern '${extraction.pattern}' in extraction: ${cause.message}"
                     )
                 }
@@ -136,14 +209,16 @@ object Compiler {
     private fun compileExpression(
         expr: ExpressionAst,
         schema: FieldSchema,
-        normalizerRegistry: NormalizerRegistry
+        normalizerRegistry: NormalizerRegistry,
+        ruleId: String?
     ): CompiledExpression {
         return when (expr) {
             is AndAst -> AndExpression(children = expr.children.map {
                 compileExpression(
                     expr = it,
                     schema = schema,
-                    normalizerRegistry = normalizerRegistry
+                    normalizerRegistry = normalizerRegistry,
+                    ruleId = ruleId
                 )
             })
 
@@ -151,7 +226,8 @@ object Compiler {
                 compileExpression(
                     expr = it,
                     schema = schema,
-                    normalizerRegistry = normalizerRegistry
+                    normalizerRegistry = normalizerRegistry,
+                    ruleId = ruleId
                 )
             })
 
@@ -159,48 +235,66 @@ object Compiler {
                 child = compileExpression(
                     expr = expr.child,
                     schema = schema,
-                    normalizerRegistry = normalizerRegistry
+                    normalizerRegistry = normalizerRegistry,
+                    ruleId = ruleId
                 )
             )
 
-            is ConditionAst -> compileCondition(cond = expr, schema = schema, normalizerRegistry = normalizerRegistry)
+            is ConditionAst -> compileCondition(
+                cond = expr,
+                schema = schema,
+                normalizerRegistry = normalizerRegistry,
+                ruleId = ruleId
+            )
 
-            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema)
+            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema, ruleId = ruleId)
         }
     }
 
-    internal fun compileFilterExpression(
+    private fun compileFilterExpression(
         expr: ExpressionAst,
-        schema: FieldSchema
+        schema: FieldSchema,
+        ruleId: String?
     ): CompiledExpression {
         return when (expr) {
-            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema)
-            is ConditionAst -> compileFilterCondition(cond = expr)
+            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema, ruleId = ruleId)
+            is ConditionAst -> compileFilterCondition(cond = expr, ruleId = ruleId)
             else -> throw CompilationException(
-                ruleId = null,
+                ruleId = ruleId,
                 details = "Only comparison expressions are supported in filter segments"
             )
         }
     }
 
-    private fun compileFilterCondition(cond: ConditionAst): CompiledExpression {
+    private fun compileFilterCondition(cond: ConditionAst, ruleId: String?): CompiledExpression {
+        // ComparisonCompiledExpression has no case-insensitive mode, so honouring the modifier is impossible
+        // here. Rejecting it is the only safe option: ignoring it would silently compare case-sensitively.
+        if (cond.ignoreCase) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "The 'ignoreCase' modifier is not supported in filter segments"
+            )
+        }
+        // Match the canonical names OperatorUtils produces, not the spellings an author may have written:
+        // it maps '==', '=' and 'eq' to "equals", '>' to "gt" and so on, so branching on the raw symbols
+        // never fires. '!=' has no canonical form and passes through unchanged.
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
         val comparisonOperator = when (op) {
-            "==" -> ComparisonOperatorAst.EQ
-            "!=" -> ComparisonOperatorAst.NEQ
-            ">", "gt", "greater_than" -> ComparisonOperatorAst.GT
-            ">=", "gte", "greater_than_or_equal" -> ComparisonOperatorAst.GTE
-            "<", "lt", "less_than" -> ComparisonOperatorAst.LT
-            "<=", "lte", "less_than_or_equal" -> ComparisonOperatorAst.LTE
+            OperatorNames.EQUALS -> ComparisonOperatorAst.EQ
+            OperatorNames.SYMBOL_NOT_EQUALS -> ComparisonOperatorAst.NEQ
+            OperatorNames.GT -> ComparisonOperatorAst.GT
+            OperatorNames.GTE -> ComparisonOperatorAst.GTE
+            OperatorNames.LT -> ComparisonOperatorAst.LT
+            OperatorNames.LTE -> ComparisonOperatorAst.LTE
             else -> throw CompilationException(
-                ruleId = null,
+                ruleId = ruleId,
                 details = "Operator '$op' is not supported in filter segments"
             )
         }
         val left = FieldAccessCompiledValueExpression(
             segments = listOf(CompiledFieldSegment(name = cond.field))
         )
-        val right = compileLiteralValue(literal = cond.value)
+        val right = compileLiteralValue(literal = cond.value, ruleId = ruleId)
         return ComparisonCompiledExpression(
             left = left,
             operator = comparisonOperator,
@@ -209,19 +303,15 @@ object Compiler {
         )
     }
 
-    private fun compileLiteralValue(literal: ruleengine.dsl.ast.LiteralAst): CompiledValueExpression {
+    private fun compileLiteralValue(literal: LiteralAst, ruleId: String?): CompiledValueExpression {
         return when (literal) {
             is NumberLiteral -> LiteralCompiledValueExpression(
-                value = NumberExpressionValue(
-                    value = java.math.BigDecimal(
-                        literal.value
-                    )
-                )
+                value = NumberExpressionValue(value = BigDecimal(literal.value))
             )
 
             is StringLiteral -> LiteralCompiledValueExpression(value = TextExpressionValue(value = literal.value))
             else -> throw CompilationException(
-                ruleId = null,
+                ruleId = ruleId,
                 details = "Unsupported literal type in filter: ${literal::class.simpleName}"
             )
         }
@@ -229,41 +319,56 @@ object Compiler {
 
     private fun compileComparisonExpression(
         expr: ComparisonExpressionAst,
-        schema: FieldSchema
+        schema: FieldSchema,
+        ruleId: String?
     ): CompiledExpression {
+        val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
+            compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
+        }
         val left = ValueExpressionCompiler.compile(
             expr = expr.left,
             schema = schema,
-            filterCompiler = ::compileFilterExpression
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
         )
         val right = ValueExpressionCompiler.compile(
             expr = expr.right,
             schema = schema,
-            filterCompiler = ::compileFilterExpression
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
         )
         val cost = maxOf(left.cost, right.cost)
         return ComparisonCompiledExpression(
             left = left,
             operator = expr.operator,
             right = right,
-            cost = cost
+            cost = cost,
+            // Rendered from the AST because it is the last point where the author's text can still be
+            // reconstructed: the compiled operands have already rewritten path roots alias → canonical.
+            label = ValueExpressionRenderer.render(expr = expr.left)
         )
     }
 
     private fun compileCondition(
         cond: ConditionAst,
         schema: FieldSchema,
-        normalizerRegistry: NormalizerRegistry
+        normalizerRegistry: NormalizerRegistry,
+        ruleId: String?
     ): CompiledExpression {
-        val resolvedId = resolveIdentifier(
-            identifier = cond.field,
-            schema = schema
+        val resolution = FieldPathResolver.resolve(identifier = cond.field, schema = schema)
+        val resolved = resolution as? FieldPathResolution.Resolved ?: throw CompilationException(
+            ruleId = ruleId,
+            details = when (resolution) {
+                is FieldPathResolution.CrossesCollection -> FieldPathMessages.crossesCollection(
+                    field = cond.field,
+                    collectionPath = resolution.collectionPath
+                )
+
+                else -> FieldPathMessages.unknownField(field = cond.field)
+            }
         )
-        val fieldId = FieldId(value = resolvedId)
-        val def = schema.fields[fieldId] ?: throw CompilationException(
-            ruleId = ruleIdOrNull(cond = cond),
-            details = "Unknown field '${cond.field}'"
-        )
+        val fieldId = resolved.id
+        val def = resolved.definition
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
 
@@ -273,60 +378,52 @@ object Compiler {
                 fieldId = fieldId,
                 def = def,
                 op = op,
-                normalizerRegistry = normalizerRegistry
+                normalizerRegistry = normalizerRegistry,
+                ruleId = ruleId
             )
 
-            DECIMAL -> compileDecimalCondition(
-                cond = cond,
-                fieldId = fieldId,
-                op = op
-            )
+            DECIMAL -> DecimalOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId, op = op)
 
-            INTEGER -> compileIntegerCondition(
-                cond = cond,
-                fieldId = fieldId,
-                op = op
-            )
+            INTEGER -> IntegerOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId, op = op)
 
             STRING_SET -> compileStringSetCondition(
                 cond = cond,
                 fieldId = fieldId,
                 def = def,
                 op = op,
-                normalizerRegistry = normalizerRegistry
+                normalizerRegistry = normalizerRegistry,
+                ruleId = ruleId
             )
 
-            BOOLEAN -> compileBooleanCondition(
-                cond = cond,
-                fieldId = fieldId
-            )
+            BOOLEAN -> compileBooleanCondition(cond = cond, fieldId = fieldId, ruleId = ruleId)
 
             DATE, DATE_TIME -> DateOperator.compile(
-                ruleId = ruleIdOrNull(cond = cond),
+                ruleId = ruleId,
                 cond = cond,
                 fieldId = fieldId,
-                def = def
+                def = def,
+                op = op
             )
 
-            else -> throw CompilationException(
-                ruleId = ruleIdOrNull(cond = cond),
+            COLLECTION, OBJECT -> throw CompilationException(
+                ruleId = ruleId,
                 details = "Field type ${def.type} not supported in compiler yet"
             )
         }
     }
 
+    @Suppress("LongParameterList")
     private fun compileTextCondition(
         cond: ConditionAst,
         fieldId: FieldId,
         def: FieldDefinition,
         op: String,
-        normalizerRegistry: NormalizerRegistry
+        normalizerRegistry: NormalizerRegistry,
+        ruleId: String?
     ): CompiledExpression {
-        val ruleId = ruleIdOrNull(cond = cond)
-
         return when (op) {
-            "regex" -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
-            "in" -> TextInOperator.compile(
+            OperatorNames.REGEX -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
+            OperatorNames.IN -> TextInOperator.compile(
                 ruleId = ruleId,
                 cond = cond,
                 fieldId = fieldId,
@@ -345,77 +442,63 @@ object Compiler {
         }
     }
 
-    @Suppress("UnusedParameter")
-    private fun compileDecimalCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
-        return DecimalOperator.compile(
-            ruleId = ruleIdOrNull(cond = cond),
-            cond = cond,
-            fieldId = fieldId
-        )
-    }
-
-    @Suppress("UnusedParameter")
-    private fun compileIntegerCondition(cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
-        return IntegerOperator.compile(ruleId = ruleIdOrNull(cond = cond), cond = cond, fieldId = fieldId)
-    }
-
-    private fun compileBooleanCondition(cond: ConditionAst, fieldId: FieldId): CompiledExpression {
+    private fun compileBooleanCondition(
+        cond: ConditionAst,
+        fieldId: FieldId,
+        ruleId: String?
+    ): CompiledExpression {
         val literal = cond.value as? BooleanLiteral ?: throw CompilationException(
-            ruleId = ruleIdOrNull(cond = cond),
+            ruleId = ruleId,
             details = "Expected 'true' or 'false' for boolean field '${cond.field}'"
         )
         return BooleanEqualsExpression(field = fieldId, expected = literal.value)
     }
 
-    @Suppress("ThrowsCount")
+    @Suppress("ThrowsCount", "LongParameterList")
     private fun compileStringSetCondition(
         cond: ConditionAst,
         fieldId: FieldId,
         def: FieldDefinition,
         op: String,
-        normalizerRegistry: NormalizerRegistry
+        normalizerRegistry: NormalizerRegistry,
+        ruleId: String?
     ): CompiledExpression {
         return when (val conditionValue = cond.value) {
             is ListLiteral -> {
                 val stringLiteralSet = conditionValue.items.map {
                     (it as? StringLiteral)?.value ?: throw CompilationException(
-                        ruleId = ruleIdOrNull(cond = cond),
+                        ruleId = ruleId,
                         details = "Expected string items in list"
                     )
                 }.toSet()
                 val normalized = stringLiteralSet.map { stringLiteral ->
-                    applyNormalizers(
-                        value = stringLiteral,
-                        normalizers = def.normalizers,
-                        registry = normalizerRegistry
-                    )
+                    normalizerRegistry.applyAll(value = stringLiteral, normalizers = def.normalizers)
                 }.toSet()
 
                 when (op) {
-                    "containsAny" -> StringSetContainsAnyExpression(
+                    OperatorNames.CONTAINS_ANY -> StringSetContainsAnyExpression(
                         field = fieldId,
                         expectedNormalized = normalized,
                         ignoreCase = cond.ignoreCase
                     )
 
-                    "containsAll" -> StringSetContainsAllExpression(
+                    OperatorNames.CONTAINS_ALL -> StringSetContainsAllExpression(
                         field = fieldId,
                         expectedNormalized = normalized,
                         ignoreCase = cond.ignoreCase
                     )
 
                     else -> throw CompilationException(
-                        ruleIdOrNull(cond = cond),
-                        "Unsupported operator '$op' for string set field"
+                        ruleId = ruleId,
+                        details = "Unsupported operator '$op' for string set field"
                     )
                 }
             }
 
             is StringLiteral -> {
-                val normalized = applyNormalizers(
+                val normalized = normalizerRegistry.applyAll(
                     value = conditionValue.value,
                     normalizers = def.normalizers,
-                    registry = normalizerRegistry
                 )
                 StringSetContainsAnyExpression(
                     field = fieldId,
@@ -425,45 +508,10 @@ object Compiler {
             }
 
             else -> throw CompilationException(
-                ruleIdOrNull(cond = cond),
-                "Expected list or string for string set field '${cond.field}'"
+                ruleId = ruleId,
+                details = "Expected list or string for string set field '${cond.field}'"
             )
         }
     }
 
-    private fun applyNormalizers(
-        value: String,
-        normalizers: List<ruleengine.core.domain.NormalizerId>,
-        registry: NormalizerRegistry
-    ): String {
-        var v = value
-        for (n in normalizers) {
-            v = registry.get(n).normalize(value = v)
-        }
-        return v
-    }
-
-    @Suppress("FunctionOnlyReturningConstant", "UnusedParameter")
-    private fun ruleIdOrNull(cond: ConditionAst): String? {
-        return null
-    }
-
-    /**
-     * Resolves a field identifier from user input to the canonical field ID.
-     * Checks the field ID first, then falls back to alias matching.
-     */
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
-        val fieldId = FieldId(value = identifier)
-        if (schema.fields.containsKey(fieldId)) {
-            return identifier
-        }
-
-        for ((id, definition) in schema.fields) {
-            if (definition.alias == identifier) {
-                return id.value
-            }
-        }
-
-        return identifier
-    }
 }

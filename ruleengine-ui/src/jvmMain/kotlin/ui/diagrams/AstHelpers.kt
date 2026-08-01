@@ -3,10 +3,11 @@ package ui.diagrams
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.ListLiteral
+import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.VariableRefLiteral
 
 /** Formats a [LiteralAst] for display inside a condition row. */
 internal fun formatLiteral(lit: LiteralAst): String {
@@ -17,7 +18,7 @@ internal fun formatLiteral(lit: LiteralAst): String {
         is ListLiteral    -> "[${lit.items.joinToString(", ") { formatLiteral(it) }}]"
         is BetweenLiteral -> "${lit.low}..${lit.high}"
         is ExtractionRefLiteral -> $$"$$${lit.groupIndex}"
+        is VariableRefLiteral -> $$"$$${lit.name}"
     }
 }
-
 

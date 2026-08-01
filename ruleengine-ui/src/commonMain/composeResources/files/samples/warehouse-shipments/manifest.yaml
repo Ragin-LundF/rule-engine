@@ -1,0 +1,19 @@
+name: warehouse-shipments
+
+# Sample: Warehouse Shipments
+# Demonstrates nested data: a `shipment` object navigated with dotted paths in plain conditions,
+# plus aggregates and filters over the `parcels` and `checkpoints` collections.
+#
+# Also demonstrates rule output variables: shipment-totals.rule computes the load's weight once with
+# `set`, and parcel-condition.rule reads it back as `$totalWeightKg`. The order below is what makes
+# that work — a variable is only visible to the rules listed after the one that sets it.
+
+entries:
+  - id: warehouse-shipments
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/shipment-totals.rule
+      - rules/delivery-quality.rule
+      - rules/parcel-condition.rule
+      - rules/route-risk.rule

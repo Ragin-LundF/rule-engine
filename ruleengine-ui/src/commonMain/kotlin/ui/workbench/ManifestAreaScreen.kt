@@ -1,27 +1,36 @@
 package ui.workbench
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.fillMaxSize
 import ui.manifest.ManifestEditorPanel
-import ui.manifest.ManifestEditorState
+import ui.manifest.model.ManifestEditorState
+import ui.workbench.model.mode.ManifestMode
 
 /**
  * Manifest builder area.
  */
 @Composable
 fun ManifestAreaScreen(
-    manifestYaml: String,
+    state: ManifestEditorState,
+    onStateChange: (ManifestEditorState) -> Unit,
+    activeEntryId: String?,
+    onSelectEntry: (String) -> Unit,
+    onAddEntry: () -> Unit,
+    onRemoveEntry: (String) -> Unit,
     fromYaml: (String) -> ManifestEditorState,
     toYaml: (ManifestEditorState) -> String,
-    onManifestYamlChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ManifestEditorPanel(
-        yaml = manifestYaml,
+        state = state,
+        onStateChange = onStateChange,
+        activeEntryId = activeEntryId,
+        onSelectEntry = onSelectEntry,
+        onAddEntry = onAddEntry,
+        onRemoveEntry = onRemoveEntry,
         fromYaml = fromYaml,
         toYaml = toYaml,
-        onYamlChange = onManifestYamlChange,
         initialMode = ManifestMode.BUILDER,
         modifier = modifier.fillMaxSize(),
     )

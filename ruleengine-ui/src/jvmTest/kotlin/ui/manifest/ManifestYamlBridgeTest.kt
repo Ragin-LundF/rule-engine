@@ -1,8 +1,9 @@
 package ui.manifest
 
+import ui.manifest.model.EditableManifestEntry
+import ui.manifest.model.ManifestEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ManifestYamlBridgeTest {
@@ -45,6 +46,35 @@ class ManifestYamlBridgeTest {
             expected = listOf("rules/rent.rule"),
             actual = parsed.entries.first().rulePaths,
         )
+    }
+
+    @Test
+    fun `round-trip preserves several entries and their order`() {
+        val state = ManifestEditorState(
+            name = "two-sets",
+            entries = listOf(
+                EditableManifestEntry(
+                    id = "transactions",
+                    schemaPath = "schemas/tx.yaml",
+                    rulePaths = listOf("rules/a.rule"),
+                ),
+                EditableManifestEntry(id = "risk", actionsPath = "schemas/risk-actions.yaml"),
+            ),
+        )
+
+        val parsed = ManifestYamlBridge.fromYaml(yaml = ManifestYamlBridge.toYaml(state = state))
+
+        assertEquals(expected = state, actual = parsed)
+    }
+
+    /** A freshly added entry has no files yet; dropping it would delete it before it was ever used. */
+    @Test
+    fun `an entry with only an id survives the round trip`() {
+        val state = ManifestEditorState(name = "x", entries = listOf(EditableManifestEntry(id = "brand-new")))
+
+        val parsed = ManifestYamlBridge.fromYaml(yaml = ManifestYamlBridge.toYaml(state = state))
+
+        assertEquals(expected = listOf("brand-new"), actual = parsed.entries.map { it.id })
     }
 
     @Test

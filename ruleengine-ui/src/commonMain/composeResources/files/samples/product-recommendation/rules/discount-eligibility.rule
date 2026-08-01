@@ -1,4 +1,5 @@
 rule "clearance-discount" {
+  description "Stock is nearly exhausted, so the remaining units go to clearance."
   when
     stock between 1 10
     and not tags containsAny ["new-arrival", "pre-order"]
@@ -9,6 +10,7 @@ rule "clearance-discount" {
 }
 
 rule "bulk-discount" {
+  description "A bulk-eligible product from a verified seller qualifies for the wholesale channel."
   when
     tags containsAll ["bulk-eligible", "verified-seller"]
     and price >= 100
@@ -19,6 +21,7 @@ rule "bulk-discount" {
 }
 
 rule "loyalty-discount" {
+  description "A mid-priced product that is part of the loyalty or member programme."
   when
     tags containsAny ["loyalty-reward", "member-exclusive"]
     and price between 50 1000

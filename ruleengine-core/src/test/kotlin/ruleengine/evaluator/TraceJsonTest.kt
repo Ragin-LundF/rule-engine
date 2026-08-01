@@ -2,12 +2,12 @@ package ruleengine.evaluator
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.domain.dto.OperatorId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -94,6 +94,56 @@ class TraceJsonTest {
         assertNotNull(actual = root)
         val children = root.get("children")
         assertNotNull(actual = children)
+
+        // These leaves report no actual value, and the mapper's NON_NULL inclusion must therefore keep
+        // "actual" out of the JSON entirely — existing consumers see byte-identical output.
+        assertTrue(
+            actual = "actual" !in json,
+            message = "Expected no 'actual' key when nothing set one, got: $json",
+        )
+    }
+
+    @Test
+    fun `an aggregate condition serializes its actual value`() {
+        val txt = """
+            rule "busy-basket" {
+              when
+                count(items) >= 5
+
+              then
+                label "busy"
+            }
+        """.trimIndent()
+
+        val schema = FieldSchema(
+            name = "basket-v1",
+            fields = mapOf(
+                FieldId(value = "items") to FieldDefinition(
+                    id = FieldId(value = "items"),
+                    type = FieldType.STRING_SET
+                )
+            )
+        )
+
+        val compiled = Compiler.compileRules(asts = Parser(input = txt).parseRules(), schema = schema)
+        val prepared = PreparedRuleContext.prepare(
+            ctx = RuleContext.of("items" to listOf(mapOf("sku" to "a"), mapOf("sku" to "b"))),
+            schema = schema
+        )
+        val result = RuleEngine(compiledRules = compiled).evaluate(prepared = prepared, includeTrace = true)
+
+        val json = JacksonUtil.jsonMapper.writeValueAsString(result.trace)
+        // root (EVALUATION) → children[0] (RULE) → children[0] (CONDITION)
+        val condition = JacksonUtil.jsonMapper.readTree(json)
+            .get("root").get("children").get(0)
+            .get("children").get(0)
+
+        assertNotNull(actual = condition)
+        assertTrue(actual = condition.get("field").asString() == "count(items)")
+        assertTrue(
+            actual = condition.get("actual").asInt() == 2,
+            message = "Expected the recorded count in the JSON, got: $json",
+        )
     }
 }
 

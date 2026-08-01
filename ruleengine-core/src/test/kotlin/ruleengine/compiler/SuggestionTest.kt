@@ -1,11 +1,11 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.domain.dto.OperatorId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -37,7 +37,7 @@ class SuggestionTest {
         )
         val res = Validator.validate(asts = asts, schema = schema)
         assertFalse(actual = res.isValid)
-        val diag = res.diagnostics.firstOrNull()
+        val diag = res.diagnostics.firstOrNull { it.message.contains("Unknown field") }
         assertEquals(expected = diag?.suggestion, actual = "purpose")
     }
 

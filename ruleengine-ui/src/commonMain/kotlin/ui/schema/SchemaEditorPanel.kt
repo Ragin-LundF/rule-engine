@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
-import ui.workbench.SchemaMode
+import ui.editor.YamlEditorPane
+import ui.schema.model.SchemaEditorState
+import ui.workbench.model.mode.SchemaMode
 
 /**
  * A composable panel for editing schemas, supporting both a visual editor and a YAML-based editor
@@ -50,6 +52,11 @@ fun SchemaEditorPanel(
     onYamlChange: (String) -> Unit,
     initialMode: SchemaMode = SchemaMode.VISUAL,
     modifier: Modifier = Modifier,
+    /**
+     * Draws which rules read which field. Supplied by the platform because the diagram renderer is
+     * JVM-side; null keeps the "later phase" placeholder.
+     */
+    usagesContent: (@Composable () -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -63,84 +70,114 @@ fun SchemaEditorPanel(
         )
     },
 ) {
-    var mode by remember { mutableStateOf(value = initialMode) }
-    var editorState by remember { mutableStateOf(value = fromYaml(yaml)) }
-    var yamlText by remember { mutableStateOf(value = yaml) }
-    var yamlError by remember { mutableStateOf<String?>(value = null) }
-
-    // External YAML changes (e.g. manifest load) should pull into the local model.
-    LaunchedEffect(key1 = yaml) {
-        if (yaml != yamlText) {
-            yamlText = yaml
-            editorState = fromYaml(yaml)
-            yamlError = null
-        }
-    }
-
-    // Visual/editor changes push to YAML only when the model is valid.
-    LaunchedEffect(key1 = editorState, key2 = mode) {
-        if (mode == SchemaMode.YAML) return@LaunchedEffect
-        if (editorState.hasValidationIssues()) return@LaunchedEffect
-        val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
-        if (generated != yamlText) {
-            yamlText = generated
-            onYamlChange(generated)
-        }
-    }
-
-    // YAML edits parse back to the visual model when valid (debounced).
-    LaunchedEffect(key1 = yamlText, key2 = mode) {
-        if (mode != SchemaMode.YAML) return@LaunchedEffect
-        delay(timeMillis = 500)
-        val parsed = runCatching { fromYaml(yamlText) }.getOrNull()
-        if (parsed != null && !parsed.isReadOnly) {
-            editorState = parsed
-            yamlError = null
-        } else {
-            yamlError = "Invalid YAML: could not parse field schema"
-        }
-    }
+    val sync = remember { SchemaEditorSync(yaml = yaml, mode = initialMode, state = fromYaml(yaml)) }
+    SyncSchemaAndYaml(sync = sync, yaml = yaml, fromYaml = fromYaml, toYaml = toYaml, onYamlChange = onYamlChange)
 
     Column(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         SchemaModeTabs(
-            current = mode,
+            current = sync.mode,
             onSelect = { newMode ->
-                if (newMode == SchemaMode.YAML && mode != SchemaMode.YAML) {
-                    if (!editorState.hasValidationIssues()) {
-                        yamlText = runCatching { toYaml(editorState) }.getOrNull() ?: yamlText
-                        onYamlChange(yamlText)
+                if (newMode == SchemaMode.YAML && sync.mode != SchemaMode.YAML) {
+                    if (!sync.state.hasValidationIssues()) {
+                        sync.yaml = runCatching { toYaml(sync.state) }.getOrNull() ?: sync.yaml
+                        onYamlChange(sync.yaml)
                     }
                 }
-                if (newMode != SchemaMode.YAML && mode == SchemaMode.YAML) {
-                    val generated = runCatching { toYaml(editorState) }.getOrNull()
+                if (newMode != SchemaMode.YAML && sync.mode == SchemaMode.YAML) {
+                    val generated = runCatching { toYaml(sync.state) }.getOrNull()
                     if (generated != null) {
-                        yamlText = generated
-                        onYamlChange(yamlText)
+                        sync.yaml = generated
+                        onYamlChange(sync.yaml)
                     }
                 }
-                mode = newMode
+                sync.mode = newMode
             },
         )
 
-        when (mode) {
+        when (sync.mode) {
             SchemaMode.VISUAL -> VisualSchemaEditor(
-                state = editorState,
-                onStateChange = { editorState = it },
+                state = sync.state,
+                onStateChange = { sync.state = it },
             )
             SchemaMode.YAML -> YamlSchemaEditor(
-                yaml = yamlText,
-                error = yamlError,
-                validationIssues = editorState.hasValidationIssues(),
+                yaml = sync.yaml,
+                error = sync.error,
+                validationIssues = sync.state.hasValidationIssues(),
                 onYamlChange = { newText ->
-                    yamlText = newText
-                    yamlError = null
+                    sync.yaml = newText
+                    sync.error = null
                 },
                 yamlEditor = yamlEditor,
             )
-            SchemaMode.USAGES -> FieldUsagesPanel()
+            SchemaMode.USAGES -> usagesContent?.invoke() ?: FieldUsagesPanel()
+        }
+    }
+}
+
+
+/**
+ * The panel's mutable state, held together because the three sync effects below all move values
+ * between these fields.
+ *
+ * [loaded] is the model as it was last read from YAML. Regenerating YAML from the model is lossy —
+ * comments, blank lines and quoting style are the author's, and the serializer does not keep them.
+ * So the panel must be able to tell "the user changed a field" from "the panel merely parsed the
+ * file", and only push in the first case. Without it, simply opening the schema tab rewrites the
+ * file the next time the project is saved.
+ */
+private class SchemaEditorSync(yaml: String, mode: SchemaMode, state: SchemaEditorState) {
+    var mode by mutableStateOf(value = mode)
+    var state by mutableStateOf(value = state)
+    var yaml by mutableStateOf(value = yaml)
+    var error by mutableStateOf<String?>(value = null)
+    var loaded by mutableStateOf(value = state)
+}
+
+/** Keeps the visual model and the YAML text in step, in whichever direction the edit came from. */
+@Suppress("FunctionNaming")
+@Composable
+private fun SyncSchemaAndYaml(
+    sync: SchemaEditorSync,
+    yaml: String,
+    fromYaml: (String) -> SchemaEditorState,
+    toYaml: (SchemaEditorState) -> String,
+    onYamlChange: (String) -> Unit,
+) {
+    // External YAML changes (e.g. project load) should pull into the local model.
+    LaunchedEffect(key1 = yaml) {
+        if (yaml != sync.yaml) {
+            sync.yaml = yaml
+            sync.state = fromYaml(yaml)
+            sync.loaded = sync.state
+            sync.error = null
+        }
+    }
+
+    // Visual/editor changes push to YAML only when the model is valid and actually different.
+    LaunchedEffect(key1 = sync.state, key2 = sync.mode) {
+        if (sync.mode == SchemaMode.YAML) return@LaunchedEffect
+        if (sync.state.hasValidationIssues()) return@LaunchedEffect
+        if (sync.state == sync.loaded) return@LaunchedEffect
+        val generated = runCatching { toYaml(sync.state) }.getOrNull() ?: return@LaunchedEffect
+        if (generated != sync.yaml) {
+            sync.yaml = generated
+            onYamlChange(generated)
+        }
+    }
+
+    // YAML edits parse back to the visual model when valid (debounced).
+    LaunchedEffect(key1 = sync.yaml, key2 = sync.mode) {
+        if (sync.mode != SchemaMode.YAML) return@LaunchedEffect
+        delay(timeMillis = 500)
+        val parsed = runCatching { fromYaml(sync.yaml) }.getOrNull()
+        if (parsed != null && !parsed.isReadOnly) {
+            sync.state = parsed
+            sync.error = null
+        } else {
+            sync.error = "Invalid YAML: could not parse field schema"
         }
     }
 }
@@ -239,12 +276,11 @@ private fun YamlSchemaEditor(
                 color = MaterialTheme.colors.error,
             )
         }
-        yamlEditor(
-            TextFieldValue(text = yaml),
-            { newValue ->
-                onYamlChange(newValue.text)
-            },
-            Modifier.fillMaxWidth().weight(1f),
+        YamlEditorPane(
+            yaml = yaml,
+            onYamlChange = onYamlChange,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            editor = yamlEditor,
         )
     }
 }

@@ -1,0 +1,34 @@
+# 3. Route risk — aggregates over the `checkpoints` collection.
+#
+# Schema: schema.yaml
+
+rule "route-on-time" {
+  description "The shipment moved through the network without any significant hold-up."
+  when
+    max(checkpoints.delayMinutes) < 60
+    and avg(checkpoints.delayMinutes) < 30
+
+  then
+    assessment "route:on-time"
+    reason "no-checkpoint-delayed-by-an-hour"
+}
+
+rule "route-delayed" {
+  description "A single checkpoint held the shipment for two hours or more."
+  when
+    max(checkpoints.delayMinutes) >= 120
+
+  then
+    assessment "route:delayed"
+    reason "a-checkpoint-was-delayed-by-two-hours-or-more"
+}
+
+rule "tracking-gap" {
+  description "A checkpoint was passed without a scan, so the tracking history has a gap."
+  when
+    count(checkpoints[scanned == false]) > 0
+
+  then
+    assessment "tracking:gap"
+    reason "a-checkpoint-was-not-scanned"
+}

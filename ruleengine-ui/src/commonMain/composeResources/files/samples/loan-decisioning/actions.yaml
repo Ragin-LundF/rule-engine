@@ -1,0 +1,12 @@
+actions:
+  decision:
+    argTypes: [string]
+  reason:
+    argTypes: [string]
+  riskGrade:
+    argTypes: [string]
+  # Margin over the base rate, in basis points.
+  marginBps:
+    argTypes: [integer]
+  requireDocument:
+    argTypes: [string]

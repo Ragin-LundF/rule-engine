@@ -1,12 +1,16 @@
 package ui.manifest
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
@@ -19,57 +23,57 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import ui.BgElevated
+import ui.BorderColor
+import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.components.PathListEditor
 import ui.components.SectionTitle
-import ui.workbench.ManifestMode
+import ui.components.StatusBadge
+import ui.components.ToolbarButton
+import ui.manifest.model.EditableManifestEntry
+import ui.manifest.model.ManifestEditorState
+import ui.workbench.model.mode.ManifestMode
 
 /**
  * Manifest builder panel with Builder / YAML / Checks tabs.
+ *
+ * The state is owned by the caller rather than by this panel: it is the same manifest the project
+ * saver writes, so a private copy here would be a second version of the truth that quietly loses to
+ * the session on the next save.
  */
 @Composable
 fun ManifestEditorPanel(
-    yaml: String,
+    state: ManifestEditorState,
+    onStateChange: (ManifestEditorState) -> Unit,
+    activeEntryId: String?,
+    onSelectEntry: (String) -> Unit,
+    onAddEntry: () -> Unit,
+    onRemoveEntry: (String) -> Unit,
     fromYaml: (String) -> ManifestEditorState,
     toYaml: (ManifestEditorState) -> String,
-    onYamlChange: (String) -> Unit,
     initialMode: ManifestMode = ManifestMode.BUILDER,
     modifier: Modifier = Modifier,
 ) {
     var mode by remember { mutableStateOf(initialMode) }
-    var editorState by remember { mutableStateOf(fromYaml(yaml)) }
-    var yamlText by remember { mutableStateOf(yaml) }
+    var yamlText by remember { mutableStateOf(toYaml(state)) }
     var yamlError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(key1 = yaml) {
-        if (yaml != yamlText) {
-            yamlText = yaml
-            editorState = fromYaml(yaml)
-            yamlError = null
-        }
-    }
-
-    LaunchedEffect(key1 = editorState, key2 = mode) {
-        if (mode == ManifestMode.YAML) return@LaunchedEffect
-        val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
-        if (generated != yamlText) {
-            yamlText = generated
-            onYamlChange(yamlText)
-        }
-    }
-
+    // Typing YAML parses on a pause rather than per keystroke: half-finished YAML is unparseable
+    // almost all of the time, and reporting that on every character makes the tab unusable.
     LaunchedEffect(key1 = yamlText, key2 = mode) {
         if (mode != ManifestMode.YAML) return@LaunchedEffect
-        delay(timeMillis = 500)
+        delay(timeMillis = YAML_PARSE_DELAY_MS)
         val parsed = runCatching { fromYaml(yamlText) }.getOrNull()
-        if (parsed != null && !parsed.isReadOnly) {
-            editorState = parsed
-            yamlError = null
-        } else {
+        if (parsed == null || parsed.isReadOnly) {
             yamlError = "Invalid YAML: could not parse manifest"
+            return@LaunchedEffect
         }
+        yamlError = null
+        if (parsed != state) onStateChange(parsed)
     }
 
     Column(
@@ -79,16 +83,11 @@ fun ManifestEditorPanel(
         ManifestModeTabs(
             current = mode,
             onSelect = { newMode ->
-                if (newMode == ManifestMode.YAML && mode != ManifestMode.YAML) {
-                    yamlText = runCatching { toYaml(editorState) }.getOrNull() ?: yamlText
-                    onYamlChange(yamlText)
-                }
-                if (newMode != ManifestMode.YAML && mode == ManifestMode.YAML) {
-                    val generated = runCatching { toYaml(editorState) }.getOrNull()
-                    if (generated != null) {
-                        yamlText = generated
-                        onYamlChange(yamlText)
-                    }
+                // Entering the YAML tab shows what the manifest currently is, not what it was the
+                // last time the tab was open.
+                if (newMode == ManifestMode.YAML) {
+                    yamlText = runCatching { toYaml(state) }.getOrNull() ?: yamlText
+                    yamlError = null
                 }
                 mode = newMode
             },
@@ -96,9 +95,14 @@ fun ManifestEditorPanel(
 
         when (mode) {
             ManifestMode.BUILDER -> VisualManifestEditor(
-                state = editorState,
-                onStateChange = { editorState = it },
+                state = state,
+                onStateChange = onStateChange,
+                activeEntryId = activeEntryId,
+                onSelectEntry = onSelectEntry,
+                onAddEntry = onAddEntry,
+                onRemoveEntry = onRemoveEntry,
             )
+
             ManifestMode.YAML -> YamlManifestEditor(
                 yaml = yamlText,
                 error = yamlError,
@@ -107,21 +111,27 @@ fun ManifestEditorPanel(
                     yamlError = null
                 },
             )
-            ManifestMode.CHECKS -> ManifestChecksPanel(state = editorState)
+
+            ManifestMode.CHECKS -> ManifestChecksPanel(state = state)
         }
     }
 }
+
+private const val YAML_PARSE_DELAY_MS = 500L
 
 @Composable
 private fun VisualManifestEditor(
     state: ManifestEditorState,
     onStateChange: (ManifestEditorState) -> Unit,
+    activeEntryId: String?,
+    onSelectEntry: (String) -> Unit,
+    onAddEntry: () -> Unit,
+    onRemoveEntry: (String) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(scrollState),
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SectionTitle(text = "MANIFEST")
@@ -133,25 +143,78 @@ private fun VisualManifestEditor(
             singleLine = true,
         )
 
-        val entry = state.entries.firstOrNull() ?: EditableManifestEntry()
-        ManifestEntryCard(
-            entry = entry,
-            onEntryChange = { updated ->
-                onStateChange(state.copy(entries = listOf(updated)))
-            },
-        )
+        SectionTitle(text = "ENTRIES")
+        state.entries.forEachIndexed { index, entry ->
+            ManifestEntryCard(
+                entry = entry,
+                index = index,
+                isActive = entry.id == activeEntryId,
+                canRemove = state.entries.size > 1,
+                onSelect = { onSelectEntry(entry.id) },
+                onRemove = { onRemoveEntry(entry.id) },
+                onEntryChange = { updated ->
+                    onStateChange(
+                        state.copy(
+                            entries = state.entries.toMutableList().also { it[index] = updated },
+                        ),
+                    )
+                },
+            )
+        }
+
+        ToolbarButton(label = "+ Add entry", onClick = onAddEntry)
     }
 }
 
 @Composable
 private fun ManifestEntryCard(
     entry: EditableManifestEntry,
+    index: Int,
+    isActive: Boolean,
+    canRemove: Boolean,
+    onSelect: () -> Unit,
+    onRemove: () -> Unit,
     onEntryChange: (EditableManifestEntry) -> Unit,
 ) {
+    // The id is edited locally and only committed once it is non-blank: pushing an empty id upwards
+    // would make the entry vanish from the manifest between two keystrokes.
+    var idDraft by remember(index) { mutableStateOf(entry.id) }
+
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = BgElevated)
+            .border(
+                width = 1.dp,
+                color = if (isActive) PrimaryBlue else BorderColor,
+                shape = RoundedCornerShape(size = 8.dp),
+            )
+            .padding(all = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+        ) {
+            if (isActive) StatusBadge(label = "EDITING", color = PrimaryBlue)
+            Spacer(modifier = Modifier.weight(weight = 1f))
+            if (!isActive) ToolbarButton(label = "Edit this entry", onClick = onSelect)
+            if (canRemove) ToolbarButton(label = "Remove…", onClick = onRemove)
+        }
+
+        OutlinedTextField(
+            value = idDraft,
+            onValueChange = { newId ->
+                idDraft = newId
+                if (newId.isNotBlank()) onEntryChange(entry.copy(id = newId.trim()))
+            },
+            label = { Text("Name (entry id)") },
+            isError = idDraft.isBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+        )
         OutlinedTextField(
             value = entry.schemaPath,
             onValueChange = { onEntryChange(entry.copy(schemaPath = it)) },
@@ -222,17 +285,7 @@ private fun ManifestChecksPanel(state: ManifestEditorState) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SectionTitle(text = "CHECKS")
-        val issues = buildList {
-            if (state.name.isBlank()) add("Manifest name is empty")
-            val entry = state.entries.firstOrNull()
-            if (entry == null) {
-                add("No manifest entry defined")
-            } else {
-                if (entry.schemaPath.isBlank()) add("Field schema file not set")
-                if (entry.actionsPath.isBlank()) add("Action schema file not set")
-                if (entry.rulePaths.isEmpty()) add("No rule files configured")
-            }
-        }
+        val issues = manifestIssues(state = state)
         if (issues.isEmpty()) {
             Text(
                 text = "✓ Manifest structure looks valid",
@@ -247,6 +300,35 @@ private fun ManifestChecksPanel(state: ManifestEditorState) {
                     style = MaterialTheme.typography.body2,
                 )
             }
+        }
+    }
+}
+
+/**
+ * What would stop this manifest from loading, plus the softer omissions.
+ *
+ * Duplicate entry ids are the one that matters most: the engine rejects the manifest outright, and
+ * the id is otherwise invisible enough that two entries can end up sharing one by accident.
+ */
+private fun manifestIssues(state: ManifestEditorState): List<String> {
+    return buildList {
+        if (state.name.isBlank()) add("Manifest name is empty")
+        if (state.entries.isEmpty()) {
+            add("No manifest entry defined")
+            return@buildList
+        }
+
+        state.entries
+            .groupBy { it.id }
+            .filter { (id, entries) -> id.isNotBlank() && entries.size > 1 }
+            .forEach { (id, _) -> add("Entry id \"$id\" is used more than once") }
+
+        state.entries.forEachIndexed { index, entry ->
+            val label = entry.id.ifBlank { "entry ${index + 1}" }
+            if (entry.id.isBlank()) add("$label has no id")
+            if (entry.schemaPath.isBlank()) add("$label: field schema file not set")
+            if (entry.actionsPath.isBlank()) add("$label: action schema file not set")
+            if (entry.rulePaths.isEmpty()) add("$label: no rule files configured")
         }
     }
 }

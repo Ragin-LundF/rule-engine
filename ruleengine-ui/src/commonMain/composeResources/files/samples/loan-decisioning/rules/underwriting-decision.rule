@@ -1,0 +1,84 @@
+# 2. Credit policy — approve, refer or decline, phrased in the ratios published above.
+#
+# Every affordability condition here reads a `$variable` instead of recomputing the ratio from income
+# and instalments. The policy limits stay visible as the plain numbers a credit committee signs off,
+# and changing how a ratio is defined never means editing this file.
+#
+# Schema: schema.yaml
+
+rule "auto-approve" {
+  description "A comfortably affordable application from a clean file, decided without a human underwriter."
+  when
+    $debtToIncomeRatio <= 0.35
+    and $disposableIncome >= 600
+    and creditScore >= 700
+    and employmentMonths >= 12
+    and not flags containsAny ["previous-default", "in-collection"]
+
+  then
+    decision "approve"
+    reason "within-policy-limits"
+}
+
+rule "refer-to-underwriter" {
+  description "Affordability is stretched but still inside policy, so a human takes the decision."
+  when
+    $debtToIncomeRatio > 0.35
+    and $debtToIncomeRatio <= 0.5
+
+  then
+    decision "refer"
+    reason "debt-to-income-above-auto-approval-limit"
+}
+
+rule "decline-unaffordable" {
+  description "More than half the applicant's net income would go to servicing debt."
+  when
+    $debtToIncomeRatio > 0.5
+
+  then
+    decision "decline"
+    reason "debt-to-income-above-policy-ceiling"
+}
+
+rule "decline-no-headroom" {
+  description "What remains after every instalment does not cover a household's running costs."
+  when
+    $disposableIncome < 400
+
+  then
+    decision "decline"
+    reason "insufficient-disposable-income"
+}
+
+rule "thin-collateral" {
+  description "The loan exceeds ninety percent of the property's value, so additional security is required."
+  when
+    $loanToValueRatio > 0.9
+
+  then
+    decision "refer"
+    reason "loan-to-value-above-ninety-percent"
+    requireDocument "additional-security"
+}
+
+rule "arrears-on-existing-commitment" {
+  description "The applicant is already behind on another loan, which ends the application regardless of the ratios."
+  when
+    count(existingLoans[inArrears == true]) > 0
+
+  then
+    decision "decline"
+    reason "arrears-on-an-existing-commitment"
+}
+
+rule "unsecured-high-exposure" {
+  description "An unsecured application above the branch limit always goes to an underwriter."
+  when
+    product in ["consumer-loan", "auto-loan"]
+    and requestedAmount > 25000
+
+  then
+    decision "refer"
+    reason "unsecured-amount-above-branch-limit"
+}

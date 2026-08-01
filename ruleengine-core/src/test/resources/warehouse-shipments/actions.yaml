@@ -1,0 +1,5 @@
+actions:
+  assessment:
+    argTypes: [string]
+  reason:
+    argTypes: [string]

@@ -2,12 +2,21 @@ package ruleengine.compiler
 
 import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
-import ruleengine.core.domain.ActionArgType
-import ruleengine.core.domain.ActionSchema
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.compiler.support.FieldPathMessages
+import ruleengine.compiler.support.LiteralValidation
+import ruleengine.compiler.support.OperatorSupport
+import ruleengine.compiler.support.Suggestions
+import ruleengine.compiler.support.VariableScopeValidator
+import ruleengine.compiler.value.ValueExpressionValidator
+import ruleengine.core.domain.FieldPathResolution
+import ruleengine.core.domain.FieldPathResolver
+import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.action.ActionArgType
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst
@@ -25,9 +34,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
-import java.math.BigDecimal
-
-data class ValidationResult(val isValid: Boolean, val diagnostics: List<ValidationDiagnostic>)
+import ruleengine.dsl.ast.VariableRefLiteral
 
 object Validator {
 
@@ -35,7 +42,29 @@ object Validator {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
         val ids = mutableSetOf<String>()
 
-        // Check for duplicate aliases in the schema
+        validateAliasUniqueness(schema = schema, diagnostics = diagnostics)
+
+        for (rule in asts) {
+            if (!ids.add(rule.id)) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Duplicate rule id: ${rule.id}",
+                    line = rule.line,
+                    column = rule.column,
+                )
+            }
+            validateRule(rule = rule, schema = schema, actions = actions, diagnostics = diagnostics)
+        }
+
+        // Runs over the whole entry rather than per rule: "an earlier rule assigns it" only has a
+        // meaning once every rule of the entry is known, in evaluation order.
+        VariableScopeValidator.validate(asts = asts, schema = schema, diagnostics = diagnostics)
+
+        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+    }
+
+    /** Two fields sharing an alias make every rule that uses it ambiguous. */
+    private fun validateAliasUniqueness(schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
         val aliasToFieldId = mutableMapOf<String, FieldId>()
         schema.fields.forEach { (fieldId, definition) ->
             definition.alias?.let { alias ->
@@ -51,39 +80,57 @@ object Validator {
                 }
             }
         }
+    }
 
-        for (rule in asts) {
-            if (!ids.add(rule.id)) {
-                diagnostics += ValidationDiagnostic(
-                    severity = Severity.ERROR,
-                    message = "Duplicate rule id: ${rule.id}"
-                )
-            }
+    /** Everything checkable about one rule on its own; cross-rule checks run over the whole list. */
+    private fun validateRule(
+        rule: RuleAst,
+        schema: FieldSchema,
+        actions: ActionSchema?,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
+        // A missing description never blocks execution — it only degrades the exported rule
+        // overview, where the id and the raw condition would be all a reader gets.
+        if (rule.description.isNullOrBlank()) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.WARNING,
+                message = "Rule '${rule.id}' has no description",
+                suggestion = "Add a description \"...\" clause so the rule can be explained " +
+                        "in an exported overview",
+                line = rule.line,
+                column = rule.column,
+            )
+        }
 
-            validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
+        validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
 
-            // Always validate extraction clauses so invalid patterns / unknown fields are caught
-            // even when no action schema is supplied.
-            for (a in rule.actions) {
-                if (a.extraction != null) {
-                    validateExtraction(
-                        extraction = a.extraction,
-                        fieldSchema = schema,
-                        diagnostics = diagnostics
-                    )
-                }
-            }
+        for (assignment in rule.assignments) {
+            ValueExpressionValidator.validateValue(
+                expr = assignment.expression,
+                schema = schema,
+                diagnostics = diagnostics
+            )
+        }
 
-            if (actions != null) {
-                validateActions(
-                    actions = rule.actions,
-                    actionSchema = actions,
+        // Always validate extraction clauses so invalid patterns / unknown fields are caught
+        // even when no action schema is supplied.
+        for (a in rule.actions) {
+            if (a.extraction != null) {
+                validateExtraction(
+                    extraction = a.extraction,
+                    fieldSchema = schema,
                     diagnostics = diagnostics
                 )
             }
         }
 
-        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+        if (actions != null) {
+            validateActions(
+                actions = rule.actions,
+                actionSchema = actions,
+                diagnostics = diagnostics
+            )
+        }
     }
 
     private fun validateExpression(
@@ -117,23 +164,35 @@ object Validator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
-        val resolvedFieldId = resolveIdentifier(identifier = cond.field, schema = schema)
-        val fieldId = FieldId(value = resolvedFieldId)
-        val def = schema.fields[fieldId]
-        if (def == null) {
-            val suggestion = suggestClosest(
-                input = cond.field,
-                candidates = buildList {
-                    addAll(schema.fields.keys.map { it.value })
-                    addAll(schema.fields.mapNotNull { it.value.alias })
-                }
-            )
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "Unknown field '${cond.field}' in condition",
-                suggestion = suggestion
-            )
-            return
+        val def = when (val resolution = FieldPathResolver.resolve(identifier = cond.field, schema = schema)) {
+            is FieldPathResolution.Resolved -> resolution.definition
+
+            is FieldPathResolution.CrossesCollection -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = FieldPathMessages.crossesCollection(
+                        field = cond.field,
+                        collectionPath = resolution.collectionPath
+                    ),
+                    line = cond.line,
+                    column = cond.column,
+                )
+                return
+            }
+
+            is FieldPathResolution.Unknown -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Unknown field '${cond.field}' in condition",
+                    suggestion = Suggestions.suggestClosest(
+                        input = cond.field,
+                        candidates = fieldCandidates(schema = schema)
+                    ),
+                    line = cond.line,
+                    column = cond.column,
+                )
+                return
+            }
         }
 
         if (def.type == FieldType.COLLECTION || def.type == FieldType.OBJECT) {
@@ -141,37 +200,45 @@ object Validator {
                 severity = Severity.ERROR,
                 message = "Field '${cond.field}' is a ${def.type.name.lowercase()} and cannot be compared " +
                         "directly; navigate into it (e.g. '${cond.field}.someField') or use an aggregate " +
-                        "function such as count(${cond.field})"
+                        "function such as count(${cond.field})",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
 
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
-        val allowedOperators = allowedOperatorsFor(def = def)
+        val allowedOperators = OperatorSupport.allowedOperatorsFor(def = def)
         if (op !in allowedOperators) {
             val allowed = allowedOperators.sorted()
-            val suggestion = suggestClosest(input = op, candidates = allowed)
+            val suggestion = Suggestions.suggestClosest(input = op, candidates = allowed)
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed",
-                suggestion = suggestion
+                suggestion = suggestion,
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
 
         when (def.type) {
             FieldType.TEXT -> when (op) {
-                "in" -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
+                OperatorNames.IN -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
-                        message = "Field '${cond.field}' with 'in' expects list or string literal"
+                        message = "Field '${cond.field}' with 'in' expects list or string literal",
+                        line = cond.line,
+                        column = cond.column,
                     )
 
-                "regex" -> {
+                OperatorNames.REGEX -> {
                     if (cond.value !is StringLiteral)
                         diagnostics += ValidationDiagnostic(
                             severity = Severity.ERROR,
-                            message = "Field '${cond.field}' with 'regex' expects string literal pattern"
+                            message = "Field '${cond.field}' with 'regex' expects string literal pattern",
+                            line = cond.line,
+                            column = cond.column,
                         )
                     else {
                         runCatching {
@@ -179,48 +246,64 @@ object Validator {
                         }.onFailure { cause ->
                             diagnostics += ValidationDiagnostic(
                                 severity = Severity.ERROR,
-                                message = "Invalid regex pattern for field '${cond.field}': ${cause.message}"
+                                message = "Invalid regex pattern for field '${cond.field}': ${cause.message}",
+                                line = cond.line,
+                                column = cond.column,
                             )
                         }
                     }
                 }
 
-                "between" -> diagnostics += ValidationDiagnostic(
+                OperatorNames.BETWEEN -> diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field"
+                    message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
                 else -> if (cond.value !is StringLiteral)
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
-                        message = "Field '${cond.field}' expects text literal"
+                        message = "Field '${cond.field}' expects text literal",
+                        line = cond.line,
+                        column = cond.column,
                     )
             }
 
             FieldType.DECIMAL -> when (op) {
-                "between" -> validateDecimalBounds(cond = cond, diagnostics = diagnostics)
-                else -> validateDecimalLiteral(cond = cond, diagnostics = diagnostics)
+                OperatorNames.BETWEEN -> LiteralValidation.validateDecimalBounds(cond = cond, diagnostics = diagnostics)
+                else -> LiteralValidation.validateDecimalLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.INTEGER -> when (op) {
-                "between" -> validateIntegerBounds(cond = cond, diagnostics = diagnostics)
-                else -> validateIntegerLiteral(cond = cond, diagnostics = diagnostics)
+                OperatorNames.BETWEEN -> LiteralValidation.validateIntegerBounds(cond = cond, diagnostics = diagnostics)
+                else -> LiteralValidation.validateIntegerLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' expects list or string literal"
+                    message = "Field '${cond.field}' expects list or string literal",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
             FieldType.BOOLEAN -> if (cond.value !is BooleanLiteral)
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' expects 'true' or 'false'"
+                    message = "Field '${cond.field}' expects 'true' or 'false'",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
             FieldType.DATE, FieldType.DATE_TIME ->
                 validateDateLiteral(cond = cond, def = def, op = op, diagnostics = diagnostics)
+
+            // Structure types carry no literal of their own — a condition addresses one of their
+            // members, which is resolved and validated as that member's scalar type before we get
+            // here. Spelled out rather than left to fall through so that adding a FieldType makes
+            // the compiler ask what its literal rule is.
+            FieldType.COLLECTION, FieldType.OBJECT -> Unit
         }
     }
 
@@ -235,11 +318,13 @@ object Validator {
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         val expected = DateOperator.expectedFormatText(def = def)
-        if (op == "between") {
+        if (op == OperatorNames.BETWEEN) {
             val between = cond.value as? BetweenLiteral ?: run {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected"
+                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected",
+                    line = cond.line,
+                    column = cond.column,
                 )
                 return
             }
@@ -249,7 +334,9 @@ object Validator {
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
                         message = "Invalid date bound '$invalid' for field '${cond.field}'; " +
-                                "expected $expected"
+                                "expected $expected",
+                        line = cond.line,
+                        column = cond.column,
                     )
                 }
             return
@@ -258,7 +345,9 @@ object Validator {
         val literal = cond.value as? StringLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects a quoted date literal in $expected"
+                message = "Field '${cond.field}' expects a quoted date literal in $expected",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -266,24 +355,40 @@ object Validator {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Invalid date '${literal.value}' for field '${cond.field}'; " +
-                        "expected $expected"
+                        "expected $expected",
+                line = cond.line,
+                column = cond.column,
             )
         }
     }
 
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
-        val fieldId = FieldId(value = identifier)
-        if (schema.fields.containsKey(fieldId)) {
-            return identifier
-        }
-
-        for ((id, definition) in schema.fields) {
-            if (definition.alias == identifier) {
-                return id.value
+    /**
+     * Names a rule may use for a field: every declared path that resolves to a scalar, plus the aliases.
+     *
+     * Nested paths are included so a typo deep in a path (`shipment.customer.tir`) can still be pointed at
+     * the field the author meant.
+     */
+    private fun fieldCandidates(schema: FieldSchema): List<String> {
+        val scalarPaths = FieldPathResolver.scalarPaths(schema = schema)
+        return buildList {
+            addAll(scalarPaths.keys.map { it.value })
+            // The author may have written the alias rather than the declared name, so offer that spelling too.
+            for ((fieldId, definition) in scalarPaths) {
+                val alias = definition.alias ?: continue
+                add(aliasPath(path = fieldId.value, alias = alias))
             }
+            addAll(schema.fields.keys.map { it.value })
+            addAll(schema.fields.mapNotNull { it.value.alias })
         }
+    }
 
-        return identifier
+    /** The same path with its last segment replaced by [alias]. */
+    private fun aliasPath(path: String, alias: String): String {
+        val prefix = path.substringBeforeLast(delimiter = '.', missingDelimiterValue = "")
+        if (prefix.isEmpty()) {
+            return alias
+        }
+        return "$prefix.$alias"
     }
 
     @Suppress("LoopWithTooManyJumpStatements", "CyclomaticComplexMethod", "NestedBlockDepth")
@@ -308,6 +413,11 @@ object Validator {
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
                 val lit = a.arguments.getOrNull(index = idx)
+                // A variable carries whatever the assigning rule produced, so its type is only known
+                // at evaluation time; that it exists at all is checked by VariableScopeValidator.
+                if (lit is VariableRefLiteral) {
+                    continue
+                }
                 // ExtractionRefLiteral resolves to a String at evaluation time
                 if (lit is ExtractionRefLiteral) {
                     if (a.extraction == null) {
@@ -345,19 +455,15 @@ object Validator {
     ) {
         when (extraction) {
             is ExtractionAst.RegexExtraction -> {
-                val resolvedSource = resolveIdentifier(
+                val resolution = FieldPathResolver.resolve(
                     identifier = extraction.sourceField,
                     schema = fieldSchema
                 )
-                val fieldId = FieldId(value = resolvedSource)
-                val def = fieldSchema.fields[fieldId]
+                val def = (resolution as? FieldPathResolution.Resolved)?.definition
                 if (def == null) {
-                    val suggestion = suggestClosest(
+                    val suggestion = Suggestions.suggestClosest(
                         input = extraction.sourceField,
-                        candidates = buildList {
-                            addAll(fieldSchema.fields.keys.map { it.value })
-                            addAll(fieldSchema.fields.mapNotNull { it.value.alias })
-                        }
+                        candidates = fieldCandidates(schema = fieldSchema)
                     )
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
@@ -388,161 +494,4 @@ object Validator {
             }
         }
     }
-}
-
-private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
-    return if (def.operators.isNotEmpty()) {
-        def.operators.mapTo(mutableSetOf()) { operator ->
-            OperatorUtils.normalizeOperator(op = operator.value)
-        }
-    } else {
-        supportedOperatorsFor(type = def.type)
-    }
-}
-
-private fun supportedOperatorsFor(type: FieldType): Set<String> {
-    return when (type) {
-        FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
-        FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
-        FieldType.STRING_SET -> setOf("containsAny", "containsAll")
-        FieldType.BOOLEAN -> setOf("equals")
-        FieldType.DATE, FieldType.DATE_TIME -> setOf("equals", "gt", "gte", "lt", "lte", "between")
-        // COLLECTION and OBJECT are navigated or aggregated, never compared directly.
-        else -> emptySet()
-    }
-}
-
-private fun validateDecimalLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-    val literal = cond.value as? NumberLiteral ?: run {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Field '${cond.field}' expects numeric literal"
-        )
-        return
-    }
-    runCatching {
-        BigDecimal(literal.value)
-    }.onFailure {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Invalid decimal literal: ${literal.value}"
-        )
-    }
-}
-
-private fun validateDecimalBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-    val between = cond.value as? BetweenLiteral ?: run {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Field '${cond.field}' with 'between' expects two numeric bounds"
-        )
-        return
-    }
-    validateDecimalBound(
-        value = between.low,
-        diagnostics = diagnostics,
-        message = "Invalid lower bound: ${between.low}"
-    )
-    validateDecimalBound(
-        value = between.high,
-        diagnostics = diagnostics,
-        message = "Invalid upper bound: ${between.high}"
-    )
-}
-
-private fun validateDecimalBound(
-    value: String,
-    diagnostics: MutableList<ValidationDiagnostic>,
-    message: String
-) {
-    runCatching {
-        BigDecimal(value)
-    }.onFailure {
-        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
-    }
-}
-
-private fun validateIntegerLiteral(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-    val literal = cond.value as? NumberLiteral ?: run {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Field '${cond.field}' expects integer literal"
-        )
-        return
-    }
-    runCatching {
-        literal.value.toLong()
-    }.onFailure {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Invalid integer literal: ${literal.value}"
-        )
-    }
-}
-
-private fun validateIntegerBounds(cond: ConditionAst, diagnostics: MutableList<ValidationDiagnostic>) {
-    val between = cond.value as? BetweenLiteral ?: run {
-        diagnostics += ValidationDiagnostic(
-            severity = Severity.ERROR,
-            message = "Field '${cond.field}' with 'between' expects two integer bounds"
-        )
-        return
-    }
-    validateIntegerBound(
-        value = between.low,
-        diagnostics = diagnostics,
-        message = "Invalid lower bound: ${between.low}"
-    )
-    validateIntegerBound(
-        value = between.high,
-        diagnostics = diagnostics,
-        message = "Invalid upper bound: ${between.high}"
-    )
-}
-
-private fun validateIntegerBound(
-    value: String,
-    diagnostics: MutableList<ValidationDiagnostic>,
-    message: String
-) {
-    runCatching {
-        value.toLong()
-    }.onFailure {
-        diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
-    }
-}
-
-private fun suggestClosest(input: String, candidates: List<String>, maxDistance: Int = 3): String? {
-    var best: String? = null
-    var bestDist = Int.MAX_VALUE
-    for (c in candidates) {
-        val d = levenshtein(a = input.lowercase(), b = c.lowercase())
-        if (d < bestDist) {
-            bestDist = d
-            best = c
-        }
-    }
-    return if (bestDist <= maxDistance) best else null
-}
-
-private fun levenshtein(a: String, b: String): Int {
-    if (a == b) return 0
-    if (a.isEmpty()) return b.length
-    if (b.isEmpty()) return a.length
-    val aLen = a.length
-    val bLen = b.length
-    val dp = Array(aLen + 1) { IntArray(bLen + 1) }
-    for (i in 0..aLen) dp[i][0] = i
-    for (j in 0..bLen) dp[0][j] = j
-    for (i in 1..aLen) {
-        for (j in 1..bLen) {
-            val cost = if (a[i - 1] == b[j - 1]) 0 else 1
-            dp[i][j] = minOf(
-                dp[i - 1][j] + 1,
-                dp[i][j - 1] + 1,
-                dp[i - 1][j - 1] + cost
-            )
-        }
-    }
-    return dp[aLen][bLen]
 }

@@ -1,8 +1,12 @@
 package ui.schema
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.isStructure
+import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.schema.FieldSchemaLoader
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 
 /**
  * Converts between [SchemaEditorState] and YAML text understood by [FieldSchemaLoader].
@@ -92,8 +96,10 @@ object FieldSchemaYamlBridge {
 private fun FieldDefinition.toEditableField(): EditableField = EditableField(
     path = id.value,
     alias = alias ?: "",
-    type = SchemaFieldType.entries.firstOrNull { it.yamlValue == type.name.lowercase() }
-        ?: SchemaFieldType.TEXT,
+    // The editor and the engine now share one FieldType, so this is carried straight across. It used
+    // to be a lookup by lowercased name that fell back to TEXT, which silently downgraded any field
+    // whose spelling drifted.
+    type = type,
     format = format ?: "",
     normalizers = normalizers.map { it.value },
     operators = operators.map { it.value },

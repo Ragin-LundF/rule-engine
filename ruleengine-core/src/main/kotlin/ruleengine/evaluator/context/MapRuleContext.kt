@@ -1,6 +1,6 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 
 class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
     override fun get(field: FieldId): Any? {
@@ -31,16 +31,16 @@ class MapRuleContext(private val map: Map<String, Any?>) : RuleContext {
             is Collection<*> -> {
                 val results = current.mapNotNull { element ->
                     val resolved = resolveRaw(current = element, path = path, index = index)
-                    if (resolved == null) null else resolved
+                    resolved
                 }
-                if (results.isEmpty()) null else results
+                results.ifEmpty { null }
             }
             is Array<*> -> {
                 val results = current.mapNotNull { element ->
                     val resolved = resolveRaw(current = element, path = path, index = index)
-                    if (resolved == null) null else resolved
+                    resolved
                 }
-                if (results.isEmpty()) null else results
+                results.ifEmpty { null }
             }
             else -> null
         }

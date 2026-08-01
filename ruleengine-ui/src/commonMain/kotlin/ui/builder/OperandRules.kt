@@ -1,5 +1,15 @@
 package ui.builder
 
+import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
+import ui.builder.model.BuilderTerm
+import ui.builder.model.catalog.CatalogFieldInfo
+import ui.builder.model.catalog.fieldAtPath
+import ui.builder.model.catalog.fieldsAtPath
+import ui.builder.model.catalog.scalarPaths
+import ui.builder.model.names
+
+
 /**
  * The rules that decide which operand kinds a comparison row may offer, and which comparison
  * operators go with them.
@@ -58,7 +68,12 @@ object OperandRules {
             is BuilderOperand.Aggregate, is BuilderOperand.Calc -> true
             is BuilderOperand.Literal -> operand.numeric || operand.text.trim().toDoubleOrNull() != null
             is BuilderOperand.FieldRef -> fields.fieldAtPath(segments = operand.path.names)
-                ?.let { OperatorOptions.isNumericType(fieldType = it.type) } ?: false
+                // An untyped variable counts as numeric so the row still offers ordering
+                // comparisons; the engine places no type restriction on one either.
+                ?.let {
+                    OperatorOptions.isNumericType(fieldType = it.type) ||
+                        OperatorOptions.isVariableType(fieldType = it.type)
+                } ?: false
         }
 
     /**
@@ -137,11 +152,19 @@ object OperandRules {
         return OperatorOptions.isStructureType(fieldType = leaf.type) && leaf.nestedFields.isNotEmpty()
     }
 
-    /** Members available to a filter on the segment at [depth]. */
+    /**
+     * Members available to a filter on the segment at [depth].
+     *
+     * A member reachable through a nested object is offered by its dotted path, because the engine
+     * resolves the filter against the element and walks that path — `parcels[origin.hub == "HAM"]`.
+     * Collection members are left out: projecting one yields many values, which a single
+     * `field op value` row has nothing to compare against.
+     */
     fun filterFieldOptions(
         fields: List<CatalogFieldInfo>,
         path: List<BuilderPathStep>,
         depth: Int,
-    ): List<CatalogFieldInfo> = fields.fieldAtPath(segments = path.take(n = depth + 1).names)?.nestedFields
+    ): List<CatalogFieldInfo> = fields.fieldAtPath(segments = path.take(n = depth + 1).names)
+        ?.nestedFields?.scalarPaths()
         ?: emptyList()
 }

@@ -1,19 +1,16 @@
 package ruleengine.compiler
 
 import org.junit.jupiter.api.Test
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
-import ruleengine.core.domain.OperatorId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
-import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.AndAst
 import kotlin.test.assertTrue
-import kotlin.test.assertEquals
 
 class ValidatorAliasUniquenessTest {
 

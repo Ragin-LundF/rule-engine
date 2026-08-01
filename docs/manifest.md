@@ -103,6 +103,38 @@ Each entry is loaded and evaluated independently.
 
 ---
 
+## Rule Order and Variables
+
+For plain rules the order of the `rules:` list is only visible in the results: every rule is checked
+against every record, and the order decides in which order the matches come back.
+
+That changes as soon as a rule publishes a [variable](rules.md#variables--the-set-clause). A `set`
+clause makes its value available to the rules **after** it in this list, so the order becomes part of
+the meaning:
+
+```yaml
+entries:
+  - id: orders
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      # First: publishes $orderTotal, which the rules below read.
+      - rules/totals.rule
+      - rules/pricing.rule
+      - rules/routing.rule
+```
+
+Moving `totals.rule` down would make every `$orderTotal` read a forward reference, and the build would
+fail with `reads unknown variable '$orderTotal'`.
+
+Variables are scoped to a single entry and a single evaluation. Two entries never see each other's
+variables, and nothing carries over from one input record to the next.
+
+The `shortCircuitByOutput` option evaluates rules by output group rather than in declaration order, so
+it cannot be combined with variables; the build fails with an explicit message if you try.
+
+---
+
 ## Recommended Project Layout
 
 Here is a clean folder structure for a rule project using a manifest:
@@ -177,6 +209,7 @@ When the engine loads a manifest, it performs the following checks:
 - All rule files parse without syntax errors.
 - All rules are valid against the field schema and action schema.
 - All rule IDs across all loaded files are unique within an entry.
+- Every `$variable` a rule reads is assigned by a `set` clause in an earlier rule of the same entry.
 
 If any check fails, the engine reports detailed errors and does not start.
 

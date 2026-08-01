@@ -1,6 +1,7 @@
 package ruleengine.jackson
 
 import com.fasterxml.jackson.annotation.JsonInclude
+import tools.jackson.core.ObjectReadContext
 import tools.jackson.core.StreamReadFeature
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.ObjectMapper
@@ -22,8 +23,25 @@ object JacksonUtil {
      */
     @JvmStatic
     val jsonMapper: ObjectMapper = createObjectMapper()
+
+    /**
+     * Reads YAML [content] as [type], using the JSON-configured [jsonMapper] behind a YAML parser.
+     *
+     * There is no separate YAML `ObjectMapper`: the module registrations and inclusion rules must be
+     * the same for both formats, so the one configured mapper is fed a `YAMLFactory` parser instead.
+     *
+     * [ignoreUndefined] is on for schema files and off for the manifest, which is how those two have
+     * always been read. It is a parameter rather than a constant only to keep that difference visible.
+     */
     @JvmStatic
-    val yamlMapper: ObjectMapper = createYamlMapper()
+    fun <T> readYaml(content: String, type: Class<T>, ignoreUndefined: Boolean = true): T {
+        val factory = YAMLFactory.builder()
+            .configure(StreamReadFeature.IGNORE_UNDEFINED, ignoreUndefined)
+            .build()
+
+        return factory.createParser(ObjectReadContext.empty(), content.toByteArray(Charsets.UTF_8))
+            .use { parser -> jsonMapper.readValue(parser, type) }
+    }
 
     @JvmStatic
     fun createObjectMapper(): ObjectMapper {
@@ -35,13 +53,6 @@ object JacksonUtil {
     @JvmStatic
     fun jsonBuilder(): JsonMapper.Builder {
         return jsonBuilder(builder = JsonMapper.builder())
-    }
-
-    @JvmStatic
-    fun createYamlMapper(): ObjectMapper {
-        // For simplicity / compatibility we reuse the JSON-configured mapper for YAML parsing
-        // callers should create a YAML parser and feed it to the JSON mapper (see FieldSchemaLoader)
-        return jsonMapper
     }
 
     @JvmStatic

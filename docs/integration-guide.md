@@ -238,7 +238,7 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.compiler.Compiler
-import ruleengine.core.domain.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -494,6 +494,11 @@ Behaviour notes:
 - With the flag enabled, `result.matches` is ordered by output group rather than by rule
   declaration order.
 
+- The flag **cannot be combined with rule variables**. A `set` clause only reaches the rules declared
+  after it, and grouping by output reorders evaluation, so `RuleEngineBuilder` fails the build with
+  `shortCircuitByOutput cannot be used with variables` rather than producing an order-dependent
+  result.
+
 Leave the flag at its default (`false`) when you need every matching rule reported or must
 preserve declaration order — behaviour is then identical to previous versions.
 
@@ -570,9 +575,9 @@ val result = engine.evaluate(prepared = prepared)
 ### 4.9 Reading the Result
 
 ```kotlin
-import ruleengine.core.domain.EvaluationResult
-import ruleengine.core.domain.RuleMatch
-import ruleengine.core.domain.RuleAction
+import ruleengine.core.domain.dto.EvaluationResult
+import ruleengine.core.domain.dto.RuleMatch
+import ruleengine.core.domain.dto.RuleAction
 
 val result: EvaluationResult = engine.evaluate(prepared = prepared)
 
@@ -589,14 +594,40 @@ for (match: RuleMatch in result.matches) {
 `EvaluationResult`:
 - `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.7)
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
+- `variables: Map<String, Any?>` — the final value of every variable a matching rule published with a
+  `set` clause, keyed by name without the `$`. Empty for a rule set that uses none.
 
 `RuleMatch`:
 - `ruleId: String` — the rule's ID
 - `actions: List<RuleAction>` — the actions the rule declared
+- `assignments: Map<String, Any?>` — the variables **this** rule published, in assignment order
 
 `RuleAction`:
 - `name: String` — the action name (e.g. `"label"`)
 - `arguments: List<Any?>` — the argument values (e.g. `["rent"]` or `[10]`)
+
+#### Reading Variables
+
+Use `result.variables` for the state at the end of the run, and `RuleMatch.assignments` when you need
+to know **which** rule produced a value — `variables` only carries the last write when several rules
+assign the same name.
+
+```kotlin
+val result = engine.evaluate(prepared = prepared)
+
+println("orderTotal = ${result.variables["orderTotal"]}")
+
+for (match in result.matches) {
+    for ((name, value) in match.assignments) {
+        println("${match.ruleId} set $name = $value")
+    }
+}
+```
+
+Values are plain Kotlin types: `BigDecimal` for numbers, `String` for text, `Boolean` for booleans and
+`List<Any?>` for a projected array. A variable no matching rule assigned is simply absent from the map.
+
+See [rules.md](rules.md#variables--the-set-clause) for the DSL side and the ordering rules.
 
 ---
 
@@ -615,8 +646,8 @@ The trace is available as `result.trace`, which is a `DecisionTree` object.
 You can serialise it to JSON:
 
 ```kotlin
-import ruleengine.evaluator.trace.DecisionTree
-import ruleengine.evaluator.trace.toJson
+import ruleengine.evaluator.trace.dto.DecisionTree
+import ruleengine.evaluator.trace.dto.toJson
 
 val tree = result.trace as? DecisionTree
 if (tree != null) {
@@ -670,12 +701,21 @@ Example JSON output:
 
 `DecisionNode`:
 - `id` — unique node identifier within the trace
-- `type` — one of `RULE`, `AND`, `OR`, `NOT`, `CONDITION`
-- `field` / `operator` / `expected` — present on `CONDITION` nodes
+- `type` — one of `EVALUATION` (the synthetic root), `RULE`, `AND`, `OR`, `NOT`, `CONDITION`
+- `field` / `operator` / `expected` — present on `CONDITION` nodes. For a condition whose operand is
+  an expression (an aggregate, arithmetic, or another field), `field` is that operand rendered back
+  to DSL text — e.g. `count(orders[status equals "paid"])` — and `expected` is the *evaluated* right
+  operand, so a comparison against another field shows the concrete value it was measured against
+- `actual: Any?` — the value actually found. Present on aggregate, arithmetic and field-to-field
+  conditions; omitted from the JSON on nodes that do not report one
 - `result: Boolean` — whether this node evaluated to `true`
 - `evaluationTimeMs: Long?` — how long this node took to evaluate
 - `ruleId: String?` — present on `RULE` nodes
 - `children: List<DecisionNode>` — child nodes
+
+A filter predicate inside a path (`orders[status equals "paid"]`) is evaluated once per element and
+is deliberately **not** traced; the enclosing comparison contributes a single node regardless of how
+many elements the collection holds.
 
 ---
 
@@ -710,6 +750,7 @@ All loaders accept both YAML and JSON content.
 
 | Object | Thread-safe? | Recommended lifetime |
 |---|---|---|
+| `RuleEngineBuilder` | ✅ (stateless `object`) | Call it from anywhere, including concurrently |
 | `FieldSchema` | ✅ (immutable) | Application lifetime / per rule reload |
 | `ActionSchema` | ✅ (immutable) | Application lifetime / per rule reload |
 | `List<CompiledRule>` | ✅ (immutable) | Application lifetime / per rule reload |
@@ -717,6 +758,12 @@ All loaders accept both YAML and JSON content.
 | `LoadedRuleEngine` | ✅ (immutable) | Application lifetime / per rule reload |
 | `RuleContext` | ❌ (per-call) | Per evaluation |
 | `PreparedRuleContext` | ❌ (per-call) | Per evaluation |
+
+> **`set` variables are safe under concurrency.** They look like shared state, but every
+> `LoadedRuleEngine.evaluate` call builds its own `PreparedRuleContext` and with it its own variable
+> map, so two threads evaluating the same engine cannot see each other's variables. The unsafe
+> pattern is hoisting a `PreparedRuleContext` and sharing that — its variable map and aggregate cache
+> are written on every evaluation. See [Performance](./performance.md#5-thread-safety).
 
 ### Hot Reload Pattern
 
@@ -727,7 +774,7 @@ a failed reload leaves the previous engine in place:
 ```kotlin
 import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
-import ruleengine.core.domain.EvaluationResult
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.errors.RuleEngineBuildException
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
@@ -815,7 +862,7 @@ Register a custom normalizer in the `NormalizerRegistry` so that schemas can ref
 
 ```kotlin
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.core.domain.NormalizerId
+import ruleengine.core.domain.dto.NormalizerId
 
 // Register before loading any schema
 NormalizerRegistry.register(
@@ -846,7 +893,10 @@ fields:
 | Package | Contents |
 |---|---|
 | `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
-| `ruleengine.core.domain` | Domain model: `FieldSchema`, `FieldDefinition`, `FieldType`, `ActionSchema`, `RuleMatch`, `EvaluationResult`, `RuleAction` |
+| `ruleengine.core.domain.dto` | Evaluation results: `RuleMatch`, `EvaluationResult`, `RuleAction`, plus `OperatorId`, `NormalizerId` |
+| `ruleengine.core.domain.dto.field` | Field model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId` |
+| `ruleengine.core.domain.dto.action` | Action model: `ActionSchema`, `ActionDefinition`, `ActionArgType` |
+| `ruleengine.core.domain` | Logic over that model: `FieldPathResolver` / `FieldPathResolution` (dotted-path resolution), `TemporalFormat` (date pattern parsing), `DefaultActionSchema` |
 | `ruleengine.core.normalizer` | `NormalizerRegistry`, `NormalizerProfile`, built-in normalizers |
 | `ruleengine.core.errors` | `RuleEngineException`, `RuleEngineBuildException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |
 | `ruleengine.dsl.parser` | `Parser` — parses `.rule` text into `List<RuleAst>` |
@@ -855,7 +905,8 @@ fields:
 | `ruleengine.compiler` | `Validator`, `Compiler` |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule` |
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext` |
-| `ruleengine.evaluator.trace` | `TraceCollector`, `DecisionTree`, `DecisionNode`, `toJson()` |
+| `ruleengine.evaluator.trace` | `TraceCollector` |
+| `ruleengine.evaluator.trace.dto` | `DecisionTree`, `DecisionNode`, `toJson()` |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader` |
 | `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry`, `ManifestPathResolver` |
 | `ruleengine.jackson` | `JacksonUtil` — shared `ObjectMapper` instance |
@@ -869,7 +920,7 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
-import ruleengine.core.domain.RuleMatch
+import ruleengine.core.domain.dto.RuleMatch
 import java.nio.file.Path
 
 @Configuration

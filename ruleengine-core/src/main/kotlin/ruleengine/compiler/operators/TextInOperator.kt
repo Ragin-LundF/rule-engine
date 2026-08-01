@@ -1,14 +1,14 @@
 package ruleengine.compiler.operators
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.TextInExpression
+import ruleengine.evaluator.compiled.text.TextInExpression
 
 object TextInOperator {
     fun compile(
@@ -26,21 +26,14 @@ object TextInOperator {
                         "Expected string items in list"
                     )
                 }.toSet()
-                val normalized = set.map { setLiterals ->
-                    var listLiteral = setLiterals
-                    for (normalizer in def.normalizers) {
-                        listLiteral = registry.get(id = normalizer).normalize(value = listLiteral)
-                    }
-                    listLiteral
+                val normalized = set.map { item ->
+                    registry.applyAll(value = item, normalizers = def.normalizers)
                 }.toSet()
                 TextInExpression(field = fieldId, expectedNormalized = normalized, ignoreCase = cond.ignoreCase)
             }
 
             is StringLiteral -> {
-                var literalValue = lit.value
-                for (normalizer in def.normalizers) {
-                    literalValue = registry.get(id = normalizer).normalize(value = literalValue)
-                }
+                val literalValue = registry.applyAll(value = lit.value, normalizers = def.normalizers)
                 TextInExpression(
                     field = fieldId,
                     expectedNormalized = setOf(literalValue),

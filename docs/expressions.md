@@ -39,6 +39,20 @@ A value expression is one of:
 | Field path | `transactions.amount`, `orders[status == "paid"].items.price` | Navigate into nested fields to any depth, optionally filtering at each level |
 | Aggregate function call | `sum(transactions.amount)` | Apply an aggregate function to a collection |
 | Arithmetic expression | `sum(...) * 0.03` | Combine value expressions with `+`, `-`, `*`, `/` |
+| Variable read | `$orderTotal` | A value published by an earlier rule's `set` clause — see [rules.md](rules.md#variables--the-set-clause) |
+
+A variable is usable wherever any other value expression is: as either side of a comparison, as an
+operand of arithmetic, as the argument of an aggregate, inside a filter predicate, and as the
+right-hand side of another `set`.
+
+```
+$orderTotal * 0.03 > 25
+count(orders[amount > $threshold]) >= 2
+```
+
+A variable has no declared type — it carries whatever its `set` expression produced — so the operand
+type check that applies to fields is skipped for it. A comparison against a variable that no matching
+rule assigned is `false`, the same as one against a missing field.
 
 ---
 
@@ -140,8 +154,13 @@ Paths may be **any depth**, following the nested `fields:` declared in the
 
 ```
 sum(orders.items.price)
-orders.customer.country
+count(orders[customer.country == "DE"])
 ```
+
+A path that stays inside `object` records has a single value, so it does not need an aggregate at all — it
+works as a plain condition with any operator (see
+[A path into an `object`](./field-schema.md#a-path-into-an-object-behaves-like-any-other-field)). Aggregates
+are for paths that read through a `collection`.
 
 ### Projection flattens every level
 
@@ -266,6 +285,7 @@ A missing value on either side of a comparison always produces `false`.
 | `sum(orders.totl)` where `orders` declares `total` | `Unknown field 'totl' in 'orders.totl'` |
 | `transactions[label == "risk" and amount > 0]` | `Only comparison expressions are supported in filter segments` |
 | `transactions[label equals "risk"]` | `Operator 'equals' is not supported in filter segments` |
+| `transactions.amount > 100` as a plain condition | `Field 'transactions.amount' reads through collection 'transactions' …` — wrap it in an aggregate or a filter |
 
 > **One case is a warning, not an error:** if the **root** of a multi-segment path is not declared in
 > the schema, the rule still loads and a warning is reported, because the root may be a structure read

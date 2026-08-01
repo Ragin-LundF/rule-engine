@@ -1,8 +1,8 @@
 package ruleengine.core
 
+import ruleengine.core.domain.dto.field.FieldId
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import ruleengine.core.domain.FieldId
 
 class DomainModelTest {
     @Test

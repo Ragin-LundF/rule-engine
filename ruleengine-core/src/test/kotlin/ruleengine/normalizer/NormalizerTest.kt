@@ -1,9 +1,9 @@
 package ruleengine.normalizer
 
+import ruleengine.core.domain.dto.NormalizerId
+import ruleengine.core.normalizer.NormalizerRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import ruleengine.core.domain.NormalizerId
-import ruleengine.core.normalizer.NormalizerRegistry
 
 class NormalizerTest {
     @Test

@@ -10,6 +10,7 @@ kotlin {
     sourceSets {
         commonMain {
             dependencies {
+                api(project(":ruleengine-model"))
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material)

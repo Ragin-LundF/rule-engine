@@ -14,6 +14,17 @@ tasks.withType(Detekt).configureEach {
 detekt {
     config.setFrom("${rootDir}/config/detekt.yml")
     buildUponDefaultConfig = true
+    // Detekt's default source set is src/main/kotlin + src/test/kotlin, which a Kotlin Multiplatform
+    // module does not have — so ruleengine-ui reported NO-SOURCE and was never analysed at all.
+    // Listing both layouts here covers the plain-JVM and the KMP modules with one config; detekt
+    // skips the directories a given module does not have.
+    source.setFrom(
+        "src/main/kotlin",
+        "src/test/kotlin",
+        "src/commonMain/kotlin",
+        "src/jvmMain/kotlin",
+        "src/jvmTest/kotlin",
+    )
 }
 
 

@@ -1,9 +1,9 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
@@ -36,8 +36,11 @@ class ValidationDiagnosticsTest {
     )
 
     private fun validate(condition: String): ValidationResult {
+        // Described so the "no description" warning never appears here — these tests are about the
+        // diagnostics an expression produces, and an unrelated WARNING in the list would mask that.
         val rule = """
             rule "test" {
+              description "Fixture rule for expression diagnostics."
               when
                 $condition
               then

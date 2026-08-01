@@ -1,4 +1,5 @@
 rule "internal-network-allow" {
+  description "Requests from the internal network ranges are allowed with a generous rate limit."
   when
     ip startsWith "10."
     or ip startsWith "192.168."
@@ -10,6 +11,7 @@ rule "internal-network-allow" {
 }
 
 rule "blocklisted-ip" {
+  description "The source address is on the block list or has been reported for abuse."
   when
     tags containsAny ["blocklisted", "abuse-reported"]
 
@@ -19,6 +21,7 @@ rule "blocklisted-ip" {
 }
 
 rule "suspicious-ip-rate-limit" {
+  description "Traffic from a high-volume or Tor exit address is throttled unless it is an admin."
   when
     tags containsAny ["high-traffic", "tor-exit"]
     and not role equals "admin"

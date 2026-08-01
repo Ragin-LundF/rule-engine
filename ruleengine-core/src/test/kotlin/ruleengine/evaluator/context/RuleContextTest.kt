@@ -1,9 +1,9 @@
 package ruleengine.evaluator.context
 
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
-import ruleengine.core.domain.FieldId
+import org.junit.jupiter.api.Test
+import ruleengine.core.domain.dto.field.FieldId
 
 class RuleContextTest {
 

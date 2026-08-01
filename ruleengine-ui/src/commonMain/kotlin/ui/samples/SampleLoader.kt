@@ -2,6 +2,8 @@ package ui.samples
 
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
+import ui.samples.model.LoadedSample
+import ui.samples.model.SampleDescriptor
 
 @OptIn(ExperimentalResourceApi::class)
 suspend fun loadSample(descriptor: SampleDescriptor): LoadedSample {

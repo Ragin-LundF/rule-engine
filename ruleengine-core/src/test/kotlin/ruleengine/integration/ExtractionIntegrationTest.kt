@@ -2,10 +2,10 @@ package ruleengine.integration
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.FieldDefinition
-import ruleengine.core.domain.FieldId
-import ruleengine.core.domain.FieldSchema
-import ruleengine.core.domain.FieldType
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -49,7 +49,7 @@ class ExtractionIntegrationTest {
     private fun evaluate(
         dsl: String,
         contextEntries: Map<String, Any?>
-    ): List<ruleengine.core.domain.RuleAction> {
+    ): List<ruleengine.core.domain.dto.RuleAction> {
         val rules = Parser(input = dsl).parseRules()
         val compiled = Compiler.compileRules(asts = rules, schema = schema)
         val engine = RuleEngine(compiledRules = compiled)
