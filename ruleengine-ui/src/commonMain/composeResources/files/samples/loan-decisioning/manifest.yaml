@@ -1,0 +1,22 @@
+name: loan-decisioning
+
+# Sample: Loan Decisioning
+# A retail lending application taken through affordability, credit policy and risk-based pricing.
+#
+# The sample is built around rule output variables. applicant-ratios.rule derives debt-to-income,
+# disposable income and loan-to-value once with `set`, and every policy and pricing rule after it
+# reads them back as `$debtToIncomeRatio`, `$disposableIncome` and `$loanToValueRatio`. That is how a
+# credit policy is actually written: the ratio is defined in one place and quoted everywhere else.
+#
+# The order below is what makes it work — a variable is only visible to the rules listed after the
+# rule that sets it.
+
+entries:
+  - id: loan-decisioning
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      # First: publishes the ratios every rule that follows is written in.
+      - rules/applicant-ratios.rule
+      - rules/underwriting-decision.rule
+      - rules/risk-pricing.rule

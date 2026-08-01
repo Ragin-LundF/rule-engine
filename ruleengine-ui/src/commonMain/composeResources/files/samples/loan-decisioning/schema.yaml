@@ -1,0 +1,147 @@
+schema: loan-decisioning-v1
+
+# Input contract of a retail lending application, in the shape an origination system hands it over:
+# the loan that was asked for, the applicant's income and employment, the collateral behind it, and
+# the credit commitments the applicant already carries.
+#
+# Note what is *not* in here: debt-to-income, disposable income and loan-to-value. Those are derived
+# figures, and the rules compute them once with a `set` clause instead of expecting the caller to
+# supply them — see rules/applicant-ratios.rule.
+
+fields:
+
+  # ── The requested loan ──────────────────────────────────────────────────────
+
+  product:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  requestedAmount:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  requestedTermMonths:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # The instalment the pricing engine offered for the requested amount and term.
+  requestedMonthlyPayment:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  # ── The applicant ───────────────────────────────────────────────────────────
+
+  monthlyNetIncome:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  employmentType:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  # Months with the current employer.
+  employmentMonths:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  creditScore:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  dependents:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  # Bureau and compliance markers, e.g. ["previous-default", "pep"].
+  flags:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll
+
+  applicationDate:
+    type: date
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # ── The collateral ──────────────────────────────────────────────────────────
+
+  # Zero for an unsecured product, which is what makes the loan-to-value rule below conditional.
+  propertyValue:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+
+  # ── Existing commitments: aggregated and filtered ───────────────────────────
+
+  existingLoans:
+    type: collection
+    fields:
+      lender:
+        type: text
+      monthlyPayment:
+        type: decimal
+      remainingBalance:
+        type: decimal
+      inArrears:
+        type: boolean

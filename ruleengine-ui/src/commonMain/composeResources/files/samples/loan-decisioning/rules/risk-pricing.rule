@@ -1,0 +1,62 @@
+# 3. Risk-based pricing — the margin, priced from the same published ratios.
+#
+# Pricing is a second, independent reader of the affordability variables. It does not recompute them
+# and it does not depend on what the policy rules concluded: both files read the same $debtToIncomeRatio,
+# so a pricing grade can never disagree with a decision about what the ratio was.
+#
+# Schema: schema.yaml
+
+rule "price-prime" {
+  description "The strongest applications earn the house's best margin."
+  when
+    $debtToIncomeRatio <= 0.25
+    and creditScore >= 750
+    and employmentType equals "permanent"
+
+  then
+    riskGrade "A"
+    marginBps 90
+}
+
+rule "price-standard" {
+  description "A sound but ordinary application, priced at the standard margin."
+  when
+    $debtToIncomeRatio > 0.25
+    and $debtToIncomeRatio <= 0.4
+    and creditScore >= 650
+
+  then
+    riskGrade "B"
+    marginBps 160
+}
+
+rule "price-elevated" {
+  description "Thin affordability or a weak bureau score, priced for the additional risk."
+  when
+    $debtToIncomeRatio > 0.4
+    or creditScore < 650
+
+  then
+    riskGrade "C"
+    marginBps 320
+}
+
+rule "price-high-ltv-surcharge" {
+  description "A loan-to-value above eighty percent adds a surcharge on top of the grade's margin."
+  when
+    $loanToValueRatio > 0.8
+
+  then
+    marginBps 40
+    reason "high-loan-to-value-surcharge"
+}
+
+rule "price-large-existing-exposure" {
+  description "The applicant already carries substantial debt elsewhere, which adds a surcharge."
+  when
+    sum(existingLoans.remainingBalance) > 100000
+
+  then
+    marginBps 25
+    reason "large-existing-exposure"
+}
