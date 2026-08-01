@@ -1,11 +1,7 @@
 package ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -16,24 +12,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Window
-import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
-import ruleengine.schema.ActionSchemaLoader
-import ruleengine.schema.FieldSchemaLoader
-import ui.actions.ActionSchemaYamlBridge
 import ui.builder.BuilderRule
 import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
-import ui.diagrams.DiagramSurface
-import ui.diagrams.FieldFlowDiagram
-import ui.diagrams.OutcomeMapDiagram
-import ui.diagrams.TraceDiagram
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.RuleValidationOutcome
@@ -42,38 +27,28 @@ import ui.editor.rules.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
-import ui.manifest.ManifestYamlBridge
-import ui.project.LinkedFileHeader
 import ui.project.ProjectDialogHost
-import ui.project.ProjectFileKind
 import ui.project.ProjectWorkspace
-import ui.project.toEditorState
-import ui.samples.SampleGalleryScreen
-import ui.samples.loadSample
-import ui.schema.FieldSchemaYamlBridge
 import ui.settings.SettingsController
 import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
 import ui.tester.RuleTestController
-import ui.tester.RuleTestPanel
-import ui.tester.TestCenterPanel
 import ui.util.Words
-import ui.workbench.ActionsAreaScreen
+import ui.workbench.ActionsAreaContent
 import ui.workbench.AppAreaIconRail
-import ui.workbench.CenterEditorPanel
-import ui.workbench.DiagramModeHost
-import ui.workbench.ManifestAreaScreen
-import ui.workbench.RightPanelWithTabs
+import ui.workbench.ExpandedDiagramWindow
+import ui.workbench.ManifestAreaContent
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchViewModel
-import ui.workbench.SchemaAreaScreen
+import ui.workbench.RulesAreaContent
+import ui.workbench.SamplesAreaContent
+import ui.workbench.SchemaAreaContent
+import ui.workbench.WorkbenchRightPanel
 import ui.workbench.builderCatalogActionsFrom
 import ui.workbench.builderCatalogFieldsFrom
 import ui.workbench.catalogActionsFrom
 import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
-import ui.workbench.diagramDataFor
-import ui.workbench.inspector.InspectorPanel
 import ui.workbench.model.AppArea
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.WorkbenchAction
@@ -308,240 +283,66 @@ actual fun RuleEditor(closeController: AppCloseController) {
         },
         centerContent = {
             when (workbenchState.appArea) {
-                AppArea.RULES -> CenterEditorPanel(
+                AppArea.RULES -> RulesAreaContent(
                     state = state,
                     scope = scope,
                     ruleMode = workbenchState.ruleMode,
                     onRuleModeChange = { mode ->
                         workbenchViewModel.dispatch(action = WorkbenchAction.SelectRuleMode(mode = mode))
                     },
+                    builderRules = builderRules,
                     builderEditorState = activeBuilderEditorState,
                     allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
-                    onRuleSelected = { ruleId -> builderRules.select(ruleId = ruleId) },
-                    onRenameRule = { oldId, newId -> builderRules.rename(oldId = oldId, newId = newId) },
-                    onAddRule = { builderRules.add() },
                     catalogFields = builderCatalogFields,
                     catalogActions = builderCatalogActions,
-                    onBuilderDslChange = { newDsl ->
-                        builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
-                    },
+                    ruleTreeFiles = ruleTreeFiles,
                     onConditionSelected = { conditionId ->
                         workbenchViewModel.dispatch(
                             action = WorkbenchAction.SelectCondition(conditionId = conditionId),
                         )
                     },
-                    ruleTreeFiles = ruleTreeFiles,
-                    onTreeRuleSelected = { relativePath, ruleId ->
-                        // The file load stays here: it is disk I/O against the editor's manifest state,
-                        // and it has to happen before the selection is parked as pending.
-                        if (relativePath == state.selectedManifestRuleFile.value || relativePath == "current") {
-                            builderRules.select(ruleId = ruleId)
-                        } else {
-                            state.loadSingleManifestRuleFile(relativePath)
-                            builderRules.selectWhenParsed(ruleId = ruleId)
-                        }
-                    },
-                    testContent = {
-                        TestCenterPanel(
-                            state = testInputState,
-                            onStateChange = { testInputState = it },
-                            onRunTest = {
-                                testController.run(
-                                    ruleText = if (state.showAllRules.value) {
-                                        state.allRulesText.value
-                                    } else {
-                                        state.ruleValue.value.text
-                                    },
-                                )
-                            },
-                            onLoadJson = { testController.loadInputJson() },
-                            ruleIds = catalogRules.map { it.id },
-                            ruleSelectionEnabled = !state.showAllRules.value,
-                            runEnabled = state.parsedSchema.value != null
-                                    && (state.ruleValue.value.text.isNotBlank() || state.showAllRules.value && state.allRulesText.value.isNotBlank())
-                                    && !hasErrors,
-                            runReason = when {
-                                state.parsedSchema.value == null -> "Load a field schema first"
-                                !state.showAllRules.value && state.ruleValue.value.text.isBlank() -> "Enter at least one rule"
-                                hasErrors -> "Fix rule validation errors before running"
-                                else -> null
-                            },
-                            traceContent = { results -> TraceDiagram(results = results) },
+                    testInputState = testInputState,
+                    onTestInputStateChange = { testInputState = it },
+                    testController = testController,
+                    hasErrors = hasErrors,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.SCHEMA -> SchemaAreaContent(
+                    state = state,
+                    workspace = workspace,
+                    expandedDiagramRules = expandedDiagramRules,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.ACTIONS -> ActionsAreaContent(
+                    state = state,
+                    workspace = workspace,
+                    expandedDiagramRules = expandedDiagramRules,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.MANIFEST -> ManifestAreaContent(
+                    state = state,
+                    workspace = workspace,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                AppArea.SAMPLES -> SamplesAreaContent(
+                    state = state,
+                    scope = scope,
+                    onSampleApplied = {
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectAppArea(area = AppArea.RULES),
                         )
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                AppArea.SCHEMA -> Column(modifier = Modifier.fillMaxSize()) {
-                    LinkedFileHeader(
-                        label = "SCHEMA FILE",
-                        linkedPath = workspace.session.value?.schemaLink,
-                        isMissing = workspace.session.value?.missing(kind = ProjectFileKind.SCHEMA) != null,
-                        onLink = workspace::linkSchema,
-                        onUnlink = { workspace.unlink(kind = ProjectFileKind.SCHEMA) },
-                    )
-                    Spacer(modifier = Modifier.height(height = 10.dp))
-                    SchemaAreaScreen(
-                    schemaYaml = state.schemaText.value,
-                    fromYaml = { yaml ->
-                        FieldSchemaYamlBridge.fromYaml(yaml = yaml)
-                    },
-                    toYaml = { editorState ->
-                        FieldSchemaYamlBridge.toYaml(state = editorState)
-                    },
-                    onSchemaYamlChange = { newYaml ->
-                        state.schemaText.value = newYaml
-                        state.schemaFieldValue.value = TextFieldValue(text = newYaml)
-                        state.parsedSchema.value = runCatching {
-                            FieldSchemaLoader.loadFromString(
-                                content = newYaml,
-                                nameHint = "schema",
-                            )
-                        }.getOrNull()
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    // The same field-flow diagram the rule editor shows, filling the "Usages" tab
-                    // that has been a placeholder: here the schema is the subject, so the fields
-                    // nothing reads are the point.
-                    usagesContent = {
-                        DiagramSurface {
-                            FieldFlowDiagram(
-                                rules = expandedDiagramRules,
-                                schema = state.parsedSchema.value,
-                                entryWide = state.showAllRules.value,
-                            )
-                        }
-                    },
-                    yamlEditor = { value, onValueChange, editorModifier ->
-                        YamlEditor(
-                            value = value,
-                            onValueChange = onValueChange,
-                            modifier = editorModifier,
-                            editorType = YamlEditorType.FIELD_SCHEMA,
-                            annotate = { text ->
-                                annotateYaml(
-                                    text = text,
-                                    editorType = YamlEditorType.FIELD_SCHEMA,
-                                )
-                            },
-                            buildCompletions = { context ->
-                                buildYamlCompletions(
-                                    context = context,
-                                    editorType = YamlEditorType.FIELD_SCHEMA,
-                                )
-                            },
-                        )
-                    },
-                    )
-                }
-
-                AppArea.ACTIONS -> Column(modifier = Modifier.fillMaxSize()) {
-                    LinkedFileHeader(
-                        label = "ACTIONS FILE",
-                        linkedPath = workspace.session.value?.actionsLink,
-                        isMissing = workspace.session.value?.missing(kind = ProjectFileKind.ACTIONS) != null,
-                        onLink = workspace::linkActions,
-                        onUnlink = { workspace.unlink(kind = ProjectFileKind.ACTIONS) },
-                    )
-                    Spacer(modifier = Modifier.height(height = 10.dp))
-                    ActionsAreaScreen(
-                    actionsYaml = state.actionSchemaText.value,
-                    fromYaml = { yaml ->
-                        ActionSchemaYamlBridge.fromYaml(yaml = yaml)
-                    },
-                    toYaml = { editorState ->
-                        ActionSchemaYamlBridge.toYaml(state = editorState)
-                    },
-                    onActionsYamlChange = { newYaml ->
-                        state.actionSchemaText.value = newYaml
-                        state.parsedActionSchema.value = runCatching {
-                            ActionSchemaLoader.loadFromString(content = newYaml)
-                        }.getOrNull()
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                    // The outcome map rather than the field flow: in the actions area the question is
-                    // which rules emit an action and which of them share an output bucket.
-                    usagesContent = {
-                        DiagramSurface {
-                            OutcomeMapDiagram(rules = expandedDiagramRules)
-                        }
-                    },
-                    yamlEditor = { value, onValueChange, editorModifier ->
-                        YamlEditor(
-                            value = value,
-                            onValueChange = onValueChange,
-                            modifier = editorModifier,
-                            editorType = YamlEditorType.ACTION_SCHEMA,
-                            annotate = { text ->
-                                annotateYaml(
-                                    text = text,
-                                    editorType = YamlEditorType.ACTION_SCHEMA,
-                                )
-                            },
-                            buildCompletions = { context ->
-                                buildYamlCompletions(
-                                    context = context,
-                                    editorType = YamlEditorType.ACTION_SCHEMA,
-                                )
-                            },
-                        )
-                    },
-                    )
-                }
-
-                // The session is the manifest: edits here go straight onto it rather than into a
-                // text buffer the saver would regenerate over.
-                AppArea.MANIFEST -> ManifestAreaScreen(
-                    state = workspace.session.value?.toEditorState()
-                        ?: ManifestYamlBridge.fromYaml(yaml = state.manifestText.value),
-                    onStateChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
-                    activeEntryId = workspace.session.value?.activeEntryId,
-                    onSelectEntry = { entryId -> workspace.selectEntry(entryId = entryId) },
-                    onAddEntry = { workspace.addEntry(entryId = workspace.suggestEntryId()) },
-                    onRemoveEntry = { entryId -> workspace.requestRemoveEntry(entryId = entryId) },
-                    fromYaml = { yaml ->
-                        ManifestYamlBridge.fromYaml(yaml = yaml)
-                    },
-                    toYaml = { editorState ->
-                        ManifestYamlBridge.toYaml(state = editorState)
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                AppArea.SAMPLES -> SampleGalleryScreen(
-                    onSampleSelected = { descriptor ->
-                        scope.launch {
-                            val loaded = loadSample(descriptor)
-                            state.schemaText.value = loaded.schemaYaml
-                            state.schemaFieldValue.value = TextFieldValue(text = loaded.schemaYaml)
-                            state.parsedSchema.value = runCatching {
-                                FieldSchemaLoader.loadFromString(
-                                    content = loaded.schemaYaml,
-                                    nameHint = descriptor.id,
-                                )
-                            }.getOrNull()
-                            state.actionSchemaText.value = loaded.actionsYaml
-                            state.actionFieldValue.value = TextFieldValue(text = loaded.actionsYaml)
-                            state.parsedActionSchema.value = runCatching {
-                                ActionSchemaLoader.loadFromString(content = loaded.actionsYaml)
-                            }.getOrNull()
-                            state.ruleValue.value = TextFieldValue(text = loaded.rulesText)
-                            state.diagnosticsList.value = emptyList()
-                            state.diagnosticsText.value = ""
-                            state.setStatus(
-                                msg = "Loaded sample: ${descriptor.name}",
-                                kind = StatusKind.SUCCESS,
-                            )
-                            workbenchViewModel.dispatch(
-                                action = WorkbenchAction.SelectAppArea(area = AppArea.RULES),
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-
+                // Left inline: a pass-through to a screen that reads no editor state, so a file of
+                // its own would hold nothing but this call.
                 AppArea.SETTINGS -> SettingsScreen(
                     shortcut = SettingsController.autoCompleteShortcut,
                     onShortcutChange = { shortcut ->
@@ -555,32 +356,21 @@ actual fun RuleEditor(closeController: AppCloseController) {
             }
         },
         rightPanel = {
-            RightPanelWithTabs(
+            WorkbenchRightPanel(
+                state = state,
                 tab = workbenchState.rightPanelTab,
                 onTabChange = { tab ->
                     workbenchViewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
                 },
-                inspectorContent = {
-                    InspectorPanel(
-                        selectedItem = workbenchState.selectedInspectorItem,
-                        fields = catalogFields,
-                        actions = catalogActions,
-                        rules = catalogRules,
-                        builderState = activeBuilderEditorState,
-                        diagnostics = uiDiagnostics,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                },
-                simulateContent = {
-                    RuleTestPanel(
-                        state = testInputState,
-                        onJsonChange = { testInputState = testInputState.copy(inputJson = it) },
-                        onRunTest = { testController.run(ruleText = state.ruleValue.value.text) },
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                },
-                expanded = state.rightPanelExpanded.value,
-                onToggleExpanded = { state.rightPanelExpanded.value = !state.rightPanelExpanded.value },
+                selectedInspectorItem = workbenchState.selectedInspectorItem,
+                catalogFields = catalogFields,
+                catalogActions = catalogActions,
+                catalogRules = catalogRules,
+                builderEditorState = activeBuilderEditorState,
+                uiDiagnostics = uiDiagnostics,
+                testInputState = testInputState,
+                onTestInputStateChange = { testInputState = it },
+                testController = testController,
             )
         },
         bottomBar = {
@@ -594,22 +384,6 @@ actual fun RuleEditor(closeController: AppCloseController) {
     // Opened via the "⤢ Expand" button in diagram mode.
     // Shares the same diagramRules state so it updates live while editing.
     if (state.showExpandedDiagram.value) {
-        Window(
-            onCloseRequest = { state.showExpandedDiagram.value = false },
-            title = "Rule Diagram — Full View",
-            state = rememberWindowState(size = DpSize(width = 1400.dp, height = 900.dp)),
-        ) {
-            AppTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = Bg,
-                ) {
-                    DiagramModeHost(
-                        view = state.diagramView.value,
-                        data = diagramDataFor(state = state, rules = expandedDiagramRules),
-                    )
-                }
-            }
-        }
+        ExpandedDiagramWindow(state = state, rules = expandedDiagramRules)
     }
 }
