@@ -1,6 +1,5 @@
 package ruleengine.export
 
-import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.io.FileInputSupport
@@ -90,13 +89,11 @@ object RuleCatalogBuilder {
         files: List<ParsedRuleFile>,
         schema: FieldSchema? = null,
         schemaPath: String? = null,
-        actionsPath: String? = null,
     ): RuleCatalog {
         return RuleCatalog(
             projectName = projectName,
             entryId = entryId,
             schemaPath = schemaPath,
-            actionsPath = actionsPath,
             files = files.map { file ->
                 CatalogRuleFile(
                     relativePath = file.relativePath,
@@ -144,7 +141,6 @@ object RuleCatalogBuilder {
             files = files,
             schema = schema,
             schemaPath = entry.schema,
-            actionsPath = entry.actions,
         )
     }
 
@@ -180,7 +176,6 @@ object RuleCatalogBuilder {
             condition = PlainLanguageRenderer.render(expr = rule.condition, schema = schema),
             technicalCondition = ValueExpressionRenderer.renderExpression(expr = rule.condition),
             outcomes = rule.actions.map { action -> outcome(action = action) },
-            fields = FieldUsage.fieldsOf(rule = rule).sorted(),
         )
     }
 

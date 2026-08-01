@@ -14,7 +14,6 @@ data class RuleCatalog(
     val projectName: String?,
     val entryId: String?,
     val schemaPath: String?,
-    val actionsPath: String?,
     val files: List<CatalogRuleFile>,
 ) {
     /** Every rule in the entry, in the order the engine evaluates them: file order, then declaration order. */

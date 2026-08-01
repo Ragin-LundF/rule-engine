@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.evaluator.compiled.text.RegexExtractExpression
 import ruleengine.evaluator.context.PreparedRuleContext
 
 /**

@@ -418,5 +418,3 @@ private fun fieldTypeValueColor(value: String): SpanStyle {
     return SpanStyle(color = color)
 }
 
-
-

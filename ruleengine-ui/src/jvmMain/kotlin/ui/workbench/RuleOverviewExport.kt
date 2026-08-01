@@ -61,7 +61,6 @@ object RuleOverviewExport {
             },
             schema = state.parsedSchema.value,
             schemaPath = entry.schema,
-            actionsPath = entry.actions,
         )
 
         return Result.Ready(

@@ -3,8 +3,8 @@ package ui.diagrams
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.ListLiteral
+import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 
@@ -19,5 +19,4 @@ internal fun formatLiteral(lit: LiteralAst): String {
         is ExtractionRefLiteral -> $$"$$${lit.groupIndex}"
     }
 }
-
 

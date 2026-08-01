@@ -395,10 +395,3 @@ fun ColumnScope.MainEditorContentSection(
     } // end CODE view
 }
 
-
-
-
-
-
-
-

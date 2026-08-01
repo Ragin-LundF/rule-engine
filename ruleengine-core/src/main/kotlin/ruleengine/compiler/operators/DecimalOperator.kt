@@ -6,10 +6,10 @@ import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.evaluator.compiled.ComparisonOperator
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.DecimalBetweenExpression
-import ruleengine.evaluator.compiled.DecimalComparisonExpression
+import ruleengine.evaluator.compiled.numeric.ComparisonOperator
+import ruleengine.evaluator.compiled.numeric.DecimalBetweenExpression
+import ruleengine.evaluator.compiled.numeric.DecimalComparisonExpression
 import java.math.BigDecimal
 
 object DecimalOperator {

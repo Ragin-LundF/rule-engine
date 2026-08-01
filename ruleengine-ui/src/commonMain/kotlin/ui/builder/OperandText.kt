@@ -2,7 +2,6 @@ package ui.builder
 
 import ui.builder.OperandText.LABEL_MAX_SEGMENTS
 
-
 /**
  * Renders [BuilderOperand] trees as text.
  *

@@ -15,18 +15,18 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
-import ruleengine.evaluator.compiled.ArithmeticCompiledValueExpression
-import ruleengine.evaluator.compiled.BooleanExpressionValue
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.CompiledFieldSegment
-import ruleengine.evaluator.compiled.CompiledFilterSegment
-import ruleengine.evaluator.compiled.CompiledPathSegment
-import ruleengine.evaluator.compiled.CompiledValueExpression
-import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
-import ruleengine.evaluator.compiled.FunctionCallCompiledValueExpression
-import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
-import ruleengine.evaluator.compiled.NumberExpressionValue
-import ruleengine.evaluator.compiled.TextExpressionValue
+import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
+import ruleengine.evaluator.compiled.value.BooleanExpressionValue
+import ruleengine.evaluator.compiled.value.CompiledFieldSegment
+import ruleengine.evaluator.compiled.value.CompiledFilterSegment
+import ruleengine.evaluator.compiled.value.CompiledPathSegment
+import ruleengine.evaluator.compiled.value.CompiledValueExpression
+import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.value.FunctionCallCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.value.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.TextExpressionValue
 import java.math.BigDecimal
 
 internal object ValueExpressionCompiler {

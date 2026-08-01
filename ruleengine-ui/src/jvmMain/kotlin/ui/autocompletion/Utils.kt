@@ -38,4 +38,3 @@ internal fun kindLabel(kind: CompletionKind): String = when (kind) {
     CompletionKind.OPERATOR -> "op"
 }
 
-

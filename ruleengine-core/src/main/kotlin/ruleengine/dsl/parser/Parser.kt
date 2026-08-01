@@ -122,26 +122,41 @@ class Parser(private val input: String) {
         }
 
         advance()
+        val actions = parseActions()
+
+        expect(type = TokenType.RBRACE)
+        return RuleAst(
+            id = id,
+            description = description,
+            condition = condition,
+            actions = actions,
+            line = first.line,
+            column = first.col,
+        )
+    }
+
+    /** The body of a `then` block: actions until the closing brace. */
+    private fun parseActions(): List<ActionAst> {
         val actions = mutableListOf<ActionAst>()
         while (true) {
-            val c = current()
-            if (c.type == TokenType.RBRACE || c.type == TokenType.EOF) {
+            val token = current()
+            if (token.type == TokenType.RBRACE || token.type == TokenType.EOF) {
                 break
             }
 
-            if (c.type != TokenType.IDENT) {
+            if (token.type != TokenType.IDENT) {
                 throw ParseException(
-                    line = c.line,
-                    column = c.col,
-                    messageText = "Expected action identifier but found ${c.text}"
+                    line = token.line,
+                    column = token.col,
+                    messageText = "Expected action identifier but found ${token.text}"
                 )
             }
 
-            if (c.text == "extract") {
+            if (token.text == "extract") {
                 advance()
                 actions += parseExtractAction()
             } else {
-                val name = c.text
+                val name = token.text
                 advance()
 
                 // The argument is optional: an action declared with `argTypes: []` takes none, so a
@@ -152,8 +167,7 @@ class Parser(private val input: String) {
             }
         }
 
-        expect(type = TokenType.RBRACE)
-        return RuleAst(id = id, description = description, condition = condition, actions = actions)
+        return actions
     }
 
     /**
@@ -464,6 +478,7 @@ class Parser(private val input: String) {
     }
 
     private fun parseCondition(): ConditionAst {
+        val start = current()
         val field = parseConditionField()
         val operator = parseConditionOperator()
         val value = parseConditionValue(operator = operator)
@@ -473,7 +488,9 @@ class Parser(private val input: String) {
             field = field,
             operator = operator,
             value = value,
-            ignoreCase = ignoreCase
+            ignoreCase = ignoreCase,
+            line = start.line,
+            column = start.col,
         )
     }
 

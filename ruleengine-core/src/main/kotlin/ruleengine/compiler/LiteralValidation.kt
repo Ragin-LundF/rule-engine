@@ -19,7 +19,9 @@ internal object LiteralValidation {
         val literal = cond.value as? NumberLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects numeric literal"
+                message = "Field '${cond.field}' expects numeric literal",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -28,7 +30,9 @@ internal object LiteralValidation {
         }.onFailure {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Invalid decimal literal: ${literal.value}"
+                message = "Invalid decimal literal: ${literal.value}",
+                line = cond.line,
+                column = cond.column,
             )
         }
     }
@@ -37,31 +41,44 @@ internal object LiteralValidation {
         val between = cond.value as? BetweenLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' with 'between' expects two numeric bounds"
+                message = "Field '${cond.field}' with 'between' expects two numeric bounds",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
         validateDecimalBound(
             value = between.low,
             diagnostics = diagnostics,
-            message = "Invalid lower bound: ${between.low}"
+            message = "Invalid lower bound: ${between.low}",
+            line = cond.line,
+            column = cond.column,
         )
         validateDecimalBound(
             value = between.high,
             diagnostics = diagnostics,
-            message = "Invalid upper bound: ${between.high}"
+            message = "Invalid upper bound: ${between.high}",
+            line = cond.line,
+            column = cond.column,
         )
     }
 
     internal fun validateDecimalBound(
         value: String,
         diagnostics: MutableList<ValidationDiagnostic>,
-        message: String
+        message: String,
+        line: Int? = null,
+        column: Int? = null,
     ) {
         runCatching {
             BigDecimal(value)
         }.onFailure {
-            diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
+            diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = message,
+            line = line,
+            column = column,
+        )
         }
     }
 
@@ -69,7 +86,9 @@ internal object LiteralValidation {
         val literal = cond.value as? NumberLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects integer literal"
+                message = "Field '${cond.field}' expects integer literal",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -78,7 +97,9 @@ internal object LiteralValidation {
         }.onFailure {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Invalid integer literal: ${literal.value}"
+                message = "Invalid integer literal: ${literal.value}",
+                line = cond.line,
+                column = cond.column,
             )
         }
     }
@@ -87,31 +108,44 @@ internal object LiteralValidation {
         val between = cond.value as? BetweenLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' with 'between' expects two integer bounds"
+                message = "Field '${cond.field}' with 'between' expects two integer bounds",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
         validateIntegerBound(
             value = between.low,
             diagnostics = diagnostics,
-            message = "Invalid lower bound: ${between.low}"
+            message = "Invalid lower bound: ${between.low}",
+            line = cond.line,
+            column = cond.column,
         )
         validateIntegerBound(
             value = between.high,
             diagnostics = diagnostics,
-            message = "Invalid upper bound: ${between.high}"
+            message = "Invalid upper bound: ${between.high}",
+            line = cond.line,
+            column = cond.column,
         )
     }
 
     internal fun validateIntegerBound(
         value: String,
         diagnostics: MutableList<ValidationDiagnostic>,
-        message: String
+        message: String,
+        line: Int? = null,
+        column: Int? = null,
     ) {
         runCatching {
             value.toLong()
         }.onFailure {
-            diagnostics += ValidationDiagnostic(severity = Severity.ERROR, message = message)
+            diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = message,
+            line = line,
+            column = column,
+        )
         }
     }
 }

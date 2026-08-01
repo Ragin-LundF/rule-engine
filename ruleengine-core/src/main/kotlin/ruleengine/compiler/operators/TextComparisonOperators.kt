@@ -8,10 +8,10 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.TextContainsExpression
-import ruleengine.evaluator.compiled.TextEndsWithExpression
-import ruleengine.evaluator.compiled.TextEqualsExpression
-import ruleengine.evaluator.compiled.TextStartsWithExpression
+import ruleengine.evaluator.compiled.text.TextContainsExpression
+import ruleengine.evaluator.compiled.text.TextEndsWithExpression
+import ruleengine.evaluator.compiled.text.TextEqualsExpression
+import ruleengine.evaluator.compiled.text.TextStartsWithExpression
 
 object TextComparisonOperators {
     @Suppress("LongParameterList")
@@ -58,5 +58,4 @@ object TextComparisonOperators {
         }
     }
 }
-
 

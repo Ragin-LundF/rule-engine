@@ -226,7 +226,3 @@ internal fun OperatorBadge(operator: String, ignoreCase: Boolean) {
     }
 }
 
-
-
-
-

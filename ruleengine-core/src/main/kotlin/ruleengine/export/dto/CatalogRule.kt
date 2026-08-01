@@ -12,7 +12,6 @@ package ruleengine.export.dto
  * @param condition The condition restated as sentences.
  * @param technicalCondition The condition in DSL syntax, for a technical reviewer.
  * @param outcomes The actions the rule produces, in declaration order.
- * @param fields The field paths the rule reads, sorted, so a reader can see what data it depends on.
  */
 data class CatalogRule(
     val id: String,
@@ -20,5 +19,4 @@ data class CatalogRule(
     val condition: PlainCondition,
     val technicalCondition: String,
     val outcomes: List<CatalogOutcome>,
-    val fields: List<String>,
 )

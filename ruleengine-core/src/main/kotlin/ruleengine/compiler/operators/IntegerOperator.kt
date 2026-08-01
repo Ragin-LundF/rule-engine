@@ -7,9 +7,9 @@ import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.IntegerBetweenExpression
-import ruleengine.evaluator.compiled.IntegerComparisonExpression
-import ruleengine.evaluator.compiled.IntegerComparisonOperator
+import ruleengine.evaluator.compiled.numeric.IntegerBetweenExpression
+import ruleengine.evaluator.compiled.numeric.IntegerComparisonExpression
+import ruleengine.evaluator.compiled.numeric.IntegerComparisonOperator
 
 object IntegerOperator {
     /** [op] is the canonical operator name; aliases are already resolved by the caller. */

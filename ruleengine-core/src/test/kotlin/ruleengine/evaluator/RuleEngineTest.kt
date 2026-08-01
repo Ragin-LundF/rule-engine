@@ -6,12 +6,12 @@ import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.OperatorId
-import ruleengine.evaluator.compiled.AndExpression
-import ruleengine.evaluator.compiled.ComparisonOperator
 import ruleengine.evaluator.compiled.CompiledActionArgument
-import ruleengine.evaluator.compiled.DecimalComparisonExpression
-import ruleengine.evaluator.compiled.RegexExtractExpression
-import ruleengine.evaluator.compiled.TextEqualsExpression
+import ruleengine.evaluator.compiled.logic.AndExpression
+import ruleengine.evaluator.compiled.numeric.ComparisonOperator
+import ruleengine.evaluator.compiled.numeric.DecimalComparisonExpression
+import ruleengine.evaluator.compiled.text.RegexExtractExpression
+import ruleengine.evaluator.compiled.text.TextEqualsExpression
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
 import java.math.BigDecimal

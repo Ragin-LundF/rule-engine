@@ -49,4 +49,3 @@ internal fun DiagramPlaceholderContent(headline: String, hint: String) {
     }
 }
 
-

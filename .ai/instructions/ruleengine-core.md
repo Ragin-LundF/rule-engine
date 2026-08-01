@@ -16,7 +16,7 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.dsl.diagnostics` | `ParseException`. |
 | `ruleengine.compiler` | `Validator` / `ValidationResult`, `Compiler`, plus `OperatorSupport` (which operators a type accepts), `LiteralValidation`, `Suggestions`, and `operators/` helpers. |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule`. |
-| `ruleengine.evaluator.compiled` | `CompiledExpression` interface and concrete expression implementations. |
+| `ruleengine.evaluator.compiled` | `CompiledExpression` interface, `EvaluationCost`, `EvaluationCache`, `CompiledActionArgument`. Concrete expressions live in subpackages, grouped by the field type they test: `text/`, `numeric/`, `temporal/`, `stringset/`, `bool/`, the structural combinators in `logic/`, and the value-expression machinery (incl. `ExpressionValue` and `CompiledPathSegment`) in `value/`. Kotlin does not import from a parent package, so a new expression needs an explicit `import ruleengine.evaluator.compiled.CompiledExpression`. |
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`, and `PreparedValue` sealed hierarchy. |
 | `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, plus the internal `MutableNode` the collector builds. Immutable `DecisionTree` / `DecisionNode` live in its `dto/`. |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader`, and DTO classes. |

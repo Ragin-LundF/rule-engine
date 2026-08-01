@@ -8,7 +8,7 @@ import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.TextInExpression
+import ruleengine.evaluator.compiled.text.TextInExpression
 
 object TextInOperator {
     fun compile(

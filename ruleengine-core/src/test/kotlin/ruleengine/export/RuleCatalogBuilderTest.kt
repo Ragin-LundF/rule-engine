@@ -39,7 +39,6 @@ class RuleCatalogBuilderTest {
         assertEquals(expected = "warehouse-shipments", actual = catalog.projectName)
         assertEquals(expected = "shipment-assessment", actual = catalog.entryId)
         assertEquals(expected = "schema.yaml", actual = catalog.schemaPath)
-        assertEquals(expected = "actions.yaml", actual = catalog.actionsPath)
     }
 
     @Test
@@ -124,14 +123,6 @@ class RuleCatalogBuilderTest {
                 CatalogOutcome(action = "reason", argument = "gold-customer-on-express-service"),
             ),
             actual = rule(id = "premium-service-promise").outcomes,
-        )
-    }
-
-    @Test
-    fun `records the fields a rule reads, sorted`() {
-        assertEquals(
-            expected = listOf("parcels.category", "parcels.weightKg"),
-            actual = rule(id = "fragile-load").fields,
         )
     }
 

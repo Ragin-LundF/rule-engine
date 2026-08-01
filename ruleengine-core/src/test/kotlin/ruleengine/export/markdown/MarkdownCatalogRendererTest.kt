@@ -221,7 +221,6 @@ class MarkdownCatalogRendererTest {
             projectName = "empty",
             entryId = "e",
             schemaPath = null,
-            actionsPath = null,
             files = emptyList(),
         )
         val markdown = MarkdownCatalogRenderer.render(catalog = catalog)

@@ -275,7 +275,6 @@ class DocxCatalogWriterTest {
             projectName = "empty",
             entryId = "e",
             schemaPath = null,
-            actionsPath = null,
             files = emptyList(),
         )
         val parts = unzip(bytes = DocxCatalogWriter.write(catalog = catalog))

@@ -43,23 +43,23 @@ import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledRule
-import ruleengine.evaluator.compiled.AndExpression
-import ruleengine.evaluator.compiled.BooleanEqualsExpression
-import ruleengine.evaluator.compiled.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
-import ruleengine.evaluator.compiled.CompiledFieldSegment
-import ruleengine.evaluator.compiled.CompiledValueExpression
 import ruleengine.evaluator.compiled.EvaluationCost
-import ruleengine.evaluator.compiled.FieldAccessCompiledValueExpression
-import ruleengine.evaluator.compiled.LiteralCompiledValueExpression
-import ruleengine.evaluator.compiled.NotExpression
-import ruleengine.evaluator.compiled.NumberExpressionValue
-import ruleengine.evaluator.compiled.OrExpression
-import ruleengine.evaluator.compiled.RegexExtractExpression
-import ruleengine.evaluator.compiled.StringSetContainsAllExpression
-import ruleengine.evaluator.compiled.StringSetContainsAnyExpression
-import ruleengine.evaluator.compiled.TextExpressionValue
+import ruleengine.evaluator.compiled.bool.BooleanEqualsExpression
+import ruleengine.evaluator.compiled.logic.AndExpression
+import ruleengine.evaluator.compiled.logic.NotExpression
+import ruleengine.evaluator.compiled.logic.OrExpression
+import ruleengine.evaluator.compiled.stringset.StringSetContainsAllExpression
+import ruleengine.evaluator.compiled.stringset.StringSetContainsAnyExpression
+import ruleengine.evaluator.compiled.text.RegexExtractExpression
+import ruleengine.evaluator.compiled.value.ComparisonCompiledExpression
+import ruleengine.evaluator.compiled.value.CompiledFieldSegment
+import ruleengine.evaluator.compiled.value.CompiledValueExpression
+import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.value.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.TextExpressionValue
 import java.math.BigDecimal
 
 /**

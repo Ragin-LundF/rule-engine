@@ -56,7 +56,9 @@ object Validator {
             if (!ids.add(rule.id)) {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Duplicate rule id: ${rule.id}"
+                    message = "Duplicate rule id: ${rule.id}",
+                    line = rule.line,
+                    column = rule.column,
                 )
             }
 
@@ -67,7 +69,9 @@ object Validator {
                     severity = Severity.WARNING,
                     message = "Rule '${rule.id}' has no description",
                     suggestion = "Add a description \"...\" clause so the rule can be explained " +
-                            "in an exported overview"
+                            "in an exported overview",
+                    line = rule.line,
+                    column = rule.column,
                 )
             }
 
@@ -137,7 +141,9 @@ object Validator {
                     message = FieldPathMessages.crossesCollection(
                         field = cond.field,
                         collectionPath = resolution.collectionPath
-                    )
+                    ),
+                    line = cond.line,
+                    column = cond.column,
                 )
                 return
             }
@@ -149,7 +155,9 @@ object Validator {
                     suggestion = Suggestions.suggestClosest(
                         input = cond.field,
                         candidates = fieldCandidates(schema = schema)
-                    )
+                    ),
+                    line = cond.line,
+                    column = cond.column,
                 )
                 return
             }
@@ -160,7 +168,9 @@ object Validator {
                 severity = Severity.ERROR,
                 message = "Field '${cond.field}' is a ${def.type.name.lowercase()} and cannot be compared " +
                         "directly; navigate into it (e.g. '${cond.field}.someField') or use an aggregate " +
-                        "function such as count(${cond.field})"
+                        "function such as count(${cond.field})",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -173,7 +183,9 @@ object Validator {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Operator '$op' is not allowed for field '${cond.field}'. Allowed: $allowed",
-                suggestion = suggestion
+                suggestion = suggestion,
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -183,14 +195,18 @@ object Validator {
                 OperatorNames.IN -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
-                        message = "Field '${cond.field}' with 'in' expects list or string literal"
+                        message = "Field '${cond.field}' with 'in' expects list or string literal",
+                        line = cond.line,
+                        column = cond.column,
                     )
 
                 OperatorNames.REGEX -> {
                     if (cond.value !is StringLiteral)
                         diagnostics += ValidationDiagnostic(
                             severity = Severity.ERROR,
-                            message = "Field '${cond.field}' with 'regex' expects string literal pattern"
+                            message = "Field '${cond.field}' with 'regex' expects string literal pattern",
+                            line = cond.line,
+                            column = cond.column,
                         )
                     else {
                         runCatching {
@@ -198,7 +214,9 @@ object Validator {
                         }.onFailure { cause ->
                             diagnostics += ValidationDiagnostic(
                                 severity = Severity.ERROR,
-                                message = "Invalid regex pattern for field '${cond.field}': ${cause.message}"
+                                message = "Invalid regex pattern for field '${cond.field}': ${cause.message}",
+                                line = cond.line,
+                                column = cond.column,
                             )
                         }
                     }
@@ -206,13 +224,17 @@ object Validator {
 
                 OperatorNames.BETWEEN -> diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field"
+                    message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
                 else -> if (cond.value !is StringLiteral)
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
-                        message = "Field '${cond.field}' expects text literal"
+                        message = "Field '${cond.field}' expects text literal",
+                        line = cond.line,
+                        column = cond.column,
                     )
             }
 
@@ -229,13 +251,17 @@ object Validator {
             FieldType.STRING_SET -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' expects list or string literal"
+                    message = "Field '${cond.field}' expects list or string literal",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
             FieldType.BOOLEAN -> if (cond.value !is BooleanLiteral)
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' expects 'true' or 'false'"
+                    message = "Field '${cond.field}' expects 'true' or 'false'",
+                    line = cond.line,
+                    column = cond.column,
                 )
 
             FieldType.DATE, FieldType.DATE_TIME ->
@@ -264,7 +290,9 @@ object Validator {
             val between = cond.value as? BetweenLiteral ?: run {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
-                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected"
+                    message = "Field '${cond.field}' with 'between' expects two quoted values in $expected",
+                    line = cond.line,
+                    column = cond.column,
                 )
                 return
             }
@@ -274,7 +302,9 @@ object Validator {
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
                         message = "Invalid date bound '$invalid' for field '${cond.field}'; " +
-                                "expected $expected"
+                                "expected $expected",
+                        line = cond.line,
+                        column = cond.column,
                     )
                 }
             return
@@ -283,7 +313,9 @@ object Validator {
         val literal = cond.value as? StringLiteral ?: run {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "Field '${cond.field}' expects a quoted date literal in $expected"
+                message = "Field '${cond.field}' expects a quoted date literal in $expected",
+                line = cond.line,
+                column = cond.column,
             )
             return
         }
@@ -291,7 +323,9 @@ object Validator {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Invalid date '${literal.value}' for field '${cond.field}'; " +
-                        "expected $expected"
+                        "expected $expected",
+                line = cond.line,
+                column = cond.column,
             )
         }
     }

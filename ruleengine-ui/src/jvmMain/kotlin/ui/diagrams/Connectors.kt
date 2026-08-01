@@ -1,5 +1,6 @@
 package ui.diagrams
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -7,9 +8,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.dp
 
 /** Draws a short vertical line with an arrowhead to visually connect nodes. */
@@ -48,5 +48,4 @@ internal fun VerticalConnector() {
         }
     }
 }
-
 
