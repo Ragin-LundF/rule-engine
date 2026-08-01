@@ -16,16 +16,12 @@ import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.dto.RawFieldDefinition
 import ruleengine.schema.dto.RawFieldSchema
-import tools.jackson.core.ObjectReadContext
-import tools.jackson.core.StreamReadFeature
-import tools.jackson.dataformat.yaml.YAMLFactory
 import java.io.Reader
 import java.io.StringReader
 import java.nio.file.Files
 import java.nio.file.Path
 
 object FieldSchemaLoader {
-    private val mapper = JacksonUtil.jsonMapper
 
     @Throws(SchemaLoadException::class)
     fun load(path: Path): FieldSchema {
@@ -67,11 +63,7 @@ object FieldSchemaLoader {
     }
 
     private fun parseSchema(content: String): RawFieldSchema {
-        val yf = YAMLFactory.builder().configure(StreamReadFeature.IGNORE_UNDEFINED, true).build()
-        val bytes = content.toByteArray(Charsets.UTF_8)
-        return yf.createParser(ObjectReadContext.empty(), bytes).use { p ->
-            mapper.readValue(p, RawFieldSchema::class.java)
-        }
+        return JacksonUtil.readYaml(content = content, type = RawFieldSchema::class.java)
     }
 
     private fun mapRawDefinition(fieldName: FieldId, raw: RawFieldDefinition): FieldDefinition {

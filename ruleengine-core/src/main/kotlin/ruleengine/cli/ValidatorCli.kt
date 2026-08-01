@@ -26,7 +26,7 @@ object ValidatorCli {
         var exitCode = 0
 
         runCatching {
-            val argsMap = parseArgs(argsArray = args)
+            val argsMap = CliArguments.parse(args = args)
 
             val schemaPath = argsMap["--schema"]
             val rulesPath = argsMap["--rules"]
@@ -85,24 +85,6 @@ object ValidatorCli {
         }
 
         return exitCode
-    }
-
-    private fun parseArgs(argsArray: Array<String>): Map<String, String?> {
-        val result = mutableMapOf<String, String?>()
-        var index = 0
-        while (index < argsArray.size) {
-            val key = argsArray[index]
-            val value = if (index + 1 < argsArray.size && !argsArray[index + 1].startsWith("--")) {
-                argsArray[index + 1]
-            } else {
-                null
-            }
-
-            result[key] = value
-            index += if (value != null) 2 else 1
-        }
-
-        return result
     }
 
     private fun usage(out: Appendable): Int {
