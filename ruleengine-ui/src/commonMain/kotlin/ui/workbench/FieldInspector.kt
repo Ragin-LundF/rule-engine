@@ -12,6 +12,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ui.builder.OperatorOptions
 import ui.components.SectionTitle
 
 /**
@@ -45,7 +46,7 @@ fun FieldInspector(
 
         Divider()
         SectionTitle(text = "EXAMPLE")
-        val exampleOp = field.operators.firstOrNull() ?: "equals"
+        val exampleOp = field.operators.firstOrNull() ?: OperatorOptions.EQUALS
         Text(
             text = "${field.id} $exampleOp <value>",
             style = MaterialTheme.typography.body2,

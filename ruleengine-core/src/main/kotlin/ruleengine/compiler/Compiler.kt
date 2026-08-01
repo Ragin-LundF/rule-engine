@@ -9,6 +9,7 @@ import ruleengine.compiler.operators.TextInOperator
 import ruleengine.compiler.operators.TextRegexOperator
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldDefinition
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.domain.dto.FieldSchema
@@ -244,12 +245,12 @@ object Compiler {
         // never fires. '!=' has no canonical form and passes through unchanged.
         val op = OperatorUtils.normalizeOperator(op = cond.operator)
         val comparisonOperator = when (op) {
-            "equals" -> ComparisonOperatorAst.EQ
-            "!=" -> ComparisonOperatorAst.NEQ
-            "gt" -> ComparisonOperatorAst.GT
-            "gte" -> ComparisonOperatorAst.GTE
-            "lt" -> ComparisonOperatorAst.LT
-            "lte" -> ComparisonOperatorAst.LTE
+            OperatorNames.EQUALS -> ComparisonOperatorAst.EQ
+            OperatorNames.SYMBOL_NOT_EQUALS -> ComparisonOperatorAst.NEQ
+            OperatorNames.GT -> ComparisonOperatorAst.GT
+            OperatorNames.GTE -> ComparisonOperatorAst.GTE
+            OperatorNames.LT -> ComparisonOperatorAst.LT
+            OperatorNames.LTE -> ComparisonOperatorAst.LTE
             else -> throw CompilationException(
                 ruleId = ruleId,
                 details = "Operator '$op' is not supported in filter segments"
@@ -346,9 +347,9 @@ object Compiler {
                 ruleId = ruleId
             )
 
-            DECIMAL -> DecimalOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
+            DECIMAL -> DecimalOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId, op = op)
 
-            INTEGER -> IntegerOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
+            INTEGER -> IntegerOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId, op = op)
 
             STRING_SET -> compileStringSetCondition(
                 cond = cond,
@@ -365,7 +366,8 @@ object Compiler {
                 ruleId = ruleId,
                 cond = cond,
                 fieldId = fieldId,
-                def = def
+                def = def,
+                op = op
             )
 
             COLLECTION, OBJECT -> throw CompilationException(
@@ -385,8 +387,8 @@ object Compiler {
         ruleId: String?
     ): CompiledExpression {
         return when (op) {
-            "regex" -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
-            "in" -> TextInOperator.compile(
+            OperatorNames.REGEX -> TextRegexOperator.compile(ruleId = ruleId, cond = cond, fieldId = fieldId)
+            OperatorNames.IN -> TextInOperator.compile(
                 ruleId = ruleId,
                 cond = cond,
                 fieldId = fieldId,
@@ -443,13 +445,13 @@ object Compiler {
                 }.toSet()
 
                 when (op) {
-                    "containsAny" -> StringSetContainsAnyExpression(
+                    OperatorNames.CONTAINS_ANY -> StringSetContainsAnyExpression(
                         field = fieldId,
                         expectedNormalized = normalized,
                         ignoreCase = cond.ignoreCase
                     )
 
-                    "containsAll" -> StringSetContainsAllExpression(
+                    OperatorNames.CONTAINS_ALL -> StringSetContainsAllExpression(
                         field = fieldId,
                         expectedNormalized = normalized,
                         ignoreCase = cond.ignoreCase

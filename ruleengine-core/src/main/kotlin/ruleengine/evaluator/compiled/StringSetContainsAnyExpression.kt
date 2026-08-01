@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedStringSet
@@ -24,7 +25,7 @@ class StringSetContainsAnyExpression(
             meta = NodeMeta(
                 type = NodeType.CONDITION,
                 field = field.value,
-                operator = "containsAny",
+                operator = OperatorNames.CONTAINS_ANY,
                 expected = expectedNormalized
             )
         )

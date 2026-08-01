@@ -1,5 +1,7 @@
 package ui.builder
 
+import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.core.domain.OperatorNames
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,6 +62,31 @@ class OperatorOptionsTest {
         assertTrue("in" !in OperatorOptions.INTEGER)
         assertTrue("in" !in OperatorOptions.DECIMAL)
         assertTrue("in" in OperatorOptions.TEXT)
+    }
+
+    @Test
+    fun `operator names match the engine`() {
+        // OperatorOptions has to restate the names because it lives in commonMain and the engine is
+        // JVM-only. This is what keeps the restatement from drifting.
+        assertEquals(
+            expected = OperatorNames.ALL.sorted(),
+            actual = OperatorOptions.ALL.sorted(),
+        )
+    }
+
+    @Test
+    fun `every mirrored operator name is one the engine knows`() {
+        OperatorOptions.ALL.forEach { operator ->
+            assertTrue(
+                actual = OperatorUtils.isKnownOperator(op = operator),
+                message = "The engine does not know operator '$operator'",
+            )
+            assertEquals(
+                expected = operator,
+                actual = OperatorUtils.normalizeOperator(op = operator),
+                message = "'$operator' is not the canonical spelling",
+            )
+        }
     }
 
     @Test

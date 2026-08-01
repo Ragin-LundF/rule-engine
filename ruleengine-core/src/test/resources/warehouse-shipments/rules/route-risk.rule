@@ -3,6 +3,7 @@
 # Schema: schema.yaml
 
 rule "route-on-time" {
+  description "The shipment moved through the network without any significant hold-up."
   when
     max(checkpoints.delayMinutes) < 60
     and avg(checkpoints.delayMinutes) < 30
@@ -13,6 +14,7 @@ rule "route-on-time" {
 }
 
 rule "route-delayed" {
+  description "A single checkpoint held the shipment for two hours or more."
   when
     max(checkpoints.delayMinutes) >= 120
 
@@ -22,6 +24,7 @@ rule "route-delayed" {
 }
 
 rule "tracking-gap" {
+  description "A checkpoint was passed without a scan, so the tracking history has a gap."
   when
     count(checkpoints[scanned == false]) > 0
 

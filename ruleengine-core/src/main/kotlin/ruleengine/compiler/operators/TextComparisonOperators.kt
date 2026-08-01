@@ -1,5 +1,6 @@
 package ruleengine.compiler.operators
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldDefinition
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.errors.CompilationException
@@ -33,25 +34,25 @@ object TextComparisonOperators {
         val expected = stringLiteral
 
         return when (op) {
-            "equals" -> TextEqualsExpression(
+            OperatorNames.EQUALS -> TextEqualsExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "contains" -> TextContainsExpression(
+            OperatorNames.CONTAINS -> TextContainsExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "startsWith" -> TextStartsWithExpression(
+            OperatorNames.STARTS_WITH -> TextStartsWithExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase
             )
 
-            "endsWith" -> TextEndsWithExpression(
+            OperatorNames.ENDS_WITH -> TextEndsWithExpression(
                 field = fieldId,
                 expectedNormalized = expected,
                 ignoreCase = cond.ignoreCase

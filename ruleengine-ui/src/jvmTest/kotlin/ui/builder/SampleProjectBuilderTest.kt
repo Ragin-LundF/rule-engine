@@ -95,6 +95,13 @@ class SampleProjectBuilderTest {
                     actual = canonical(expr = reparsed.condition),
                     message = "Round-trip changed rule '${ast.id}' of '$name'.\nGenerated:\n$generated",
                 )
+                // The generated text replaces the rule in the editor, so anything the Builder does
+                // not carry is deleted from the file — not merely absent from the Builder view.
+                assertEquals(
+                    expected = ast.description,
+                    actual = reparsed.description,
+                    message = "Round-trip dropped the description of rule '${ast.id}' of '$name'.",
+                )
             }
         }
     }

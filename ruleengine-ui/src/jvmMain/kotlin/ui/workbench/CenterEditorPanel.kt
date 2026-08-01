@@ -2,6 +2,7 @@ package ui.workbench
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -218,7 +220,14 @@ fun CenterEditorPanel(
     }
 }
 
-/** Header that is shown above every center mode: title, mode tabs, and context actions. */
+/**
+ * Header that is shown above every center mode: title, mode tabs, and context actions.
+ *
+ * The actions sit on their own row under the tabs rather than beside them. Sharing one row makes
+ * the two compete for width — the tabs are fixed, so the actions absorb every shortfall, and the
+ * last button gets squeezed until its label wraps to one letter per line. Which actions there are
+ * depends on the mode, so that shortfall is not a fixed amount that could simply be designed around.
+ */
 @Suppress("FunctionNaming")
 @Composable
 private fun CenterPanelHeader(
@@ -228,18 +237,19 @@ private fun CenterPanelHeader(
     onRuleModeChange: (RuleMode) -> Unit,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "Rule Editor",
-            style = MaterialTheme.typography.subtitle1,
-            color = TextPrimary,
-        )
-        Spacer(Modifier.width(width = 14.dp))
-        ViewModeToggle(
-            current = viewMode,
-            onChange = { onRuleModeChange(it.toRuleMode()) },
-        )
-        Spacer(modifier = Modifier.weight(1f))
+    Column(verticalArrangement = Arrangement.spacedBy(space = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "Rule Editor",
+                style = MaterialTheme.typography.subtitle1,
+                color = TextPrimary,
+            )
+            Spacer(Modifier.width(width = 14.dp))
+            ViewModeToggle(
+                current = viewMode,
+                onChange = { onRuleModeChange(it.toRuleMode()) },
+            )
+        }
         CenterPanelActions(
             state = state,
             scope = scope,
@@ -258,7 +268,11 @@ private fun CenterPanelActions(
 ) {
     var ruleValue by state.ruleValue
 
+    // Scrollable because the number of actions depends on the mode and the window can be narrower
+    // than they need. Without it the row squeezes its last button instead, which is how "Validate"
+    // once ended up rendered as a column of letters.
     Row(
+        modifier = Modifier.horizontalScroll(state = rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -334,6 +348,7 @@ private fun CodeModeActions(
                 }
             },
         )
+        ExportOverviewButton(state = state, scope = scope)
         ToolbarButton(
             label = "Validate",
             primary = true,

@@ -1,4 +1,4 @@
-package ui.diagrams.model
+package ruleengine.export
 
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticValueAst

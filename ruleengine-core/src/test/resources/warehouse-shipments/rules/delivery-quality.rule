@@ -4,6 +4,7 @@
 # Schema: schema.yaml
 
 rule "premium-service-promise" {
+  description "Gold-tier customers shipping on an express service get the premium service assessment."
   when
     shipment.customer.tier equals "gold"
     and shipment.service contains "express"
@@ -14,6 +15,7 @@ rule "premium-service-promise" {
 }
 
 rule "transit-within-promise" {
+  description "A shipment delivered in two days or less meets the transit promise."
   when
     shipment.transitDays <= 2
 
@@ -23,6 +25,7 @@ rule "transit-within-promise" {
 }
 
 rule "transit-over-promise" {
+  description "A shipment that spends more than two days in transit misses the promise."
   when
     shipment.transitDays > 2
 
@@ -31,8 +34,8 @@ rule "transit-over-promise" {
     reason "more-than-two-days-in-transit"
 }
 
-# Cover note is required for a valuable shipment; the operator normalizes the country before comparing.
 rule "insurance-required" {
+  description "A valuable shipment needs a cover note. The country is normalized before it is compared, so \"de\" and \" DE \" are treated the same."
   when
     shipment.declaredValue between 1000 25000
     and shipment.customer.country equals "DE"
@@ -43,6 +46,7 @@ rule "insurance-required" {
 }
 
 rule "pickup-inside-planning-window" {
+  description "The shipment was picked up inside the current planning window."
   when
     shipment.pickedUpAt >= "01.03.2026"
 

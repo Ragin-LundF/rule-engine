@@ -34,6 +34,7 @@ import ui.TextSecondary
 import ui.builder.components.ActionRowEditor
 import ui.builder.components.ComparisonRowEditor
 import ui.builder.components.ConditionRowEditor
+import ui.builder.components.PlainTextField
 import ui.builder.components.RuleBuilderHeader
 import ui.components.TinyButton
 import kotlin.random.Random
@@ -83,6 +84,10 @@ fun RuleBuilderView(
         }
 
         BuilderCard {
+            DescriptionSection(editorState = editorState, onDslChange = onDslChange)
+        }
+
+        BuilderCard {
             WhenSection(
                 editorState = editorState,
                 catalogFields = catalogFields,
@@ -113,6 +118,35 @@ private fun BuilderCard(content: @Composable () -> Unit) {
     ) {
         content()
     }
+}
+
+/**
+ * The rule's optional `description` clause.
+ *
+ * Sits above WHEN because that is where it belongs in the generated DSL, and because a rule author
+ * arriving at a rule should read what it is for before reading how it decides.
+ */
+@Composable
+private fun DescriptionSection(
+    editorState: BuilderEditorState,
+    onDslChange: (String) -> Unit,
+) {
+    SectionHeader(
+        title = "DESCRIPTION",
+        subtitle = "Optional — one sentence, shown in the exported rule overview",
+    )
+
+    Spacer(modifier = Modifier.height(height = 8.dp))
+
+    PlainTextField(
+        value = editorState.description,
+        placeholder = "What is this rule for?",
+        onValueChange = { text ->
+            editorState.description = text
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -644,7 +678,7 @@ private fun defaultOperatorFor(field: CatalogFieldInfo?): String {
     val allowed = field?.let {
         OperatorOptions.forField(fieldType = it.type, schemaOperators = it.operators)
     }
-    return allowed?.firstOrNull() ?: "equals"
+    return allowed?.firstOrNull() ?: OperatorOptions.EQUALS
 }
 
 private fun emitDslChange(

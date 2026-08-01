@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedText
@@ -22,8 +23,10 @@ class TextInExpression(
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
             meta = NodeMeta(
-                type = NodeType.CONDITION, field = field.value,
-                operator = if (ignoreCase) "inIgnoreCase" else "in", expected = expectedNormalized
+                type = NodeType.CONDITION,
+                field = field.value,
+                operator = if (ignoreCase) "${OperatorNames.IN}IgnoreCase" else OperatorNames.IN,
+                expected = expectedNormalized,
             )
         )
 

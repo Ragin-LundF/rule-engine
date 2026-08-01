@@ -594,6 +594,8 @@ You may define any action names that fit the domain. These are widely used conve
 
 ```
 rule "<rule-id>" {
+  description "<one sentence explaining what the rule is for>"
+
   when
     <condition>
 
@@ -607,8 +609,35 @@ rule "<rule-id>" {
 | Part | Required | Notes |
 |---|---|---|
 | `rule "<id>"` | ✅ | ID must be unique across all loaded rule files. Use lowercase-hyphenated or UPPER_UNDERSCORE identifiers. |
+| `description "<text>"` | ⬜ | One double-quoted sentence. If present it must be the **first** thing inside `{`, before `when`. May appear at most once per rule. |
 | `when` | ✅ | Keyword, followed by one or more conditions. |
 | `then` | ✅ | Keyword, followed by one or more actions. |
+
+**No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags`, `salience` or `else` — the engine rejects them.
+
+#### The `description` clause
+
+Always emit a `description` when translating a business statement into a rule: the business analyst's own sentence is exactly what belongs there. It is the only part of the rule written for a human rather than the engine, and it is what appears in an exported rule overview handed to someone who has never seen this DSL.
+
+```
+rule "rent-payment" {
+  description "A recurring payment of at least 300 whose purpose mentions rent."
+
+  when
+    purpose contains "rent"
+    and amount >= 300
+
+  then
+    label "rent"
+}
+```
+
+Rules:
+
+- Optional — omitting it produces a **warning**, never an error, and the rule still loads, compiles and evaluates.
+- Has **no effect on matching**. Never encode logic in it.
+- Describe the **business intent**, not the mechanics. Write `"A valuable shipment needs a cover note."`, not `"Checks declaredValue between 1000 and 25000."`
+- A `#` comment is **not** a description: comments are stripped when the file is read and never reach the engine. Use `#` for notes to other rule authors and `description` for the business reader.
 
 ### 5.3 Conditions
 
@@ -830,6 +859,7 @@ then
 # Classifies bank transactions by purpose and amount
 
 rule "direct-debit" {
+  description "The transaction carries one of the SEPA direct-debit codes."
   when
     sepaCode in ["DMCT", "DRNL", "PRCT"]
   then
@@ -838,6 +868,7 @@ rule "direct-debit" {
 }
 
 rule "salary-credit" {
+  description "An incoming payment carrying the SEPA salary code."
   when
     sepaCode equals "SALA"
     and amount > 0
@@ -847,6 +878,7 @@ rule "salary-credit" {
 }
 
 rule "rent-payment" {
+  description "A payment of at least 300 whose purpose mentions rent."
   when
     (purpose contains "miete"
     or purpose contains "rent"
@@ -858,6 +890,7 @@ rule "rent-payment" {
 }
 
 rule "premium-customer-transfer" {
+  description "A verified premium customer made an incoming transfer."
   when
     tags containsAll ["premium", "verified"]
     and amount > 0
@@ -1272,6 +1305,8 @@ actions:
 # classification.rule — transaction classification rules
 
 rule "rent-payment" {
+  description "A payment of at least 300 whose purpose mentions rent."
+
   when
     (purpose contains "miete"
     or purpose contains "rent"
@@ -1283,6 +1318,8 @@ rule "rent-payment" {
 }
 
 rule "salary-credit" {
+  description "An incoming payment carrying the SEPA salary code."
+
   when
     sepaCode equals "SALA"
     and amount > 0
@@ -1300,6 +1337,8 @@ rule "salary-credit" {
 # fraud-detection.rule — fraud and AML detection rules
 
 rule "non-dach-iban" {
+  description "The counterparty IBAN is not German, Austrian or Swiss."
+
   when
     not iban regex "^(DE|AT|CH)"
 
@@ -1308,6 +1347,8 @@ rule "non-dach-iban" {
 }
 
 rule "structuring-suspicion" {
+  description "Repeated payments just under the reporting threshold look like structuring."
+
   when
     count between 5 20
     and amount between 8000 9999
@@ -1318,6 +1359,8 @@ rule "structuring-suspicion" {
 }
 
 rule "blocked-customer" {
+  description "The customer is blocked or sanctioned, so the transaction is rejected."
+
   when
     tags containsAny ["blocked", "sanctioned"]
 

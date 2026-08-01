@@ -1,5 +1,6 @@
 package ruleengine.compiler.operators
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
@@ -11,9 +12,10 @@ import ruleengine.evaluator.compiled.IntegerComparisonExpression
 import ruleengine.evaluator.compiled.IntegerComparisonOperator
 
 object IntegerOperator {
-    @Suppress("LongMethod", "ThrowsCount")
-    fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId): CompiledExpression {
-        if (cond.operator.lowercase() == "between") {
+    /** [op] is the canonical operator name; aliases are already resolved by the caller. */
+    @Suppress("ThrowsCount")
+    fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
+        if (op == OperatorNames.BETWEEN) {
             val between = cond.value as? BetweenLiteral ?: throw CompilationException(
                 ruleId = ruleId,
                 details = "Operator 'between' expects two integer bounds for field '${cond.field}'"
@@ -44,42 +46,21 @@ object IntegerOperator {
             )
         }
 
-        return when (cond.operator.lowercase()) {
-            "equals", "==", "=", "eq" -> IntegerComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = IntegerComparisonOperator.EQ
-            )
+        val comparison = COMPARISONS[op] ?: throw CompilationException(
+            ruleId = ruleId,
+            details = "Unsupported operator '${cond.operator}' for integer field"
+        )
 
-            "gt", ">" -> IntegerComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = IntegerComparisonOperator.GT
-            )
-
-            "gte", ">=" -> IntegerComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = IntegerComparisonOperator.GTE
-            )
-
-            "lt", "<" -> IntegerComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = IntegerComparisonOperator.LT
-            )
-
-            "lte", "<=" -> IntegerComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = IntegerComparisonOperator.LTE
-            )
-
-            else -> throw CompilationException(
-                ruleId = ruleId,
-                details = "Unsupported operator '${cond.operator}' for integer field"
-            )
-        }
+        return IntegerComparisonExpression(field = fieldId, expected = expected, op = comparison)
     }
+
+    /** Keyed by canonical name only — the caller normalises every alias before it gets here. */
+    private val COMPARISONS: Map<String, IntegerComparisonOperator> = mapOf(
+        OperatorNames.EQUALS to IntegerComparisonOperator.EQ,
+        OperatorNames.GT to IntegerComparisonOperator.GT,
+        OperatorNames.GTE to IntegerComparisonOperator.GTE,
+        OperatorNames.LT to IntegerComparisonOperator.LT,
+        OperatorNames.LTE to IntegerComparisonOperator.LTE,
+    )
 }
 

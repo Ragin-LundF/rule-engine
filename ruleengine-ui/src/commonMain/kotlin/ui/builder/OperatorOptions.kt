@@ -1,28 +1,71 @@
 package ui.builder
 
 /**
- * Default operator lists per field type, used when the schema does not restrict operators.
- * If the schema provides an explicit operator set, it is intersected with these defaults.
+ * The operator vocabulary for the visual editor: the names themselves, and the default list offered
+ * per field type when the schema does not restrict them.
+ *
+ * Mirrors `ruleengine.core.domain.OperatorNames`, which is the engine's authority. It has to be a
+ * mirror rather than a reference: this file is in `commonMain`, and the core module is JVM-only, so
+ * `commonMain` cannot see it. `OperatorOptionsTest` asserts the two agree — the same arrangement
+ * [AGGREGATE_FUNCTIONS] already uses for the engine's aggregate enum.
+ *
+ * Every other file in the UI takes its operator names from here rather than spelling them again.
  */
 object OperatorOptions {
 
-    val TEXT: List<String> = listOf("equals", "contains", "startsWith", "endsWith", "in", "regex", "!=")
+    // ── operator names, mirroring ruleengine.core.domain.OperatorNames ────────
+
+    const val EQUALS = "equals"
+    const val GT = "gt"
+    const val GTE = "gte"
+    const val LT = "lt"
+    const val LTE = "lte"
+    const val BETWEEN = "between"
+    const val CONTAINS = "contains"
+    const val STARTS_WITH = "startsWith"
+    const val ENDS_WITH = "endsWith"
+    const val IN = "in"
+    const val CONTAINS_ANY = "containsAny"
+    const val CONTAINS_ALL = "containsAll"
+    const val REGEX = "regex"
+
+    const val SYMBOL_EQUALS = "=="
+    const val SYMBOL_NOT_EQUALS = "!="
+    const val SYMBOL_GT = ">"
+    const val SYMBOL_GTE = ">="
+    const val SYMBOL_LT = "<"
+    const val SYMBOL_LTE = "<="
+
+    /** The canonical names, in the order the engine documents them. */
+    val ALL: List<String> = listOf(
+        EQUALS, GT, GTE, LT, LTE, BETWEEN,
+        CONTAINS, STARTS_WITH, ENDS_WITH, IN,
+        CONTAINS_ANY, CONTAINS_ALL, REGEX,
+    )
+
+    // ── defaults per field type ───────────────────────────────────────────────
+
+    val TEXT: List<String> = listOf(EQUALS, CONTAINS, STARTS_WITH, ENDS_WITH, IN, REGEX, SYMBOL_NOT_EQUALS)
+
     // No `in`: the engine allows it on text fields only (`Validator.supportedOperatorsFor`).
-    val INTEGER: List<String> = listOf("equals", ">", ">=", "<", "<=", "between", "!=")
-    val DECIMAL: List<String> = listOf("equals", ">", ">=", "<", "<=", "between", "!=")
-    val BOOLEAN: List<String> = listOf("equals")
-    val STRING_SET: List<String> = listOf("containsAny", "containsAll")
-    val DATE: List<String> = listOf("equals", ">", ">=", "<", "<=", "between")
+    val INTEGER: List<String> =
+        listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN, SYMBOL_NOT_EQUALS)
+
+    val DECIMAL: List<String> = INTEGER
+    val BOOLEAN: List<String> = listOf(EQUALS)
+    val STRING_SET: List<String> = listOf(CONTAINS_ANY, CONTAINS_ALL)
+    val DATE: List<String> = listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN)
 
     /**
      * Operators allowed once either side of a comparison is a computed value. The engine's parser
      * only routes a condition through the value-expression path for symbolic operators, so these are
      * the only valid choices for a comparison row.
      */
-    val COMPARISON_NUMERIC: List<String> = listOf("==", "!=", ">", ">=", "<", "<=")
+    val COMPARISON_NUMERIC: List<String> =
+        listOf(SYMBOL_EQUALS, SYMBOL_NOT_EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE)
 
     /** Text operands support equality only — the engine rejects ordering comparisons on text. */
-    val COMPARISON_TEXT: List<String> = listOf("==", "!=")
+    val COMPARISON_TEXT: List<String> = listOf(SYMBOL_EQUALS, SYMBOL_NOT_EQUALS)
 
     /**
      * Aggregate functions understood by the engine, lowercase.
@@ -38,7 +81,7 @@ object OperatorOptions {
     val ARITHMETIC_OPERATORS: List<String> = listOf("+", "-", "*", "/")
 
     /** Operators available inside a filter segment (`orders[...]`). */
-    val FILTER_OPERATORS: List<String> = listOf("==", "!=", ">", ">=", "<", "<=")
+    val FILTER_OPERATORS: List<String> = COMPARISON_NUMERIC
 
     /** Field types that can take part in numeric comparisons and arithmetic. */
     private val NUMERIC_TYPES: Set<String> = setOf("integer", "decimal")
@@ -65,13 +108,14 @@ object OperatorOptions {
      * This allows the intersection logic to work even when the schema uses word-form names.
      */
     private val SCHEMA_NAME_TO_SYMBOL: Map<String, String> = mapOf(
-        "gt" to ">",
-        "gte" to ">=",
-        "lt" to "<",
-        "lte" to "<=",
-        "ne" to "!=",
-        "neq" to "!=",
-        "not_equals" to "!=",
+        GT to SYMBOL_GT,
+        GTE to SYMBOL_GTE,
+        LT to SYMBOL_LT,
+        LTE to SYMBOL_LTE,
+        // The engine has no named inequality, but schemas written by hand sometimes declare one.
+        "ne" to SYMBOL_NOT_EQUALS,
+        "neq" to SYMBOL_NOT_EQUALS,
+        "not_equals" to SYMBOL_NOT_EQUALS,
     )
 
     /**
@@ -103,8 +147,8 @@ object OperatorOptions {
     }
 
     /** Returns true if the operator expects two values (low/high). */
-    fun isBetween(operator: String): Boolean = operator == "between"
+    fun isBetween(operator: String): Boolean = operator == BETWEEN
 
     /** Returns true if the operator expects a list of values. */
-    fun isList(operator: String): Boolean = operator in listOf("in", "containsAny", "containsAll")
+    fun isList(operator: String): Boolean = operator in listOf(IN, CONTAINS_ANY, CONTAINS_ALL)
 }

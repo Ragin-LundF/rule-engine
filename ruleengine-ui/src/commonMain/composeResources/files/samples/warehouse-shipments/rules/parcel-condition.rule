@@ -3,6 +3,7 @@
 # Schema: schema.yaml
 
 rule "all-parcels-intact" {
+  description "Every parcel arrived intact - nothing in the shipment is flagged as damaged."
   when
     count(parcels[damaged == true]) == 0
 
@@ -12,6 +13,7 @@ rule "all-parcels-intact" {
 }
 
 rule "damaged-parcels-reported" {
+  description "At least one parcel in the shipment is flagged as damaged."
   when
     count(parcels[damaged == true]) > 0
 
@@ -21,6 +23,7 @@ rule "damaged-parcels-reported" {
 }
 
 rule "two-person-lift" {
+  description "The shipment is too heavy for one person to handle safely and must be lifted by two."
   when
     sum(parcels.weightKg) > 100
 
@@ -29,8 +32,8 @@ rule "two-person-lift" {
     reason "total-weight-above-one-hundred-kilograms"
 }
 
-# More than a quarter of the load is fragile, so the whole shipment is handled as fragile.
 rule "fragile-load" {
+  description "More than a quarter of the load is fragile, so the whole shipment is handled as fragile rather than only the individual parcels."
   when
     sum(parcels[category == "fragile"].weightKg) > sum(parcels.weightKg) * 0.25
 
@@ -41,6 +44,7 @@ rule "fragile-load" {
 
 # A filter may read a nested member of the element it filters.
 rule "consolidate-at-hamburg-hub" {
+  description "Two or more parcels start at the Hamburg hub, so they are consolidated into one handling unit."
   when
     count(parcels[origin.hub == "HAM"]) >= 2
 

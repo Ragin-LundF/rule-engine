@@ -37,6 +37,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The **Usages** tabs of the schema and action editors, previously placeholders reading *"will be
   shown here in a later phase"*, now render the field flow and the outcome map respectively.
 
+- **An optional `description` clause on a rule.** One sentence, written for a human rather than for
+  the engine, placed directly after the opening `{` and before `when`:
+
+  ```
+  rule "insurance-required" {
+    description "A valuable shipment needs a cover note."
+
+    when
+      shipment.declaredValue between 1000 25000
+    then
+      assessment "insurance:required"
+  }
+  ```
+
+  It has no effect on matching and may appear at most once per rule. Omitting it produces a
+  `Severity.WARNING` diagnostic, never an error, so every existing rule file keeps loading,
+  compiling and evaluating unchanged. A `#` comment is not a substitute: comments are stripped by
+  the lexer and never reach the engine, so they cannot appear in an export. Documented in
+  `RULE-SPEC.md` §5.2 and `docs/rules.md`, and carried by every sample rule set.
+
+- **Rule overview export, as Markdown for a wiki or as a Word document for a customer.** *Export
+  Overview* in the Rule Editor toolbar writes the whole selected manifest entry — not just the open
+  file — as a document for someone who has never seen the DSL: an index of every rule linked to its
+  section, a table of the outcomes the rule set can produce, then one section per rule file. Each
+  rule leads with its `description`, restates its condition as sentences, and shows the exact
+  rule-language condition underneath for whoever has to verify it.
+
+  The `.docx` is written directly as OOXML and zipped with `java.util.zip`, so this adds **no new
+  dependency** to either module; Word, LibreOffice and Google Docs do all layout and pagination, and
+  a PDF is one File → Export away. Both renderers are pure functions of their input — no timestamp
+  in the Markdown, fixed ZIP entry times in the `.docx` — so regenerating an unchanged rule set
+  produces byte-identical output and a wiki page shows no edit.
+
+  The export reads the entry's rule files from disk, so unsaved edits in the open file are not
+  included; the status line says so rather than letting an author hand over a version they believe
+  contains their change.
+
+- **`ruleengine.export`** — the model and renderers behind that export, usable without the UI:
+  `RuleCatalogBuilder.fromManifest(path, entryId)` builds a `RuleCatalog` (in `ruleengine.export.dto`)
+  from a manifest, `MarkdownCatalogRenderer` and `DocxCatalogWriter` render it. `PlainLanguageRenderer`
+  restates a condition as a `PlainCondition` tree — `PlainAll` / `PlainAny` / `PlainNot` / `PlainLeaf`
+  — rather than as finished text, so each output format can render the boolean structure its own way.
+
+  The wording is deliberately literal and never infers intent: `> total * 0.25` becomes *"more than
+  … multiplied by 0.25"*, not *"more than a quarter of …"*. Saying what a rule is **for** is the
+  author's job, in the `description` clause. Field paths are labelled from the schema, preferring a
+  declared `alias` and otherwise deriving one (`shipment.customer.tier` → *Customer › Tier*), and
+  date comparisons read as points in time rather than quantities (`gte` → *"is on or after"*, and
+  *"at"* instead of *"on"* for a `date_time`, whose comparison keeps the time).
+
+- **`OperatorNames`** (`ruleengine.core.domain`) — every operator name the engine understands, in one
+  place: the canonical names, the symbolic and legacy spellings, and the alias table
+  `OperatorUtils.normalizeOperator` reads. The names are shared vocabulary between the parser, the
+  validator, the compiler, the trace, the export and the visual editor, and spelled as literals at
+  each of those sites they drift.
+
 ### Changed
 
 - **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,
@@ -64,6 +120,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `ValueExpressionRenderer` (`ruleengine.dsl.ast`) — renders a parsed expression back to DSL-like
   text. Used to label traced conditions and to display them in the UI diagram view.
+
+- **BREAKING for `ruleengine-ui` consumers: `FieldUsage` moved to `ruleengine.export`.** The walk that
+  answers *"which field paths does this rule read"* was declared in `ui.diagrams.model` but is not a
+  UI concern — the export needs the same answer, and `ruleengine-ui` must not own logic the core
+  depends on. Only the package changed; `fieldsOf(rule)` and its behaviour, including resolving a
+  filter's paths against the collection it filters, are untouched.
+
+- **The numeric and date operator compilers no longer carry their own alias tables.**
+  `IntegerOperator`, `DecimalOperator` and `DateOperator` each matched on `cond.operator.lowercase()`
+  against their own list of spellings (`"equals", "==", "=", "eq"`, …), duplicating
+  `OperatorUtils.normalizeOperator`, which `Compiler` had already applied. Each now receives the
+  canonical name from its caller and matches one `OperatorNames` constant per operator, so a fourth
+  spelling of an operator cannot be recognised in one place and missed in another. Behaviour is
+  unchanged: the aliases they listed are exactly the ones the canonical table already maps.
+  `RuleAstToBuilderMapper` held a fifth copy and now normalises through the engine, translating only
+  what the Builder genuinely displays differently (`gt` → `>`).
+
+- **`ValueExpressionRenderer` renders `between` as two literals, not a range.** A `BetweenLiteral`
+  was written `1000..25000`, which is not syntax the DSL accepts; it is now `between 1000 25000`, so
+  the rendered text is a condition that parses. Affects trace labels, the UI diagram views and the
+  exported rule-language line.
+
+- **The Rule Editor's action buttons moved onto their own row, under the mode tabs.** Sharing a row
+  with the tabs made the two compete for width: the tabs are fixed, so the actions absorbed every
+  shortfall, and which actions exist depends on the mode — there is no fixed amount to design
+  around.
+
+- Every sample rule set — the five bundled in the workbench and the fixtures under
+  `ruleengine-core/src/test/resources` — now carries a `description` on each rule, as do the complete
+  worked examples in `RULE-SPEC.md` §5.7 and §8. Two `#` comments that had said the same thing as the
+  new clause were removed rather than left to drift out of sync with it.
 
 ### Fixed
 
@@ -121,6 +208,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the value silently changed type. The quoting rule used `toDoubleOrNull`, which accepts `10.`, `1e5` and
   `Infinity` — none of them forms the DSL writes for a number. It now matches the canonical integer and
   decimal forms only, and quotes everything else.
+
+- **The editor offered a `description` clause the parser rejected.** `SyntaxHighlighter` coloured
+  `description` as a structure keyword and the autocompletion offered `description ""`, but
+  `Parser.parseRule` expected `when` immediately after `{`, so accepting that completion produced
+  `Expected 'when' block`. `RuleAst.description` had existed since the AST was written and was never
+  populated by anything. The clause is now parsed, and the field carries what the author wrote.
+
+- **A toolbar button squeezed for width rendered its label one letter per line.** A `Row` of buttons
+  narrower than their combined width compresses the last one, and a wrapping caption then reads as a
+  column of characters where a button should be — *Validate* was the one that showed it. Button
+  captions are single-line and non-wrapping now, and the Rule Editor's action row scrolls instead, so
+  a toolbar too full for its window stays usable rather than mangling its last control.
 
 ## 1.4.0
 

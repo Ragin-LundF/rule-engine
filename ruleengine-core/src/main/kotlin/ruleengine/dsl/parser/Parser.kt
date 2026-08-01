@@ -1,5 +1,7 @@
 package ruleengine.dsl.parser
 
+import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.core.domain.OperatorNames
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
@@ -95,6 +97,8 @@ class Parser(private val input: String) {
 
         expect(type = TokenType.LBRACE)
 
+        val description = parseOptionalDescription()
+
         // parse when
         val whenTok = current()
         if (whenTok.type != TokenType.IDENT || whenTok.text != "when") {
@@ -149,7 +153,38 @@ class Parser(private val input: String) {
         }
 
         expect(type = TokenType.RBRACE)
-        return RuleAst(id = id, condition = condition, actions = actions)
+        return RuleAst(id = id, description = description, condition = condition, actions = actions)
+    }
+
+    /**
+     * Consumes the optional `description "..."` clause that may open a rule block.
+     *
+     * `description` is not a reserved word — it arrives as a plain [TokenType.IDENT], exactly like
+     * `rule`, `when` and `then` — so it is matched by text. A rule body can only begin with either
+     * this clause or `when`, which makes the lookahead unambiguous without backtracking.
+     *
+     * A repeated clause is rejected rather than silently taking the last value: two descriptions on
+     * one rule is an authoring mistake, and picking one of them would hide it.
+     */
+    private fun parseOptionalDescription(): String? {
+        val tok = current()
+        if (tok.type != TokenType.IDENT || tok.text != "description") {
+            return null
+        }
+
+        advance()
+        val text = expect(type = TokenType.STRING).text
+
+        val next = current()
+        if (next.type == TokenType.IDENT && next.text == "description") {
+            throw ParseException(
+                line = next.line,
+                column = next.col,
+                messageText = "Duplicate 'description' clause"
+            )
+        }
+
+        return text
     }
 
     private fun parseExpression(): ExpressionAst {
@@ -495,7 +530,7 @@ class Parser(private val input: String) {
     }
 
     private fun parseConditionValue(operator: String): LiteralAst {
-        return if (operator.lowercase() == "between") {
+        return if (OperatorUtils.normalizeOperator(op = operator) == OperatorNames.BETWEEN) {
             parseBetweenLiteral()
         } else {
             parseLiteral()

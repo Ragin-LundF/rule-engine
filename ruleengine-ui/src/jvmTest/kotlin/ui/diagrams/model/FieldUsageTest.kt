@@ -2,6 +2,7 @@ package ui.diagrams.model
 
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
+import ruleengine.export.FieldUsage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

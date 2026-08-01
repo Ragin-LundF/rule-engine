@@ -234,16 +234,55 @@ class RuleEditorState(
      * was written in.
      */
     fun loadAllRuleFilesForCurrentEntry() {
-        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return
-        val entry = parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value } ?: return
-        val loaded = entry.rules.mapNotNull { relativePath ->
+        val loaded = readCurrentEntryRuleFiles()
+        allRulesText.value = loaded.joinToString(separator = "\n\n") { (_, content) -> content }
+        entryRuleSources.value = parseRuleSources(loaded = loaded)
+        showAllRules.value = true
+    }
+
+    /**
+     * The current entry's rule files, parsed per file, without changing what the editor is showing.
+     *
+     * [entryRuleSources] only holds them once the user has switched to "All files", but an
+     * entry-wide action such as the rule-overview export needs them whichever single file happens to
+     * be open. Reading here rather than reusing that state keeps the export from silently covering
+     * only part of the entry.
+     *
+     * Reads from disk, so unsaved edits in the open buffer are not included — the caller is expected
+     * to say so rather than to merge them in, which would export a mixture of saved and unsaved
+     * rules with no way for the reader to tell which was which.
+     */
+    fun parsedRuleFilesForCurrentEntry(): List<RuleSource> {
+        return parseRuleSources(loaded = readCurrentEntryRuleFiles())
+    }
+
+    /** True when the open rule file differs from what is on disk. */
+    fun currentRuleFileHasUnsavedChanges(): Boolean {
+        val relativePath = selectedManifestRuleFile.value ?: return false
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return false
+
+        return runCatching {
+            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+            Files.readString(path) != ruleValue.value.text
+        }.getOrDefault(defaultValue = false)
+    }
+
+    private fun readCurrentEntryRuleFiles(): List<Pair<String, String>> {
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
+            ?: return emptyList()
+        val entry = parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value }
+            ?: return emptyList()
+
+        return entry.rules.mapNotNull { relativePath ->
             runCatching {
                 val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
                 relativePath to Files.readString(path)
             }.getOrNull()
         }
-        allRulesText.value = loaded.joinToString(separator = "\n\n") { (_, content) -> content }
-        entryRuleSources.value = loaded.map { (relativePath, content) ->
+    }
+
+    private fun parseRuleSources(loaded: List<Pair<String, String>>): List<RuleSource> {
+        return loaded.map { (relativePath, content) ->
             RuleSource(
                 relativePath = relativePath,
                 // A file edited into a temporarily unparseable state keeps its band in the diagram,
@@ -251,7 +290,6 @@ class RuleEditorState(
                 rules = runCatching { Parser(input = content).parseRules() }.getOrElse { emptyList() },
             )
         }
-        showAllRules.value = true
     }
 
     /** Load a single rule file from the current manifest entry into the editor. */

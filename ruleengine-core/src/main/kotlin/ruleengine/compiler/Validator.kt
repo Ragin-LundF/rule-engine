@@ -4,6 +4,7 @@ import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.ActionArgType
 import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.domain.dto.FieldDefinition
@@ -59,6 +60,17 @@ object Validator {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
                     message = "Duplicate rule id: ${rule.id}"
+                )
+            }
+
+            // A missing description never blocks execution — it only degrades the exported rule
+            // overview, where the id and the raw condition would be all a reader gets.
+            if (rule.description.isNullOrBlank()) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.WARNING,
+                    message = "Rule '${rule.id}' has no description",
+                    suggestion = "Add a description \"...\" clause so the rule can be explained " +
+                            "in an exported overview"
                 )
             }
 
@@ -171,13 +183,13 @@ object Validator {
 
         when (def.type) {
             FieldType.TEXT -> when (op) {
-                "in" -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
+                OperatorNames.IN -> if (cond.value !is ListLiteral && cond.value !is StringLiteral)
                     diagnostics += ValidationDiagnostic(
                         severity = Severity.ERROR,
                         message = "Field '${cond.field}' with 'in' expects list or string literal"
                     )
 
-                "regex" -> {
+                OperatorNames.REGEX -> {
                     if (cond.value !is StringLiteral)
                         diagnostics += ValidationDiagnostic(
                             severity = Severity.ERROR,
@@ -195,7 +207,7 @@ object Validator {
                     }
                 }
 
-                "between" -> diagnostics += ValidationDiagnostic(
+                OperatorNames.BETWEEN -> diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
                     message = "Operator 'between' is not applicable to text field '${cond.field}'; use a numeric field"
                 )
@@ -208,12 +220,12 @@ object Validator {
             }
 
             FieldType.DECIMAL -> when (op) {
-                "between" -> validateDecimalBounds(cond = cond, diagnostics = diagnostics)
+                OperatorNames.BETWEEN -> validateDecimalBounds(cond = cond, diagnostics = diagnostics)
                 else -> validateDecimalLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.INTEGER -> when (op) {
-                "between" -> validateIntegerBounds(cond = cond, diagnostics = diagnostics)
+                OperatorNames.BETWEEN -> validateIntegerBounds(cond = cond, diagnostics = diagnostics)
                 else -> validateIntegerLiteral(cond = cond, diagnostics = diagnostics)
             }
 
@@ -245,7 +257,7 @@ object Validator {
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         val expected = DateOperator.expectedFormatText(def = def)
-        if (op == "between") {
+        if (op == OperatorNames.BETWEEN) {
             val between = cond.value as? BetweenLiteral ?: run {
                 diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,
@@ -420,13 +432,31 @@ private fun allowedOperatorsFor(def: FieldDefinition): Set<String> {
     }
 }
 
+/** Numbers and dates are both ordered, so they accept the same comparisons. */
+private val NUMERIC_OPERATORS: Set<String> = setOf(
+    OperatorNames.EQUALS,
+    OperatorNames.GT,
+    OperatorNames.GTE,
+    OperatorNames.LT,
+    OperatorNames.LTE,
+    OperatorNames.BETWEEN,
+)
+
 private fun supportedOperatorsFor(type: FieldType): Set<String> {
     return when (type) {
-        FieldType.TEXT -> setOf("equals", "contains", "startsWith", "endsWith", "in", "regex")
-        FieldType.DECIMAL, FieldType.INTEGER -> setOf("equals", "gt", "gte", "lt", "lte", "between")
-        FieldType.STRING_SET -> setOf("containsAny", "containsAll")
-        FieldType.BOOLEAN -> setOf("equals")
-        FieldType.DATE, FieldType.DATE_TIME -> setOf("equals", "gt", "gte", "lt", "lte", "between")
+        FieldType.TEXT -> setOf(
+            OperatorNames.EQUALS,
+            OperatorNames.CONTAINS,
+            OperatorNames.STARTS_WITH,
+            OperatorNames.ENDS_WITH,
+            OperatorNames.IN,
+            OperatorNames.REGEX,
+        )
+
+        FieldType.DECIMAL, FieldType.INTEGER -> NUMERIC_OPERATORS
+        FieldType.STRING_SET -> setOf(OperatorNames.CONTAINS_ANY, OperatorNames.CONTAINS_ALL)
+        FieldType.BOOLEAN -> setOf(OperatorNames.EQUALS)
+        FieldType.DATE, FieldType.DATE_TIME -> NUMERIC_OPERATORS
         // COLLECTION and OBJECT are navigated or aggregated, never compared directly.
         else -> emptySet()
     }

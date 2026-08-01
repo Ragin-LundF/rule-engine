@@ -92,6 +92,28 @@ actual fun copyToClipboard(text: String) {
 }
 
 /**
+ * Opens the native save dialog and writes [bytes] to the chosen file.
+ *
+ * Returns the file name written, or null when the user cancels — the caller needs to tell those two
+ * apart to report "Exported to x.docx" rather than claiming success for a dialog that was dismissed.
+ */
+fun saveBytesToFile(title: String, suggestedName: String, bytes: ByteArray): String? {
+    val file = nativeSave(title = title, suggestedName = suggestedName) ?: return null
+    file.writeBytes(bytes)
+
+    return file.name
+}
+
+/** As [saveBytesToFile], for text written as UTF-8. */
+fun saveTextToFile(title: String, suggestedName: String, content: String): String? {
+    return saveBytesToFile(
+        title = title,
+        suggestedName = suggestedName,
+        bytes = content.toByteArray(charset = Charsets.UTF_8),
+    )
+}
+
+/**
  * Opens the native save dialog pre-filled with "diagram.png", then encodes
  * [bitmap] as PNG and writes the bytes to the selected file.
  * Does nothing silently if the user cancels the dialog or encoding fails.

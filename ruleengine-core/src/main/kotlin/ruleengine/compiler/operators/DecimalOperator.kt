@@ -1,5 +1,6 @@
 package ruleengine.compiler.operators
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
@@ -12,9 +13,10 @@ import ruleengine.evaluator.compiled.DecimalComparisonExpression
 import java.math.BigDecimal
 
 object DecimalOperator {
+    /** [op] is the canonical operator name; aliases are already resolved by the caller. */
     @Suppress("ThrowsCount")
-    fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId): CompiledExpression {
-        if (cond.operator.lowercase() == "between") {
+    fun compile(ruleId: String?, cond: ConditionAst, fieldId: FieldId, op: String): CompiledExpression {
+        if (op == OperatorNames.BETWEEN) {
             val between = cond.value as? BetweenLiteral ?: throw CompilationException(
                 ruleId = ruleId,
                 details = "Operator 'between' expects two numeric bounds for field '${cond.field}'"
@@ -45,31 +47,20 @@ object DecimalOperator {
             )
         }
 
-        return when (cond.operator.lowercase()) {
-            "equals", "==", "=", "eq" -> DecimalComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = ComparisonOperator.EQ
-            )
+        val comparison = COMPARISONS[op] ?: throw CompilationException(
+            ruleId = ruleId,
+            details = "Unsupported operator '${cond.operator}' for decimal field"
+        )
 
-            "gt", ">" -> DecimalComparisonExpression(field = fieldId, expected = expected, op = ComparisonOperator.GT)
-            "gte", ">=" -> DecimalComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = ComparisonOperator.GTE
-            )
-
-            "lt", "<" -> DecimalComparisonExpression(field = fieldId, expected = expected, op = ComparisonOperator.LT)
-            "lte", "<=" -> DecimalComparisonExpression(
-                field = fieldId,
-                expected = expected,
-                op = ComparisonOperator.LTE
-            )
-
-            else -> throw CompilationException(
-                ruleId = ruleId,
-                details = "Unsupported operator '${cond.operator}' for decimal field"
-            )
-        }
+        return DecimalComparisonExpression(field = fieldId, expected = expected, op = comparison)
     }
+
+    /** Keyed by canonical name only — the caller normalises every alias before it gets here. */
+    private val COMPARISONS: Map<String, ComparisonOperator> = mapOf(
+        OperatorNames.EQUALS to ComparisonOperator.EQ,
+        OperatorNames.GT to ComparisonOperator.GT,
+        OperatorNames.GTE to ComparisonOperator.GTE,
+        OperatorNames.LT to ComparisonOperator.LT,
+        OperatorNames.LTE to ComparisonOperator.LTE,
+    )
 }

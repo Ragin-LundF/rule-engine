@@ -21,6 +21,8 @@ The syntax is intentionally simple and close to natural language, so that busine
 
 ```
 rule "rule-id" {
+  description "<what this rule is for, in one sentence>"
+
   when
     <condition>
 
@@ -34,6 +36,7 @@ rule "rule-id" {
 | Part | Required | Description |
 |---|---|---|
 | `rule "id"` | ✅ | Unique identifier for this rule |
+| `description "..."` | ⬜ | One sentence explaining what the rule is for. Must come first, before `when` |
 | `when` | ✅ | One or more conditions that must be true |
 | `then` | ✅ | One or more actions to return when the rule matches |
 
@@ -49,6 +52,42 @@ rule "rent-payment" {
     label "rent"
 }
 ```
+
+---
+
+## Descriptions
+
+A rule may open with a `description` clause: one sentence, in the reader's language, saying **what the rule is for** — not what it technically compares.
+
+```
+rule "rent-payment" {
+  description "A recurring payment of at least 500 whose purpose mentions rent."
+
+  when
+    purpose contains "rent"
+    and amount >= 500
+
+  then
+    label "rent"
+}
+```
+
+- The clause is **optional**, and must appear **directly after the opening `{`**, before `when`.
+- It takes exactly one double-quoted string. Writing it twice is an error.
+- It has **no effect on evaluation** — the engine ignores it when matching rules.
+- Leaving it out produces a **warning** from the validator, never an error. Existing rule files keep working unchanged.
+
+Why it matters: the description is the only part of a rule written for a human rather than for the engine. It is what appears in an exported rule overview handed to a customer or published to a wiki, where the reader has never seen the DSL. Without it, such a reader gets only the rule id and the raw condition.
+
+Write it as a statement about the business, not about the syntax:
+
+| ✅ Good | ❌ Avoid |
+|---|---|
+| `"A valuable shipment needs a cover note."` | `"Checks declaredValue between 1000 and 25000."` |
+| `"Gold-tier customers on an express service get the premium assessment."` | `"tier equals gold AND service contains express"` |
+| `"Two or more parcels from the same hub travel together."` | `"A filter may read a nested member of the element it filters."` |
+
+> **Comments are not descriptions.** A `#` comment is stripped when the file is read and never reaches the engine, so it cannot appear in an export. Use `#` for notes to other rule authors, and `description` for the sentence the business reader needs.
 
 ---
 

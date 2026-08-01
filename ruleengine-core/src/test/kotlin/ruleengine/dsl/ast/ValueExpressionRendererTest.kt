@@ -102,7 +102,8 @@ class ValueExpressionRendererTest {
             NumberLiteral(value = "7.5") to "7.5",
             BooleanLiteral(value = true) to "true",
             ListLiteral(items = listOf(StringLiteral(value = "a"), NumberLiteral(value = "1"))) to "[\"a\", 1]",
-            BetweenLiteral(low = "1", high = "9") to "1..9",
+            // Two space-separated literals, matching `field between 1 9` in the DSL.
+            BetweenLiteral(low = "1", high = "9") to "1 9",
             ExtractionRefLiteral(groupIndex = 2) to "\$2",
         )
         literals.forEach { (literal, expected) ->

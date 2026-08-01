@@ -6,6 +6,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.Severity
@@ -24,9 +25,7 @@ private val OP_CHARS = setOf('>', '<', '=', '!')
 
 /** Named operator keywords recognized in condition expressions. */
 private val DSL_NAMED_OPS = setOf(
-    "equals", "contains", "startsWith", "endsWith", "in", "regex",
-    "gt", "gte", "lt", "lte", "between",
-    "containsAny", "containsAll",
+    *OperatorNames.ALL.toTypedArray(),
     "ignoreCase",
 )
 

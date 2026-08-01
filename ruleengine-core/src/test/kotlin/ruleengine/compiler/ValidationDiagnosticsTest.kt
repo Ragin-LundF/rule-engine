@@ -36,8 +36,11 @@ class ValidationDiagnosticsTest {
     )
 
     private fun validate(condition: String): ValidationResult {
+        // Described so the "no description" warning never appears here — these tests are about the
+        // diagnostics an expression produces, and an unrelated WARNING in the list would mask that.
         val rule = """
             rule "test" {
+              description "Fixture rule for expression diagnostics."
               when
                 $condition
               then

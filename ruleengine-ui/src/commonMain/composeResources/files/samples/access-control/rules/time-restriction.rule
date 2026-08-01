@@ -1,4 +1,5 @@
 rule "maintenance-window" {
+  description "During the nightly maintenance window everyone except admins and service accounts is redirected."
   when
     hour between 2 4
     and not role in ["admin", "service-account"]
@@ -9,6 +10,7 @@ rule "maintenance-window" {
 }
 
 rule "business-hours-only" {
+  description "Accounts limited to business hours are denied outside 08:00-18:00, unless they are admins."
   when
     tags containsAny ["business-hours-only"]
     and (hour lt 8 or hour gte 18)
@@ -19,6 +21,7 @@ rule "business-hours-only" {
 }
 
 rule "off-hours-elevated-log" {
+  description "Write operations outside normal hours are logged and tightly throttled."
   when
     (hour lt 6 or hour gte 22)
     and method in ["DELETE", "PUT", "PATCH"]

@@ -1,5 +1,7 @@
 package ui.schema
 
+import ui.builder.OperatorOptions
+
 /**
  * Editable representation of a single field in the visual schema editor.
  *
@@ -75,6 +77,16 @@ val KnownNormalizers: List<String> = listOf(
     "german_umlaut_fold",
 )
 
+/** Numbers and dates are ordered, so the schema editor offers them the same comparisons. */
+private val ORDERED_OPERATORS: List<String> = listOf(
+    OperatorOptions.EQUALS,
+    OperatorOptions.GT,
+    OperatorOptions.GTE,
+    OperatorOptions.LT,
+    OperatorOptions.LTE,
+    OperatorOptions.BETWEEN,
+)
+
 /**
  * Operators the engine allows per field type, keyed by type.
  *
@@ -85,13 +97,20 @@ val KnownNormalizers: List<String> = listOf(
  * A structure type is navigated into or aggregated over, never compared, so it has no operators.
  */
 val OperatorsByType: Map<SchemaFieldType, List<String>> = mapOf(
-    SchemaFieldType.TEXT to listOf("equals", "contains", "startsWith", "endsWith", "in", "regex"),
-    SchemaFieldType.INTEGER to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.DECIMAL to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.BOOLEAN to listOf("equals"),
-    SchemaFieldType.STRING_SET to listOf("containsAny", "containsAll"),
-    SchemaFieldType.DATE to listOf("equals", "gt", "gte", "lt", "lte", "between"),
-    SchemaFieldType.DATE_TIME to listOf("equals", "gt", "gte", "lt", "lte", "between"),
+    SchemaFieldType.TEXT to listOf(
+        OperatorOptions.EQUALS,
+        OperatorOptions.CONTAINS,
+        OperatorOptions.STARTS_WITH,
+        OperatorOptions.ENDS_WITH,
+        OperatorOptions.IN,
+        OperatorOptions.REGEX,
+    ),
+    SchemaFieldType.INTEGER to ORDERED_OPERATORS,
+    SchemaFieldType.DECIMAL to ORDERED_OPERATORS,
+    SchemaFieldType.BOOLEAN to listOf(OperatorOptions.EQUALS),
+    SchemaFieldType.STRING_SET to listOf(OperatorOptions.CONTAINS_ANY, OperatorOptions.CONTAINS_ALL),
+    SchemaFieldType.DATE to ORDERED_OPERATORS,
+    SchemaFieldType.DATE_TIME to ORDERED_OPERATORS,
     SchemaFieldType.COLLECTION to emptyList(),
     SchemaFieldType.OBJECT to emptyList(),
 )

@@ -23,9 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import ui.BorderColor
 import ui.BgElevated
 import ui.BgHover
+import ui.BorderColor
 import ui.PrimaryBlue
 import ui.PrimaryGlow
 import ui.TextOnPrimary
@@ -54,7 +54,7 @@ fun PrimaryButton(
             disabledContentColor = TextSecondary,
         ),
     ) {
-        Text(text = text, style = MaterialTheme.typography.button)
+        ButtonLabel(text = text)
     }
 }
 
@@ -83,8 +83,27 @@ fun SecondaryButton(
             color = if (enabled) BorderColor else BorderColor.copy(alpha = 0.5f),
         ),
     ) {
-        Text(text = text, style = MaterialTheme.typography.button)
+        ButtonLabel(text = text)
     }
+}
+
+/**
+ * A button's caption.
+ *
+ * Single-line and non-wrapping, which is not cosmetic: a `Row` of buttons narrower than their
+ * combined width squeezes the last one, and a wrapping caption then renders one letter per line —
+ * a column of characters where a button should be. Refusing to wrap keeps the button a button, and
+ * the toolbar that holds it scrolls instead.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun ButtonLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.button,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
 
 /**
@@ -111,6 +130,8 @@ fun GhostButton(
             text = text,
             style = MaterialTheme.typography.button,
             color = if (enabled) PrimaryBlue else TextSecondary,
+            maxLines = 1,
+            softWrap = false,
         )
     }
 }

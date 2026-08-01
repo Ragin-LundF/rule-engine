@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedTemporal
@@ -20,7 +21,7 @@ class DateBetweenExpression(
             meta = NodeMeta(
                 type = NodeType.CONDITION,
                 field = field.value,
-                operator = "between",
+                operator = OperatorNames.BETWEEN,
                 expected = "${low.value}..${high.value}"
             )
         )

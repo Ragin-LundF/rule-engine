@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedText
@@ -16,8 +17,10 @@ class TextContainsExpression(
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
         trace?.enter(
             meta = NodeMeta(
-                type = NodeType.CONDITION, field = field.value,
-                operator = if (ignoreCase) "containsIgnoreCase" else "contains", expected = expectedNormalized
+                type = NodeType.CONDITION,
+                field = field.value,
+                operator = if (ignoreCase) "${OperatorNames.CONTAINS}IgnoreCase" else OperatorNames.CONTAINS,
+                expected = expectedNormalized,
             )
         )
 

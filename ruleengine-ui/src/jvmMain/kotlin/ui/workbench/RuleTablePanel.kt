@@ -154,12 +154,25 @@ private fun RuleTableRow(
     val idWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
 
     Row(modifier = rowModifier, verticalAlignment = Alignment.Top) {
-        Text(
-            text = rule.tableRuleId(),
-            style = MaterialTheme.typography.body2.copy(fontWeight = idWeight),
-            color = idColor,
+        Column(
             modifier = Modifier.weight(weight = 0.22f),
-        )
+            verticalArrangement = Arrangement.spacedBy(space = 2.dp),
+        ) {
+            Text(
+                text = rule.tableRuleId(),
+                style = MaterialTheme.typography.body2.copy(fontWeight = idWeight),
+                color = idColor,
+            )
+            // Rendered even when empty: an undescribed rule is a gap in the exported overview, and a
+            // blank cell would read as "nothing to say here" rather than "still to write".
+            rule.tableDescription()?.let { description ->
+                Text(
+                    text = description.ifBlank { "no description" },
+                    style = MaterialTheme.typography.caption,
+                    color = if (description.isBlank()) TextMuted else TextSecondary,
+                )
+            }
+        }
         Box(modifier = Modifier.width(width = 80.dp)) {
             if (status != null) {
                 StatusBadge(
@@ -258,4 +271,14 @@ private fun BuilderRule.tableRuleId(): String = when (this) {
     is BuilderRule.Supported -> id
     is BuilderRule.Unsupported -> id
     BuilderRule.None -> ""
+}
+
+/**
+ * Null for a rule the Builder could not map: it never read that rule's body, so reporting "no
+ * description" would be a claim it cannot make — the clause may well be there in the file.
+ */
+private fun BuilderRule.tableDescription(): String? = when (this) {
+    is BuilderRule.Supported -> description
+    is BuilderRule.Unsupported -> null
+    BuilderRule.None -> null
 }

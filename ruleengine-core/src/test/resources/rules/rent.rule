@@ -1,4 +1,5 @@
 rule "rent-payment" {
+  description "A recurring payment of at least 500 whose purpose mentions rent or an apartment."
   when
     (purpose contains "rent"
     or purpose contains "apartment")

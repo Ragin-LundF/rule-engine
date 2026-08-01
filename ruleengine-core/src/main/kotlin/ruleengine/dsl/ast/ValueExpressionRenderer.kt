@@ -77,7 +77,9 @@ object ValueExpressionRenderer {
                 val items = literal.items.joinToString(separator = ", ") { item -> renderLiteral(literal = item) }
                 "[$items]"
             }
-            is BetweenLiteral -> "${literal.low}..${literal.high}"
+            // Space-separated, not `low..high`: `between` takes two literals in the DSL, and this text
+            // is read as the condition the author wrote.
+            is BetweenLiteral -> "${literal.low} ${literal.high}"
             is ExtractionRefLiteral -> $$"$$${literal.groupIndex}"
         }
     }

@@ -191,12 +191,16 @@ enum class BuilderLockKind {
 
 class BuilderEditorState private constructor(
     val ruleId: String,
+    description: String,
     val conditionNodes: SnapshotStateList<MutableConditionNode>,
     val actions: SnapshotStateList<MutableBuilderAction>,
     val isLocked: Boolean,
     val lockReason: String,
     val lockKind: BuilderLockKind = BuilderLockKind.NONE,
 ) {
+    /** The rule's optional `description` clause. Editable, unlike [ruleId], which is renamed separately. */
+    var description by mutableStateOf(value = description)
+
     private var nextConditionId = conditionNodes.size + 1
     private var nextActionId = actions.size + 1
 
@@ -204,6 +208,7 @@ class BuilderEditorState private constructor(
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
             is BuilderRule.Supported -> BuilderEditorState(
                 ruleId = rule.id,
+                description = rule.description,
                 conditionNodes = rule.conditionNodes.map { it.toMutable() }.toMutableStateList(),
                 actions = rule.actions.map {
                     MutableBuilderAction(
@@ -219,6 +224,7 @@ class BuilderEditorState private constructor(
 
             is BuilderRule.Unsupported -> BuilderEditorState(
                 ruleId = rule.id,
+                description = "",
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 isLocked = true,
@@ -228,6 +234,7 @@ class BuilderEditorState private constructor(
 
             BuilderRule.None -> BuilderEditorState(
                 ruleId = "",
+                description = "",
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 isLocked = true,
@@ -337,7 +344,7 @@ class BuilderEditorState private constructor(
     fun addConditionInside(
         groupId: String,
         defaultField: String = "",
-        defaultOperator: String = "equals"
+        defaultOperator: String = OperatorOptions.EQUALS
     ): MutableBuilderCondition? {
         val group = findGroupById(groupId) ?: return null
         val condition = MutableBuilderCondition(
@@ -359,7 +366,10 @@ class BuilderEditorState private constructor(
     }
 
     /** Adds a new empty condition after the existing ones, at the top level. */
-    fun addCondition(defaultField: String = "", defaultOperator: String = "equals"): MutableBuilderCondition {
+    fun addCondition(
+        defaultField: String = "",
+        defaultOperator: String = OperatorOptions.EQUALS,
+    ): MutableBuilderCondition {
         val condition = MutableBuilderCondition(
             id = "cond-${nextConditionId++}",
             field = defaultField,

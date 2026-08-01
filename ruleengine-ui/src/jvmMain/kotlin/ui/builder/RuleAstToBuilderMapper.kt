@@ -1,5 +1,7 @@
 package ui.builder
 
+import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.core.domain.OperatorNames
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
@@ -61,6 +63,7 @@ object RuleAstToBuilderMapper {
 
         return BuilderRule.Supported(
             id = rule.id,
+            description = rule.description.orEmpty(),
             conditionNodes = conditionNodes,
             actions = rule.actions.map { mapAction(action = it) },
         )
@@ -393,30 +396,36 @@ object RuleAstToBuilderMapper {
      * Maps the DSL's word-form operators onto the symbols the Builder dropdowns offer, so a rule
      * written as `amount gt 5` selects the `>` entry instead of showing a value that is not in the list.
      */
-    internal fun normalizeOperator(operator: String): String =
-        WORD_FORM_OPERATORS[operator.lowercase()] ?: operator
+    internal fun normalizeOperator(operator: String): String {
+        // The engine already knows every spelling of its own operators, so resolve to the canonical
+        // name first and only translate what the Builder displays differently.
+        val canonical = OperatorUtils.normalizeOperator(op = operator)
+        return DISPLAY_SYMBOLS[canonical]
+            ?: UNSUPPORTED_SPELLINGS[operator.lowercase()]
+            ?: canonical
+    }
 
-    private val WORD_FORM_OPERATORS: Map<String, String> = mapOf(
-        "gt" to ">",
-        "greater_than" to ">",
-        "gte" to ">=",
-        "greater_or_equal" to ">=",
-        "lt" to "<",
-        "less_than" to "<",
-        "lte" to "<=",
-        "less_or_equal" to "<=",
-        "ne" to "!=",
-        "neq" to "!=",
-        "not_equals" to "!=",
-        "eq" to "equals",
-        "==" to "equals",
-        "=" to "equals",
-        "matches" to "regex",
-        "regexp" to "regex",
-        "starts_with" to "startsWith",
-        "ends_with" to "endsWith",
-        "containsany" to "containsAny",
-        "containsall" to "containsAll",
+    /** Ordering comparisons are offered as symbols in the dropdowns, not as their DSL names. */
+    private val DISPLAY_SYMBOLS: Map<String, String> = mapOf(
+        OperatorNames.GT to OperatorNames.SYMBOL_GT,
+        OperatorNames.GTE to OperatorNames.SYMBOL_GTE,
+        OperatorNames.LT to OperatorNames.SYMBOL_LT,
+        OperatorNames.LTE to OperatorNames.SYMBOL_LTE,
+    )
+
+    /**
+     * Spellings the engine itself does not accept, mapped so a hand-written rule using one still
+     * opens in the Builder rather than locking it. The rule will not compile either way — the
+     * Builder just shows what the author meant instead of an operator missing from every dropdown.
+     */
+    private val UNSUPPORTED_SPELLINGS: Map<String, String> = mapOf(
+        "greater_than" to OperatorNames.SYMBOL_GT,
+        "greater_or_equal" to OperatorNames.SYMBOL_GTE,
+        "less_than" to OperatorNames.SYMBOL_LT,
+        "less_or_equal" to OperatorNames.SYMBOL_LTE,
+        "ne" to OperatorNames.SYMBOL_NOT_EQUALS,
+        "neq" to OperatorNames.SYMBOL_NOT_EQUALS,
+        "not_equals" to OperatorNames.SYMBOL_NOT_EQUALS,
     )
 
     /** Names the construct that prevented mapping, so the lock message is specific. */

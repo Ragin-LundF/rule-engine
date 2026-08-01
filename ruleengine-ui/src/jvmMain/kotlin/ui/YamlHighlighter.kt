@@ -6,6 +6,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import ruleengine.core.domain.OperatorNames
 
 // ── YAML editor type ──────────────────────────────────────────────────────────
 
@@ -42,11 +43,7 @@ private val NORMALIZER_VALUES = listOf(
     "german_umlaut_fold",
     "collapse_whitespace", "remove_punctuation",
 )
-private val OPERATOR_VALUES = listOf(
-    "equals", "contains", "startsWith", "endsWith", "in", "regex",
-    "gt", "gte", "lt", "lte", "between",
-    "containsAny", "containsAll",
-)
+private val OPERATOR_VALUES = OperatorNames.ALL
 private val ARG_TYPE_VALUES = listOf("string", "integer", "decimal")
 
 private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")

@@ -3,6 +3,7 @@
 # sides can be a field, a value, an aggregate, or a calculation.
 
 rule "high-total-volume" {
+  description "The transactions in this record add up to a high total volume."
   when
     sum(transactions.amount) > 10000
 
@@ -12,6 +13,7 @@ rule "high-total-volume" {
 }
 
 rule "risk-share-too-high" {
+  description "More than three percent of the incoming volume is flagged as risk."
   when
     sum(transactions[label == "risk"].amount) > sum(transactions[amount > 0].amount) * 0.03
 
@@ -22,6 +24,7 @@ rule "risk-share-too-high" {
 }
 
 rule "many-small-transfers" {
+  description "A large number of very small transfers with a low average amount."
   when
     count(transactions[amount < 100]) > 20
     and avg(transactions.amount) < 50
@@ -33,6 +36,7 @@ rule "many-small-transfers" {
 }
 
 rule "foreign-counterparty-volume" {
+  description "Part of the volume is non-domestic and at least one transfer is substantial."
   when
     not sum(transactions[label == "domestic"].amount) >= sum(transactions.amount)
     and max(transactions.amount) > 2500

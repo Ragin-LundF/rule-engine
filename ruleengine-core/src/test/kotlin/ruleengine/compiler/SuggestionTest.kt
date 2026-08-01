@@ -37,7 +37,7 @@ class SuggestionTest {
         )
         val res = Validator.validate(asts = asts, schema = schema)
         assertFalse(actual = res.isValid)
-        val diag = res.diagnostics.firstOrNull()
+        val diag = res.diagnostics.firstOrNull { it.message.contains("Unknown field") }
         assertEquals(expected = diag?.suggestion, actual = "purpose")
     }
 
