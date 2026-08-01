@@ -29,8 +29,13 @@ import java.time.ZoneOffset
  *
  * [values] is immutable — the engine never modifies input data. [variables] is not: it holds the
  * values published by `set` clauses of rules that matched earlier in the same evaluation, and it is
- * the one place where a rule can affect a later one. It is reset by `RuleEngine.evaluate`, so a
- * context reused across records never carries a variable over.
+ * the one place where a rule can affect a later one. It is reset by `RuleEngine.evaluate`, so
+ * evaluating the same context twice starts from a clean slate both times.
+ *
+ * A context carries one record — [values] is a snapshot taken in [prepare] — so it belongs to a
+ * single evaluation and must not be shared between threads: [variables] and [cache] are plain maps,
+ * and concurrent evaluations would write to both. Sharing the [ruleengine.evaluator.RuleEngine]
+ * itself is safe; give each thread its own context.
  */
 class PreparedRuleContext(
     private val values: Map<FieldId, PreparedValue>,

@@ -63,9 +63,13 @@ class RuleEngine(
     /**
      * Evaluates every rule against [prepared].
      *
-     * Variables left behind by a previous evaluation are discarded first: [PreparedRuleContext] is
-     * documented as reusable across records, and carrying a variable over would let one record's
-     * outcome decide another's.
+     * Variables left behind by a previous evaluation are discarded first. A [PreparedRuleContext]
+     * holds one record, so re-evaluating it means running the same record again — and it must start
+     * from the same clean slate as the first run rather than seeing the variables that run published.
+     *
+     * [prepared] is written to during evaluation and must not be shared between threads. Evaluating
+     * one engine concurrently is safe as long as each thread brings its own context, which is what
+     * [ruleengine.builder.LoadedRuleEngine.evaluate] does.
      */
     fun evaluate(prepared: PreparedRuleContext, includeTrace: Boolean = false): EvaluationResult {
         prepared.clearVariables()

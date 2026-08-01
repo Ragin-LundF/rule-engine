@@ -99,6 +99,7 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 | [Manifest](docs/manifest.md) | Rule authors & developers | How to organise rule files into a project |
 | [Value Expressions](docs/expressions.md) | Rule authors | Aggregate functions, arithmetic, filtered array paths |
 | [Integration Guide](docs/integration-guide.md) | Developers | Embedding the engine as a library, API reference |
+| [Performance](docs/performance.md) | Developers | Benchmark figures, where evaluation time goes, tuning, thread safety |
 | [Full reference index](docs/README.md) | Everyone | Overview of all documentation |
 
 ---

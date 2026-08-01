@@ -29,4 +29,5 @@ This guide is for engineers integrating the rule engine into an application as a
 | Document                                    | What you will learn                                                                                     |
 |---------------------------------------------|---------------------------------------------------------------------------------------------------------|
 | [Integration Guide](./integration-guide.md) | Adding the dependency, loading schemas and rules, evaluating data, error handling, extending the engine |
+| [Performance](./performance.md)             | How fast the engine is, where the time goes, tuning levers, thread safety                               |
 

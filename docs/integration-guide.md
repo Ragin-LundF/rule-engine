@@ -750,6 +750,7 @@ All loaders accept both YAML and JSON content.
 
 | Object | Thread-safe? | Recommended lifetime |
 |---|---|---|
+| `RuleEngineBuilder` | ✅ (stateless `object`) | Call it from anywhere, including concurrently |
 | `FieldSchema` | ✅ (immutable) | Application lifetime / per rule reload |
 | `ActionSchema` | ✅ (immutable) | Application lifetime / per rule reload |
 | `List<CompiledRule>` | ✅ (immutable) | Application lifetime / per rule reload |
@@ -757,6 +758,12 @@ All loaders accept both YAML and JSON content.
 | `LoadedRuleEngine` | ✅ (immutable) | Application lifetime / per rule reload |
 | `RuleContext` | ❌ (per-call) | Per evaluation |
 | `PreparedRuleContext` | ❌ (per-call) | Per evaluation |
+
+> **`set` variables are safe under concurrency.** They look like shared state, but every
+> `LoadedRuleEngine.evaluate` call builds its own `PreparedRuleContext` and with it its own variable
+> map, so two threads evaluating the same engine cannot see each other's variables. The unsafe
+> pattern is hoisting a `PreparedRuleContext` and sharing that — its variable map and aggregate cache
+> are written on every evaluation. See [Performance](./performance.md#5-thread-safety).
 
 ### Hot Reload Pattern
 
