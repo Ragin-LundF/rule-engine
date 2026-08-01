@@ -137,11 +137,19 @@ object OperandRules {
         return OperatorOptions.isStructureType(fieldType = leaf.type) && leaf.nestedFields.isNotEmpty()
     }
 
-    /** Members available to a filter on the segment at [depth]. */
+    /**
+     * Members available to a filter on the segment at [depth].
+     *
+     * A member reachable through a nested object is offered by its dotted path, because the engine
+     * resolves the filter against the element and walks that path — `parcels[origin.hub == "HAM"]`.
+     * Collection members are left out: projecting one yields many values, which a single
+     * `field op value` row has nothing to compare against.
+     */
     fun filterFieldOptions(
         fields: List<CatalogFieldInfo>,
         path: List<BuilderPathStep>,
         depth: Int,
-    ): List<CatalogFieldInfo> = fields.fieldAtPath(segments = path.take(n = depth + 1).names)?.nestedFields
+    ): List<CatalogFieldInfo> = fields.fieldAtPath(segments = path.take(n = depth + 1).names)
+        ?.nestedFields?.scalarPaths()
         ?: emptyList()
 }

@@ -107,6 +107,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rule built only from them produced a verdict with an empty trace. Filter predicates inside a path
   remain untraced by design: they run once per element, so tracing them would emit one node per row.
 
+- **A filter comparing a nested field locked the Builder.** `count(parcels[origin.hub == "HAM"])` — a rule
+  the parser, validator and evaluator all accept, and which the `warehouse-shipments` sample ships — was
+  reported as *"Rule uses a function argument the Builder cannot represent"* in both Builder mode and the
+  rule table. `RuleAstToBuilderMapper` read the filter's field with `path.singleOrNull()`, so any dotted
+  path failed to map, which failed the whole `count(...)` operand and locked the rule. A filter field may
+  now be a path of any depth; only a filter nested inside the filtered path stays unsupported, because a
+  Builder filter row has no shape for it. The `where` drawer offers nested members by their dotted path, so
+  such a filter is editable and not merely displayed.
+
+- **A text value that looks like a number lost its quotes on the way back to DSL.** Editing
+  `ip startsWith "10."` in the Builder wrote `ip startsWith 10.`, which the lexer reads back as a number:
+  the value silently changed type. The quoting rule used `toDoubleOrNull`, which accepts `10.`, `1e5` and
+  `Infinity` — none of them forms the DSL writes for a number. It now matches the canonical integer and
+  decimal forms only, and quotes everything else.
+
 ## 1.4.0
 
 ### Added

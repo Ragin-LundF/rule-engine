@@ -1,5 +1,8 @@
 package ui.builder
 
+import ui.builder.OperandText.LABEL_MAX_SEGMENTS
+
+
 /**
  * Renders [BuilderOperand] trees as text.
  *
@@ -95,11 +98,20 @@ object OperandText {
         return "\"$value\""
     }
 
+    /**
+     * A number in canonical form, i.e. what the DSL writes back out as a number literal.
+     *
+     * Deliberately stricter than `toDoubleOrNull`, which accepts `10.`, `1e5` and `Infinity`. The
+     * lexer reads `10.` as a number too, so emitting the text of `ip startsWith "10."` unquoted would
+     * turn a text literal into a numeric one on the next parse.
+     */
+    private val CANONICAL_NUMBER = Regex(pattern = """-?\d+(\.\d+)?""")
+
     /** Leaves numeric and boolean literals bare; quotes everything else. */
     fun quoteUnlessNumeric(value: String): String {
         val trimmed = value.trim()
         if (trimmed.startsWith(prefix = "\"") && trimmed.endsWith(suffix = "\"")) return trimmed
-        if (trimmed.toDoubleOrNull() != null) return trimmed
+        if (CANONICAL_NUMBER.matches(input = trimmed)) return trimmed
         if (trimmed == "true" || trimmed == "false") return trimmed
         return quote(value = trimmed)
     }

@@ -8,10 +8,10 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertTrue
 
 class RuleAstToBuilderMapperTest {
 
@@ -167,4 +167,28 @@ class RuleAstToBuilderMapperTest {
         assertIs<BuilderRule.Supported>(result)
         assertEquals(expected = "my-rule", actual = result.id)
     }
+
+    /**
+     * A filter may name a dotted path into the element, but not one that filters again on the way:
+     * `BuilderFilter` is a flat `field op value` row, so an inner `[...]` has nowhere to go and would
+     * be dropped silently on the way back to DSL. Locking the rule is the honest answer.
+     */
+    @Test
+    fun `filter containing a nested filter stays unsupported`() {
+        val ast = parseRule(condition = """count(orders[items[price > 0].sku == "x"]) > 0""")
+        val result = RuleAstToBuilderMapper.map(ast)
+
+        assertIs<BuilderRule.Unsupported>(result)
+    }
+
+    private fun parseRule(condition: String): RuleAst = Parser(
+        input = """
+            rule "filtered" {
+              when
+                $condition
+              then
+                flag "hit"
+            }
+        """.trimIndent()
+    ).parseRules().single()
 }

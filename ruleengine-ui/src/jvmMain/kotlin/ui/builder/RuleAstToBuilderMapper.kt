@@ -251,12 +251,19 @@ object RuleAstToBuilderMapper {
         return steps.ifEmpty { null }
     }
 
-    /** Maps a filter expression. Only single comparisons against a literal are representable. */
+    /**
+     * Maps a filter expression. Only single comparisons against a literal are representable.
+     *
+     * The compared field may be a dotted path into the element — `parcels[origin.hub == "HAM"]`
+     * reads `origin.hub` relative to a parcel, which the engine resolves through the element context.
+     * A filter nested inside the filtered path is not representable: [BuilderFilter] is a flat
+     * `field op value` row, so `OperandText` would drop the inner brackets.
+     */
     private fun mapFilter(expr: ExpressionAst): BuilderFilter? = when (expr) {
         is ComparisonExpressionAst -> {
-            val field = (expr.left as? FieldAccessAst)?.let { access ->
-                (access.path.singleOrNull() as? FieldSegmentAst)?.name
-            }
+            val field = (expr.left as? FieldAccessAst)?.path
+                ?.takeIf { segments -> segments.all { it is FieldSegmentAst } }
+                ?.joinToString(separator = ".") { (it as FieldSegmentAst).name }
             val value = (expr.right as? LiteralValueAst)?.literal?.let { literalText(lit = it) }
             if (field == null || value == null) {
                 null
@@ -386,7 +393,7 @@ object RuleAstToBuilderMapper {
      * Maps the DSL's word-form operators onto the symbols the Builder dropdowns offer, so a rule
      * written as `amount gt 5` selects the `>` entry instead of showing a value that is not in the list.
      */
-    private fun normalizeOperator(operator: String): String =
+    internal fun normalizeOperator(operator: String): String =
         WORD_FORM_OPERATORS[operator.lowercase()] ?: operator
 
     private val WORD_FORM_OPERATORS: Map<String, String> = mapOf(

@@ -30,7 +30,8 @@ class AdvancedExpressionRoundTripTest {
         )
 
     /**
-     * orders: collection { status: text, total: decimal, items: collection { price: decimal, sku: text } }
+     * orders: collection { status: text, total: decimal, origin: object { hub: text },
+     *                      items: collection { price: decimal, sku: text } }
      * plus scalar fields for the plain-condition cases.
      */
     private val schema = FieldSchema(
@@ -42,6 +43,11 @@ class AdvancedExpressionRoundTripTest {
                 nested = listOf(
                     field(name = "status", type = FieldType.TEXT),
                     field(name = "total", type = FieldType.DECIMAL),
+                    field(
+                        name = "origin",
+                        type = FieldType.OBJECT,
+                        nested = listOf(field(name = "hub", type = FieldType.TEXT)),
+                    ),
                     field(
                         name = "items",
                         type = FieldType.COLLECTION,
@@ -140,6 +146,16 @@ class AdvancedExpressionRoundTripTest {
     @Test
     fun `count of a filtered collection round-trips`() {
         assertRoundTrips(condition = """count(orders[status == "paid"]) > 0""")
+    }
+
+    /**
+     * A filter may compare a field the element reaches through a nested object. The engine evaluates
+     * `origin.hub` against the element context, so the Builder has to keep the dotted path rather
+     * than treat the filter as unrepresentable.
+     */
+    @Test
+    fun `filter on a dotted path into the element round-trips`() {
+        assertRoundTrips(condition = """count(orders[origin.hub == "HAM"]) >= 2""")
     }
 
     @Test
@@ -255,7 +271,7 @@ class AdvancedExpressionRoundTripTest {
         val catalog = schema.fields.values.map { it.toCatalogFieldInfo() }
 
         assertEquals(
-            expected = listOf("status", "total", "items"),
+            expected = listOf("status", "total", "origin", "items"),
             actual = OperandRules
                 .segmentOptions(fields = catalog, path = listOf(BuilderPathStep(name = "orders")), depth = 1)
                 .map { it.id },
