@@ -43,7 +43,7 @@ fun CalculationEditor(
 ) {
     var expandedTerm by remember { mutableStateOf<Int?>(value = null) }
 
-    PanelCard(title = "Calculation", modifier = modifier) {
+    TitledPanelCard(title = "Calculation", modifier = modifier) {
         calc.terms.forEachIndexed { index, term ->
             Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
                 Row(
@@ -219,7 +219,7 @@ fun FieldPathEditor(
     onChanged: (BuilderOperand.FieldRef) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    PanelCard(
+    TitledPanelCard(
         title = "Field",
         detail = OperandText.toDsl(operand = fieldRef),
         modifier = modifier,

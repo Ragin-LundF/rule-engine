@@ -1,6 +1,14 @@
 package ui.workbench
 
 import kotlinx.coroutines.runBlocking
+import ui.workbench.model.AppArea
+import ui.workbench.model.InspectorItem
+import ui.workbench.model.RightPanelTab
+import ui.workbench.model.RuleMode
+import ui.workbench.model.SchemaMode
+import ui.workbench.model.ValidationState
+import ui.workbench.model.WorkbenchAction
+import ui.workbench.model.WorkbenchValidationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

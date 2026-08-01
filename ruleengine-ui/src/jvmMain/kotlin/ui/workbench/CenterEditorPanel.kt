@@ -57,6 +57,9 @@ import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.sections.MainEditorContentSection
 import ui.pickRuleFile
 import ui.saveDiagramAsPng
+import ui.workbench.model.CatalogRule
+import ui.workbench.model.RuleMode
+import ui.workbench.model.RuleTreeFile
 
 @Suppress("FunctionNaming")
 @Composable

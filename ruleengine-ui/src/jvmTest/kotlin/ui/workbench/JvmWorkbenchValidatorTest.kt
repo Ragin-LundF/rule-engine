@@ -1,5 +1,7 @@
 package ui.workbench
 
+import ui.workbench.model.UiDiagnosticSeverity
+import ui.workbench.model.ValidationState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

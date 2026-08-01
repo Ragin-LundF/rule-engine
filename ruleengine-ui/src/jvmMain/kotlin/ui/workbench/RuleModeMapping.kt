@@ -1,6 +1,7 @@
 package ui.workbench
 
 import ui.editor.rules.ViewMode
+import ui.workbench.model.RuleMode
 
 /**
  * Convert the platform-neutral [RuleMode] used by [RuleWorkbenchState]

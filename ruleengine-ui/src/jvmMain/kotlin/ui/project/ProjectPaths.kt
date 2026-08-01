@@ -1,5 +1,6 @@
 package ui.project
 
+import ui.util.Slugs
 import java.nio.file.Path
 
 /**
@@ -49,10 +50,7 @@ object ProjectPaths {
 
     /** Reduces a user-typed id to something safe to put in a path. */
     fun slug(value: String): String {
-        val cleaned = value.lowercase()
-            .replace(regex = Regex(pattern = "[^a-z0-9]+"), replacement = "-")
-            .trim('-')
-        return cleaned.ifBlank { "entry" }
+        return Slugs.slugify(value = value, fallback = "entry")
     }
 
     /**

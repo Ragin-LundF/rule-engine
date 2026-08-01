@@ -7,19 +7,6 @@ import ruleengine.core.domain.dto.FieldDefinition
 import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.isTemporal
 
-// ── Completion model
-
-public enum class CompletionKind { KEYWORD, LOGIC, FIELD, ACTION, LITERAL, OPERATOR }
-
-public data class CompletionItem(
-    val label: String,
-    val insertText: String,
-    val kind: CompletionKind,
-    val hint: String = "",
-)
-
-// Export some small helpers that builder needs
-
 /** Numbers and dates are ordered, so both accept the same named comparisons. */
 internal val ORDERED_OPS = listOf(
     OperatorNames.EQUALS,
@@ -40,6 +27,7 @@ internal val TEXT_OPS = listOf(
     OperatorNames.SYMBOL_EQUALS,
     OperatorNames.SYMBOL_NOT_EQUALS,
 )
+
 internal val NUM_OPS = ORDERED_OPS + listOf(
     OperatorNames.SYMBOL_EQUALS,
     OperatorNames.SYMBOL_NOT_EQUALS,
@@ -48,9 +36,12 @@ internal val NUM_OPS = ORDERED_OPS + listOf(
     OperatorNames.SYMBOL_LT,
     OperatorNames.SYMBOL_LTE,
 )
+
 internal val BOOL_OPS = listOf(OperatorNames.EQUALS)
+
 // A string set is tested for membership only; the engine rejects `contains` on it.
 internal val SET_OPS = listOf(OperatorNames.CONTAINS_ANY, OperatorNames.CONTAINS_ALL)
+
 internal val DATE_OPS = ORDERED_OPS
 
 internal fun defaultOperatorsForType(fieldType: FieldType): List<String> {

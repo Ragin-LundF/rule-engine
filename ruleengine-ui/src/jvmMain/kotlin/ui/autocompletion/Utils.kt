@@ -7,16 +7,11 @@ import ui.ColorKeyword
 import ui.ColorLogic
 import ui.ColorNumber
 import ui.ColorOp
+import ui.util.Words
 
 /** Extract the current word at [cursorPos] in [text]. Returns (start, word). */
 public fun extractCurrentWord(text: String, cursorPos: Int): Pair<Int, String> {
-    val cursor = cursorPos.coerceIn(0, text.length)
-    var wordStart = cursor
-    while (wordStart > 0) {
-        val ch = text[wordStart - 1]
-        if (ch.isLetterOrDigit() || ch == '_' || ch == '-') wordStart-- else break
-    }
-    return Pair(wordStart, text.substring(wordStart, cursor))
+    return Words.currentWord(text = text, cursorPos = cursorPos)
 }
 
 // Styling helpers used by the dropdown UI

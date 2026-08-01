@@ -18,7 +18,7 @@ import ui.BgHover
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.workbench.ActionMode
+import ui.workbench.model.ActionMode
 
 /**
  * Tab switcher for the Action Schema editor area: Visual / YAML / Usages.

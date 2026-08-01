@@ -1,5 +1,6 @@
 package ui.builder
 
+
 /**
  * One path segment plus the filters attached to it — mirrors an engine `FieldSegmentAst` followed by
  * zero or more `FilterSegmentAst`.

@@ -2,6 +2,7 @@ package ui.manifest
 
 import ruleengine.manifest.ManifestLoader
 import ruleengine.manifest.ProjectManifest
+import ui.util.YamlScalars
 
 /**
  * Converts between editable manifest state and the core [ProjectManifest] YAML format.
@@ -51,45 +52,21 @@ object ManifestYamlBridge {
         )
         return buildString {
             manifest.name?.takeIf { it.isNotBlank() }?.let { name ->
-                appendLine("name: ${scalar(value = name)}")
+                appendLine("name: ${YamlScalars.quoteIfNeeded(value = name)}")
             }
             // `entries:` with nothing under it reads back as null rather than an empty list, so a
             // manifest with no entries yet is written without the key at all.
             if (manifest.entries.isEmpty()) return@buildString
             appendLine("entries:")
             manifest.entries.forEach { entry ->
-                appendLine("  - id: ${scalar(value = entry.id)}")
-                entry.schema?.let { schema -> appendLine("    schema: ${scalar(value = schema)}") }
-                entry.actions?.let { actions -> appendLine("    actions: ${scalar(value = actions)}") }
+                appendLine("  - id: ${YamlScalars.quoteIfNeeded(value = entry.id)}")
+                entry.schema?.let { schema -> appendLine("    schema: ${YamlScalars.quoteIfNeeded(value = schema)}") }
+                entry.actions?.let { actions -> appendLine("    actions: ${YamlScalars.quoteIfNeeded(value = actions)}") }
                 if (entry.rules.isNotEmpty()) {
                     appendLine("    rules:")
-                    entry.rules.forEach { rule -> appendLine("      - ${scalar(value = rule)}") }
+                    entry.rules.forEach { rule -> appendLine("      - ${YamlScalars.quoteIfNeeded(value = rule)}") }
                 }
             }
         }
     }
-
-    /**
-     * Emits [value] as a YAML scalar, quoting it when a plain one would not survive a round trip.
-     *
-     * Paths reach here from a file dialog, so they can hold anything a filesystem allows: a comment
-     * marker, a colon, a leading indicator character. Writing those unquoted produces a manifest the
-     * loader cannot read back — a save that looks like it worked and breaks on the next open.
-     */
-    private fun scalar(value: String): String {
-        val needsQuotes = value.isEmpty() ||
-                value.first().isWhitespace() ||
-                value.last().isWhitespace() ||
-                value.first() in INDICATOR_CHARS ||
-                value.contains(other = ": ") ||
-                value.contains(other = " #") ||
-                value.endsWith(suffix = ":")
-
-        if (!needsQuotes) return value
-        return "\"" + value.replace(oldValue = "\\", newValue = "\\\\").replace(oldValue = "\"", newValue = "\\\"") + "\""
-    }
-
-    private val INDICATOR_CHARS: Set<Char> = setOf(
-        '-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`',
-    )
 }

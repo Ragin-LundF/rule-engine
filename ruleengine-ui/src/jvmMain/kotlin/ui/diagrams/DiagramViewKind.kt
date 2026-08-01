@@ -1,5 +1,6 @@
 package ui.diagrams
 
+
 /**
  * Which diagram the Diagram mode is currently drawing.
  *

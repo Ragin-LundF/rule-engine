@@ -446,10 +446,3 @@ object RuleAstToBuilderMapper {
 
     private fun nextId(prefix: String): String = "$prefix-${idCounter++}"
 }
-
-/** Internal holder for a decomposed literal value. */
-private data class LiteralValue(
-    val value: String = "",
-    val valueTo: String = "",
-    val listItems: List<String> = emptyList(),
-)

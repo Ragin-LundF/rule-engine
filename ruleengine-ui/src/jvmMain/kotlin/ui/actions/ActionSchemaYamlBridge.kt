@@ -2,6 +2,7 @@ package ui.actions
 
 import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.schema.ActionSchemaLoader
+import ui.util.YamlScalars
 
 /**
  * Converts between [ActionEditorState] and YAML text understood by [ActionSchemaLoader].
@@ -51,7 +52,7 @@ object ActionSchemaYamlBridge {
         state.actions.forEach { action ->
             sb.appendLine(value = "  ${action.name}:")
             if (action.purpose.isNotBlank()) {
-                sb.appendLine(value = "    purpose: \"${escape(action.purpose)}\"")
+                sb.appendLine(value = "    purpose: \"${YamlScalars.escape(action.purpose)}\"")
             }
             if (action.argTypes.isNotEmpty()) {
                 sb.appendLine(value = "    argTypes:")
@@ -65,8 +66,5 @@ object ActionSchemaYamlBridge {
         return sb.toString().trim()
     }
 
-    private fun escape(s: String): String {
-        return s.replace(oldValue = "\\", newValue = "\\\\")
-            .replace(oldValue = "\"", newValue = "\\\"")
-    }
+
 }

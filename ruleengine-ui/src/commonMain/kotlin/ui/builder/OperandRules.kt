@@ -1,5 +1,6 @@
 package ui.builder
 
+
 /**
  * The rules that decide which operand kinds a comparison row may offer, and which comparison
  * operators go with them.

@@ -37,6 +37,9 @@ import ui.TextSecondary
 import ui.components.StatusBadge
 import ui.components.TinyButton
 import ui.components.rotateVertically
+import ui.workbench.model.CatalogRule
+import ui.workbench.model.CatalogRuleStatus
+import ui.workbench.model.RuleTreeFile
 
 /**
  * File-and-rule tree shown in the left column of Builder mode.

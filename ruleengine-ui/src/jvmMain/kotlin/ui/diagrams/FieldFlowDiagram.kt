@@ -27,6 +27,7 @@ import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.dsl.ast.RuleAst
 import ui.diagrams.model.OutcomeKey
 import ui.diagrams.model.SchemaLeaves
+import ui.util.Plurals
 
 /**
  * What a rule depends on and what it produces, in three columns: schema field, rule, outcome family.
@@ -160,7 +161,7 @@ private fun OutcomeColumn(
             val values = model.valuesByFamily[family].orEmpty()
             FlowNode(
                 label = family,
-                detail = "${values.size} value${plural(count = values.size)}",
+                detail = "${values.size} value${Plurals.suffix(count = values.size)}",
                 labelColor = LabelActionName,
                 onClick = { onSelect(family) },
                 dimmed = lit != null && family !in lit,
@@ -225,45 +226,6 @@ private fun toggle(current: String?, next: String): String? {
     }
     return next
 }
-
-/**
- * The bipartite edges, precomputed once per rule set.
- *
- * Fields are the schema's leaves, so a declared-but-unread field keeps its row. A path a rule reads
- * that is not a schema leaf — a bare collection such as `parcels` in `count(parcels[...])` — is
- * dropped, because it is a step on the way to a value rather than a value.
- */
-private class FlowModel(
-    val fields: List<FieldNode>,
-    val rules: List<RuleAst>,
-    val families: List<String>,
-    val rulesByField: Map<String, List<String>>,
-    val fieldsByRule: Map<String, List<String>>,
-    val familiesByRule: Map<String, List<String>>,
-    val valuesByFamily: Map<String, Set<String>>,
-) {
-    /** The node itself plus everything reachable from it in either direction, or null for no selection. */
-    fun connectedTo(nodeId: String?): Set<String>? {
-        if (nodeId == null) {
-            return null
-        }
-        val reachedRules = when {
-            rules.any { rule -> rule.id == nodeId } -> listOf(nodeId)
-            else -> rules.map { rule -> rule.id }.filter { ruleId ->
-                nodeId in fieldsByRule[ruleId].orEmpty() || nodeId in familiesByRule[ruleId].orEmpty()
-            }
-        }
-        val lit = mutableSetOf(nodeId)
-        reachedRules.forEach { ruleId ->
-            lit += ruleId
-            lit += fieldsByRule[ruleId].orEmpty()
-            lit += familiesByRule[ruleId].orEmpty()
-        }
-        return lit
-    }
-}
-
-private class FieldNode(val path: String)
 
 private fun buildFlowModel(rules: List<RuleAst>, schema: FieldSchema?): FlowModel {
     val referencedByRule = rules.associate { rule -> rule.id to FieldUsage.fieldsOf(rule = rule) }

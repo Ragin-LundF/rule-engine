@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.dp
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.workbench.ManifestMode
+import ui.workbench.model.ManifestMode
 
 @Composable
 fun ManifestModeTabs(

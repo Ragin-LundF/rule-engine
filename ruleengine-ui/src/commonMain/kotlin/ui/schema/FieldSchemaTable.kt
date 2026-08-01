@@ -33,9 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.isNormalizable
 import ruleengine.core.domain.dto.isStructure
@@ -48,6 +46,7 @@ import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.components.DropdownSelector
+import ui.components.HeaderCell
 
 /**
  * Renders a composable table for editing a schema, displaying fields with their respective
@@ -191,18 +190,6 @@ private fun AddFieldDropdown(
     }
 }
 
-@Suppress("FunctionNaming")
-@Composable
-private fun HeaderCell(text: String, modifier: Modifier = Modifier) {
-    Text(
-        text = text,
-        modifier = modifier,
-        style = MaterialTheme.typography.caption,
-        fontWeight = FontWeight.SemiBold,
-        color = TextSecondary,
-        fontSize = 11.sp,
-    )
-}
 
 @Suppress("FunctionNaming", "LongMethod")
 @Composable

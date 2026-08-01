@@ -11,41 +11,22 @@ import ruleengine.core.domain.dto.ActionArgType
 import ruleengine.core.domain.dto.FieldType
 import ui.schema.KnownNormalizers
 
-// ── YAML editor type ──────────────────────────────────────────────────────────
-
-enum class YamlEditorType { FIELD_SCHEMA, ACTION_SCHEMA }
-
-// ── YAML cursor context for completions ───────────────────────────────────────
-
-/**
- * Describes what the cursor is "inside" within a YAML document.
- *
- * @property currentKey    The key whose value is being edited (e.g., `"type"`, `"schema"`).
- * @property parentKey     The enclosing key (e.g., `"purpose"`, `"normalizers"`, `"operators"`).
- * @property isValue       True when the cursor is on the value side of a `key: ` line.
- * @property isListItem    True when the cursor is on a `- ` list item line.
- * @property currentIndent The number of leading spaces on the cursor's line.
- */
-data class YamlCursorContext(
-    val currentKey: String? = null,
-    val parentKey: String? = null,
-    val isValue: Boolean = false,
-    val isListItem: Boolean = false,
-    val currentIndent: Int = 0,
-)
-
-// ── YAML completion candidates ────────────────────────────────────────────────
-
 private val FIELD_TYPE_VALUES = FieldType.entries.map { type -> type.name.lowercase() }
+
 private val FORMAT_VALUES = listOf("dd.MM.yyyy", "yyyy/MM/dd", "dd.MM.yyyy HH:mm", "yyyy-MM-dd HH:mm:ss")
 
 private val NORMALIZER_VALUES = KnownNormalizers
+
 private val OPERATOR_VALUES = OperatorNames.ALL
+
 private val ARG_TYPE_VALUES = ActionArgType.entries.map { argType -> argType.name.lowercase() }
 
 private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")
+
 private val ACTION_SCHEMA_TOP_KEYS = listOf("actions")
+
 private val FIELD_DEF_KEYS = listOf("type", "alias", "format", "normalizers", "operators", "fields")
+
 private val ACTION_DEF_KEYS = listOf("argTypes")
 
 // ── YAML cursor context analyzer ──────────────────────────────────────────────
@@ -417,4 +398,3 @@ private fun fieldTypeValueColor(value: String): SpanStyle {
     }
     return SpanStyle(color = color)
 }
-

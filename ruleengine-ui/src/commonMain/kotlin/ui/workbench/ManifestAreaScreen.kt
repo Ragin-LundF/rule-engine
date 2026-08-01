@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import ui.manifest.ManifestEditorPanel
 import ui.manifest.ManifestEditorState
+import ui.workbench.model.ManifestMode
 
 /**
  * Manifest builder area.

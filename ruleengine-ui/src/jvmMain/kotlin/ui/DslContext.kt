@@ -1,25 +1,13 @@
 package ui
+
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
-/** The structural section of the rule DSL where the cursor is located. */
-enum class DslSection { TOP_LEVEL, RULE_HEADER, WHEN, THEN }
-/**
- * Describes the editing context at the cursor position inside the rule DSL.
- *
- * @property section          The DSL block the cursor is currently in.
- * @property precedingField   The field name immediately before the cursor (if in WHEN and no operator yet).
- * @property precedingOperator The operator after the preceding field (if no value consumed yet).
- * @property afterAction      The action name on the current THEN line (if no argument consumed yet).
- */
-data class DslCursorContext(
-    val section: DslSection,
-    val precedingField: String? = null,
-    val precedingOperator: String? = null,
-    val afterAction: String? = null,
-)
+import ui.util.Words
+
 private val DSL_LOGIC_WORDS = setOf("and", "or", "not")
+
 /**
  * Analyzes the rule DSL text to determine what section the cursor is in and
  * what tokens immediately precede the current word being typed.
@@ -36,7 +24,7 @@ fun analyzeDslContext(
         listOf(id.value, def.alias).mapNotNull { it }.filter { it.isNotEmpty() }
     }?.toSet() ?: emptySet()
     return runCatching {
-        val wordStart = findWordStart(text = text, cursorPos = cursorPos)
+        val wordStart = Words.wordStart(text = text, cursorPos = cursorPos)
         val prefix = text.substring(startIndex = 0, endIndex = wordStart)
         val tokens = Lexer(input = prefix).tokenize()
             .filter { it.type != TokenType.EOF }
@@ -45,16 +33,7 @@ fun analyzeDslContext(
         DslCursorContext(section = DslSection.TOP_LEVEL)
     }
 }
-/** Returns the character index where the currently typed word begins. */
-internal fun findWordStart(text: String, cursorPos: Int): Int {
-    val cursor = cursorPos.coerceIn(0, text.length)
-    var start = cursor
-    while (start > 0) {
-        val ch = text[start - 1]
-        if (ch.isLetterOrDigit() || ch == '_' || ch == '-') start-- else break
-    }
-    return start
-}
+
 /**
  * Walks the token list to derive the current DSL editing context.
  * [fieldNames] is retained for future schema-driven disambiguation; currently any IDENT

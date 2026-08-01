@@ -40,6 +40,8 @@ import ui.builder.BuilderConditionNode
 import ui.builder.BuilderRule
 import ui.builder.OperandText
 import ui.components.StatusBadge
+import ui.workbench.model.CatalogRule
+import ui.workbench.model.CatalogRuleStatus
 
 @Suppress("FunctionNaming")
 @Composable

@@ -26,6 +26,7 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ui.diagrams.model.DiagramData
 import ui.diagrams.model.RuleSource
+import ui.util.Plurals
 
 /**
  * A manifest entry drawn as the single connected unit the engine actually runs.
@@ -85,7 +86,7 @@ private fun EntryHeaderNode(data: DiagramData) {
             Row(horizontalArrangement = Arrangement.spacedBy(space = 6.dp)) {
                 data.schemaPath?.let { path -> DiagramChip(text = path) }
                 data.actionsPath?.let { path -> DiagramChip(text = path) }
-                DiagramChip(text = "$fileCount file${plural(count = fileCount)} → $ruleCount rules")
+                DiagramChip(text = "$fileCount file${Plurals.suffix(count = fileCount)} → $ruleCount rules")
             }
         }
     }
@@ -136,7 +137,7 @@ private fun FileBand(source: RuleSource) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DiagramIdentifier(text = source.relativePath, color = TextDesc, fontSize = 11)
-        DiagramNote(text = "${source.rules.size} rule${plural(count = source.rules.size)}")
+        DiagramNote(text = "${source.rules.size} rule${Plurals.suffix(count = source.rules.size)}")
         DiagramNote(
             text = "grouping only — no runtime boundary",
             color = TextDesc.copy(alpha = 0.6f),

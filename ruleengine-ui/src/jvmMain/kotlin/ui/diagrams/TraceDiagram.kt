@@ -16,10 +16,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
 import ruleengine.evaluator.trace.dto.NodeType
 import ui.tester.RuleResult
 import ui.tester.TraceNode
+import ui.util.Plurals
 
 /**
  * A run's decision trees, drawn with the same nesting as the condition diagram.
@@ -71,8 +71,8 @@ private fun TraceSummary(results: List<RuleResult>) {
     Row(horizontalArrangement = Arrangement.spacedBy(space = 8.dp)) {
         DiagramChip(text = "$matched matched", textColor = LabelValue, borderColor = BorderOr)
         DiagramChip(text = "${results.size - matched} no match", textColor = LabelNot, borderColor = BorderNot)
-        DiagramChip(text = "$trueNodes condition${plural(count = trueNodes)} true")
-        DiagramChip(text = "$falseNodes condition${plural(count = falseNodes)} false")
+        DiagramChip(text = "$trueNodes condition${Plurals.suffix(count = trueNodes)} true")
+        DiagramChip(text = "$falseNodes condition${Plurals.suffix(count = falseNodes)} false")
     }
 }
 

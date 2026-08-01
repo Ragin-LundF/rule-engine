@@ -1,5 +1,6 @@
 package ui.builder
 
+
 /** Type name of an object field, as [CatalogFieldInfo.type] spells it. */
 private const val OBJECT_TYPE: String = "object"
 

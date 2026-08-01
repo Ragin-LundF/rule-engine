@@ -6,6 +6,7 @@ import ruleengine.export.dto.ParsedRuleFile
 import ruleengine.export.dto.RuleCatalog
 import ruleengine.export.markdown.MarkdownCatalogRenderer
 import ui.editor.rules.RuleEditorState
+import ui.util.Slugs
 import java.time.LocalDate
 
 /**
@@ -88,9 +89,6 @@ object RuleOverviewExport {
     private fun fileStem(entryId: String, projectName: String?): String {
         val name = listOfNotNull(projectName, entryId).joinToString(separator = "-")
 
-        return name.lowercase()
-            .replace(regex = Regex(pattern = "[^a-z0-9]+"), replacement = "-")
-            .trim('-')
-            .ifEmpty { "rule-overview" }
+        return Slugs.slugify(value = name, fallback = "rule-overview")
     }
 }

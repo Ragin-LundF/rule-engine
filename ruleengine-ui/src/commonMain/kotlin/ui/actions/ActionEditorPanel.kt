@@ -25,7 +25,7 @@ import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
 import ui.editor.YamlEditorPane
-import ui.workbench.ActionMode
+import ui.workbench.model.ActionMode
 
 /**
  * A composable function representing the Action Editor Panel. It allows users

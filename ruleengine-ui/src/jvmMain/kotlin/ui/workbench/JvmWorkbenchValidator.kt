@@ -6,6 +6,10 @@ import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.UiDiagnosticSeverity
+import ui.workbench.model.ValidationState
+import ui.workbench.model.WorkbenchValidationResult
 
 /**
  * JVM implementation of [WorkbenchValidator].

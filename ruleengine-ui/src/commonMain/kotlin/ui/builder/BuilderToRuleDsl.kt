@@ -1,5 +1,6 @@
 package ui.builder
 
+
 /**
  * Generates valid rule DSL text from a [BuilderEditorState].
  *

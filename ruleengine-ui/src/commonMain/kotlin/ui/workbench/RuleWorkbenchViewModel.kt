@@ -5,6 +5,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import ui.workbench.model.InspectorItem
+import ui.workbench.model.RuleWorkbenchState
+import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.UiDiagnosticSeverity
+import ui.workbench.model.ValidationState
+import ui.workbench.model.WorkbenchAction
+import ui.workbench.model.WorkbenchValidationResult
 
 /**
  * Shared view model for the rule workbench.

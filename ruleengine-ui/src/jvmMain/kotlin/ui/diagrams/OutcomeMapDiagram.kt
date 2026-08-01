@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ui.diagrams.model.OutcomeKey
+import ui.util.Plurals
 
 /**
  * Rules grouped by what they produce instead of by the file they live in.
@@ -79,8 +80,8 @@ private fun FamilySection(family: String, buckets: Map<String, List<RuleAst>>) {
         ) {
             DiagramIdentifier(text = family, color = LabelActions, fontSize = 13, weight = FontWeight.SemiBold)
             DiagramNote(
-                text = "${buckets.size} bucket${plural(count = buckets.size)} · " +
-                    "$ruleCount rule${plural(count = ruleCount)}",
+                text = "${buckets.size} bucket${Plurals.suffix(count = buckets.size)} · " +
+                    "$ruleCount rule${Plurals.suffix(count = ruleCount)}",
             )
             if (exclusive) {
                 DiagramChip(

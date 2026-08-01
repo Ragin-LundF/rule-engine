@@ -116,14 +116,6 @@ internal fun DiagramNote(text: String, color: Color = TextDesc, modifier: Modifi
     )
 }
 
-/** Plural suffix for the counts the views print. */
-internal fun plural(count: Int): String {
-    if (count == 1) {
-        return ""
-    }
-    return "s"
-}
-
 /**
  * The scrolling dark canvas a diagram sits on.
  *
