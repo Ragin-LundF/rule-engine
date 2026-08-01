@@ -108,8 +108,7 @@ class PreparedRuleContext(
             registry: NormalizerRegistry
         ) {
             val s = raw.toString()
-            var normalized = s
-            for (n in def.normalizers) normalized = registry.get(n).normalize(value = normalized)
+            val normalized = registry.applyAll(value = s, normalizers = def.normalizers)
             map[fieldId] = PreparedText(original = s, normalized = normalized)
         }
 
@@ -207,14 +206,9 @@ class PreparedRuleContext(
                 is String -> setOf(raw)
                 else -> return
             }
-            var normalizedSet = set.map { it }.toSet()
-            if (def.normalizers.isNotEmpty()) {
-                normalizedSet = set.map { v ->
-                    var n = v
-                    for (nn in def.normalizers) n = registry.get(nn).normalize(value = n)
-                    n
-                }.toSet()
-            }
+            val normalizedSet = set.map { value ->
+                registry.applyAll(value = value, normalizers = def.normalizers)
+            }.toSet()
             map[fieldId] = PreparedStringSet(original = set, normalized = normalizedSet)
         }
     }

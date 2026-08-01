@@ -1,13 +1,8 @@
 package ruleengine.export.docx
 
-import ruleengine.export.dto.CatalogOutcome
+import ruleengine.export.CatalogText
 import ruleengine.export.dto.CatalogRule
 import ruleengine.export.dto.CatalogRuleFile
-import ruleengine.export.dto.PlainAll
-import ruleengine.export.dto.PlainAny
-import ruleengine.export.dto.PlainCondition
-import ruleengine.export.dto.PlainLeaf
-import ruleengine.export.dto.PlainNot
 import ruleengine.export.dto.RuleCatalog
 import java.io.ByteArrayOutputStream
 import java.util.zip.ZipEntry
@@ -106,8 +101,8 @@ object DocxCatalogWriter {
 
         val facts = buildList {
             catalog.entryId?.let { entry -> add("Entry $entry") }
-            add(count(n = catalog.rules.size, singular = "rule"))
-            add(count(n = catalog.files.size, singular = "rule file"))
+            add(CatalogText.count(n = catalog.rules.size, singular = "rule"))
+            add(CatalogText.count(n = catalog.files.size, singular = "rule file"))
             catalog.schemaPath?.let { path -> add("Input contract $path") }
             generatedOn?.let { date -> add("Generated $date") }
         }
@@ -155,7 +150,7 @@ object DocxCatalogWriter {
     }
 
     private fun summaryOf(rule: CatalogRule): String {
-        return rule.description ?: flatten(condition = rule.condition)
+        return rule.description ?: CatalogText.flatten(condition = rule.condition)
     }
 
     private fun outcomeSummary(rule: CatalogRule): String {
@@ -163,7 +158,7 @@ object DocxCatalogWriter {
             return "—"
         }
 
-        return rule.outcomes.joinToString(separator = "\n") { outcome -> label(outcome = outcome) }
+        return rule.outcomes.joinToString(separator = "\n") { outcome -> CatalogText.label(outcome = outcome) }
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────
@@ -220,112 +215,19 @@ object DocxCatalogWriter {
             out.append(DocxXml.paragraph(style = "Normal", text = description))
         }
 
-        out.append(DocxXml.paragraph(style = "FieldLabel", text = introFor(condition = rule.condition)))
-        appendCondition(out = out, condition = rule.condition, depth = 0, unwrapRoot = true)
+        out.append(DocxXml.paragraph(style = "FieldLabel", text = CatalogText.intro(condition = rule.condition)))
+        CatalogText.walk(condition = rule.condition, depth = 0, unwrapRoot = true) { text, depth ->
+            out.append(DocxXml.bullet(text = text, depth = depth))
+        }
 
         if (rule.outcomes.isNotEmpty()) {
             out.append(DocxXml.paragraph(style = "FieldLabel", text = "Then"))
             rule.outcomes.forEach { outcome ->
-                out.append(DocxXml.bullet(text = label(outcome = outcome), depth = 0, code = true))
+                out.append(DocxXml.bullet(text = CatalogText.label(outcome = outcome), depth = 0, code = true))
             }
         }
 
         out.append(DocxXml.paragraph(style = "FieldLabel", text = "In the rule language"))
         out.append(DocxXml.paragraph(style = "TechCondition", text = rule.technicalCondition))
-    }
-
-    private fun introFor(condition: PlainCondition): String {
-        return when (condition) {
-            is PlainAll -> "Applies when all of the following are true"
-            is PlainAny -> "Applies when any of the following is true"
-            is PlainNot -> "Applies when the following is not true"
-            is PlainLeaf -> "Applies when"
-        }
-    }
-
-    /**
-     * Writes the condition as bullets.
-     *
-     * [unwrapRoot] drops the outermost group's own bullet, because the label above already said "all
-     * of the following" — repeating it would indent every rule in the document one level for nothing.
-     */
-    private fun appendCondition(
-        out: StringBuilder,
-        condition: PlainCondition,
-        depth: Int,
-        unwrapRoot: Boolean = false,
-    ) {
-        when (condition) {
-            is PlainLeaf -> out.append(DocxXml.bullet(text = condition.text, depth = depth))
-
-            is PlainAll -> appendChildren(
-                out = out,
-                children = condition.children,
-                depth = depth,
-                unwrapRoot = unwrapRoot,
-                header = "All of the following are true:",
-            )
-
-            is PlainAny -> appendChildren(
-                out = out,
-                children = condition.children,
-                depth = depth,
-                unwrapRoot = unwrapRoot,
-                header = "Any of the following is true:",
-            )
-
-            is PlainNot -> {
-                if (unwrapRoot) {
-                    appendCondition(out = out, condition = condition.child, depth = depth)
-                } else {
-                    out.append(DocxXml.bullet(text = "The following is not true:", depth = depth))
-                    appendCondition(out = out, condition = condition.child, depth = depth + 1)
-                }
-            }
-        }
-    }
-
-    private fun appendChildren(
-        out: StringBuilder,
-        children: List<PlainCondition>,
-        depth: Int,
-        unwrapRoot: Boolean,
-        header: String,
-    ) {
-        if (unwrapRoot) {
-            children.forEach { child -> appendCondition(out = out, condition = child, depth = depth) }
-            return
-        }
-
-        out.append(DocxXml.bullet(text = header, depth = depth))
-        children.forEach { child -> appendCondition(out = out, condition = child, depth = depth + 1) }
-    }
-
-    // ── shared with the Markdown renderer ─────────────────────────────────────
-
-    private fun label(outcome: CatalogOutcome): String {
-        if (outcome.arguments.isEmpty()) {
-            return outcome.action
-        }
-
-        return "${outcome.action} ${outcome.arguments.joinToString(separator = ", ")}"
-    }
-
-    private fun count(n: Int, singular: String): String {
-        return if (n == 1) "1 $singular" else "$n ${singular}s"
-    }
-
-    private fun flatten(condition: PlainCondition): String {
-        return when (condition) {
-            is PlainLeaf -> condition.text
-            is PlainNot -> "not (${flatten(condition = condition.child)})"
-            is PlainAll -> condition.children.joinToString(separator = " and ") { child ->
-                flatten(condition = child)
-            }
-
-            is PlainAny -> condition.children.joinToString(separator = " or ") { child ->
-                flatten(condition = child)
-            }
-        }
     }
 }

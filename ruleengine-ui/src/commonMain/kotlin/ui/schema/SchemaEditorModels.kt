@@ -1,6 +1,7 @@
 package ui.schema
 
 import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.normalizer.NormalizerRegistry
 import ui.builder.OperatorOptions
 
 /**
@@ -41,20 +42,13 @@ val FieldType.yamlValue: String
     get() = name.lowercase()
 
 /**
- * All normalizer ids known to the engine, used to populate the selector.
+ * All normalizer ids known to the engine, in declaration order, used to populate the selector and
+ * the YAML completions.
  *
- * Must stay in sync with `ruleengine.core.normalizer.NormalizerRegistry`, which lives in the JVM-only
- * core module and so cannot be referenced from `commonMain`. `SchemaEditorModelsTest` asserts every id
- * here is one the engine accepts.
+ * Read from [NormalizerRegistry] rather than restated: an id offered here that the registry does not
+ * have is a schema the engine refuses to load.
  */
-val KnownNormalizers: List<String> = listOf(
-    "trim",
-    "lowercase",
-    "uppercase",
-    "collapse_whitespace",
-    "remove_punctuation",
-    "german_umlaut_fold",
-)
+val KnownNormalizers: List<String> = NormalizerRegistry.ids.map { id -> id.value }
 
 /** Numbers and dates are ordered, so the schema editor offers them the same comparisons. */
 private val ORDERED_OPERATORS: List<String> = listOf(

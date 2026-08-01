@@ -9,7 +9,7 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.core.domain.dto` | Shared domain models such as `FieldSchema`, `FieldDefinition`, `FieldType`, `RuleMatch`, `EvaluationResult`, `ActionSchema`, and the inline value classes `FieldId`, `OperatorId`, `NormalizerId`. One top-level declaration per file. |
 | `ruleengine.core.domain` | Logic over those models: `FieldPathResolver` / `FieldPathResolution` (the single owner of dotted-path resolution), `TemporalFormat` (the single owner of date pattern parsing), `OperatorNames`. |
 | `ruleengine.core.errors` | Exception types such as `CompilationException`, `SchemaLoadException`, `RuleEngineException`, plus `ValidationDiagnostic` and `Severity`. |
-| `ruleengine.core.normalizer` | `Normalizer` functional interface, `NormalizerProfile`, and `NormalizerRegistry` singleton. |
+| `ruleengine.core.normalizer` | **Lives in `ruleengine-model`.** `Normalizer` functional interface, `NormalizerProfile`, and the `NormalizerRegistry` singleton (`ids` enumerates the built-ins). |
 | `ruleengine.dsl.lexer` | `Lexer`, `Token`, `TokenType`; raw tokenisation of the rule DSL. |
 | `ruleengine.dsl.parser` | `Parser`; converts token stream into AST nodes. |
 | `ruleengine.dsl.ast` | Immutable AST data classes such as `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, and literals. |
@@ -71,8 +71,8 @@ If the change affects DSL keywords or operators, also update relevant UI syntax 
 
 ## Adding normalizers
 
-- Use `NormalizerRegistry.default` to access built-in normalizers.
-- Register custom normalizers via the `NormalizerRegistry` API.
+- Use `NormalizerRegistry.default` to access built-in normalizers, and `NormalizerRegistry.ids` to enumerate them (the schema editor and YAML completions both read that list).
+- There is currently no registration API: `builtins` is a private immutable map, so adding a normalizer means editing `NormalizerRegistry` in `ruleengine-model`.
 - `Normalizer` is a `fun interface` taking a `String` and returning a `String`.
 - Use descriptive `snake_case` keys for normalizer IDs.
 

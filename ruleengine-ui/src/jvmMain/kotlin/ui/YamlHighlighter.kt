@@ -9,6 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.ActionArgType
 import ruleengine.core.domain.dto.FieldType
+import ui.schema.KnownNormalizers
 
 // ── YAML editor type ──────────────────────────────────────────────────────────
 
@@ -38,15 +39,7 @@ data class YamlCursorContext(
 private val FIELD_TYPE_VALUES = FieldType.entries.map { type -> type.name.lowercase() }
 private val FORMAT_VALUES = listOf("dd.MM.yyyy", "yyyy/MM/dd", "dd.MM.yyyy HH:mm", "yyyy-MM-dd HH:mm:ss")
 
-// Same set as `ui.schema.KnownNormalizers`, deliberately in a different order: the completion list
-// leads with the three that are almost always what the author wants. Kept as its own list so that
-// display order stays a presentation choice rather than a consequence of the engine's declaration
-// order — the set itself is what must not drift.
-private val NORMALIZER_VALUES = listOf(
-    "trim", "lowercase", "uppercase",
-    "german_umlaut_fold",
-    "collapse_whitespace", "remove_punctuation",
-)
+private val NORMALIZER_VALUES = KnownNormalizers
 private val OPERATOR_VALUES = OperatorNames.ALL
 private val ARG_TYPE_VALUES = ActionArgType.entries.map { argType -> argType.name.lowercase() }
 

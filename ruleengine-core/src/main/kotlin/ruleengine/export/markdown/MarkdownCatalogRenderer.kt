@@ -1,15 +1,9 @@
 package ruleengine.export.markdown
 
-import ruleengine.export.dto.CatalogOutcome
+import ruleengine.export.CatalogText
 import ruleengine.export.dto.CatalogRule
 import ruleengine.export.dto.CatalogRuleFile
-import ruleengine.export.dto.PlainAll
-import ruleengine.export.dto.PlainAny
-import ruleengine.export.dto.PlainCondition
-import ruleengine.export.dto.PlainLeaf
-import ruleengine.export.dto.PlainNot
 import ruleengine.export.dto.RuleCatalog
-import ruleengine.export.markdown.MarkdownCatalogRenderer.introFor
 
 /**
  * Renders a [RuleCatalog] as a Markdown document for a wiki.
@@ -44,8 +38,8 @@ object MarkdownCatalogRenderer {
 
         val facts = buildList {
             catalog.entryId?.let { entry -> add("Entry `$entry`") }
-            add(count(n = catalog.rules.size, singular = "rule"))
-            add(count(n = catalog.files.size, singular = "rule file"))
+            add(CatalogText.count(n = catalog.rules.size, singular = "rule"))
+            add(CatalogText.count(n = catalog.files.size, singular = "rule file"))
             catalog.schemaPath?.let { path -> add("Input contract `$path`") }
         }
         out.append("_").append(facts.joinToString(separator = " · ")).append("_\n\n")
@@ -86,7 +80,7 @@ object MarkdownCatalogRenderer {
 
     /** The description when the author wrote one; otherwise the condition, so no row is ever blank. */
     private fun summaryOf(rule: CatalogRule): String {
-        return rule.description ?: flatten(condition = rule.condition)
+        return rule.description ?: CatalogText.flatten(condition = rule.condition)
     }
 
     private fun outcomeSummary(rule: CatalogRule): String {
@@ -94,7 +88,7 @@ object MarkdownCatalogRenderer {
             return "—"
         }
 
-        return rule.outcomes.joinToString(separator = ", ") { outcome -> "`${label(outcome = outcome)}`" }
+        return rule.outcomes.joinToString(separator = ", ") { outcome -> "`${CatalogText.label(outcome = outcome)}`" }
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────
@@ -146,13 +140,15 @@ object MarkdownCatalogRenderer {
 
         rule.description?.let { description -> out.append(description).append("\n\n") }
 
-        out.append("**").append(introFor(condition = rule.condition)).append("**\n\n")
-        appendCondition(out = out, condition = rule.condition, depth = 0, unwrapRoot = true)
+        out.append("**").append(CatalogText.intro(condition = rule.condition)).append(":**\n\n")
+        CatalogText.walk(condition = rule.condition, depth = 0, unwrapRoot = true) { text, depth ->
+            out.append(INDENT.repeat(n = depth)).append("- ").append(text).append("\n")
+        }
         out.append("\n")
 
         if (rule.outcomes.isNotEmpty()) {
             val outcomes = rule.outcomes.joinToString(separator = ", ") { outcome ->
-                "`${label(outcome = outcome)}`"
+                "`${CatalogText.label(outcome = outcome)}`"
             }
             out.append("**Then:** ").append(outcomes).append("\n\n")
         }
@@ -160,86 +156,7 @@ object MarkdownCatalogRenderer {
         out.append("In the rule language: `").append(rule.technicalCondition).append("`\n\n")
     }
 
-    /** The lead-in sentence, which carries the boolean structure the bullets below would otherwise lose. */
-    private fun introFor(condition: PlainCondition): String {
-        return when (condition) {
-            is PlainAll -> "Applies when all of the following are true:"
-            is PlainAny -> "Applies when any of the following is true:"
-            is PlainNot -> "Applies when the following is not true:"
-            is PlainLeaf -> "Applies when:"
-        }
-    }
-
-    /**
-     * Writes the condition as a bullet list.
-     *
-     * [unwrapRoot] drops the outermost group's own bullet, because [introFor] has already said "all
-     * of the following" — nesting the whole rule one level deeper under a repeat of that sentence
-     * wastes a level of indent on every rule in the document.
-     */
-    private fun appendCondition(
-        out: StringBuilder,
-        condition: PlainCondition,
-        depth: Int,
-        unwrapRoot: Boolean = false,
-    ) {
-        val pad = INDENT.repeat(n = depth)
-
-        when (condition) {
-            is PlainLeaf -> out.append(pad).append("- ").append(condition.text).append("\n")
-
-            is PlainAll -> appendChildren(
-                out = out,
-                children = condition.children,
-                depth = depth,
-                unwrapRoot = unwrapRoot,
-                header = "All of the following are true:",
-            )
-
-            is PlainAny -> appendChildren(
-                out = out,
-                children = condition.children,
-                depth = depth,
-                unwrapRoot = unwrapRoot,
-                header = "Any of the following is true:",
-            )
-
-            is PlainNot -> {
-                if (unwrapRoot) {
-                    appendCondition(out = out, condition = condition.child, depth = depth)
-                } else {
-                    out.append(pad).append("- ").append("The following is not true:").append("\n")
-                    appendCondition(out = out, condition = condition.child, depth = depth + 1)
-                }
-            }
-        }
-    }
-
-    private fun appendChildren(
-        out: StringBuilder,
-        children: List<PlainCondition>,
-        depth: Int,
-        unwrapRoot: Boolean,
-        header: String,
-    ) {
-        if (unwrapRoot) {
-            children.forEach { child -> appendCondition(out = out, condition = child, depth = depth) }
-            return
-        }
-
-        out.append(INDENT.repeat(n = depth)).append("- ").append(header).append("\n")
-        children.forEach { child -> appendCondition(out = out, condition = child, depth = depth + 1) }
-    }
-
     // ── shared formatting ─────────────────────────────────────────────────────
-
-    private fun label(outcome: CatalogOutcome): String {
-        if (outcome.arguments.isEmpty()) {
-            return outcome.action
-        }
-
-        return "${outcome.action} ${outcome.arguments.joinToString(separator = ", ")}"
-    }
 
     /**
      * Makes [text] safe inside a table cell.
@@ -265,24 +182,5 @@ object MarkdownCatalogRenderer {
             .replace(regex = Regex(pattern = "[^a-z0-9\\s-]"), replacement = "")
             .trim()
             .replace(regex = Regex(pattern = "\\s+"), replacement = "-")
-    }
-
-    private fun count(n: Int, singular: String): String {
-        return if (n == 1) "1 $singular" else "$n ${singular}s"
-    }
-
-    /** One-line form of a condition, for the index table where a bullet list will not fit. */
-    private fun flatten(condition: PlainCondition): String {
-        return when (condition) {
-            is PlainLeaf -> condition.text
-            is PlainNot -> "not (${flatten(condition = condition.child)})"
-            is PlainAll -> condition.children.joinToString(separator = " and ") { child ->
-                flatten(condition = child)
-            }
-
-            is PlainAny -> condition.children.joinToString(separator = " or ") { child ->
-                flatten(condition = child)
-            }
-        }
     }
 }

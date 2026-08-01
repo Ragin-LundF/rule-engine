@@ -22,7 +22,6 @@ import ruleengine.core.domain.dto.FieldType.INTEGER
 import ruleengine.core.domain.dto.FieldType.OBJECT
 import ruleengine.core.domain.dto.FieldType.STRING_SET
 import ruleengine.core.domain.dto.FieldType.TEXT
-import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
@@ -437,11 +436,7 @@ object Compiler {
                     )
                 }.toSet()
                 val normalized = stringLiteralSet.map { stringLiteral ->
-                    applyNormalizers(
-                        value = stringLiteral,
-                        normalizers = def.normalizers,
-                        registry = normalizerRegistry
-                    )
+                    normalizerRegistry.applyAll(value = stringLiteral, normalizers = def.normalizers)
                 }.toSet()
 
                 when (op) {
@@ -465,10 +460,9 @@ object Compiler {
             }
 
             is StringLiteral -> {
-                val normalized = applyNormalizers(
+                val normalized = normalizerRegistry.applyAll(
                     value = conditionValue.value,
                     normalizers = def.normalizers,
-                    registry = normalizerRegistry
                 )
                 StringSetContainsAnyExpression(
                     field = fieldId,
@@ -484,15 +478,4 @@ object Compiler {
         }
     }
 
-    private fun applyNormalizers(
-        value: String,
-        normalizers: List<NormalizerId>,
-        registry: NormalizerRegistry
-    ): String {
-        var v = value
-        for (n in normalizers) {
-            v = registry.get(n).normalize(value = v)
-        }
-        return v
-    }
 }

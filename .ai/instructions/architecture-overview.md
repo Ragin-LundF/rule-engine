@@ -4,7 +4,7 @@ Read this file for repository-level architecture decisions, cross-module changes
 
 ## Modules
 
-- `ruleengine-model` is the shared domain vocabulary: `FieldType`, `FieldDefinition`, `FieldSchema`, `ActionArgType`, `OperatorNames`, `OperatorUtils`, `Severity`, `NodeType`, `AggregateFunctionName` and the `FieldId` / `OperatorId` / `NormalizerId` value classes. It has **no dependencies** and must keep none — no engine, no I/O, no serialization. Both other modules depend on it, which is what lets the UI use the engine's own types instead of mirroring them.
+- `ruleengine-model` is the shared domain vocabulary: `FieldType`, `FieldDefinition`, `FieldSchema`, `ActionArgType`, `OperatorNames`, `OperatorUtils`, `Severity`, `NodeType`, `AggregateFunctionName`, the `ruleengine.core.normalizer` package, and the `FieldId` / `OperatorId` / `NormalizerId` value classes. It has **no dependencies** and must keep none — no engine, no I/O, no serialization. Both other modules depend on it, which is what lets the UI use the engine's own types instead of mirroring them.
 - `ruleengine-core` is the rule execution library. It owns the DSL for defining rules and the full execution pipeline. It exposes `ruleengine-model` via `api`, so consumers of core see those types transitively.
 - `ruleengine-ui` is the desktop UI for managing and validating rules. Its `commonMain` depends on `ruleengine-model` only; `ruleengine-core` is available in `jvmMain` and `jvmTest`.
 

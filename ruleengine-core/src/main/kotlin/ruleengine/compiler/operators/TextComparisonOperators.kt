@@ -27,11 +27,7 @@ object TextComparisonOperators {
             ruleId = ruleId,
             details = "Expected string literal for text field '${cond.field}'"
         )
-        var stringLiteral = literal.value
-        for (normalizer in def.normalizers) {
-            stringLiteral = registry.get(id = normalizer).normalize(value = stringLiteral)
-        }
-        val expected = stringLiteral
+        val expected = registry.applyAll(value = literal.value, normalizers = def.normalizers)
 
         return when (op) {
             OperatorNames.EQUALS -> TextEqualsExpression(
