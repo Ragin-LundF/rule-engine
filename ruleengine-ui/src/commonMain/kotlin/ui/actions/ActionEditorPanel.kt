@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
+import ui.editor.YamlEditorPane
 import ui.workbench.ActionMode
 
 /**
@@ -224,12 +225,11 @@ private fun YamlActionEditor(
                 color = MaterialTheme.colors.error,
             )
         }
-        yamlEditor(
-            TextFieldValue(text = yaml),
-            { newValue ->
-                onYamlChange(newValue.text)
-            },
-            Modifier.fillMaxWidth().weight(1f),
+        YamlEditorPane(
+            yaml = yaml,
+            onYamlChange = onYamlChange,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            editor = yamlEditor,
         )
     }
 }

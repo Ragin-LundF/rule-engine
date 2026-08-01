@@ -1,8 +1,16 @@
 package ui.diagrams
 
 import androidx.compose.ui.graphics.Color
+import ui.theme.DarkPalette
 
-/** The original GitHub-dark-inspired diagram palette, used when the app theme is dark. */
+/**
+ * The original GitHub-dark-inspired diagram palette, used when the app theme is dark.
+ *
+ * Unlike [LightDiagramPalette] this is *not* derived from the app's own dark palette: its blues,
+ * greens and reds are GitHub's, chosen so a dense diagram stays legible, and they differ from
+ * [DarkPalette] on purpose. Only the two purples coincide, and those are read from the app palette
+ * so the one genuine overlap cannot drift. Do not "align" the rest — that is a design change.
+ */
 internal val DarkDiagramPalette = DiagramPalette(
     diagramBg = Color(0xFF0D1117),
     nodeBgRule = Color(0xFF1C2333),
@@ -22,11 +30,11 @@ internal val DarkDiagramPalette = DiagramPalette(
     labelAnd = Color(0xFF58A6FF),
     labelOr = Color(0xFF3FB950),
     labelNot = Color(0xFFF85149),
-    labelActions = Color(0xFFA78BFA),
+    labelActions = DarkPalette.accentPurple,
     labelField = Color(0xFF79C0FF),
     labelOp = Color(0xFFD29922),
     labelValue = Color(0xFF3FB950),
-    labelActionName = Color(0xFFA78BFA),
+    labelActionName = DarkPalette.accentPurple,
     labelArg = Color(0xFFE6EDF3),
     textDesc = Color(0xFF8B949E),
 )

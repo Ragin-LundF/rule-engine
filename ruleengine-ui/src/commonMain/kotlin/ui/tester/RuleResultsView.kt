@@ -43,11 +43,19 @@ private const val FILTER_MATCHED = "Matched"
 private const val FILTER_PARTIAL = "Partial"
 private const val FILTER_NO_MATCH = "No match"
 
-private val MonoText = TextStyle(
-    fontFamily = FontFamily.Monospace,
-    fontSize = 12.sp,
-    color = TextPrimary,
-)
+/**
+ * Must be a getter, not a `val`.
+ *
+ * [TextPrimary] reads the active palette on every access, so capturing it in a file-level `val`
+ * freezes whichever theme happened to load first — which rendered the emitted actions in near-black
+ * on the dark background.
+ */
+private val MonoText: TextStyle
+    get() = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontSize = 12.sp,
+        color = TextPrimary,
+    )
 
 /**
  * What every rule in the run decided.

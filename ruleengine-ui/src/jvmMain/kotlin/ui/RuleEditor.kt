@@ -37,14 +37,13 @@ import ui.builder.CatalogActionInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
-import ui.components.PlaceholderPanel
 import ui.diagrams.DiagramSurface
 import ui.diagrams.FieldFlowDiagram
 import ui.diagrams.OutcomeMapDiagram
 import ui.diagrams.TraceDiagram
+import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
-import ui.editor.rules.isContextuallyImmediate
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
@@ -57,6 +56,9 @@ import ui.project.toEditorState
 import ui.samples.SampleGalleryScreen
 import ui.samples.loadSample
 import ui.schema.FieldSchemaYamlBridge
+import ui.settings.SettingsController
+import ui.settings.SettingsPersistence
+import ui.settings.SettingsScreen
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
 import ui.tester.SimulationOutcome
@@ -146,10 +148,16 @@ actual fun RuleEditor(closeController: AppCloseController) {
         )
         state.dslContext.value = ctx
 
-        val lastChar = if (cursor > 0) state.ruleValue.value.text.getOrNull(index = cursor - 1) else null
-        val afterSpace = lastChar == ' ' || lastChar == '\n'
-        state.showAutoComplete.value = state.autoCompleteWord.value.isNotEmpty() ||
-                (afterSpace && isContextuallyImmediate(context = ctx))
+        // Never offered on its own. Once open it stays anchored to the word it was opened for, so
+        // typing narrows it; it closes only when the caret leaves that word.
+        if (state.showAutoComplete.value && !CodeEditing.isAnchorLive(
+                text = state.ruleValue.value.text,
+                cursor = cursor,
+                anchor = state.autoCompleteAnchor.value,
+            )
+        ) {
+            state.showAutoComplete.value = false
+        }
     }
 
     // ── Debounced auto-validation ──────────────────────────────────────────────
@@ -706,8 +714,14 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                AppArea.SETTINGS -> PlaceholderPanel(
-                    label = workbenchState.appArea.name,
+                AppArea.SETTINGS -> SettingsScreen(
+                    shortcut = SettingsController.autoCompleteShortcut,
+                    onShortcutChange = { shortcut ->
+                        SettingsController.setAutoCompleteShortcut(
+                            shortcut = shortcut,
+                            persist = SettingsPersistence::saveAutoCompleteShortcut,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }

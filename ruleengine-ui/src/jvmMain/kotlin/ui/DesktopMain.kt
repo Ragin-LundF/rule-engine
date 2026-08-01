@@ -12,11 +12,14 @@ import androidx.compose.ui.window.rememberWindowState
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.Res
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.app
 import org.jetbrains.compose.resources.painterResource
+import ui.settings.SettingsController
+import ui.settings.SettingsPersistence
 import ui.theme.ThemeController
 import ui.theme.ThemePersistence
 
 fun main() = application {
     ThemeController.isDark = ThemePersistence.loadIsDark()
+    SettingsController.setAutoCompleteShortcut(shortcut = SettingsPersistence.loadAutoCompleteShortcut())
 
     val closeController = remember { AppCloseController() }
     closeController.onCloseConfirmed = ::exitApplication

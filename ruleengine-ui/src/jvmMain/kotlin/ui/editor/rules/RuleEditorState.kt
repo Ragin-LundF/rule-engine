@@ -18,6 +18,7 @@ import ui.DslSection
 import ui.autocompletion.CompletionItem
 import ui.diagrams.DiagramViewKind
 import ui.diagrams.model.RuleSource
+import ui.editor.CodeEditing
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -96,6 +97,12 @@ class RuleEditorState(
     val autoCompleteIndex: MutableState<Int> = mutableStateOf(value = 0)
     val autoCompleteWord: MutableState<String> = mutableStateOf(value = "")
     val autoCompleteWordStart: MutableState<Int> = mutableStateOf(value = 0)
+
+    /** Where an open completion popup was anchored; -1 when none is open. See `CodeEditing.isAnchorLive`. */
+    val autoCompleteAnchor: MutableState<Int> = mutableStateOf(value = -1)
+
+    /** Set when a space-based shortcut fired, so the editor can drop the space it may also insert. */
+    val swallowShortcutSpace: MutableState<Boolean> = mutableStateOf(value = false)
     val dslContext: MutableState<DslCursorContext> = mutableStateOf(
         value = DslCursorContext(section = DslSection.TOP_LEVEL)
     )
@@ -170,12 +177,13 @@ class RuleEditorState(
 
     /** Accept an autocomplete suggestion and insert it at the current cursor position. */
     fun acceptSuggestion(item: CompletionItem) {
-        val cursor = ruleValue.value.selection.start
-        val newText = ruleValue.value.text.substring(startIndex = 0, endIndex = autoCompleteWordStart.value) +
-                item.insertText +
-                ruleValue.value.text.substring(startIndex = cursor)
-        val newPos = autoCompleteWordStart.value + item.insertText.length
-        ruleValue.value = TextFieldValue(text = newText, selection = TextRange(index = newPos))
+        val edit = CodeEditing.applySuggestion(
+            text = ruleValue.value.text,
+            wordStart = autoCompleteWordStart.value,
+            cursor = ruleValue.value.selection.start,
+            insertText = item.insertText,
+        )
+        ruleValue.value = TextFieldValue(text = edit.text, selection = TextRange(index = edit.cursor))
         showAutoComplete.value = false
     }
 

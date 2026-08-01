@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import ui.BgElevated
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.TextPrimary
+import ui.TextOnPrimary
 import ui.TextSecondary
 import ui.components.TinyButton
 import ui.components.rotateVertically
@@ -145,7 +145,9 @@ private fun RightTab(
     modifier: Modifier = Modifier,
 ) {
     val bg = if (selected) PrimaryBlue else Color.Transparent
-    val textColor = if (selected) TextPrimary else TextSecondary
+    // TextOnPrimary, not TextPrimary: the selected tab sits on PrimaryBlue, and TextPrimary is
+    // near-black in the light theme.
+    val textColor = if (selected) TextOnPrimary else TextSecondary
 
     Box(
         modifier = modifier
