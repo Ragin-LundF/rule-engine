@@ -70,8 +70,7 @@ object OperatorOptions {
     val COMPARISON_TEXT: List<String> = listOf(SYMBOL_EQUALS, SYMBOL_NOT_EQUALS)
 
     /** Aggregate functions understood by the engine, lowercase, in declaration order. */
-    val AGGREGATE_FUNCTIONS: List<String> =
-        AggregateFunctionName.entries.map { function -> function.name.lowercase() }
+    val AGGREGATE_FUNCTIONS: List<String> = AggregateFunctionName.lowercaseNames()
 
     /** Arithmetic operators available in a calculation, in display order. */
     val ARITHMETIC_OPERATORS: List<String> = listOf("+", "-", "*", "/")

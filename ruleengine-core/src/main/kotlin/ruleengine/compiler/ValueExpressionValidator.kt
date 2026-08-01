@@ -226,8 +226,8 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
-        val knownNames = AggregateFunctionName.entries.map { it.name.lowercase() }
-        if (!knownNames.contains(expr.name.lowercase())) {
+        val knownNames = AggregateFunctionName.lowercaseNames()
+        if (AggregateFunctionName.fromName(name = expr.name) == null) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Unknown function '${expr.name}'; supported functions are: ${knownNames.joinToString()}"
@@ -242,7 +242,7 @@ internal object ValueExpressionValidator {
             return ValueKind.UNKNOWN
         }
         val argKind = validateValueExpression(expr = expr.arguments[0], schema = schema, diagnostics = diagnostics)
-        val functionName = AggregateFunctionName.entries.first { it.name.equals(expr.name, ignoreCase = true) }
+        val functionName = AggregateFunctionName.fromName(name = expr.name)
         if (functionName == AggregateFunctionName.COUNT) {
             if (argKind == ValueKind.TEXT) {
                 diagnostics += ValidationDiagnostic(

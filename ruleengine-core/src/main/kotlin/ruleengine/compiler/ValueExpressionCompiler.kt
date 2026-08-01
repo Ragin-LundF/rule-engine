@@ -1,6 +1,6 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ArithmeticValueAst
@@ -85,7 +85,7 @@ internal object ValueExpressionCompiler {
             when (segment) {
                 is FieldSegmentAst -> {
                     val name = if (index == 0) {
-                        resolveIdentifier(identifier = segment.name, schema = schema)
+                        FieldPathResolver.resolveName(identifier = segment.name, fields = schema.fields)
                     } else {
                         segment.name
                     }
@@ -111,9 +111,7 @@ internal object ValueExpressionCompiler {
         ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): CompiledValueExpression {
-        val functionName = AggregateFunctionName.entries.find {
-            it.name.equals(expr.name, ignoreCase = true)
-        } ?: throw CompilationException(
+        val functionName = AggregateFunctionName.fromName(name = expr.name) ?: throw CompilationException(
             ruleId = ruleId,
             details = "Unknown function '${expr.name}'"
         )
@@ -149,16 +147,4 @@ internal object ValueExpressionCompiler {
         )
     }
 
-    private fun resolveIdentifier(identifier: String, schema: FieldSchema): String {
-        val fieldId = FieldId(value = identifier)
-        if (schema.fields.containsKey(fieldId)) {
-            return identifier
-        }
-        for ((id, definition) in schema.fields) {
-            if (definition.alias == identifier) {
-                return id.value
-            }
-        }
-        return identifier
-    }
 }

@@ -2,7 +2,6 @@ package ruleengine.export
 
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.domain.dto.isStructure
 
@@ -103,9 +102,8 @@ object FieldLabels {
             return false
         }
 
-        val definition = schema.fields[FieldId(value = root)]
-            ?: schema.fields.values.firstOrNull { candidate -> candidate.alias == root }
+        val resolution = FieldPathResolver.resolve(identifier = root, schema = schema)
 
-        return definition?.type?.isStructure == true
+        return resolution is FieldPathResolution.Resolved && resolution.definition.type.isStructure
     }
 }

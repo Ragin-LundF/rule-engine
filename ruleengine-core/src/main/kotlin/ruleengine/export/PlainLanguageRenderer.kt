@@ -219,8 +219,7 @@ object PlainLanguageRenderer {
      */
     private fun aggregate(call: FunctionCallValueAst, schema: FieldSchema?): String {
         val argument = call.arguments.singleOrNull()
-        val function = AggregateFunctionName.entries
-            .firstOrNull { candidate -> candidate.name.equals(other = call.name, ignoreCase = true) }
+        val function = AggregateFunctionName.fromName(name = call.name)
 
         if (argument !is FieldAccessAst) {
             val rendered = call.arguments.joinToString(separator = ", ") { arg ->
