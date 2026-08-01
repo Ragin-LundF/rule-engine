@@ -39,13 +39,4 @@ sealed interface WorkbenchAction {
 
     /** Select an item in the inspector panel (field, action, rule, condition, or manifest). */
     data class SelectInspectorItem(val item: InspectorItem?) : WorkbenchAction
-
-    /** Request a validation run against the current schema and rule text. */
-    data object RequestValidation : WorkbenchAction
-
-    /** Apply a completed validation result to the state. */
-    data class ApplyValidationResult(
-        val diagnostics: List<UiDiagnostic>,
-        val validationState: ValidationState,
-    ) : WorkbenchAction
 }

@@ -6,26 +6,12 @@ import ui.workbench.model.InspectorItem
 import ui.workbench.model.RightPanelTab
 import ui.workbench.model.RuleMode
 import ui.workbench.model.SchemaMode
-import ui.workbench.model.ValidationState
 import ui.workbench.model.WorkbenchAction
-import ui.workbench.model.WorkbenchValidationResult
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
-
-private class NoOpWorkbenchValidator : WorkbenchValidator {
-    override fun validate(schemaText: String, actionsText: String, ruleText: String): WorkbenchValidationResult {
-        return WorkbenchValidationResult(
-            diagnostics = emptyList(),
-            validationState = if (ruleText.isBlank()) ValidationState.IDLE else ValidationState.VALID,
-        )
-    }
-}
 
 class RuleWorkbenchViewModelTest {
-
-    private val validator = NoOpWorkbenchValidator()
 
     @Test
     fun `initial state uses RULES area and CODE mode`() = runModelTest {
@@ -96,21 +82,8 @@ class RuleWorkbenchViewModelTest {
         assertEquals(expected = RightPanelTab.SIMULATE, actual = viewModel.state.value.rightPanelTab)
     }
 
-    @Test
-    fun `RequestValidation transitions state and resolves to IDLE with empty text`() = runModelTest {
-        viewModel.dispatch(action = WorkbenchAction.RequestValidation)
-
-        assertEquals(expected = ValidationState.VALIDATING, actual = viewModel.state.value.validationState)
-
-        // Wait for the async validation coroutine to finish.
-        kotlinx.coroutines.delay(timeMillis = 50)
-
-        assertEquals(expected = ValidationState.IDLE, actual = viewModel.state.value.validationState)
-        assertTrue(actual = viewModel.state.value.diagnostics.isEmpty())
-    }
-
     private fun runModelTest(block: suspend TestContext.() -> Unit) = runBlocking {
-        val context = TestContext(viewModel = RuleWorkbenchViewModel(validator = validator, scope = this))
+        val context = TestContext(viewModel = RuleWorkbenchViewModel())
         context.block()
     }
 

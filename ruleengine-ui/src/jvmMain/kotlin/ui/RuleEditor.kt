@@ -72,7 +72,6 @@ import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppAreaIconRail
 import ui.workbench.CenterEditorPanel
 import ui.workbench.DiagramModeHost
-import ui.workbench.JvmWorkbenchValidator
 import ui.workbench.ManifestAreaScreen
 import ui.workbench.RightPanelWithTabs
 import ui.workbench.RuleWorkbenchScreen
@@ -100,13 +99,8 @@ actual fun RuleEditor(closeController: AppCloseController) {
     val scope = rememberCoroutineScope()
 
     // Root workbench state (navigation, selection, panel tabs).
-    val validator = remember { JvmWorkbenchValidator() }
     val workbenchViewModel = remember {
-        RuleWorkbenchViewModel(
-            validator = validator,
-            scope = scope,
-            initialState = RuleWorkbenchState.Empty,
-        )
+        RuleWorkbenchViewModel(initialState = RuleWorkbenchState.Empty)
     }
     val workbenchState by workbenchViewModel.state.collectAsState()
 

@@ -16,8 +16,6 @@ data class RuleWorkbenchState(
     val selectedConditionId: String? = null,
     val selectedInspectorItem: InspectorItem? = null,
     val rightPanelTab: RightPanelTab = RightPanelTab.INSPECTOR,
-    val diagnostics: List<UiDiagnostic> = emptyList(),
-    val validationState: ValidationState = ValidationState.IDLE,
 ) {
     companion object {
         /** Empty initial state. */

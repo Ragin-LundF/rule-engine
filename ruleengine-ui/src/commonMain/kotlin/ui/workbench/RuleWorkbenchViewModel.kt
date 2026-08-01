@@ -1,27 +1,21 @@
 package ui.workbench
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import ruleengine.core.errors.Severity
 import ui.workbench.model.InspectorItem
 import ui.workbench.model.RuleWorkbenchState
-import ui.workbench.model.UiDiagnostic
-import ui.workbench.model.ValidationState
 import ui.workbench.model.WorkbenchAction
-import ui.workbench.model.WorkbenchValidationResult
 
 /**
  * Shared view model for the rule workbench.
- * Holds an immutable [RuleWorkbenchState] snapshot and processes [WorkbenchAction]s
- * to produce the next state. Validation is delegated to [WorkbenchValidator]
- * so that the view model itself is platform-agnostic and unit-testable.
+ *
+ * Holds an immutable [RuleWorkbenchState] snapshot and processes [WorkbenchAction]s to produce the
+ * next state. It is navigation and selection only: validation lives in
+ * `ui.editor.rules.RuleValidationRunner`, and the diagnostics it produces are rendered from
+ * `RuleEditorState`, not from here.
  */
 class RuleWorkbenchViewModel(
-    private val validator: WorkbenchValidator,
-    private val scope: CoroutineScope,
     initialState: RuleWorkbenchState = RuleWorkbenchState.Empty,
 ) {
     private val _state = MutableStateFlow(value = initialState)
@@ -61,13 +55,6 @@ class RuleWorkbenchViewModel(
                 )
             }
             is WorkbenchAction.SelectInspectorItem -> updateState { it.copy(selectedInspectorItem = action.item) }
-            is WorkbenchAction.RequestValidation -> requestValidation()
-            is WorkbenchAction.ApplyValidationResult -> updateState {
-                it.copy(
-                    diagnostics = action.diagnostics,
-                    validationState = action.validationState,
-                )
-            }
         }
     }
 
@@ -77,38 +64,5 @@ class RuleWorkbenchViewModel(
      */
     internal fun updateState(transform: (RuleWorkbenchState) -> RuleWorkbenchState) {
         _state.value = transform(_state.value)
-    }
-
-    // -------------------------------------------------------------------------
-    // Private helpers
-    // -------------------------------------------------------------------------
-
-    private fun requestValidation() {
-        updateState { it.copy(validationState = ValidationState.VALIDATING) }
-        scope.launch {
-            val result = runCatching {
-                validator.validate(
-                    schemaText = "",
-                    actionsText = "",
-                    ruleText = "",
-                )
-            }.getOrElse { throwable ->
-                WorkbenchValidationResult(
-                    diagnostics = listOf(
-                        UiDiagnostic(
-                            severity = Severity.ERROR,
-                            message = throwable.message ?: "Unexpected validation error",
-                        )
-                    ),
-                    validationState = ValidationState.INVALID,
-                )
-            }
-            dispatch(
-                action = WorkbenchAction.ApplyValidationResult(
-                    diagnostics = result.diagnostics,
-                    validationState = result.validationState,
-                )
-            )
-        }
     }
 }
