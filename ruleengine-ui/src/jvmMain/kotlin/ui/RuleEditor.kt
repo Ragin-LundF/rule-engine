@@ -11,7 +11,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -28,14 +27,9 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
-import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
+import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
-import ui.builder.generateUniqueRuleId
-import ui.builder.isBuilderStateStale
-import ui.builder.isLocked
-import ui.builder.ruleId
-import ui.builder.toImmutable
 import ui.diagrams.DiagramSurface
 import ui.diagrams.FieldFlowDiagram
 import ui.diagrams.OutcomeMapDiagram
@@ -218,62 +212,35 @@ actual fun RuleEditor(closeController: AppCloseController) {
         }
     }
 
-    // ── Selected builder rule ID: default to manifest selection or first rule ───
-    var selectedBuilderRuleId by remember { mutableStateOf("") }
-    // When a new rule is added via onAddRule, we store the pending ID here so the
-    // LaunchedEffect sync does not override it before the DSL re-parse completes.
-    var pendingBuilderRuleId by remember { mutableStateOf("") }
-
-    // Sync selected rule ID when parsed rules change or manifest selection changes
-    LaunchedEffect(key1 = allBuilderRules, key2 = state.selectedManifestEntry.value) {
-        val preferredId = state.selectedManifestEntry.value
-        val available = allBuilderRules.mapNotNull { it.ruleId().takeIf { id -> id.isNotBlank() } }
-        selectedBuilderRuleId = when {
-            pendingBuilderRuleId.isNotBlank() && pendingBuilderRuleId in available -> {
-                val id = pendingBuilderRuleId
-                pendingBuilderRuleId = ""
-                id
-            }
-
-            pendingBuilderRuleId.isNotBlank() -> pendingBuilderRuleId // not yet parsed, keep waiting
-            selectedBuilderRuleId in available -> selectedBuilderRuleId // keep current selection
-            preferredId != null && preferredId in available -> preferredId
-            available.isNotEmpty() -> available.first()
-            else -> selectedBuilderRuleId // don't clear when parse temporarily fails
-        }
+    // ── Builder rules: selection and one editor state per rule ────────────────
+    // remember with no keys: the controller and its state map outlive every re-parse, which is what
+    // keeps the rule list alive across tab switches.
+    val builderRules = remember {
+        BuilderRulesController(
+            ruleText = { state.ruleValue.value.text },
+            // TextFieldValue without a selection: the caret returns to offset 0 after a rename or an
+            // add, exactly as it did before.
+            onRuleTextChange = { text -> state.ruleValue.value = TextFieldValue(text = text) },
+        )
     }
+    val builderStateMap by builderRules.stateMap
+    val selectedBuilderRuleId by builderRules.selectedId
 
-    // ── Builder state map: one BuilderEditorState per rule ID ─────────────────
-    // The map survives tab switches so the rule list survives navigation, but is
-    // rebuilt when the DSL text is externally modified (e.g., by editing in code
-    // mode) so the builder always reflects the current rule text.
-    var builderStateMap by remember { mutableStateOf<Map<String, BuilderEditorState>>(emptyMap()) }
+    // Two effects, in this order, on purpose: Compose applies them in declaration order, and that
+    // decides whether the active state below resolves against the old or the new map on the first
+    // frame after a parse. Do not merge them.
+    LaunchedEffect(key1 = allBuilderRules, key2 = state.selectedManifestEntry.value) {
+        builderRules.syncSelection(
+            rules = allBuilderRules,
+            preferredId = state.selectedManifestEntry.value,
+        )
+    }
 
     LaunchedEffect(key1 = allBuilderRules) {
-        val newMap = mutableMapOf<String, BuilderEditorState>()
-        val currentFullText = state.ruleValue.value.text
-
-        allBuilderRules.forEach { rule ->
-            val ruleId = rule.ruleId()
-            val existing = builderStateMap[ruleId]
-            val shouldReset = existing == null ||
-                    existing.isLocked != rule.isLocked() ||
-                    isBuilderStateStale(existing = existing, currentFullText = currentFullText)
-            newMap[ruleId] = if (shouldReset) {
-                BuilderEditorState.fromBuilderRule(rule = rule)
-            } else {
-                existing
-            }
-        }
-        // Preserve any newly added rules that are not yet in allBuilderRules
-        builderStateMap.forEach { (id, existingState) ->
-            if (id !in newMap) newMap[id] = existingState
-        }
-        builderStateMap = newMap
+        builderRules.rebuildStateMap(rules = allBuilderRules)
     }
 
-    val activeBuilderEditorState = builderStateMap[selectedBuilderRuleId]
-        ?: BuilderEditorState.fromBuilderRule(rule = BuilderRule.None)
+    val activeBuilderEditorState = builderRules.activeState()
 
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     // The remember keys stay here on purpose: they are what decides when each list goes stale, and
@@ -352,63 +319,13 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
-                    onRuleSelected = { ruleId -> selectedBuilderRuleId = ruleId },
-                    onRenameRule = { oldId, newId ->
-                        if (newId !in builderStateMap && newId.isNotBlank()) {
-                            val oldState = builderStateMap[oldId]
-                            if (oldState != null) {
-                                // Rebuild state with new ID, deep-copying conditions and actions
-                                val renamedState = BuilderEditorState.fromBuilderRule(
-                                    rule = BuilderRule.Supported(
-                                        id = newId,
-                                        conditionNodes = oldState.conditionNodes.map { it.toImmutable() },
-                                        actions = oldState.actions.map { it.toImmutable() },
-                                    ),
-                                )
-                                val newMap = builderStateMap.toMutableMap()
-                                newMap.remove(oldId)
-                                newMap[newId] = renamedState
-                                builderStateMap = newMap
-                                selectedBuilderRuleId = newId
-                                pendingBuilderRuleId = newId
-                                // Replace rule ID in DSL text
-                                val updatedText = state.ruleValue.value.text.replace(
-                                    oldValue = "rule \"$oldId\"",
-                                    newValue = "rule \"$newId\"",
-                                )
-                                state.ruleValue.value = TextFieldValue(text = updatedText)
-                            }
-                        }
-                    },
-                    onAddRule = {
-                        val existingIds = builderStateMap.keys
-                        val newId = generateUniqueRuleId(existingIds = existingIds)
-                        val newState = BuilderEditorState.fromBuilderRule(
-                            rule = BuilderRule.Supported(
-                                id = newId,
-                                conditionNodes = emptyList(),
-                                actions = emptyList(),
-                            ),
-                        )
-                        builderStateMap = builderStateMap + mapOf(newId to newState)
-                        selectedBuilderRuleId = newId
-                        pendingBuilderRuleId = newId
-                        val skeletonDsl = "\nrule \"$newId\" {\n  when\n  then\n}"
-                        val currentText = state.ruleValue.value.text
-                        state.ruleValue.value = TextFieldValue(
-                            text = if (currentText.isBlank()) skeletonDsl.trimStart() else currentText + skeletonDsl,
-                        )
-                    },
+                    onRuleSelected = { ruleId -> builderRules.select(ruleId = ruleId) },
+                    onRenameRule = { oldId, newId -> builderRules.rename(oldId = oldId, newId = newId) },
+                    onAddRule = { builderRules.add() },
                     catalogFields = builderCatalogFields,
                     catalogActions = builderCatalogActions,
                     onBuilderDslChange = { newDsl ->
-                        // Replace only the DSL block for the active rule; keep other rules intact
-                        val updatedText = replaceRuleDslBlock(
-                            fullText = state.ruleValue.value.text,
-                            ruleId = activeBuilderEditorState.ruleId,
-                            newRuleDsl = newDsl,
-                        )
-                        state.ruleValue.value = TextFieldValue(text = updatedText)
+                        builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
                     },
                     onConditionSelected = { conditionId ->
                         workbenchViewModel.dispatch(
@@ -417,11 +334,13 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     },
                     ruleTreeFiles = ruleTreeFiles,
                     onTreeRuleSelected = { relativePath, ruleId ->
+                        // The file load stays here: it is disk I/O against the editor's manifest state,
+                        // and it has to happen before the selection is parked as pending.
                         if (relativePath == state.selectedManifestRuleFile.value || relativePath == "current") {
-                            selectedBuilderRuleId = ruleId
+                            builderRules.select(ruleId = ruleId)
                         } else {
                             state.loadSingleManifestRuleFile(relativePath)
-                            pendingBuilderRuleId = ruleId
+                            builderRules.selectWhenParsed(ruleId = ruleId)
                         }
                     },
                     testContent = {
