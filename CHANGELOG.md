@@ -114,6 +114,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   date comparisons read as points in time rather than quantities (`gte` → *"is on or after"*, and
   *"at"* instead of *"on"* for a `date_time`, whose comparison keeps the time).
 
+- **`ValueExpressionRenderer`** (`ruleengine.dsl.ast`) — renders a parsed expression back to DSL-like
+  text, used to label traced conditions, to display them in the UI diagram views and to print the
+  rule-language line in an export. What it writes parses: a `BetweenLiteral` renders as
+  `between 1000 25000` rather than as a `1000..25000` range the DSL does not accept.
+
+- `DecisionNode.actual` — the value a condition actually found, alongside the `expected` it was
+  compared against. Omitted from the JSON on nodes that do not report one, so existing trace output
+  is unchanged for them.
+
+- **A new `ruleengine-model` module** holding the shared vocabulary — the field and action model and
+  `OperatorNames` — with **zero dependencies**, so a consumer that only needs to describe a schema
+  does not pull in the engine. `ruleengine-core` exposes it as an `api` dependency, so it arrives
+  transitively and an existing build needs no new coordinate. See the package move under *Changed*.
+
 - **`OperatorNames`** (`ruleengine.core.domain`) — every operator name the engine understands, in one
   place: the canonical names, the symbolic and legacy spellings, and the alias table
   `OperatorUtils.normalizeOperator` reads. The names are shared vocabulary between the parser, the
@@ -184,15 +198,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING: the field and action model moved into subpackages of `ruleengine.core.domain.dto`.**
-  `FieldSchema`, `FieldDefinition`, `FieldType` (with its `isStructure` / `isTemporal` extensions),
-  `FieldTypeCategories` and `FieldId` are now in `ruleengine.core.domain.dto.field`; `ActionSchema`,
-  `ActionDefinition` and `ActionArgType` are now in `ruleengine.core.domain.dto.action`.
-  `RuleMatch`, `RuleAction`, `EvaluationResult`, `OperatorId` and `NormalizerId` stay in
-  `ruleengine.core.domain.dto`. Only the package changed — every type, member and default value is
-  untouched, so updating an integration means adding `.field` or `.action` to the affected imports
-  (`import ruleengine.core.domain.dto.FieldSchema` becomes
-  `import ruleengine.core.domain.dto.field.FieldSchema`).
+- **BREAKING: the domain model moved out of `ruleengine.core.domain` into `…domain.dto` subpackages.**
+  Every type, member and default value is untouched — only the package changed, so updating an
+  integration is an import rewrite:
+
+  | Types | New package |
+  |---|---|
+  | `FieldSchema`, `FieldDefinition`, `FieldType` (with its `isStructure` / `isTemporal` extensions), `FieldTypeCategories`, `FieldId` | `ruleengine.core.domain.dto.field` |
+  | `ActionSchema`, `ActionDefinition`, `ActionArgType` | `ruleengine.core.domain.dto.action` |
+  | `RuleMatch`, `RuleAction`, `EvaluationResult`, `OperatorId`, `NormalizerId` | `ruleengine.core.domain.dto` |
+
+  So `import ruleengine.core.domain.FieldSchema` becomes
+  `import ruleengine.core.domain.dto.field.FieldSchema`. `ruleengine.core.domain` keeps the logic
+  that operates on the model — `FieldPathResolver`, `FieldPathResolution`, `TemporalFormat` and the
+  new `OperatorNames`.
+
+  The two files that previously held all of it, `FieldModels.kt` and `ActionSchema.kt`, declared
+  eleven and four types respectively, against the one-declaration-per-file rule the rest of the
+  codebase follows; the `dto` subpackage matches `ruleengine.schema.dto`,
+  `ruleengine.evaluator.context.dto` and `ruleengine.evaluator.trace.dto`, which were already laid
+  out this way.
 
 - Internal packages split so that no source directory holds more than eight files. `Compiler`,
   `Validator` and `ValidationResult` stay in `ruleengine.compiler` — the public entry points are
@@ -200,41 +225,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LiteralValidation`, `Suggestions`, `FieldPathMessages`) and `ruleengine.compiler.value`
   (`ValueExpressionCompiler`, `ValueExpressionValidator`). In the evaluator, the `ExpressionValue`
   hierarchy moved to `ruleengine.evaluator.compiled.value.result` and `CompiledPathSegment` to
-  `ruleengine.evaluator.compiled.value.path`.
+  `ruleengine.evaluator.compiled.value.path`. `ruleengine.dsl.ast` and
+  `ruleengine.evaluator.context.dto` deliberately stay flat: nearly every type in them is a direct
+  subclass of a sealed hierarchy, and Kotlin requires those to share a package with their parent.
 
 - `ruleengine-ui` reorganised so every feature package keeps its models and enums in a `model`
   subpackage (`ui.builder.model`, `ui.tester.model`, `ui.project.model`, …), with behaviour grouped
   by role beside it (`ui.workbench.areas`, `ui.builder.view`, `ui.diagrams.render`). UI-internal only.
-
-- `ruleengine.dsl.ast` and `ruleengine.evaluator.context.dto` deliberately stay flat: nearly every
-  type in them is a direct subclass of a sealed hierarchy, and Kotlin requires those to share a
-  package with their parent.
-
-- **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,
-  `FieldType` (with its `isStructure` / `isTemporal` extensions), `FieldId`, `OperatorId`, `NormalizerId`,
-  `ActionSchema`, `ActionDefinition`, `ActionArgType`, `RuleMatch`, `RuleAction` and `EvaluationResult` are
-  now declared in `ruleengine.core.domain.dto`, one top-level declaration per file. `ruleengine.core.domain`
-  keeps the logic that operates on them — `FieldPathResolver`, `FieldPathResolution`, `TemporalFormat` and
-  `DefaultActionSchema`. Only the package changed: every type, member and default value is untouched, so
-  updating an integration is a matter of adding `.dto` to the affected imports
-  (`import ruleengine.core.domain.FieldSchema` becomes `import ruleengine.core.domain.dto.FieldSchema`).
-  The two files that previously held all of it, `FieldModels.kt` and `ActionSchema.kt`, declared eleven and
-  four types respectively, against the one-declaration-per-file rule the rest of the codebase follows; the
-  `dto` subpackage matches `ruleengine.schema.dto`, `ruleengine.evaluator.context.dto` and
-  `ruleengine.evaluator.trace.dto`, which were already laid out this way.
 
 - `Compiler` internals, with no change in behaviour: the `compileDecimalCondition` /
   `compileIntegerCondition` pass-throughs are inlined into `compileCondition` next to the existing date
   branch, `compileFilterExpression` is private, the `when` over `FieldType` is exhaustive instead of ending
   in a catch-all `else`, and the four `@Suppress` annotations that covered the removed helper and the two
   wrappers are gone.
-
-- `DecisionNode.actual` — the value a condition actually found, alongside the `expected` it was
-  compared against. Omitted from the JSON on nodes that do not report one, so existing trace output
-  is unchanged for them.
-
-- `ValueExpressionRenderer` (`ruleengine.dsl.ast`) — renders a parsed expression back to DSL-like
-  text. Used to label traced conditions and to display them in the UI diagram view.
 
 - **BREAKING for `ruleengine-ui` consumers: `FieldUsage` moved to `ruleengine.export`.** The walk that
   answers *"which field paths does this rule read"* was declared in `ui.diagrams.model` but is not a
@@ -251,11 +254,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged: the aliases they listed are exactly the ones the canonical table already maps.
   `RuleAstToBuilderMapper` held a fifth copy and now normalises through the engine, translating only
   what the Builder genuinely displays differently (`gt` → `>`).
-
-- **`ValueExpressionRenderer` renders `between` as two literals, not a range.** A `BetweenLiteral`
-  was written `1000..25000`, which is not syntax the DSL accepts; it is now `between 1000 25000`, so
-  the rendered text is a condition that parses. Affects trace labels, the UI diagram views and the
-  exported rule-language line.
 
 - **The Rule Editor's action buttons moved onto their own row, under the mode tabs.** Sharing a row
   with the tabs made the two compete for width: the tabs are fixed, so the actions absorbed every
