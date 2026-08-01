@@ -13,43 +13,37 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.Res
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.app
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.painterResource
-import ruleengine.manifest.ManifestLoader
-import ruleengine.schema.ActionSchemaLoader
-import ruleengine.schema.FieldSchemaLoader
 import ui.BgSurface
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.components.StatusBadge
 import ui.components.ToolbarButton
-import ui.editor.rules.RuleEditorState
-import ui.editor.rules.StatusKind
-import ui.pickActionsFile
-import ui.pickManifestFile
-import ui.pickSchemaFile
-import ui.saveActionsToFile
-import ui.saveManifestToFile
-import ui.saveSchemaToFile
+import ui.project.ProjectFileKind
+import ui.project.ProjectWorkspace
 import ui.theme.ThemeController
 import ui.theme.ThemePersistence
-import java.nio.file.Path
 
-/** Top bar section: app brand, mode badge and Load Manifest action. */
+/**
+ * Top bar: app brand, then the project actions, then the two shared-file exports.
+ *
+ * The six independent load/save buttons that used to live here have collapsed into one project
+ * group. Loading a schema is no longer a toolbar action at all — it belongs next to the schema it
+ * replaces, in the Schema area, where the user can see what is linked.
+ */
 @Composable
-fun TopBarSection(
-    state: RuleEditorState,
-    scope: CoroutineScope,
-) {
+fun TopBarSection(workspace: ProjectWorkspace) {
+    val session by workspace.session
+    val isDirty = workspace.isDirty
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -64,74 +58,25 @@ fun TopBarSection(
             style = MaterialTheme.typography.h6.copy(fontWeight = FontWeight.SemiBold),
             color = TextPrimary,
         )
-        StatusBadge(
-            label = "WORKBENCH",
-            color = PrimaryBlue,
-        )
+        StatusBadge(label = "WORKBENCH", color = PrimaryBlue)
         Spacer(modifier = Modifier.weight(weight = 1f))
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            ToolbarButton(label = "New Project", onClick = workspace::newProject)
+            ToolbarButton(label = "Open Project…", onClick = workspace::openProject)
             ToolbarButton(
-                label = "Load Schema",
-                onClick = {
-                    scope.launch {
-                        val content = pickSchemaFile()
-                        if (content != null) {
-                            state.schemaText.value = content
-                            state.schemaFieldValue.value = TextFieldValue(text = content)
-                            state.parsedSchema.value = runCatching {
-                                FieldSchemaLoader.loadFromString(
-                                    content = content,
-                                    nameHint = "schema",
-                                )
-                            }.getOrNull()
-                            state.setStatus(msg = "Schema loaded", kind = StatusKind.SUCCESS)
-                        } else {
-                            state.setStatus(msg = "Schema load cancelled", kind = StatusKind.IDLE)
-                        }
-                    }
-                },
+                // The dot is the only place the toolbar can say "there is work not yet on disk".
+                label = if (isDirty) "Save Project •" else "Save Project",
+                onClick = { workspace.saveProject() },
+                primary = isDirty,
+                // A multi-entry manifest can only be written as a single-entry copy, so plain Save
+                // is refused rather than silently dropping the other entries.
+                enabled = isDirty && session?.isMultiEntry != true,
             )
-            ToolbarButton(
-                label = "Load Actions",
-                onClick = {
-                    scope.launch {
-                        val content = pickActionsFile()
-                        if (content != null) {
-                            state.actionSchemaText.value = content
-                            state.actionFieldValue.value = TextFieldValue(text = content)
-                            state.parsedActionSchema.value = runCatching {
-                                ActionSchemaLoader.loadFromString(content = content)
-                            }.getOrNull()
-                            state.setStatus(msg = "Actions loaded", kind = StatusKind.SUCCESS)
-                        } else {
-                            state.setStatus(msg = "Actions load cancelled", kind = StatusKind.IDLE)
-                        }
-                    }
-                },
-            )
-            ToolbarButton(
-                label = "Load Manifest",
-                onClick = {
-                    scope.launch {
-                        val m = pickManifestFile()
-                        if (m != null) {
-                            state.manifestText.value = m.first
-                            state.manifestBaseDir.value = Path.of(m.second).toAbsolutePath().normalize().toString()
-                            state.selectedManifestEntry.value = null
-                            state.parsedManifest.value = runCatching {
-                                ManifestLoader.loadFromString(content = state.manifestText.value)
-                            }.getOrNull()
-                            state.setStatus(msg = "Manifest loaded", kind = StatusKind.SUCCESS)
-                        } else {
-                            state.setStatus(msg = "Manifest load cancelled", kind = StatusKind.IDLE)
-                        }
-                    }
-                },
-            )
+            ToolbarButton(label = "Save Project As…", onClick = { workspace.saveProjectAs() })
         }
 
         Spacer(modifier = Modifier.width(width = 16.dp))
@@ -141,40 +86,12 @@ fun TopBarSection(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolbarButton(
-                label = "Save Schema",
-                onClick = {
-                    val content = state.schemaText.value
-                    if (content.isNotBlank()) {
-                        saveSchemaToFile(filename = "schema.yaml", content = content)
-                        state.setStatus(msg = "Schema saved", kind = StatusKind.SUCCESS)
-                    } else {
-                        state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
-                    }
-                },
+                label = "Save Schema As…",
+                onClick = { workspace.exportShared(kind = ProjectFileKind.SCHEMA) },
             )
             ToolbarButton(
-                label = "Save Actions",
-                onClick = {
-                    val content = state.actionSchemaText.value
-                    if (content.isNotBlank()) {
-                        saveActionsToFile(filename = "actions.yaml", content = content)
-                        state.setStatus(msg = "Actions saved", kind = StatusKind.SUCCESS)
-                    } else {
-                        state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
-                    }
-                },
-            )
-            ToolbarButton(
-                label = "Save Manifest",
-                onClick = {
-                    val content = state.manifestText.value
-                    if (content.isNotBlank()) {
-                        saveManifestToFile(filename = "manifest.yaml", content = content)
-                        state.setStatus(msg = "Manifest saved", kind = StatusKind.SUCCESS)
-                    } else {
-                        state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
-                    }
-                },
+                label = "Save Actions As…",
+                onClick = { workspace.exportShared(kind = ProjectFileKind.ACTIONS) },
             )
         }
 

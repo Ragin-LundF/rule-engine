@@ -1,9 +1,13 @@
 package ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -46,6 +50,10 @@ import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.manifest.ManifestYamlBridge
+import ui.project.LinkedFileHeader
+import ui.project.ProjectDialogHost
+import ui.project.ProjectFileKind
+import ui.project.ProjectWorkspace
 import ui.samples.SampleGalleryScreen
 import ui.samples.loadSample
 import ui.schema.FieldSchemaYamlBridge
@@ -83,7 +91,7 @@ import ui.workbench.toViewMode
 
 @Composable
 @Suppress("CyclomaticComplexMethod", "LongMethod")
-actual fun RuleEditor() {
+actual fun RuleEditor(closeController: AppCloseController) {
     val scope = rememberCoroutineScope()
 
     // Root workbench state (navigation, selection, panel tabs).
@@ -100,24 +108,28 @@ actual fun RuleEditor() {
     // Centralized state container for the editor content (text, parsed schema, diagnostics).
     val state = remember { RuleEditorState(scope = scope) }
 
+    // Owns the project on disk: open, new, save, and linking shared schema/action files.
+    val workspace = remember { ProjectWorkspace(state = state) }
+
+    DisposableEffect(key1 = closeController, key2 = workspace) {
+        closeController.onCloseRequested = workspace::requestClose
+        onDispose { closeController.onCloseRequested = null }
+    }
+
+    val closeApproved by workspace.closeRequested
+    LaunchedEffect(key1 = closeApproved) {
+        if (closeApproved) closeController.confirmClose()
+    }
+
     // Keep the legacy editor view mode in sync with the workbench rule mode.
     LaunchedEffect(key1 = workbenchState.ruleMode) {
         state.viewMode.value = workbenchState.ruleMode.toViewMode()
     }
 
-    // ── Auto-load first manifest entry when manifest is newly set ─────────────
-    LaunchedEffect(key1 = state.parsedManifest.value) {
-        val manifest = state.parsedManifest.value ?: run {
-            state.selectedManifestEntry.value = null
-            return@LaunchedEffect
-        }
-        val first = manifest.entries.firstOrNull() ?: return@LaunchedEffect
-        // Only auto-load when no entry is already selected (prevents unwanted override
-        // when the same manifest is re-parsed after a text edit).
-        if (state.selectedManifestEntry.value == null) {
-            state.loadManifestEntry(entry = first)
-        }
-    }
+    // Opening a project is an explicit ProjectLoader call, not a side effect of the parsed manifest
+    // changing: keying an effect on a data class meant re-opening an equal-but-different manifest
+    // never fired, and the "only when nothing is selected" guard meant the second project of a
+    // session silently kept the first one's rules.
 
     // ── Track word + DSL context on every cursor move ─────────────────────────
     LaunchedEffect(key1 = state.ruleValue.value.text, key2 = state.ruleValue.value.selection.start) {
@@ -388,8 +400,10 @@ actual fun RuleEditor() {
         }
     }
 
+    ProjectDialogHost(workspace = workspace)
+
     RuleWorkbenchScreen(
-        topBar = { TopBarSection(state = state, scope = scope) },
+        topBar = { TopBarSection(workspace = workspace) },
         iconRail = {
             AppAreaIconRail(
                 selectedArea = workbenchState.appArea,
@@ -515,7 +529,16 @@ actual fun RuleEditor() {
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                AppArea.SCHEMA -> SchemaAreaScreen(
+                AppArea.SCHEMA -> Column(modifier = Modifier.fillMaxSize()) {
+                    LinkedFileHeader(
+                        label = "SCHEMA FILE",
+                        linkedPath = workspace.session.value?.schemaLink,
+                        isMissing = workspace.session.value?.missing(kind = ProjectFileKind.SCHEMA) != null,
+                        onLink = workspace::linkSchema,
+                        onUnlink = { workspace.unlink(kind = ProjectFileKind.SCHEMA) },
+                    )
+                    Spacer(modifier = Modifier.height(height = 10.dp))
+                    SchemaAreaScreen(
                     schemaYaml = state.schemaText.value,
                     fromYaml = { yaml ->
                         FieldSchemaYamlBridge.fromYaml(yaml = yaml)
@@ -566,9 +589,19 @@ actual fun RuleEditor() {
                             },
                         )
                     },
-                )
+                    )
+                }
 
-                AppArea.ACTIONS -> ActionsAreaScreen(
+                AppArea.ACTIONS -> Column(modifier = Modifier.fillMaxSize()) {
+                    LinkedFileHeader(
+                        label = "ACTIONS FILE",
+                        linkedPath = workspace.session.value?.actionsLink,
+                        isMissing = workspace.session.value?.missing(kind = ProjectFileKind.ACTIONS) != null,
+                        onLink = workspace::linkActions,
+                        onUnlink = { workspace.unlink(kind = ProjectFileKind.ACTIONS) },
+                    )
+                    Spacer(modifier = Modifier.height(height = 10.dp))
+                    ActionsAreaScreen(
                     actionsYaml = state.actionSchemaText.value,
                     fromYaml = { yaml ->
                         ActionSchemaYamlBridge.fromYaml(yaml = yaml)
@@ -610,7 +643,8 @@ actual fun RuleEditor() {
                             },
                         )
                     },
-                )
+                    )
+                }
 
                 AppArea.MANIFEST -> ManifestAreaScreen(
                     manifestYaml = state.manifestText.value,
@@ -699,7 +733,7 @@ actual fun RuleEditor() {
         },
         bottomBar = {
             DiagnosticsSection(state = state)
-            StatusBarSection(state = state)
+            StatusBarSection(state = state, workspace = workspace)
         },
         rightPanelWidth = if (state.rightPanelExpanded.value) 320.dp else 56.dp,
     )

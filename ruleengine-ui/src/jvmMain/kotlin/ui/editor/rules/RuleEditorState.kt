@@ -10,12 +10,9 @@ import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
-import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
-import ruleengine.schema.ActionSchemaLoader
-import ruleengine.schema.FieldSchemaLoader
 import ui.DslCursorContext
 import ui.DslSection
 import ui.autocompletion.CompletionItem
@@ -120,6 +117,45 @@ class RuleEditorState(
         statusKind.value = kind
     }
 
+    /**
+     * Clears every buffer that belongs to a loaded project.
+     *
+     * Opening a project has to start from nothing, not from whatever the previous one left behind:
+     * an entry without a `schema:` key must show an empty schema rather than inheriting the last
+     * project's, and a stale [selectedManifestEntry] is what used to make a second load do nothing
+     * at all. Panel layout (split fraction, expanded panels, theme-ish preferences) is deliberately
+     * left alone — that is the user's workspace, not the project's content.
+     */
+    fun reset() {
+        schemaText.value = ""
+        schemaFieldValue.value = TextFieldValue(text = "")
+        parsedSchema.value = null
+
+        actionSchemaText.value = ""
+        actionFieldValue.value = TextFieldValue(text = "")
+        parsedActionSchema.value = null
+
+        ruleValue.value = TextFieldValue(text = "")
+        allRulesText.value = ""
+        showAllRules.value = false
+        entryRuleSources.value = emptyList()
+
+        manifestText.value = ""
+        manifestFieldValue.value = TextFieldValue(text = "")
+        manifestBaseDir.value = null
+        parsedManifest.value = null
+        selectedManifestEntry.value = null
+        selectedManifestRuleFile.value = null
+
+        diagnosticsList.value = emptyList()
+        diagnosticsText.value = ""
+
+        showAutoComplete.value = false
+        autoCompleteWord.value = ""
+        autoCompleteIndex.value = 0
+        autoCompleteWordStart.value = 0
+    }
+
     /** Accept an autocomplete suggestion and insert it at the current cursor position. */
     fun acceptSuggestion(item: CompletionItem) {
         val cursor = ruleValue.value.selection.start
@@ -129,105 +165,6 @@ class RuleEditorState(
         val newPos = autoCompleteWordStart.value + item.insertText.length
         ruleValue.value = TextFieldValue(text = newText, selection = TextRange(index = newPos))
         showAutoComplete.value = false
-    }
-
-    /** Load all files referenced by a manifest entry into the editor state. */
-    fun loadManifestEntry(entry: ManifestEntry) {
-        selectedManifestEntry.value = entry.id
-        selectedManifestRuleFile.value = null
-        // Belongs to the entry being left; keeping it would draw the previous entry's file bands.
-        entryRuleSources.value = emptyList()
-        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
-            reportManifestPathIssue(message = "Manifest base directory is not set")
-            return
-        }
-
-        val validationMessage = validateManifestEntryPaths(baseDir = base, entry = entry)
-        if (validationMessage != null) {
-            reportManifestPathIssue(message = validationMessage)
-            return
-        }
-
-        if (!loadManifestSchema(baseDir = base, entry = entry)) {
-            return
-        }
-        if (!loadManifestActions(baseDir = base, entry = entry)) {
-            return
-        }
-        val loadedRules = loadManifestRules(baseDir = base, entry = entry) ?: return
-
-        diagnosticsText.value = ""
-        diagnosticsList.value = emptyList()
-        setStatus(
-            msg = "Loaded '${entry.id}'" +
-                    (if (entry.schema != null) ", schema" else "") +
-                    (if (entry.actions != null) ", actions" else "") +
-                    (if (entry.rules.isNotEmpty()) ", ${entry.rules.size} rule file(s) — showing first" else ""),
-            kind = StatusKind.SUCCESS,
-        )
-    }
-
-    private fun loadManifestSchema(baseDir: Path, entry: ManifestEntry): Boolean {
-        val relativePath = entry.schema ?: return true
-        return runCatching {
-            val path = resolveManifestPathOrThrow(
-                baseDir = baseDir,
-                relativePath = relativePath,
-                label = "schema",
-            )
-            val content = Files.readString(path)
-            schemaText.value = content
-            schemaFieldValue.value = TextFieldValue(text = content)
-            parsedSchema.value = runCatching {
-                FieldSchemaLoader.loadFromString(
-                    content = content,
-                    nameHint = path.fileName.toString(),
-                )
-            }.getOrNull()
-            true
-        }.getOrElse { ex ->
-            reportManifestPathIssue(message = "Failed to load manifest schema: ${ex.message}")
-            false
-        }
-    }
-
-    private fun loadManifestActions(baseDir: Path, entry: ManifestEntry): Boolean {
-        val relativePath = entry.actions ?: return true
-        return runCatching {
-            val path = resolveManifestPathOrThrow(
-                baseDir = baseDir,
-                relativePath = relativePath,
-                label = "actions",
-            )
-            val content = Files.readString(path)
-            actionSchemaText.value = content
-            actionFieldValue.value = TextFieldValue(text = content)
-            parsedActionSchema.value = runCatching {
-                ActionSchemaLoader.loadFromString(content = content)
-            }.getOrNull()
-            true
-        }.getOrElse { ex ->
-            reportManifestPathIssue(message = "Failed to load manifest actions: ${ex.message}")
-            false
-        }
-    }
-
-    private fun loadManifestRules(baseDir: Path, entry: ManifestEntry): Int? {
-        if (entry.rules.isEmpty()) return 0
-        val firstRelPath = entry.rules.first()
-        showAllRules.value = false
-        return runCatching {
-            val path = resolveManifestPathOrThrow(baseDir = baseDir, relativePath = firstRelPath, label = "rule")
-            val content = Files.readString(path)
-            ruleValue.value = TextFieldValue(text = content)
-            selectedManifestRuleFile.value = firstRelPath
-            diagnosticsText.value = ""
-            diagnosticsList.value = emptyList()
-            1
-        }.getOrElse { ex ->
-            reportManifestPathIssue(message = "Failed to load manifest rule: ${ex.message}")
-            null
-        }
     }
 
     /**
@@ -335,34 +272,6 @@ class RuleEditorState(
             reportManifestPathIssue(message = "Failed to save rule file: ${ex.message}")
             false
         }
-    }
-
-    private fun validateManifestEntryPaths(baseDir: Path, entry: ManifestEntry): String? {
-        entry.schema?.let {
-            val rejected = ManifestPathResolver.resolveWithinBase(
-                baseDir = baseDir,
-                relativePath = it,
-                label = "schema",
-            )
-            if (rejected is ManifestPathResolution.Rejected) return rejected.message
-        }
-        entry.actions?.let {
-            val rejected = ManifestPathResolver.resolveWithinBase(
-                baseDir = baseDir,
-                relativePath = it,
-                label = "actions",
-            )
-            if (rejected is ManifestPathResolution.Rejected) return rejected.message
-        }
-        for (relativePath in entry.rules) {
-            val rejected = ManifestPathResolver.resolveWithinBase(
-                baseDir = baseDir,
-                relativePath = relativePath,
-                label = "rule",
-            )
-            if (rejected is ManifestPathResolution.Rejected) return rejected.message
-        }
-        return null
     }
 
     private fun resolveManifestPathOrThrow(

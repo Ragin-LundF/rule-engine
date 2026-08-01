@@ -14,5 +14,5 @@ expect fun saveManifestToFile(filename: String, content: String)
 expect fun copyToClipboard(text: String)
 
 @Composable
-expect fun RuleEditor()
+expect fun RuleEditor(closeController: AppCloseController = AppCloseController())
 

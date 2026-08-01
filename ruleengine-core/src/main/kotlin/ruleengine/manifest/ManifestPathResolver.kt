@@ -19,4 +19,16 @@ object ManifestPathResolver {
             )
         }
     }
+
+    /**
+     * Resolves a path that is allowed to leave [baseDir].
+     *
+     * Schema and action files may be shared between projects, so a manifest referring to
+     * `../shared/schemas/common.yaml` is legitimate and must not be rejected. Rule files stay
+     * confined to the project and keep using [resolveWithinBase] — the escape is a deliberate
+     * exception for the two file kinds a user can link, not a general relaxation.
+     */
+    fun resolveAllowingEscape(baseDir: Path, relativePath: String): Path {
+        return baseDir.toAbsolutePath().normalize().resolve(relativePath).normalize()
+    }
 }

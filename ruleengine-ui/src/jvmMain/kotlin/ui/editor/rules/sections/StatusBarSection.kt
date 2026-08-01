@@ -26,18 +26,26 @@ import ui.AccentRed
 import ui.BgElevated
 import ui.BorderColor
 import ui.TextMuted
-import ui.TextPrimary
 import ui.TextSecondary
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
+import ui.project.ProjectPaths
+import ui.project.ProjectWorkspace
 
-/** Status bar: shows the current status message with a colour-coded indicator dot and schema info. */
+/**
+ * Status bar: the current message with a colour-coded dot, plus where the project lives.
+ *
+ * The project line matters more than it sounds: with several projects open over a session, "which
+ * one am I editing and is it saved" is otherwise only answerable by opening a file dialog.
+ */
 @Suppress("FunctionNaming")
 @Composable
-fun StatusBarSection(state: RuleEditorState) {
+fun StatusBarSection(state: RuleEditorState, workspace: ProjectWorkspace) {
     val statusKind by state.statusKind
     val status by state.status
     val parsedSchema by state.parsedSchema
+    val session by workspace.session
+    val isDirty = workspace.isDirty
 
     Spacer(modifier = Modifier.height(height = 8.dp))
 
@@ -76,6 +84,20 @@ fun StatusBarSection(state: RuleEditorState) {
             color = messageColor,
         )
         Spacer(modifier = Modifier.weight(weight = 1f))
+        Text(
+            text = session?.let { project ->
+                buildString {
+                    if (isDirty) append("• ")
+                    append(project.displayName)
+                    append(" — ")
+                    append(project.root)
+                    append(" • ${project.ruleFiles.size} rule file(s)")
+                    if (project.schemaLink?.let(ProjectPaths::isExternal) == true) append(" • shared schema")
+                }
+            } ?: "Unsaved project — never saved",
+            style = MaterialTheme.typography.caption,
+            color = if (isDirty) AccentOrange else TextMuted,
+        )
         parsedSchema?.let {
             Text(
                 text = "Schema: ${it.fields.size} fields",

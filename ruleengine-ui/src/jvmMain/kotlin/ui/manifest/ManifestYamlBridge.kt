@@ -50,19 +50,43 @@ object ManifestYamlBridge {
             },
         )
         return buildString {
-            if (!manifest.name.isNullOrBlank()) {
-                appendLine("name: ${manifest.name}")
+            manifest.name?.takeIf { it.isNotBlank() }?.let { name ->
+                appendLine("name: ${scalar(value = name)}")
             }
             appendLine("entries:")
             manifest.entries.forEach { entry ->
-                appendLine("  - id: ${entry.id}")
-                entry.schema?.let { schema -> appendLine("    schema: $schema") }
-                entry.actions?.let { actions -> appendLine("    actions: $actions") }
+                appendLine("  - id: ${scalar(value = entry.id)}")
+                entry.schema?.let { schema -> appendLine("    schema: ${scalar(value = schema)}") }
+                entry.actions?.let { actions -> appendLine("    actions: ${scalar(value = actions)}") }
                 if (entry.rules.isNotEmpty()) {
                     appendLine("    rules:")
-                    entry.rules.forEach { rule -> appendLine("      - $rule") }
+                    entry.rules.forEach { rule -> appendLine("      - ${scalar(value = rule)}") }
                 }
             }
         }
     }
+
+    /**
+     * Emits [value] as a YAML scalar, quoting it when a plain one would not survive a round trip.
+     *
+     * Paths reach here from a file dialog, so they can hold anything a filesystem allows: a comment
+     * marker, a colon, a leading indicator character. Writing those unquoted produces a manifest the
+     * loader cannot read back — a save that looks like it worked and breaks on the next open.
+     */
+    private fun scalar(value: String): String {
+        val needsQuotes = value.isEmpty() ||
+                value.first().isWhitespace() ||
+                value.last().isWhitespace() ||
+                value.first() in INDICATOR_CHARS ||
+                value.contains(other = ": ") ||
+                value.contains(other = " #") ||
+                value.endsWith(suffix = ":")
+
+        if (!needsQuotes) return value
+        return "\"" + value.replace(oldValue = "\\", newValue = "\\\\").replace(oldValue = "\"", newValue = "\\\"") + "\""
+    }
+
+    private val INDICATOR_CHARS: Set<Char> = setOf(
+        '-', '?', ':', ',', '[', ']', '{', '}', '#', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`',
+    )
 }

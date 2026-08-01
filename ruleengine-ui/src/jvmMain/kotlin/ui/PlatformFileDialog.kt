@@ -9,6 +9,7 @@ import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
 import java.io.File
 import java.io.FilenameFilter
+import java.nio.file.Path
 import org.jetbrains.skia.Image as SkiaImage
 
 // ── Global last-used directory (persists for the whole app session) ───────────
@@ -86,6 +87,37 @@ actual fun saveManifestToFile(filename: String, content: String) {
     val file = nativeSave(title = "Save Manifest YAML", suggestedName = filename) ?: return
     file.writeText(content)
 }
+
+// ── Project dialogs ───────────────────────────────────────────────────────────
+//
+// These return the chosen Path and read or write nothing themselves: a project touches several
+// files, and the loader and saver own that so a half-written project can be reported as such.
+
+/** Picks the manifest of an existing project. Its parent directory is the project root. */
+fun pickProjectManifestPath(): Path? =
+    nativeOpen(title = "Open Project Manifest", filter = yamlFilter)?.toPath()
+
+/**
+ * Asks where to put the manifest of a project that has never been saved.
+ *
+ * The user chooses the location and may rename the file; whichever name they pick becomes the
+ * project's manifest name. The parent directory becomes the project root, and `rules/` and
+ * `schemas/` are created inside it by the saver without asking.
+ */
+fun pickProjectManifestSavePath(suggestedName: String = "manifest.yaml"): Path? =
+    nativeSave(title = "Save Project Manifest", suggestedName = suggestedName)?.toPath()
+
+/** Picks a schema file to link. The path matters, not just the content — it goes into the manifest. */
+fun pickSchemaFilePath(): Path? =
+    nativeOpen(title = "Link Schema YAML", filter = yamlFilter)?.toPath()
+
+/** As [pickSchemaFilePath], for the actions file. */
+fun pickActionsFilePath(): Path? =
+    nativeOpen(title = "Link Actions YAML", filter = yamlFilter)?.toPath()
+
+/** Picks where to export a schema or actions file so several projects can share it. */
+fun pickSharedFileSavePath(title: String, suggestedName: String): Path? =
+    nativeSave(title = title, suggestedName = suggestedName)?.toPath()
 
 actual fun copyToClipboard(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)

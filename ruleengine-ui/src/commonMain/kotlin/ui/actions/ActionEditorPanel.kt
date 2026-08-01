@@ -70,19 +70,29 @@ fun ActionEditorPanel(
     var yamlText by remember { mutableStateOf(value = yaml) }
     var yamlError by remember { mutableStateOf<String?>(value = null) }
 
-    // External YAML changes (e.g. manifest load) should pull into the local model.
+    /**
+     * The model as it was last read from YAML — see [ui.schema.SchemaEditorPanel] for why.
+     *
+     * Regenerating YAML from the model drops the author's comments and formatting, so merely opening
+     * this tab must not count as an edit; otherwise the next project save rewrites the file.
+     */
+    var loadedState by remember { mutableStateOf(value = editorState) }
+
+    // External YAML changes (e.g. project load) should pull into the local model.
     LaunchedEffect(key1 = yaml) {
         if (yaml != yamlText) {
             yamlText = yaml
             editorState = fromYaml(yaml)
+            loadedState = editorState
             yamlError = null
         }
     }
 
-    // Visual/editor changes push to YAML only when the model is valid.
+    // Visual/editor changes push to YAML only when the model is valid and actually different.
     LaunchedEffect(key1 = editorState, key2 = mode) {
         if (mode == ActionMode.YAML) return@LaunchedEffect
         if (editorState.hasValidationIssues()) return@LaunchedEffect
+        if (editorState == loadedState) return@LaunchedEffect
         val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
         if (generated != yamlText) {
             yamlText = generated

@@ -58,7 +58,6 @@ import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.sections.MainEditorContentSection
 import ui.pickRuleFile
 import ui.saveDiagramAsPng
-import ui.saveRuleToFile
 
 @Suppress("FunctionNaming")
 @Composable
@@ -343,19 +342,9 @@ private fun CodeModeActions(
                 }
             },
         )
-        ToolbarButton(
-            label = "Save Rule",
-            onClick = {
-                if (ruleValue.text.isNotBlank()) {
-                    if (!state.saveCurrentManifestRuleFile()) {
-                        saveRuleToFile(filename = "rule.rule", content = ruleValue.text)
-                        state.setStatus(msg = "Rule saved", kind = StatusKind.SUCCESS)
-                    }
-                } else {
-                    state.setStatus(msg = "Nothing to save", kind = StatusKind.IDLE)
-                }
-            },
-        )
+        // No "Save Rule" here: rule files are written by Save Project along with the manifest that
+        // indexes them. A separate write also went behind the project's back, leaving it convinced
+        // the file had been changed by someone else the next time it saved.
         ToolbarButton(
             label = "Copy Rule",
             onClick = {

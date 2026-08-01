@@ -73,19 +73,31 @@ fun SchemaEditorPanel(
     var yamlText by remember { mutableStateOf(value = yaml) }
     var yamlError by remember { mutableStateOf<String?>(value = null) }
 
-    // External YAML changes (e.g. manifest load) should pull into the local model.
+    /**
+     * The model as it was last read from YAML.
+     *
+     * Regenerating YAML from the model is lossy — comments, blank lines and quoting style are the
+     * author's, and the serializer does not keep them. So the panel must be able to tell "the user
+     * changed a field" from "the panel merely parsed the file", and only push in the first case.
+     * Without it, simply opening the schema tab rewrites the file the next time the project is saved.
+     */
+    var loadedState by remember { mutableStateOf(value = editorState) }
+
+    // External YAML changes (e.g. project load) should pull into the local model.
     LaunchedEffect(key1 = yaml) {
         if (yaml != yamlText) {
             yamlText = yaml
             editorState = fromYaml(yaml)
+            loadedState = editorState
             yamlError = null
         }
     }
 
-    // Visual/editor changes push to YAML only when the model is valid.
+    // Visual/editor changes push to YAML only when the model is valid and actually different.
     LaunchedEffect(key1 = editorState, key2 = mode) {
         if (mode == SchemaMode.YAML) return@LaunchedEffect
         if (editorState.hasValidationIssues()) return@LaunchedEffect
+        if (editorState == loadedState) return@LaunchedEffect
         val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
         if (generated != yamlText) {
             yamlText = generated
