@@ -61,7 +61,9 @@ object ManifestYamlBridge {
             manifest.entries.forEach { entry ->
                 appendLine("  - id: ${YamlScalars.quoteIfNeeded(value = entry.id)}")
                 entry.schema?.let { schema -> appendLine("    schema: ${YamlScalars.quoteIfNeeded(value = schema)}") }
-                entry.actions?.let { actions -> appendLine("    actions: ${YamlScalars.quoteIfNeeded(value = actions)}") }
+                entry.actions?.let { actions ->
+                    appendLine("    actions: ${YamlScalars.quoteIfNeeded(value = actions)}")
+                }
                 if (entry.rules.isNotEmpty()) {
                     appendLine("    rules:")
                     entry.rules.forEach { rule -> appendLine("      - ${YamlScalars.quoteIfNeeded(value = rule)}") }

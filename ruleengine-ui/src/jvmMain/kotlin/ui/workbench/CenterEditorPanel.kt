@@ -216,7 +216,9 @@ fun CenterEditorPanel(
                     )
                 }
 
-                ui.editor.rules.ViewMode.CODE, ui.editor.rules.ViewMode.DIAGRAM -> Column(modifier = Modifier.fillMaxSize()) {
+                ui.editor.rules.ViewMode.CODE,
+                ui.editor.rules.ViewMode.DIAGRAM,
+                -> Column(modifier = Modifier.fillMaxSize()) {
                     MainEditorContentSection(
                         state = state,
                         diagramGraphicsLayer = diagramGraphicsLayer,

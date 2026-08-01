@@ -149,7 +149,10 @@ class ProjectLoader(private val dirtyState: ProjectDirtyState) {
         state.showAllRules.value = false
         entry.ruleFiles.firstOrNull { it in loadedPaths }?.let { first ->
             state.loadSingleManifestRuleFile(relativePath = first)
-            dirtyState.markClean(key = ProjectDirtyState.ruleKey(relativePath = first), content = state.ruleValue.value.text)
+            dirtyState.markClean(
+                key = ProjectDirtyState.ruleKey(relativePath = first),
+                content = state.ruleValue.value.text,
+            )
         }
 
         return entry.ruleFiles.filterNot { it in loadedPaths }.map { relativePath ->

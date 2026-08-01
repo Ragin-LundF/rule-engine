@@ -67,7 +67,9 @@ class RuleWorkbenchViewModelTest {
 
     @Test
     fun `SelectInspectorItem with Condition does not set field or action selection`() = runModelTest {
-        viewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = InspectorItem.Condition(conditionId = "c1")))
+        viewModel.dispatch(
+            action = WorkbenchAction.SelectInspectorItem(item = InspectorItem.Condition(conditionId = "c1")),
+        )
 
         val state = viewModel.state.value
         assertEquals(expected = InspectorItem.Condition(conditionId = "c1"), actual = state.selectedInspectorItem)

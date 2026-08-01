@@ -1,6 +1,13 @@
 # Overwrites for Detekt
 # Example for most configs: https://github.com/detekt/detekt/blob/main/config/detekt/detekt.yml
 # Docs: https://detekt.dev/docs/intro
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by framework convention — Compose's own tooling and every code
+    # sample name them that way, so this is the rule being configured for the framework rather than
+    # relaxed. Without it the UI module reports one finding per composable.
+    ignoreAnnotated: [ "Composable" ]
+
 style:
   # using 5 instead of 2
   ReturnCount:
@@ -9,6 +16,9 @@ style:
     max: 5
   MagicNumber:
     ignoreAnnotation: true
+    # dp/sp sizes and weights are the literal content of a layout; naming each one moves the value
+    # away from the only place it means anything.
+    ignoreAnnotated: [ "Composable" ]
   ForbiddenComment:
     active: false
 

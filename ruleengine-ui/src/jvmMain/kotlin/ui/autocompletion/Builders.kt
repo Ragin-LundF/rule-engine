@@ -126,13 +126,48 @@ private fun buildThenCompletions(
 
 private fun buildAggregateFunctionCompletions(): List<CompletionItem> {
     return listOf(
-        CompletionItem(label = "count(...)", insertText = "count(transactions)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "sum(...)", insertText = "sum(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "subtract(...)", insertText = "subtract(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "avg(...)", insertText = "avg(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "median(...)", insertText = "median(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "max(...)", insertText = "max(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
-        CompletionItem(label = "min(...)", insertText = "min(transactions.amount)", kind = CompletionKind.OPERATOR, hint = "aggregate"),
+        CompletionItem(
+            label = "count(...)",
+            insertText = "count(transactions)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "sum(...)",
+            insertText = "sum(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "subtract(...)",
+            insertText = "subtract(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "avg(...)",
+            insertText = "avg(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "median(...)",
+            insertText = "median(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "max(...)",
+            insertText = "max(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
+        CompletionItem(
+            label = "min(...)",
+            insertText = "min(transactions.amount)",
+            kind = CompletionKind.OPERATOR,
+            hint = "aggregate",
+        ),
     )
 }
 

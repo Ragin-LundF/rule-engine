@@ -53,16 +53,7 @@ fun SchemaAreaContent(
             toYaml = { editorState ->
                 FieldSchemaYamlBridge.toYaml(state = editorState)
             },
-            onSchemaYamlChange = { newYaml ->
-                state.schemaText.value = newYaml
-                state.schemaFieldValue.value = TextFieldValue(text = newYaml)
-                state.parsedSchema.value = runCatching {
-                    FieldSchemaLoader.loadFromString(
-                        content = newYaml,
-                        nameHint = "schema",
-                    )
-                }.getOrNull()
-            },
+            onSchemaYamlChange = { newYaml -> state.applySchemaYaml(yaml = newYaml) },
             modifier = Modifier.fillMaxSize(),
             // The same field-flow diagram the rule editor shows, filling the "Usages" tab
             // that has been a placeholder: here the schema is the subject, so the fields
@@ -98,4 +89,18 @@ fun SchemaAreaContent(
             },
         )
     }
+}
+
+/**
+ * Applies edited schema YAML: the text, the editor's own field value, and the re-parse.
+ *
+ * All three, because the table view, the code editor and the rule validator each read a different
+ * one — writing only the text leaves the other two showing the previous schema.
+ */
+internal fun RuleEditorState.applySchemaYaml(yaml: String) {
+    schemaText.value = yaml
+    schemaFieldValue.value = TextFieldValue(text = yaml)
+    parsedSchema.value = runCatching {
+        FieldSchemaLoader.loadFromString(content = yaml, nameHint = "schema")
+    }.getOrNull()
 }

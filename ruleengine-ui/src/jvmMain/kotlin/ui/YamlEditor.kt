@@ -279,7 +279,6 @@ fun YamlEditor(
                 suggestions   = filteredSuggestions,
                 selectedIndex = autoCompleteIndex,
                 onSelect      = { acceptSuggestion(it) },
-                onDismiss     = { showAutoComplete = false },
             )
         }
     }

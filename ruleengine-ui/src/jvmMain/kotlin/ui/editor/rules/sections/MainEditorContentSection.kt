@@ -379,7 +379,6 @@ fun ColumnScope.MainEditorContentSection(
                     suggestions = filteredSuggestions,
                     selectedIndex = autoCompleteIndex,
                     onSelect = { state.acceptSuggestion(item = it) },
-                    onDismiss = { showAutoComplete = false },
                 )
             }
         }

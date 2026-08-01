@@ -39,7 +39,9 @@ class ProjectDirtyStateTest {
         val dirtyState = ProjectDirtyState()
         dirtyState.markClean(key = ProjectDirtyState.ruleKey(relativePath = "rules/a.rule"), content = "a")
 
-        assertFalse(actual = dirtyState.isDirty(key = ProjectDirtyState.ruleKey(relativePath = "rules/a.rule"), content = "a"))
-        assertTrue(actual = dirtyState.isDirty(key = ProjectDirtyState.ruleKey(relativePath = "rules/b.rule"), content = "a"))
+        val keyA = ProjectDirtyState.ruleKey(relativePath = "rules/a.rule")
+        val keyB = ProjectDirtyState.ruleKey(relativePath = "rules/b.rule")
+        assertFalse(actual = dirtyState.isDirty(key = keyA, content = "a"))
+        assertTrue(actual = dirtyState.isDirty(key = keyB, content = "a"))
     }
 }

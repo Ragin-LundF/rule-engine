@@ -13,17 +13,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ui.builder.BuilderRule
 import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
-import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.RuleValidationOutcome
-import ui.editor.rules.RuleValidationRunner
-import ui.editor.rules.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
@@ -33,7 +28,6 @@ import ui.settings.SettingsController
 import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
 import ui.tester.RuleTestController
-import ui.util.Words
 import ui.workbench.ActionsAreaContent
 import ui.workbench.AppAreaIconRail
 import ui.workbench.ExpandedDiagramWindow
@@ -58,8 +52,13 @@ import ui.workbench.uiDiagnosticsFrom
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
+// Down from 925 lines to ~209: the effects, the derivations, every area's content and both panels
+// now live in their own files. What is left is the screen's wiring — the state it owns, the
+// derivations that feed the slots, and one call filling those slots — and it does not compress
+// further without hiding the layout behind indirection that makes it harder to read, not easier.
+// `CyclomaticComplexMethod` was suppressed here too and is no longer needed.
+@Suppress("LongMethod")
 @Composable
-@Suppress("CyclomaticComplexMethod", "LongMethod")
 actual fun RuleEditor(closeController: AppCloseController) {
     val scope = rememberCoroutineScope()
 
@@ -95,65 +94,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
     // never fired, and the "only when nothing is selected" guard meant the second project of a
     // session silently kept the first one's rules.
 
-    // ── Track word + DSL context on every cursor move ─────────────────────────
-    LaunchedEffect(key1 = state.ruleValue.value.text, key2 = state.ruleValue.value.selection.start) {
-        val cursor = state.ruleValue.value.selection.start
-        val (wordStart, word) = Words.currentWord(text = state.ruleValue.value.text, cursorPos = cursor)
-        state.autoCompleteWordStart.value = wordStart
-        state.autoCompleteWord.value = word
-        state.autoCompleteIndex.value = 0
-
-        val ctx = analyzeDslContext(
-            text = state.ruleValue.value.text,
-            cursorPos = cursor,
-            schema = state.parsedSchema.value,
-        )
-        state.dslContext.value = ctx
-
-        // Never offered on its own. Once open it stays anchored to the word it was opened for, so
-        // typing narrows it; it closes only when the caret leaves that word.
-        if (state.showAutoComplete.value && !CodeEditing.isAnchorLive(
-                text = state.ruleValue.value.text,
-                cursor = cursor,
-                anchor = state.autoCompleteAnchor.value,
-            )
-        ) {
-            state.showAutoComplete.value = false
-        }
-    }
-
-    // ── Debounced auto-validation ──────────────────────────────────────────────
-    LaunchedEffect(key1 = state.ruleValue.value.text) {
-        if (state.ruleValue.value.text.isBlank()) {
-            state.diagnosticsList.value = emptyList()
-            state.diagnosticsText.value = ""
-            return@LaunchedEffect
-        }
-        delay(timeMillis = 700)
-        // The guard stays a return from the effect, not from a lambda: with no schema there is
-        // nothing to validate against and the previous diagnostics must be left as they are.
-        val schema = state.parsedSchema.value ?: return@LaunchedEffect
-
-        when (
-            val outcome = RuleValidationRunner.run(
-                ruleText = state.ruleValue.value.text,
-                schema = schema,
-                actions = state.parsedActionSchema.value,
-            )
-        ) {
-            is RuleValidationOutcome.Completed -> {
-                state.diagnosticsList.value = outcome.diagnostics
-                state.diagnosticsText.value = if (outcome.isValid) "No issues found" else ""
-                state.setStatus(
-                    msg = if (outcome.isValid) "✓ Validation passed" else "✗ ${outcome.diagnostics.size} issue(s)",
-                    kind = if (outcome.isValid) StatusKind.SUCCESS else StatusKind.ERROR,
-                )
-            }
-            // Deliberately silent: this pass runs while the author is still typing, so a parse
-            // failure is the normal state of half-written text, not something to report.
-            is RuleValidationOutcome.Threw -> Unit
-        }
-    }
+    RuleEditorTextEffects(state = state)
 
     // ── Test panel state ──────────────────────────────────────────────────────
     // Created by remember with no keys, so the controller and its caret-visible run state live for
@@ -199,7 +140,6 @@ actual fun RuleEditor(closeController: AppCloseController) {
         )
     }
     val builderStateMap by builderRules.stateMap
-    val selectedBuilderRuleId by builderRules.selectedId
 
     // Two effects, in this order, on purpose: Compose applies them in declaration order, and that
     // decides whether the active state below resolves against the old or the new map on the first

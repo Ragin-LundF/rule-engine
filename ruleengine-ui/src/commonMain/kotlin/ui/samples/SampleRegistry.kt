@@ -6,7 +6,8 @@ object SampleRegistry {
         SampleDescriptor(
             id = "financial-transactions",
             name = "Financial Transactions",
-            description = "Classify bank payments by purpose, detect fraud signals, and identify VIP customers based on amount and tags.",
+            description = "Classify bank payments by purpose, detect fraud signals, " +
+                    "and identify VIP customers based on amount and tags.",
             category = SampleCategory.FINANCE,
             schemaResPath = "files/samples/financial-transactions/schema.yaml",
             actionsResPath = "files/samples/financial-transactions/actions.yaml",
@@ -19,7 +20,8 @@ object SampleRegistry {
         SampleDescriptor(
             id = "log-filter",
             name = "Log Filter",
-            description = "Route, suppress, and escalate application log events by severity level, response time, and originating service.",
+            description = "Route, suppress, and escalate application log events by severity level, " +
+                    "response time, and originating service.",
             category = SampleCategory.LOGGING,
             schemaResPath = "files/samples/log-filter/schema.yaml",
             actionsResPath = "files/samples/log-filter/actions.yaml",
@@ -32,7 +34,8 @@ object SampleRegistry {
         SampleDescriptor(
             id = "product-recommendation",
             name = "Product Recommendation",
-            description = "Boost, badge, and discount products for recommendation engines based on category, price, rating, and inventory.",
+            description = "Boost, badge, and discount products for recommendation engines " +
+                    "based on category, price, rating, and inventory.",
             category = SampleCategory.ECOMMERCE,
             schemaResPath = "files/samples/product-recommendation/schema.yaml",
             actionsResPath = "files/samples/product-recommendation/actions.yaml",
@@ -59,7 +62,8 @@ object SampleRegistry {
         SampleDescriptor(
             id = "access-control",
             name = "Access Control",
-            description = "Enforce role-based permissions, IP allowlist/blocklist rules, and time-window restrictions on API routes.",
+            description = "Enforce role-based permissions, IP allowlist/blocklist rules, " +
+                    "and time-window restrictions on API routes.",
             category = SampleCategory.SECURITY,
             schemaResPath = "files/samples/access-control/schema.yaml",
             actionsResPath = "files/samples/access-control/actions.yaml",

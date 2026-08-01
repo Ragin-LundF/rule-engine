@@ -98,6 +98,9 @@ private fun findParentKey(text: String, lineStart: Int, childIndent: Int): Strin
 /**
  * Returns context-appropriate YAML completion items for [context] and [editorType].
  */
+/** Depth of a definition's own properties: `fields:` (0) → field name (2) → property (4). */
+private const val DEFINITION_KEY_INDENT = 4
+
 fun buildYamlCompletions(
     context: YamlCursorContext,
     editorType: YamlEditorType,
@@ -134,7 +137,7 @@ fun buildYamlCompletions(
             }
 
         // Keys at indent 4 (sub-keys of a field definition)
-        context.currentIndent == 4 && editorType == YamlEditorType.FIELD_SCHEMA ->
+        context.currentIndent == DEFINITION_KEY_INDENT && editorType == YamlEditorType.FIELD_SCHEMA ->
             FIELD_DEF_KEYS.map { key ->
                 CompletionItem(
                     label = key,
@@ -145,7 +148,7 @@ fun buildYamlCompletions(
             }
 
         // Keys at indent 4 (sub-keys of an action definition)
-        context.currentIndent == 4 && editorType == YamlEditorType.ACTION_SCHEMA ->
+        context.currentIndent == DEFINITION_KEY_INDENT && editorType == YamlEditorType.ACTION_SCHEMA ->
             ACTION_DEF_KEYS.map { key ->
                 CompletionItem(
                     label = key,

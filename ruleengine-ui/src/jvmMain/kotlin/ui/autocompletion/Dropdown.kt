@@ -35,7 +35,6 @@ public fun AutoCompleteDropdown(
     suggestions: List<CompletionItem>,
     selectedIndex: Int,
     onSelect: (CompletionItem) -> Unit,
-    onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(

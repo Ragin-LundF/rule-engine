@@ -110,7 +110,10 @@ class ProjectSaverTest {
         )
 
         // Someone else edits the rule file, then the user edits their buffer and saves.
-        Files.writeString(root.resolve("rules/discount.rule"), "rule \"other\" { when purpose equals \"x\" then label \"x\" }")
+        Files.writeString(
+            root.resolve("rules/discount.rule"),
+            "rule \"other\" { when purpose equals \"x\" then label \"x\" }",
+        )
         state.ruleValue.value = TextFieldValue(text = ruleText(ruleId = "discount") + "\n// mine")
 
         val outcome = saver.save(state = state, session = first.session)
