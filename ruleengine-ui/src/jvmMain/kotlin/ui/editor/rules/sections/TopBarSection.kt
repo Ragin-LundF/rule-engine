@@ -1,11 +1,13 @@
 package ui.editor.rules.sections
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.MaterialTheme
@@ -17,9 +19,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import io.github.ragin_lundf.ruleengine_ui.generated.resources.Res
+import io.github.ragin_lundf.ruleengine_ui.generated.resources.app
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.painterResource
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
@@ -188,13 +192,13 @@ fun TopBarSection(
 
 @Composable
 private fun AppLogo(modifier: Modifier = Modifier) {
-    Text(
-        text = "◆",
-        fontSize = 22.sp,
-        color = PrimaryBlue,
+    Image(
+        painter = painterResource(Res.drawable.app),
+        contentDescription = "Rule Engine Workbench",
         modifier = modifier
             .clip(shape = CircleShape)
             .background(color = PrimaryBlue.copy(alpha = 0.12f))
-            .padding(8.dp),
+            .padding(all = 4.dp)
+            .size(size = 30.dp),
     )
 }
