@@ -45,96 +45,18 @@ fun CalculationEditor(
 
     TitledPanelCard(title = "Calculation", modifier = modifier) {
         calc.terms.forEachIndexed { index, term ->
-            Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (index == 0) {
-                        Text(
-                            text = "     ",
-                            style = MaterialTheme.typography.body2,
-                            color = TextSecondary,
-                        )
-                    } else {
-                        DropdownSelector(
-                            selected = term.operator,
-                            options = OperatorOptions.ARITHMETIC_OPERATORS,
-                            onSelected = { operator ->
-                                onChanged(calc.copy(terms = calc.terms.replaceAt(
-                                    index = index,
-                                    value = term.copy(operator = operator),
-                                )))
-                            },
-                            modifier = Modifier.width(width = 70.dp),
-                        )
-                    }
-
-                    OperandChip(
-                        operand = term.operand,
-                        // Terms are numeric by definition, so every operand kind stays available.
-                        otherOperand = BuilderOperand.Literal(text = "0", numeric = true),
-                        fields = fields,
-                        expanded = expandedTerm == index,
-                        onKindChanged = { replacement ->
-                            onChanged(calc.copy(terms = calc.terms.replaceAt(
-                                index = index,
-                                value = term.copy(operand = replacement),
-                            )))
-                        },
-                        onToggleExpanded = {
-                            expandedTerm = if (expandedTerm == index) null else index
-                        },
-                    )
-
-                    val literal = term.operand
-                    if (literal is BuilderOperand.Literal) {
-                        PlainTextField(
-                            value = literal.text,
-                            placeholder = "0",
-                            onValueChange = { text ->
-                                onChanged(calc.copy(terms = calc.terms.replaceAt(
-                                    index = index,
-                                    value = term.copy(
-                                        operand = BuilderOperand.Literal(
-                                            text = text,
-                                            numeric = text.trim().toDoubleOrNull() != null,
-                                        ),
-                                    ),
-                                )))
-                            },
-                            modifier = Modifier.width(width = 90.dp),
-                        )
-                    }
-
-                    // A calculation needs at least two terms to mean anything.
-                    if (calc.terms.size > 2) {
-                        TinyButton(
-                            text = "×",
-                            onClick = {
-                                onChanged(
-                                    calc.copy(terms = calc.terms.filterIndexed { i, _ -> i != index })
-                                )
-                                expandedTerm = null
-                            },
-                        )
-                    }
-                }
-
-                if (expandedTerm == index) {
-                    NestedOperandEditor(
-                        operand = term.operand,
-                        fields = fields,
-                        onChanged = { replacement ->
-                            onChanged(calc.copy(terms = calc.terms.replaceAt(
-                                index = index,
-                                value = term.copy(operand = replacement),
-                            )))
-                        },
-                        modifier = Modifier.padding(start = 24.dp),
-                    )
-                }
-            }
+            CalcTermRow(
+                calc = calc,
+                term = term,
+                index = index,
+                fields = fields,
+                expanded = expandedTerm == index,
+                onToggleExpanded = { expandedTerm = if (expandedTerm == index) null else index },
+                onTermsChanged = { terms ->
+                    if (terms.size < calc.terms.size) expandedTerm = null
+                    onChanged(calc.copy(terms = terms))
+                },
+            )
         }
 
         Row(
@@ -171,6 +93,94 @@ fun CalculationEditor(
             style = MaterialTheme.typography.caption,
             color = TextSecondary,
         )
+    }
+}
+
+/**
+ * One term of a calculation: its operator, its operand, and the expander for a nested operand.
+ *
+ * The first term has no operator — a calculation reads `a + b`, not `+ a + b` — so its slot is
+ * blanked to keep the operands of every row aligned.
+ */
+@Suppress("FunctionNaming", "LongParameterList", "LongMethod")
+@Composable
+private fun CalcTermRow(
+    calc: BuilderOperand.Calc,
+    term: BuilderTerm,
+    index: Int,
+    fields: List<CatalogFieldInfo>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onTermsChanged: (List<BuilderTerm>) -> Unit,
+) {
+    fun replaceTerm(value: BuilderTerm) = onTermsChanged(calc.terms.replaceAt(index = index, value = value))
+
+    Column(verticalArrangement = Arrangement.spacedBy(space = 4.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (index == 0) {
+                Text(
+                    text = "     ",
+                    style = MaterialTheme.typography.body2,
+                    color = TextSecondary,
+                )
+            } else {
+                DropdownSelector(
+                    selected = term.operator,
+                    options = OperatorOptions.ARITHMETIC_OPERATORS,
+                    onSelected = { operator -> replaceTerm(term.copy(operator = operator)) },
+                    modifier = Modifier.width(width = 70.dp),
+                )
+            }
+
+            OperandChip(
+                operand = term.operand,
+                // Terms are numeric by definition, so every operand kind stays available.
+                otherOperand = BuilderOperand.Literal(text = "0", numeric = true),
+                fields = fields,
+                expanded = expanded,
+                onKindChanged = { replacement -> replaceTerm(term.copy(operand = replacement)) },
+                onToggleExpanded = onToggleExpanded,
+            )
+
+            val literal = term.operand
+            if (literal is BuilderOperand.Literal) {
+                PlainTextField(
+                    value = literal.text,
+                    placeholder = "0",
+                    onValueChange = { text ->
+                        replaceTerm(
+                            term.copy(
+                                operand = BuilderOperand.Literal(
+                                    text = text,
+                                    numeric = text.trim().toDoubleOrNull() != null,
+                                ),
+                            ),
+                        )
+                    },
+                    modifier = Modifier.width(width = 90.dp),
+                )
+            }
+
+            // A calculation needs at least two terms to mean anything.
+            if (calc.terms.size > 2) {
+                TinyButton(
+                    text = "×",
+                    onClick = { onTermsChanged(calc.terms.filterIndexed { i, _ -> i != index }) },
+                )
+            }
+        }
+
+        if (expanded) {
+            NestedOperandEditor(
+                operand = term.operand,
+                fields = fields,
+                onChanged = { replacement -> replaceTerm(term.copy(operand = replacement)) },
+                modifier = Modifier.padding(start = 24.dp),
+            )
+        }
     }
 }
 

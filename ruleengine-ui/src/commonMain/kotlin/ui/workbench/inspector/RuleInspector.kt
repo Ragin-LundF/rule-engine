@@ -27,6 +27,10 @@ import ui.workbench.model.UiDiagnostic
 /**
  * Inspector for a selected parsed rule.
  */
+// 71 lines against a threshold of 60. A single Column of labelled rows describing one rule; the
+// length is the number of facts shown, not nesting. Every candidate split here would be "the first
+// half" and "the second half", which names nothing.
+@Suppress("LongMethod")
 @Composable
 fun RuleInspector(
     rule: CatalogRule,

@@ -37,11 +37,7 @@ private fun TrackCursorContext(state: RuleEditorState) {
         state.autoCompleteWord.value = word
         state.autoCompleteIndex.value = 0
 
-        val ctx = analyzeDslContext(
-            text = state.ruleValue.value.text,
-            cursorPos = cursor,
-            schema = state.parsedSchema.value,
-        )
+        val ctx = analyzeDslContext(text = state.ruleValue.value.text, cursorPos = cursor)
         state.dslContext.value = ctx
 
         // Never offered on its own. Once open it stays anchored to the word it was opened for, so

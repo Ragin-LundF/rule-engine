@@ -6,184 +6,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import ruleengine.core.domain.OperatorNames
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.FieldType
-import ui.autocompletion.CompletionItem
-import ui.autocompletion.CompletionKind
-import ui.schema.KnownNormalizers
-
-private val FIELD_TYPE_VALUES = FieldType.entries.map { type -> type.name.lowercase() }
-
-private val FORMAT_VALUES = listOf("dd.MM.yyyy", "yyyy/MM/dd", "dd.MM.yyyy HH:mm", "yyyy-MM-dd HH:mm:ss")
-
-private val NORMALIZER_VALUES = KnownNormalizers
-
-private val OPERATOR_VALUES = OperatorNames.ALL
-
-private val ARG_TYPE_VALUES = ActionArgType.entries.map { argType -> argType.name.lowercase() }
-
-private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")
-
-private val ACTION_SCHEMA_TOP_KEYS = listOf("actions")
-
-private val FIELD_DEF_KEYS = listOf("type", "alias", "format", "normalizers", "operators", "fields")
-
-private val ACTION_DEF_KEYS = listOf("argTypes")
-
-// ── YAML cursor context analyzer ──────────────────────────────────────────────
-
-/**
- * Analyzes the YAML [text] to determine the editing context at [cursorPos].
- * Uses indent-level heuristics rather than a full YAML parse.
- */
-fun analyzeYamlContext(text: String, cursorPos: Int): YamlCursorContext {
-    return runCatching {
-        val safePos = cursorPos.coerceIn(0, text.length)
-
-        // Locate the current line.
-        val lineStart = text.lastIndexOf('\n', safePos - 1) + 1
-        val currentLine = text.substring(startIndex = lineStart, endIndex = safePos)
-        val trimmedCurrentLine = currentLine.trimStart()
-        val currentIndent = currentLine.length - trimmedCurrentLine.length
-
-        val isListItem = trimmedCurrentLine.startsWith("- ") || trimmedCurrentLine == "-"
-        val isValue = !isListItem && trimmedCurrentLine.contains(':')
-
-        val currentKey = if (isValue) {
-            extractKey(trimmedCurrentLine)
-        } else {
-            null
-        }
-
-        // Scan backwards to find the enclosing parent key (first line with less indent).
-        val parentKey = findParentKey(text = text, lineStart = lineStart, childIndent = currentIndent)
-
-        YamlCursorContext(
-            currentKey = currentKey,
-            parentKey = parentKey,
-            isValue = isValue,
-            isListItem = isListItem,
-            currentIndent = currentIndent,
-        )
-    }.getOrElse {
-        YamlCursorContext()
-    }
-}
-
-/** Extracts the key name from a trimmed `key: value` or `key:` line. */
-private fun extractKey(trimmedLine: String): String? {
-    val colonIdx = trimmedLine.indexOf(':')
-    return if (colonIdx > 0) trimmedLine.substring(0, colonIdx).trim() else null
-}
-
-/** Scans previous lines to find the closest ancestor key with less indent than [childIndent]. */
-private fun findParentKey(text: String, lineStart: Int, childIndent: Int): String? {
-    if (lineStart == 0) return null
-    val previousContent = text.substring(0, lineStart)
-    val prevLines = previousContent.lines()
-    for (line in prevLines.asReversed()) {
-        if (line.isBlank()) continue
-        val trimmed = line.trimStart()
-        val lineIndent = line.length - trimmed.length
-        if (lineIndent < childIndent && trimmed.contains(char = ':')) {
-            return extractKey(trimmedLine = trimmed)
-        }
-    }
-    return null
-}
-
-// ── YAML completion builder ───────────────────────────────────────────────────
-
-/**
- * Returns context-appropriate YAML completion items for [context] and [editorType].
- */
-/** Depth of a definition's own properties: `fields:` (0) → field name (2) → property (4). */
-private const val DEFINITION_KEY_INDENT = 4
-
-fun buildYamlCompletions(
-    context: YamlCursorContext,
-    editorType: YamlEditorType,
-): List<CompletionItem> {
-    return when {
-        // Value of `type:` → field type values
-        context.isValue && context.currentKey == "type" ->
-            FIELD_TYPE_VALUES.map { value ->
-                CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "field type")
-            }
-
-        // Value of `format:` → date pattern examples
-        context.isValue && context.currentKey == "format" ->
-            FORMAT_VALUES.map { value ->
-                CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "date format")
-            }
-
-        // List item under `normalizers:` → normalizer names
-        context.isListItem && context.parentKey == "normalizers" ->
-            NORMALIZER_VALUES.map { value ->
-                CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "normalizer")
-            }
-
-        // List item under `operators:` → operator names
-        context.isListItem && context.parentKey == "operators" ->
-            OPERATOR_VALUES.map { value ->
-                CompletionItem(label = value, insertText = value, kind = CompletionKind.OPERATOR, hint = "operator")
-            }
-
-        // List item under `argTypes:` → argument type names
-        context.isListItem && context.parentKey == "argTypes" ->
-            ARG_TYPE_VALUES.map { value ->
-                CompletionItem(label = value, insertText = value, kind = CompletionKind.LITERAL, hint = "arg type")
-            }
-
-        // Keys at indent 4 (sub-keys of a field definition)
-        context.currentIndent == DEFINITION_KEY_INDENT && editorType == YamlEditorType.FIELD_SCHEMA ->
-            FIELD_DEF_KEYS.map { key ->
-                CompletionItem(
-                    label = key,
-                    insertText = "$key:",
-                    kind = CompletionKind.KEYWORD,
-                    hint = "field property"
-                )
-            }
-
-        // Keys at indent 4 (sub-keys of an action definition)
-        context.currentIndent == DEFINITION_KEY_INDENT && editorType == YamlEditorType.ACTION_SCHEMA ->
-            ACTION_DEF_KEYS.map { key ->
-                CompletionItem(
-                    label = key,
-                    insertText = "$key: []",
-                    kind = CompletionKind.KEYWORD,
-                    hint = "action property"
-                )
-            }
-
-        // Top-level keys for field schema
-        context.currentIndent == 0 && editorType == YamlEditorType.FIELD_SCHEMA ->
-            FIELD_SCHEMA_TOP_KEYS.map { key ->
-                CompletionItem(label = key, insertText = "$key: ", kind = CompletionKind.KEYWORD, hint = "schema key")
-            }
-
-        // Top-level keys for action schema
-        context.currentIndent == 0 && editorType == YamlEditorType.ACTION_SCHEMA ->
-            ACTION_SCHEMA_TOP_KEYS.map { key ->
-                CompletionItem(label = key, insertText = "$key:", kind = CompletionKind.KEYWORD, hint = "schema key")
-            }
-
-        // Field name values (at indent 2, under `fields:`) → suggest field names
-        context.currentIndent == 2 && context.parentKey == "fields" && editorType == YamlEditorType.FIELD_SCHEMA ->
-            FIELD_SCHEMA_TOP_KEYS.map { key ->
-                CompletionItem(
-                    label = key,
-                    insertText = "$key: ",
-                    kind = CompletionKind.KEYWORD,
-                    hint = "field property"
-                )
-            }
-
-        else -> emptyList()
-    }
-}
 
 // ── YAML syntax highlighter ───────────────────────────────────────────────────
 
@@ -197,100 +19,132 @@ fun annotateYaml(text: String, editorType: YamlEditorType): AnnotatedString {
     if (text.isEmpty()) return AnnotatedString(text)
 
     return buildAnnotatedString {
-        append(text)
-
-        val lines = text.split('\n')
         var lineOffset = 0
-
-        // Context stack: (indentLevel, key) — the key at that indent level.
+        append(text)
+        // Context stack: (indentLevel, key) — the key at that indent level. Frames at or deeper than
+        // the current line are popped first, which is how a de-indent returns to the right parent.
         val contextStack = ArrayDeque<Pair<Int, String>>()
 
-        for (line in lines) {
-            val lineLen = line.length
+        for (line in text.split('\n')) {
             val trimmed = line.trimStart()
-            val indent = lineLen - trimmed.length
-
-            // Pop all stack frames whose indent is >= current line indent.
-            // This handles "de-indenting" back to a shallower level.
+            val indent = line.length - trimmed.length
             while (contextStack.isNotEmpty() && contextStack.last().first >= indent) {
                 contextStack.removeLast()
             }
-
-            val parentEntry = contextStack.lastOrNull()
-            val parentKey = parentEntry?.second
-
-            when {
-                trimmed.startsWith('#') -> {
-                    // Comment — entire line is muted and italic.
-                    addStyle(
-                        style = SpanStyle(color = TextMuted, fontStyle = FontStyle.Italic),
-                        start = lineOffset,
-                        end = lineOffset + lineLen,
-                    )
-                }
-
-                trimmed.startsWith("- ") || trimmed == "-" -> {
-                    // List item.
-                    val dashAbs = lineOffset + indent
-                    val valueAbs = dashAbs + 2 // skip "- "
-                    val valueStr = if (trimmed.length > 2) trimmed.substring(2).trimEnd() else ""
-
-                    // Colour the dash punctuation.
-                    addStyle(style = SpanStyle(color = TextMuted), start = dashAbs, end = dashAbs + 1)
-
-                    // Colour the list value depending on the enclosing key.
-                    val valueStyle = resolveListItemStyle(parentKey = parentKey)
-                    if (valueStr.isNotEmpty() && valueAbs < lineOffset + lineLen) {
-                        addStyle(style = valueStyle, start = valueAbs, end = lineOffset + lineLen)
-                    }
-
-                    // Inline bracket list items like `argTypes: [string]` are handled by the
-                    // key-value branch below; plain `- value` items are handled here.
-                }
-
-                trimmed.contains(':') -> {
-                    // Key-value line (or key-only line like `fields:`).
-                    val colonIdx = trimmed.indexOf(':')
-                    val key = trimmed.substring(0, colonIdx).trim()
-                    val valueRaw = trimmed.substring(colonIdx + 1)
-                    val valueTrimmed = valueRaw.trim()
-
-                    val keyAbsStart = lineOffset + indent
-                    val keyAbsEnd = keyAbsStart + key.length
-                    val colonAbs = keyAbsEnd
-
-                    // Colour the key.
-                    val keyStyle = resolveKeyStyle(
-                        key = key,
-                        indent = indent,
-                        parentKey = parentKey,
-                        editorType = editorType,
-                    )
-                    addStyle(style = keyStyle, start = keyAbsStart, end = keyAbsEnd)
-
-                    // Colour the colon separator.
-                    addStyle(style = SpanStyle(color = TextMuted), start = colonAbs, end = colonAbs + 1)
-
-                    // Colour the inline value (if present and not a nested block).
-                    if (valueTrimmed.isNotEmpty()) {
-                        applyValueStyle(
-                            key = key,
-                            value = valueTrimmed,
-                            lineOffset = lineOffset,
-                            line = line,
-                            colonIdx = indent + colonIdx,
-                        )
-                    }
-
-                    // Push the current key onto the context stack so child lines inherit it.
-                    contextStack.addLast(Pair(indent, key))
-                }
-            }
-
-            // Advance to the next line (+1 for the '\n' separator).
-            lineOffset += lineLen + 1
+            styleLine(
+                line = line,
+                trimmed = trimmed,
+                indent = indent,
+                lineOffset = lineOffset,
+                parentKey = contextStack.lastOrNull()?.second,
+                editorType = editorType,
+                contextStack = contextStack,
+            )
+            lineOffset += line.length + 1 // +1 for the '\n' separator
         }
     }
+}
+
+@Suppress("LongParameterList")
+private fun AnnotatedString.Builder.styleLine(
+    line: String,
+    trimmed: String,
+    indent: Int,
+    lineOffset: Int,
+    parentKey: String?,
+    editorType: YamlEditorType,
+    contextStack: ArrayDeque<Pair<Int, String>>,
+) {
+    when {
+        trimmed.startsWith('#') -> addStyle(
+            style = SpanStyle(color = TextMuted, fontStyle = FontStyle.Italic),
+            start = lineOffset,
+            end = lineOffset + line.length,
+        )
+
+        trimmed.startsWith("- ") || trimmed == "-" ->
+            styleListItem(
+                lineLen = line.length,
+                trimmed = trimmed,
+                indent = indent,
+                lineOffset = lineOffset,
+                parentKey = parentKey,
+            )
+
+        trimmed.contains(':') -> {
+            val key = styleKeyValue(
+                line = line,
+                trimmed = trimmed,
+                indent = indent,
+                lineOffset = lineOffset,
+                parentKey = parentKey,
+                editorType = editorType,
+            )
+            // Push the key so child lines inherit it as their parent.
+            contextStack.addLast(Pair(indent, key))
+        }
+    }
+}
+
+/**
+ * A `- value` item.
+ *
+ * Inline bracket lists such as `argTypes: [string]` are not this shape — they arrive at the
+ * key-value branch instead.
+ */
+private fun AnnotatedString.Builder.styleListItem(
+    lineLen: Int,
+    trimmed: String,
+    indent: Int,
+    lineOffset: Int,
+    parentKey: String?,
+) {
+    val dashAbs = lineOffset + indent
+    val valueAbs = dashAbs + 2 // skip "- "
+    val valueStr = if (trimmed.length > 2) trimmed.substring(2).trimEnd() else ""
+
+    addStyle(style = SpanStyle(color = TextMuted), start = dashAbs, end = dashAbs + 1)
+
+    val valueStyle = resolveListItemStyle(parentKey = parentKey)
+    if (valueStr.isNotEmpty() && valueAbs < lineOffset + lineLen) {
+        addStyle(style = valueStyle, start = valueAbs, end = lineOffset + lineLen)
+    }
+}
+
+/** A `key: value` line, or a key-only line such as `fields:`. Returns the key it styled. */
+@Suppress("LongParameterList")
+private fun AnnotatedString.Builder.styleKeyValue(
+    line: String,
+    trimmed: String,
+    indent: Int,
+    lineOffset: Int,
+    parentKey: String?,
+    editorType: YamlEditorType,
+): String {
+    val colonIdx = trimmed.indexOf(':')
+    val key = trimmed.substring(0, colonIdx).trim()
+    val valueTrimmed = trimmed.substring(colonIdx + 1).trim()
+
+    val keyAbsStart = lineOffset + indent
+    val keyAbsEnd = keyAbsStart + key.length
+
+    addStyle(
+        style = resolveKeyStyle(key = key, indent = indent, parentKey = parentKey, editorType = editorType),
+        start = keyAbsStart,
+        end = keyAbsEnd,
+    )
+    addStyle(style = SpanStyle(color = TextMuted), start = keyAbsEnd, end = keyAbsEnd + 1)
+
+    if (valueTrimmed.isNotEmpty()) {
+        applyValueStyle(
+            key = key,
+            value = valueTrimmed,
+            lineOffset = lineOffset,
+            line = line,
+            colonIdx = indent + colonIdx,
+        )
+    }
+    return key
 }
 
 /** Returns the [SpanStyle] for a YAML key based on its structural position. */

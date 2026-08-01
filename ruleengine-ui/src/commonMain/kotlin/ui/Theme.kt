@@ -1,6 +1,7 @@
 package ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Colors
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Shapes
 import androidx.compose.material.Typography
@@ -21,6 +22,12 @@ import ui.theme.ThemeController
 // so every existing usage site (including non-composable code such as
 // SyntaxHighlighter.annotateRule) keeps working unchanged and recomposes when
 // the theme switches.
+//
+// ⚠ With one exception: a read inside a `remember` block does NOT subscribe that block. remember
+// re-runs only when its keys change, so anything that bakes a colour into a cached value must take
+// `ThemeController.isDark` as a key. Both syntax highlighters do; they showed the previous theme's
+// token colours until they did. A plain `val` at file scope is the same trap without the escape —
+// it freezes at class-load, so never capture a colour getter in one.
 
 // Neutral foundation
 val Bg: Color get() = ThemeController.palette.bg
@@ -65,92 +72,9 @@ val ColorOp: Color get() = TextSecondary
 
 @Composable
 fun AppTheme(content: @Composable () -> Unit) {
-    val colors = if (ThemeController.isDark) {
-        darkColors(
-            background      = Bg,
-            surface         = BgSurface,
-            primary         = PrimaryBlue,
-            primaryVariant  = PrimaryBlueDim,
-            secondary       = AccentGreen,
-            secondaryVariant= AccentPurple,
-            error           = AccentRed,
-            onBackground    = TextPrimary,
-            onSurface       = TextPrimary,
-            onPrimary       = TextOnPrimary,
-            onSecondary     = Bg,
-            onError         = Color.White,
-        )
-    } else {
-        lightColors(
-            background      = Bg,
-            surface         = BgSurface,
-            primary         = PrimaryBlue,
-            primaryVariant  = PrimaryBlueDim,
-            secondary       = AccentGreen,
-            secondaryVariant= AccentPurple,
-            error           = AccentRed,
-            onBackground    = TextPrimary,
-            onSurface       = TextPrimary,
-            onPrimary       = TextOnPrimary,
-            onSecondary     = Bg,
-            onError         = Color.White,
-        )
-    }
     MaterialTheme(
-        colors = colors,
-        typography = Typography(
-            h4 = TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize   = 24.sp,
-                letterSpacing = (-0.5).sp,
-                color = TextPrimary,
-            ),
-            h5 = TextStyle(
-                fontWeight = FontWeight.Bold,
-                fontSize   = 20.sp,
-                letterSpacing = 0.sp,
-                color = TextPrimary,
-            ),
-            h6 = TextStyle(
-                fontWeight = FontWeight.SemiBold,
-                fontSize   = 16.sp,
-                letterSpacing = 0.sp,
-                color = TextPrimary,
-            ),
-            subtitle1 = TextStyle(
-                fontWeight = FontWeight.SemiBold,
-                fontSize   = 13.sp,
-                letterSpacing = 0.25.sp,
-                color = TextPrimary,
-            ),
-            subtitle2 = TextStyle(
-                fontWeight = FontWeight.Medium,
-                fontSize   = 12.sp,
-                letterSpacing = 0.25.sp,
-                color = TextSecondary,
-            ),
-            body1 = TextStyle(
-                fontWeight = FontWeight.Normal,
-                fontSize   = 14.sp,
-                color = TextPrimary,
-            ),
-            body2 = TextStyle(
-                fontWeight = FontWeight.Normal,
-                fontSize   = 13.sp,
-                color = TextSecondary,
-            ),
-            caption = TextStyle(
-                fontWeight = FontWeight.Medium,
-                fontSize   = 12.sp,
-                color = TextSecondary,
-                letterSpacing = 0.25.sp,
-            ),
-            button = TextStyle(
-                fontWeight = FontWeight.SemiBold,
-                fontSize   = 12.sp,
-                letterSpacing = 0.25.sp,
-            ),
-        ),
+        colors = materialColors(),
+        typography = workbenchTypography(),
         shapes = Shapes(
             small  = RoundedCornerShape(6.dp),
             medium = RoundedCornerShape(10.dp),
@@ -159,3 +83,96 @@ fun AppTheme(content: @Composable () -> Unit) {
         content = content,
     )
 }
+
+/**
+ * Material's own colour slots, filled from the workbench palette.
+ *
+ * The two branches assign the same tokens: only `darkColors`/`lightColors` differ, because Material
+ * derives a few unset slots differently depending on which it is. Every token here is a getter, so
+ * both read the palette that is current when this runs.
+ */
+private fun materialColors(): Colors = if (ThemeController.isDark) {
+    darkColors(
+        background      = Bg,
+        surface         = BgSurface,
+        primary         = PrimaryBlue,
+        primaryVariant  = PrimaryBlueDim,
+        secondary       = AccentGreen,
+        secondaryVariant= AccentPurple,
+        error           = AccentRed,
+        onBackground    = TextPrimary,
+        onSurface       = TextPrimary,
+        onPrimary       = TextOnPrimary,
+        onSecondary     = Bg,
+        onError         = Color.White,
+    )
+} else {
+    lightColors(
+        background      = Bg,
+        surface         = BgSurface,
+        primary         = PrimaryBlue,
+        primaryVariant  = PrimaryBlueDim,
+        secondary       = AccentGreen,
+        secondaryVariant= AccentPurple,
+        error           = AccentRed,
+        onBackground    = TextPrimary,
+        onSurface       = TextPrimary,
+        onPrimary       = TextOnPrimary,
+        onSecondary     = Bg,
+        onError         = Color.White,
+    )
+}
+
+private fun workbenchTypography(): Typography = Typography(
+    h4 = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize   = 24.sp,
+        letterSpacing = (-0.5).sp,
+        color = TextPrimary,
+    ),
+    h5 = TextStyle(
+        fontWeight = FontWeight.Bold,
+        fontSize   = 20.sp,
+        letterSpacing = 0.sp,
+        color = TextPrimary,
+    ),
+    h6 = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize   = 16.sp,
+        letterSpacing = 0.sp,
+        color = TextPrimary,
+    ),
+    subtitle1 = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize   = 13.sp,
+        letterSpacing = 0.25.sp,
+        color = TextPrimary,
+    ),
+    subtitle2 = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize   = 12.sp,
+        letterSpacing = 0.25.sp,
+        color = TextSecondary,
+    ),
+    body1 = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize   = 14.sp,
+        color = TextPrimary,
+    ),
+    body2 = TextStyle(
+        fontWeight = FontWeight.Normal,
+        fontSize   = 13.sp,
+        color = TextSecondary,
+    ),
+    caption = TextStyle(
+        fontWeight = FontWeight.Medium,
+        fontSize   = 12.sp,
+        color = TextSecondary,
+        letterSpacing = 0.25.sp,
+    ),
+    button = TextStyle(
+        fontWeight = FontWeight.SemiBold,
+        fontSize   = 12.sp,
+        letterSpacing = 0.25.sp,
+    ),
+)

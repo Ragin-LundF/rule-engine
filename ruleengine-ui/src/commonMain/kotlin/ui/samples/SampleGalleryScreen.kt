@@ -88,42 +88,59 @@ fun SampleGalleryScreen(
     }
 
     pendingDescriptor?.let { descriptor ->
-        AlertDialog(
-            onDismissRequest = { pendingDescriptor = null },
-            title = {
-                Text(
-                    text = "Load \"${descriptor.name}\"?",
-                    style = MaterialTheme.typography.subtitle1,
-                )
+        ConfirmLoadSampleDialog(
+            descriptor = descriptor,
+            onDismiss = { pendingDescriptor = null },
+            onConfirm = {
+                pendingDescriptor = null
+                onSampleSelected(descriptor)
             },
-            text = {
-                Text(
-                    text = "This will replace your current schema, actions, and rules.",
-                    style = MaterialTheme.typography.body2,
-                    color = TextSecondary,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val d = descriptor
-                        pendingDescriptor = null
-                        onSampleSelected(d)
-                    },
-                    colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBlue),
-                ) {
-                    Text(text = "Load Sample", color = TextPrimary)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingDescriptor = null }) {
-                    Text(text = "Cancel", color = TextSecondary)
-                }
-            },
-            backgroundColor = BgElevated,
-            shape = MaterialTheme.shapes.medium,
         )
     }
+}
+
+/**
+ * Asked before loading, because loading a sample replaces everything currently in the editor and
+ * there is no undo across all three documents.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun ConfirmLoadSampleDialog(
+    descriptor: SampleDescriptor,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Load \"${descriptor.name}\"?",
+                style = MaterialTheme.typography.subtitle1,
+            )
+        },
+        text = {
+            Text(
+                text = "This will replace your current schema, actions, and rules.",
+                style = MaterialTheme.typography.body2,
+                color = TextSecondary,
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(backgroundColor = PrimaryBlue),
+            ) {
+                Text(text = "Load Sample", color = TextPrimary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Cancel", color = TextSecondary)
+            }
+        },
+        backgroundColor = BgElevated,
+        shape = MaterialTheme.shapes.medium,
+    )
 }
 
 @Composable

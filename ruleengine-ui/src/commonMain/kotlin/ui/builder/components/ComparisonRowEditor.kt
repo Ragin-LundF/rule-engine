@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.Checkbox
-import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -66,72 +64,16 @@ fun ComparisonRowEditor(
             modifier = Modifier.padding(start = 8.dp).fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(space = 4.dp),
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "⠿",
-                    style = MaterialTheme.typography.body2,
-                    color = TextSecondary,
-                    modifier = Modifier.clickable(onClick = onSelected),
-                )
-
-                OperandSide(
-                    operand = comparison.left,
-                    other = comparison.right,
-                    fields = fields,
-                    expanded = expanded == ExpandedSide.LEFT,
-                    onOperandChanged = {
-                        comparison.left = it
-                        onChanged()
-                    },
-                    onToggleExpanded = {
-                        expanded = if (expanded == ExpandedSide.LEFT) ExpandedSide.NONE else ExpandedSide.LEFT
-                    },
-                )
-
-                DropdownSelector(
-                    selected = comparison.operator,
-                    options = operators,
-                    onSelected = {
-                        comparison.operator = it
-                        onChanged()
-                    },
-                    modifier = Modifier.width(width = 80.dp),
-                )
-
-                OperandSide(
-                    operand = comparison.right,
-                    other = comparison.left,
-                    fields = fields,
-                    expanded = expanded == ExpandedSide.RIGHT,
-                    onOperandChanged = {
-                        comparison.right = it
-                        onChanged()
-                    },
-                    onToggleExpanded = {
-                        expanded = if (expanded == ExpandedSide.RIGHT) ExpandedSide.NONE else ExpandedSide.RIGHT
-                    },
-                )
-
-                if (OperandRules.supportsIgnoreCase(
-                        left = comparison.left,
-                        right = comparison.right,
-                        fields = fields,
-                    )
-                ) {
-                    IgnoreCaseToggle(
-                        checked = comparison.ignoreCase,
-                        onCheckedChange = {
-                            comparison.ignoreCase = it
-                            onChanged()
-                        },
-                    )
-                }
-
-                TinyButton(text = "×", onClick = onRemove)
-            }
+            ComparisonControls(
+                comparison = comparison,
+                fields = fields,
+                operators = operators,
+                expanded = expanded,
+                onExpandedChange = { side -> expanded = side },
+                onSelected = onSelected,
+                onChanged = onChanged,
+                onRemove = onRemove,
+            )
 
             // Read-only echo of the generated DSL, so the row is always verifiable at a glance.
             Text(
@@ -162,6 +104,87 @@ fun ComparisonRowEditor(
                 ExpandedSide.NONE -> Unit
             }
         }
+    }
+}
+
+/**
+ * The row itself: drag handle, both operands, the operator between them, and the row's own controls.
+ *
+ * Only one side can be expanded at a time, so toggling a side that is already open closes it and
+ * toggling the other simply moves the expansion across.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun ComparisonControls(
+    comparison: MutableBuilderComparison,
+    fields: List<CatalogFieldInfo>,
+    operators: List<String>,
+    expanded: ExpandedSide,
+    onExpandedChange: (ExpandedSide) -> Unit,
+    onSelected: () -> Unit,
+    onChanged: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "⠿",
+            style = MaterialTheme.typography.body2,
+            color = TextSecondary,
+            modifier = Modifier.clickable(onClick = onSelected),
+        )
+
+        OperandSide(
+            operand = comparison.left,
+            other = comparison.right,
+            fields = fields,
+            expanded = expanded == ExpandedSide.LEFT,
+            onOperandChanged = {
+                comparison.left = it
+                onChanged()
+            },
+            onToggleExpanded = {
+                onExpandedChange(if (expanded == ExpandedSide.LEFT) ExpandedSide.NONE else ExpandedSide.LEFT)
+            },
+        )
+
+        DropdownSelector(
+            selected = comparison.operator,
+            options = operators,
+            onSelected = {
+                comparison.operator = it
+                onChanged()
+            },
+            modifier = Modifier.width(width = 80.dp),
+        )
+
+        OperandSide(
+            operand = comparison.right,
+            other = comparison.left,
+            fields = fields,
+            expanded = expanded == ExpandedSide.RIGHT,
+            onOperandChanged = {
+                comparison.right = it
+                onChanged()
+            },
+            onToggleExpanded = {
+                onExpandedChange(if (expanded == ExpandedSide.RIGHT) ExpandedSide.NONE else ExpandedSide.RIGHT)
+            },
+        )
+
+        if (OperandRules.supportsIgnoreCase(left = comparison.left, right = comparison.right, fields = fields)) {
+            IgnoreCaseToggle(
+                checked = comparison.ignoreCase,
+                onCheckedChange = {
+                    comparison.ignoreCase = it
+                    onChanged()
+                },
+            )
+        }
+
+        TinyButton(text = "×", onClick = onRemove)
     }
 }
 
@@ -206,25 +229,6 @@ private fun OperandSide(
                 modifier = Modifier.width(width = 120.dp),
             )
         }
-    }
-}
-
-@Composable
-private fun IgnoreCaseToggle(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(checkedColor = PrimaryBlue),
-        )
-        Text(
-            text = "ignore case",
-            style = MaterialTheme.typography.caption,
-            color = TextSecondary,
-        )
     }
 }
 

@@ -66,90 +66,45 @@ fun ActionEditorPanel(
         )
     },
 ) {
-    var mode by remember { mutableStateOf(value = initialMode) }
-    var editorState by remember { mutableStateOf(value = fromYaml(yaml)) }
-    var yamlText by remember { mutableStateOf(value = yaml) }
-    var yamlError by remember { mutableStateOf<String?>(value = null) }
-
-    /**
-     * The model as it was last read from YAML — see [ui.schema.SchemaEditorPanel] for why.
-     *
-     * Regenerating YAML from the model drops the author's comments and formatting, so merely opening
-     * this tab must not count as an edit; otherwise the next project save rewrites the file.
-     */
-    var loadedState by remember { mutableStateOf(value = editorState) }
-
-    // External YAML changes (e.g. project load) should pull into the local model.
-    LaunchedEffect(key1 = yaml) {
-        if (yaml != yamlText) {
-            yamlText = yaml
-            editorState = fromYaml(yaml)
-            loadedState = editorState
-            yamlError = null
-        }
-    }
-
-    // Visual/editor changes push to YAML only when the model is valid and actually different.
-    LaunchedEffect(key1 = editorState, key2 = mode) {
-        if (mode == ActionMode.YAML) return@LaunchedEffect
-        if (editorState.hasValidationIssues()) return@LaunchedEffect
-        if (editorState == loadedState) return@LaunchedEffect
-        val generated = runCatching { toYaml(editorState) }.getOrNull() ?: return@LaunchedEffect
-        if (generated != yamlText) {
-            yamlText = generated
-            onYamlChange(generated)
-        }
-    }
-
-    // YAML edits parse back to the visual model when valid (debounced).
-    LaunchedEffect(key1 = yamlText, key2 = mode) {
-        if (mode != ActionMode.YAML) return@LaunchedEffect
-        delay(timeMillis = 500)
-        val parsed = runCatching { fromYaml(yamlText) }.getOrNull()
-        if (parsed != null && !parsed.isReadOnly) {
-            editorState = parsed
-            yamlError = null
-        } else {
-            yamlError = "Invalid YAML: could not parse action schema"
-        }
-    }
+    val sync = remember { ActionEditorSync(yaml = yaml, mode = initialMode, state = fromYaml(yaml)) }
+    SyncActionsAndYaml(sync = sync, yaml = yaml, fromYaml = fromYaml, toYaml = toYaml, onYamlChange = onYamlChange)
 
     Column(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         ActionModeTabs(
-            current = mode,
+            current = sync.mode,
             onSelect = { newMode ->
-                if (newMode == ActionMode.YAML && mode != ActionMode.YAML) {
-                    if (!editorState.hasValidationIssues()) {
-                        yamlText = runCatching { toYaml(editorState) }.getOrNull() ?: yamlText
-                        onYamlChange(yamlText)
+                if (newMode == ActionMode.YAML && sync.mode != ActionMode.YAML) {
+                    if (!sync.state.hasValidationIssues()) {
+                        sync.yaml = runCatching { toYaml(sync.state) }.getOrNull() ?: sync.yaml
+                        onYamlChange(sync.yaml)
                     }
                 }
-                if (newMode != ActionMode.YAML && mode == ActionMode.YAML) {
-                    val generated = runCatching { toYaml(editorState) }.getOrNull()
+                if (newMode != ActionMode.YAML && sync.mode == ActionMode.YAML) {
+                    val generated = runCatching { toYaml(sync.state) }.getOrNull()
                     if (generated != null) {
-                        yamlText = generated
-                        onYamlChange(yamlText)
+                        sync.yaml = generated
+                        onYamlChange(sync.yaml)
                     }
                 }
-                mode = newMode
+                sync.mode = newMode
             },
         )
 
-        when (mode) {
+        when (sync.mode) {
             ActionMode.VISUAL -> VisualActionEditor(
-                state = editorState,
-                onStateChange = { editorState = it },
+                state = sync.state,
+                onStateChange = { sync.state = it },
             )
             ActionMode.YAML -> YamlActionEditor(
-                yaml = yamlText,
-                error = yamlError,
-                validationIssues = editorState.hasValidationIssues(),
+                yaml = sync.yaml,
+                error = sync.error,
+                validationIssues = sync.state.hasValidationIssues(),
                 onYamlChange = { newText ->
-                    yamlText = newText
-                    yamlError = null
+                    sync.yaml = newText
+                    sync.error = null
                 },
                 yamlEditor = yamlEditor,
             )
@@ -157,6 +112,66 @@ fun ActionEditorPanel(
         }
     }
 }
+
+/**
+ * The panel's mutable state — see [ui.schema.SchemaEditorPanel] for the shape and why [loaded]
+ * exists: regenerating YAML drops the author's comments and formatting, so merely opening this tab
+ * must not count as an edit.
+ */
+private class ActionEditorSync(yaml: String, mode: ActionMode, state: ActionEditorState) {
+    var mode by mutableStateOf(value = mode)
+    var state by mutableStateOf(value = state)
+    var yaml by mutableStateOf(value = yaml)
+    var error by mutableStateOf<String?>(value = null)
+    var loaded by mutableStateOf(value = state)
+}
+
+/** Keeps the visual model and the YAML text in step, in whichever direction the edit came from. */
+@Suppress("FunctionNaming")
+@Composable
+private fun SyncActionsAndYaml(
+    sync: ActionEditorSync,
+    yaml: String,
+    fromYaml: (String) -> ActionEditorState,
+    toYaml: (ActionEditorState) -> String,
+    onYamlChange: (String) -> Unit,
+) {
+    // External YAML changes (e.g. project load) should pull into the local model.
+    LaunchedEffect(key1 = yaml) {
+        if (yaml != sync.yaml) {
+            sync.yaml = yaml
+            sync.state = fromYaml(yaml)
+            sync.loaded = sync.state
+            sync.error = null
+        }
+    }
+
+    // Visual/editor changes push to YAML only when the model is valid and actually different.
+    LaunchedEffect(key1 = sync.state, key2 = sync.mode) {
+        if (sync.mode == ActionMode.YAML) return@LaunchedEffect
+        if (sync.state.hasValidationIssues()) return@LaunchedEffect
+        if (sync.state == sync.loaded) return@LaunchedEffect
+        val generated = runCatching { toYaml(sync.state) }.getOrNull() ?: return@LaunchedEffect
+        if (generated != sync.yaml) {
+            sync.yaml = generated
+            onYamlChange(generated)
+        }
+    }
+
+    // YAML edits parse back to the visual model when valid (debounced).
+    LaunchedEffect(key1 = sync.yaml, key2 = sync.mode) {
+        if (sync.mode != ActionMode.YAML) return@LaunchedEffect
+        delay(timeMillis = 500)
+        val parsed = runCatching { fromYaml(sync.yaml) }.getOrNull()
+        if (parsed != null && !parsed.isReadOnly) {
+            sync.state = parsed
+            sync.error = null
+        } else {
+            sync.error = "Invalid YAML: could not parse action schema"
+        }
+    }
+}
+
 
 private fun ActionEditorState.hasValidationIssues(): Boolean {
     val names = actions.map { it.name.trim() }.filter { it.isNotBlank() }

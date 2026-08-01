@@ -46,62 +46,77 @@ public fun AutoCompleteDropdown(
             .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
     ) {
         suggestions.forEachIndexed { idx, item ->
-            val isSelected = idx == selectedIndex
-            Row(
+            SuggestionRow(
+                item = item,
+                selected = idx == selectedIndex,
+                onSelect = { onSelect(item) },
+            )
+        }
+    }
+}
+
+/**
+ * One suggestion: a kind badge, the label, an optional hint, and a `tab` marker on the selected row.
+ *
+ * The marker only appears on the selection because Tab accepts whatever is highlighted — showing it
+ * on every row would suggest each has its own shortcut.
+ */
+@Suppress("FunctionNaming", "LongMethod")
+@Composable
+private fun SuggestionRow(item: CompletionItem, selected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(if (selected) BgHover else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(onClick = onSelect)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(3.dp))
+                .background(kindColor(item.kind).copy(alpha = 0.15f))
+                .padding(horizontal = 4.dp, vertical = 1.dp),
+        ) {
+            Text(
+                text = kindLabel(item.kind),
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = kindColor(item.kind),
+                ),
+            )
+        }
+        Text(
+            text = item.label,
+            style = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = if (selected) TextPrimary else TextSecondary,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        if (item.hint.isNotEmpty()) {
+            Text(
+                text = item.hint,
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    color = TextMuted,
+                ),
+            )
+        }
+        if (selected) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(if (isSelected) BgHover else androidx.compose.ui.graphics.Color.Transparent)
-                    .clickable { onSelect(item) }
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    .clip(RoundedCornerShape(3.dp))
+                    .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
             ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(kindColor(item.kind).copy(alpha = 0.15f))
-                        .padding(horizontal = 4.dp, vertical = 1.dp),
-                ) {
-                    Text(
-                        text = kindLabel(item.kind),
-                        style = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = kindColor(item.kind)
-                        ),
-                    )
-                }
-                Text(
-                    text = item.label,
-                    style = TextStyle(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 12.sp,
-                        color = if (isSelected) TextPrimary else TextSecondary,
-                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                if (item.hint.isNotEmpty()) {
-                    Text(
-                        text = item.hint,
-                        style = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            color = TextMuted
-                        )
-                    )
-                }
-                if (isSelected) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(3.dp))
-                            .border(1.dp, BorderColor, RoundedCornerShape(3.dp))
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                    ) {
-                        Text("tab", style = TextStyle(fontSize = 9.sp, color = TextMuted))
-                    }
-                }
+                Text("tab", style = TextStyle(fontSize = 9.sp, color = TextMuted))
             }
         }
     }

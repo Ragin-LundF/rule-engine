@@ -21,7 +21,17 @@ class RuleWorkbenchViewModel(
     private val _state = MutableStateFlow(value = initialState)
     val state: StateFlow<RuleWorkbenchState> = _state.asStateFlow()
 
-    /** Dispatch a [WorkbenchAction] and update state accordingly. */
+    /**
+     * Dispatch a [WorkbenchAction] and update state accordingly.
+     *
+     * Suppressed at 15 against a threshold of 14: this is one exhaustive `when` over a sealed
+     * hierarchy, and every branch is a single `copy`. Detekt counts a branch as a decision, so the
+     * measure grows with the number of actions rather than with any tangling. Splitting it would
+     * mean two `when`s with an `else`, which is what would actually make it unsafe — the
+     * exhaustiveness is what turns deleting an action subtype into a compile error rather than a
+     * silently ignored dispatch.
+     */
+    @Suppress("CyclomaticComplexMethod")
     fun dispatch(action: WorkbenchAction) {
         when (action) {
             is WorkbenchAction.SelectAppArea -> updateState { it.copy(appArea = action.area) }

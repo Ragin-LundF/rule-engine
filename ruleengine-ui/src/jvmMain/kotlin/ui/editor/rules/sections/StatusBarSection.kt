@@ -38,7 +38,9 @@ import ui.project.ProjectWorkspace
  * The project line matters more than it sounds: with several projects open over a session, "which
  * one am I editing and is it saved" is otherwise only answerable by opening a file dialog.
  */
-@Suppress("FunctionNaming")
+// 65 lines against a threshold of 60: one Row of status segments, each a Text with a condition on
+// it. Same reasoning as RuleInspector — the length is the number of things reported.
+@Suppress("FunctionNaming", "LongMethod")
 @Composable
 fun StatusBarSection(state: RuleEditorState, workspace: ProjectWorkspace) {
     val statusKind by state.statusKind

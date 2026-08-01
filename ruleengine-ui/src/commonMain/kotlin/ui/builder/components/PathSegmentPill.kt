@@ -42,6 +42,11 @@ private val PillShape = RoundedCornerShape(percent = 50)
  * Clicking the pill selects it, which is what opens its `where` drawer in [PathBreadcrumb], and opens
  * the member menu when there is one to open.
  */
+// 81 lines against a threshold of 60, and flat: a Row whose five children are each an optional
+// Text — the name, the filter count, the unknown marker, the chevron, the remove button. Splitting
+// would mean a composable per Text, which is more to read than the tree it replaces. The one part
+// with substance, the name menu, is already `OptionMenu`.
+@Suppress("LongMethod")
 @Composable
 fun PathSegmentPill(
     name: String,

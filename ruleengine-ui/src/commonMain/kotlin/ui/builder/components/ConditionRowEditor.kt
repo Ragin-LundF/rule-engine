@@ -6,8 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.Checkbox
-import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -15,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.CatalogFieldInfo
 import ui.builder.MutableBuilderCondition
@@ -54,73 +51,16 @@ fun ConditionRowEditor(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .weight(weight = 1f)
-                .clickable(onClick = onSelected),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "⠿",
-                style = MaterialTheme.typography.body2,
-                color = TextSecondary,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-
-            FieldDropdown(
-                selectedFieldId = condition.field,
-                fields = fieldOptions,
-                onFieldSelected = { selectedField ->
-                    condition.field = selectedField.id
-                    val newOperators = OperatorOptions.forField(
-                        fieldType = selectedField.type,
-                        schemaOperators = selectedField.operators,
-                    )
-                    if (condition.operator !in newOperators) {
-                        condition.operator = newOperators.firstOrNull() ?: condition.operator
-                    }
-                    onChanged()
-                },
-                modifier = Modifier.width(width = 150.dp),
-            )
-
-            OperatorDropdown(
-                selectedOperator = condition.operator,
-                operators = operators,
-                onOperatorSelected = { selectedOperator ->
-                    condition.operator = selectedOperator
-                    onChanged()
-                },
-                modifier = Modifier.width(width = 120.dp),
-            )
-
-            TypedValueEditor(
-                condition = condition,
-                onChanged = onChanged,
-                fieldType = fieldInfo?.type ?: "text",
-                valueHint = fieldInfo?.format ?: "",
-                modifier = Modifier.weight(weight = 1f),
-            )
-
-            if (supportsIgnoreCase) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = condition.ignoreCase,
-                        onCheckedChange = {
-                            condition.ignoreCase = it
-                            onChanged()
-                        },
-                        colors = CheckboxDefaults.colors(checkedColor = PrimaryBlue),
-                    )
-                    Text(
-                        text = "ignore case",
-                        style = MaterialTheme.typography.caption,
-                        color = TextSecondary,
-                    )
-                }
-            }
-        }
+        ConditionControls(
+            condition = condition,
+            fieldOptions = fieldOptions,
+            fieldInfo = fieldInfo,
+            operators = operators,
+            supportsIgnoreCase = supportsIgnoreCase,
+            onSelected = onSelected,
+            onChanged = onChanged,
+            modifier = Modifier.weight(weight = 1f),
+        )
 
         // Escape hatch into a comparison row, where a side can become an aggregate or calculation.
         if (onSwitchToAdvanced != null) {
@@ -134,5 +74,82 @@ fun ConditionRowEditor(
             text = "×",
             onClick = onRemove,
         )
+    }
+}
+
+/**
+ * Field, operator and value — the three parts of a simple condition.
+ *
+ * Changing the field can invalidate the operator (a `text` field has no `>=`), so the operator falls
+ * back to the first the new field allows rather than staying on something that will not compile.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun ConditionControls(
+    condition: MutableBuilderCondition,
+    fieldOptions: List<CatalogFieldInfo>,
+    fieldInfo: CatalogFieldInfo?,
+    operators: List<String>,
+    supportsIgnoreCase: Boolean,
+    onSelected: () -> Unit,
+    onChanged: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.clickable(onClick = onSelected),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "⠿",
+            style = MaterialTheme.typography.body2,
+            color = TextSecondary,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
+
+        FieldDropdown(
+            selectedFieldId = condition.field,
+            fields = fieldOptions,
+            onFieldSelected = { selectedField ->
+                condition.field = selectedField.id
+                val newOperators = OperatorOptions.forField(
+                    fieldType = selectedField.type,
+                    schemaOperators = selectedField.operators,
+                )
+                if (condition.operator !in newOperators) {
+                    condition.operator = newOperators.firstOrNull() ?: condition.operator
+                }
+                onChanged()
+            },
+            modifier = Modifier.width(width = 150.dp),
+        )
+
+        OperatorDropdown(
+            selectedOperator = condition.operator,
+            operators = operators,
+            onOperatorSelected = { selectedOperator ->
+                condition.operator = selectedOperator
+                onChanged()
+            },
+            modifier = Modifier.width(width = 120.dp),
+        )
+
+        TypedValueEditor(
+            condition = condition,
+            onChanged = onChanged,
+            fieldType = fieldInfo?.type ?: "text",
+            valueHint = fieldInfo?.format ?: "",
+            modifier = Modifier.weight(weight = 1f),
+        )
+
+        if (supportsIgnoreCase) {
+            IgnoreCaseToggle(
+                checked = condition.ignoreCase,
+                onCheckedChange = {
+                    condition.ignoreCase = it
+                    onChanged()
+                },
+            )
+        }
     }
 }

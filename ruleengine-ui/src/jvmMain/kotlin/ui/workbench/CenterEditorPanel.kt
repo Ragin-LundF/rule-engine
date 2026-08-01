@@ -75,67 +75,64 @@ private fun ManifestFilePicker(state: RuleEditorState, viewMode: ui.editor.rules
         ?.rules
         .orEmpty()
 
+    // "All files" is only meaningful where the view can show more than one at once, and only when
+    // the entry actually has more than one.
     val showAllFilesOption = currentEntryRuleFiles.size >= 2 &&
         (viewMode == ui.editor.rules.ViewMode.DIAGRAM || viewMode == ui.editor.rules.ViewMode.TEST)
 
-    if (currentEntryRuleFiles.isNotEmpty()) {
-        var expanded by remember { mutableStateOf(false) }
-        Box {
-            ToolbarButton(label = "☰", onClick = { expanded = true })
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier
-                    .background(color = BgElevated)
-                    .border(
-                        width = 1.dp,
-                        color = BorderColor,
-                        shape = RoundedCornerShape(size = 8.dp),
-                    ),
-            ) {
-                if (showAllFilesOption) {
-                    DropdownMenuItem(
-                        onClick = {
-                            state.loadAllRuleFilesForCurrentEntry()
-                            expanded = false
-                        },
-                        modifier = Modifier.background(
-                            color = if (showAllRules) BgHover else BgElevated,
-                            shape = RoundedCornerShape(size = 6.dp),
-                        ),
-                    ) {
-                        Text(
-                            text = "All files",
-                            style = MaterialTheme.typography.body2,
-                            color = if (showAllRules) PrimaryBlue else TextPrimary,
-                            fontWeight = if (showAllRules) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
-                    Divider(color = BorderColor, thickness = 1.dp)
+    if (currentEntryRuleFiles.isEmpty()) return
+
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        ToolbarButton(label = "☰", onClick = { expanded = true })
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(color = BgElevated)
+                .border(
+                    width = 1.dp,
+                    color = BorderColor,
+                    shape = RoundedCornerShape(size = 8.dp),
+                ),
+        ) {
+            if (showAllFilesOption) {
+                RuleFileMenuItem(label = "All files", selected = showAllRules) {
+                    state.loadAllRuleFilesForCurrentEntry()
+                    expanded = false
                 }
-                currentEntryRuleFiles.forEach { relativePath ->
-                    val fileName = relativePath.substringAfterLast('/')
-                    val isSelected = !showAllRules && relativePath == selectedManifestRuleFile
-                    DropdownMenuItem(
-                        onClick = {
-                            state.loadSingleManifestRuleFile(relativePath)
-                            expanded = false
-                        },
-                        modifier = Modifier.background(
-                            color = if (isSelected) BgHover else BgElevated,
-                            shape = RoundedCornerShape(size = 6.dp),
-                        ),
-                    ) {
-                        Text(
-                            text = fileName,
-                            style = MaterialTheme.typography.body2,
-                            color = if (isSelected) PrimaryBlue else TextPrimary,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
+                Divider(color = BorderColor, thickness = 1.dp)
+            }
+            currentEntryRuleFiles.forEach { relativePath ->
+                RuleFileMenuItem(
+                    label = relativePath.substringAfterLast('/'),
+                    selected = !showAllRules && relativePath == selectedManifestRuleFile,
+                ) {
+                    state.loadSingleManifestRuleFile(relativePath)
+                    expanded = false
                 }
             }
         }
+    }
+}
+
+/** One entry in the rule-file menu; "All files" and a single file look and behave the same. */
+@Suppress("FunctionNaming")
+@Composable
+private fun RuleFileMenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        onClick = onClick,
+        modifier = Modifier.background(
+            color = if (selected) BgHover else BgElevated,
+            shape = RoundedCornerShape(size = 6.dp),
+        ),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.body2,
+            color = if (selected) PrimaryBlue else TextPrimary,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+        )
     }
 }
 
@@ -187,34 +184,20 @@ fun CenterEditorPanel(
 
         Box(modifier = Modifier.weight(weight = 1f)) {
             when (viewMode) {
-                ui.editor.rules.ViewMode.BUILDER -> Row(modifier = Modifier.fillMaxSize()) {
-                    RuleTreePanel(
-                        files = ruleTreeFiles,
-                        selectedRuleId = builderEditorState.ruleId,
-                        onRuleSelected = onTreeRuleSelected,
-                        onAddRule = onAddRule,
-                        expanded = state.ruleTreeExpanded.value,
-                        onToggleExpanded = {
-                            state.ruleTreeExpanded.value = !state.ruleTreeExpanded.value
-                        },
-                    )
-                    Divider(
-                        color = BorderColor,
-                        modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
-                    )
-                    RuleBuilderView(
-                        editorState = builderEditorState,
-                        allRuleIds = allRuleIds,
-                        onRuleSelected = onRuleSelected,
-                        onAddRule = onAddRule,
-                        onRenameRule = onRenameRule,
-                        catalogFields = catalogFields,
-                        catalogActions = catalogActions,
-                        onConditionSelected = onConditionSelected,
-                        onDslChange = onBuilderDslChange,
-                        modifier = Modifier.weight(weight = 1f).fillMaxSize(),
-                    )
-                }
+                ui.editor.rules.ViewMode.BUILDER -> BuilderModeContent(
+                    state = state,
+                    builderEditorState = builderEditorState,
+                    allRuleIds = allRuleIds,
+                    catalogFields = catalogFields,
+                    catalogActions = catalogActions,
+                    ruleTreeFiles = ruleTreeFiles,
+                    onRuleSelected = onRuleSelected,
+                    onAddRule = onAddRule,
+                    onRenameRule = onRenameRule,
+                    onConditionSelected = onConditionSelected,
+                    onBuilderDslChange = onBuilderDslChange,
+                    onTreeRuleSelected = onTreeRuleSelected,
+                )
 
                 ui.editor.rules.ViewMode.CODE,
                 ui.editor.rules.ViewMode.DIAGRAM,
@@ -239,6 +222,51 @@ fun CenterEditorPanel(
                 )
             }
         }
+    }
+}
+
+/** Builder mode: the rule tree on the left, the selected rule's blocks on the right. */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun BuilderModeContent(
+    state: RuleEditorState,
+    builderEditorState: BuilderEditorState,
+    allRuleIds: List<String>,
+    catalogFields: List<CatalogFieldInfo>,
+    catalogActions: List<CatalogActionInfo>,
+    ruleTreeFiles: List<RuleTreeFile>,
+    onRuleSelected: (String) -> Unit,
+    onAddRule: () -> Unit,
+    onRenameRule: (oldId: String, newId: String) -> Unit,
+    onConditionSelected: (String) -> Unit,
+    onBuilderDslChange: (String) -> Unit,
+    onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
+) {
+    Row(modifier = Modifier.fillMaxSize()) {
+        RuleTreePanel(
+            files = ruleTreeFiles,
+            selectedRuleId = builderEditorState.ruleId,
+            onRuleSelected = onTreeRuleSelected,
+            onAddRule = onAddRule,
+            expanded = state.ruleTreeExpanded.value,
+            onToggleExpanded = { state.ruleTreeExpanded.value = !state.ruleTreeExpanded.value },
+        )
+        Divider(
+            color = BorderColor,
+            modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
+        )
+        RuleBuilderView(
+            editorState = builderEditorState,
+            allRuleIds = allRuleIds,
+            onRuleSelected = onRuleSelected,
+            onAddRule = onAddRule,
+            onRenameRule = onRenameRule,
+            catalogFields = catalogFields,
+            catalogActions = catalogActions,
+            onConditionSelected = onConditionSelected,
+            onDslChange = onBuilderDslChange,
+            modifier = Modifier.weight(weight = 1f).fillMaxSize(),
+        )
     }
 }
 
@@ -325,9 +353,6 @@ private fun CodeModeActions(
     ruleValue: TextFieldValue,
     onRuleValueChange: (TextFieldValue) -> Unit,
 ) {
-    var diagnosticsList by state.diagnosticsList
-    var diagnosticsText by state.diagnosticsText
-
     Row(
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -364,50 +389,52 @@ private fun CodeModeActions(
         ToolbarButton(
             label = "Validate",
             primary = true,
-            onClick = {
-                scope.launch {
-                    val schema = state.parsedSchema.value
-                    if (schema == null) {
-                        state.setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
-                        return@launch
-                    }
-                    if (ruleValue.text.isBlank()) {
-                        state.setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
-                        return@launch
-                    }
-
-                    when (
-                        val outcome = RuleValidationRunner.run(
-                            ruleText = ruleValue.text,
-                            schema = schema,
-                            actions = state.parsedActionSchema.value,
-                        )
-                    ) {
-                        is RuleValidationOutcome.Completed -> if (outcome.isValid) {
-                            state.setStatus(msg = "Validation passed", kind = StatusKind.SUCCESS)
-                            diagnosticsText = "No issues found"
-                            diagnosticsList = emptyList()
-                        } else {
-                            state.setStatus(
-                                msg = "${outcome.diagnostics.size} issue(s) found",
-                                kind = StatusKind.ERROR,
-                            )
-                            diagnosticsList = outcome.diagnostics
-                            diagnosticsText = outcome.diagnostics.joinToString(separator = "\n") { d ->
-                                "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
-                            }
-                        }
-
-                        // Unlike the debounced pass, an explicit Validate click reports the failure.
-                        is RuleValidationOutcome.Threw -> {
-                            state.setStatus(msg = "Parse error: ${outcome.cause.message}", kind = StatusKind.ERROR)
-                            diagnosticsText = outcome.cause.toString()
-                            diagnosticsList = emptyList()
-                        }
-                    }
-                }
-            },
+            onClick = { scope.launch { state.validateNow(ruleText = ruleValue.text) } },
         )
+    }
+}
+
+/**
+ * The Validate button's work: parse, validate, and report.
+ *
+ * Unlike the debounced pass in the editor, an explicit click reports a parse failure — someone who
+ * pressed Validate is asking, so silence would read as "it is fine".
+ */
+private fun RuleEditorState.validateNow(ruleText: String) {
+    val schema = parsedSchema.value
+    if (schema == null) {
+        setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
+        return
+    }
+    if (ruleText.isBlank()) {
+        setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
+        return
+    }
+
+    when (
+        val outcome = RuleValidationRunner.run(
+            ruleText = ruleText,
+            schema = schema,
+            actions = parsedActionSchema.value,
+        )
+    ) {
+        is RuleValidationOutcome.Completed -> if (outcome.isValid) {
+            setStatus(msg = "Validation passed", kind = StatusKind.SUCCESS)
+            diagnosticsText.value = "No issues found"
+            diagnosticsList.value = emptyList()
+        } else {
+            setStatus(msg = "${outcome.diagnostics.size} issue(s) found", kind = StatusKind.ERROR)
+            diagnosticsList.value = outcome.diagnostics
+            diagnosticsText.value = outcome.diagnostics.joinToString(separator = "\n") { d ->
+                "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
+            }
+        }
+
+        is RuleValidationOutcome.Threw -> {
+            setStatus(msg = "Parse error: ${outcome.cause.message}", kind = StatusKind.ERROR)
+            diagnosticsText.value = outcome.cause.toString()
+            diagnosticsList.value = emptyList()
+        }
     }
 }
 

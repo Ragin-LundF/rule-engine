@@ -37,49 +37,49 @@ fun InspectorPanel(
     modifier: Modifier = Modifier,
 ) {
     when (selectedItem) {
-        is InspectorItem.Field -> {
-            val field = fields.firstOrNull { it.id == selectedItem.id }
-            if (field != null) {
-                FieldInspector(field = field, modifier = modifier)
-            } else {
-                InspectorPlaceholder(modifier = modifier)
-            }
+        is InspectorItem.Field -> Inspect(
+            subject = fields.firstOrNull { it.id == selectedItem.id },
+            modifier = modifier,
+        ) { field -> FieldInspector(field = field, modifier = modifier) }
+
+        is InspectorItem.Action -> Inspect(
+            subject = actions.firstOrNull { it.name == selectedItem.name },
+            modifier = modifier,
+        ) { action -> ActionInspector(action = action, modifier = modifier) }
+
+        is InspectorItem.Rule -> Inspect(
+            subject = rules.firstOrNull { it.id == selectedItem.id },
+            modifier = modifier,
+        ) { rule ->
+            RuleInspector(
+                rule = rule,
+                conditionCount = builderState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
+                actionCount = builderState?.actions?.size ?: 0,
+                diagnostics = diagnostics,
+                modifier = modifier,
+            )
         }
-        is InspectorItem.Action -> {
-            val action = actions.firstOrNull { it.name == selectedItem.name }
-            if (action != null) {
-                ActionInspector(action = action, modifier = modifier)
-            } else {
-                InspectorPlaceholder(modifier = modifier)
-            }
-        }
-        is InspectorItem.Rule -> {
-            val rule = rules.firstOrNull { it.id == selectedItem.id }
-            if (rule != null) {
-                RuleInspector(
-                    rule = rule,
-                    conditionCount = builderState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
-                    actionCount = builderState?.actions?.size ?: 0,
-                    diagnostics = diagnostics,
-                    modifier = modifier,
-                )
-            } else {
-                InspectorPlaceholder(modifier = modifier)
-            }
-        }
-        is InspectorItem.Condition -> {
-            val condition = builderState?.let { findLeafCondition(it.conditionNodes, selectedItem.conditionId) }
-            if (condition != null) {
-                ConditionInspector(condition = condition.toImmutable(), modifier = modifier)
-            } else {
-                InspectorPlaceholder(modifier = modifier)
-            }
-        }
-        is InspectorItem.Manifest -> {
-            ManifestInspector(modifier = modifier)
-        }
+
+        is InspectorItem.Condition -> Inspect(
+            subject = builderState?.let { findLeafCondition(it.conditionNodes, selectedItem.conditionId) },
+            modifier = modifier,
+        ) { condition -> ConditionInspector(condition = condition.toImmutable(), modifier = modifier) }
+
+        is InspectorItem.Manifest -> ManifestInspector(modifier = modifier)
         null -> InspectorPlaceholder(modifier = modifier)
     }
+}
+
+/**
+ * Renders [content] for [subject], or the placeholder when there is no subject.
+ *
+ * Selection outlives the catalog it points into — a rule can be selected and then edited away — so
+ * every lookup here can miss, and each branch used to repeat the same null check.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun <T : Any> Inspect(subject: T?, modifier: Modifier, content: @Composable (T) -> Unit) {
+    if (subject == null) InspectorPlaceholder(modifier = modifier) else content(subject)
 }
 
 /**

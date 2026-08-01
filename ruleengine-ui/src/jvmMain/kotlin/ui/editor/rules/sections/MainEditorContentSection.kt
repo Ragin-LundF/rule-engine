@@ -59,6 +59,7 @@ import ui.editor.rules.autoClosingBraceDedent
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
 import ui.settings.SettingsController
+import ui.theme.ThemeController
 import ui.workbench.DiagramModeHost
 import ui.workbench.diagramDataFor
 
@@ -97,10 +98,20 @@ fun ColumnScope.MainEditorContentSection(
     }
 
     // ── Syntax-highlighted display value ──────────────────────────────────────
-    // Annotation is cached by text+schema only. The final TextFieldValue is
-    // NOT wrapped in remember so its selection always reflects the current cursor
-    // position — this fixes arrow-key navigation (stale-selection bug).
-    val annotatedRule = remember(ruleValue.text, parsedSchema, parsedActionSchema, diagnosticsList) {
+    // The final TextFieldValue is NOT wrapped in remember so its selection always reflects the
+    // current cursor position — this fixes arrow-key navigation (stale-selection bug).
+    //
+    // `isDark` is a key, not incidental: the colours annotateRule bakes in come from the palette,
+    // and a snapshot read inside a remember block does not invalidate that block. Without the key
+    // the spans keep the palette that was active when the text last changed, so switching theme
+    // left dark-mode token colours on a light background.
+    val annotatedRule = remember(
+        ruleValue.text,
+        parsedSchema,
+        parsedActionSchema,
+        diagnosticsList,
+        ThemeController.isDark,
+    ) {
         annotateRule(
             text = ruleValue.text,
             schema = parsedSchema,

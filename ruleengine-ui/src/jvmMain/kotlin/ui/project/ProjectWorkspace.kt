@@ -27,6 +27,13 @@ import java.nio.file.Path
  * questions it needs to ask are exposed as [dialog] rather than opened directly, keeping this class
  * testable and the dialogs in the composable layer where they belong.
  */
+@Suppress("TooManyFunctions")
+// 37 methods against a threshold of 20. Splitting was considered and rejected: they are not 37
+// independent operations but one state machine over `session` / `dialog` / `dirtyState`, and most of
+// them are the *resumption* half of a guarded action — `openProject` asks, `onUnsavedChangesSave`
+// answers, `resume` continues. Carving those into collaborators would spread three mutable fields
+// across objects and make the ask-then-act sequencing, which is the whole point of this class,
+// something you have to reassemble from several files to check.
 class ProjectWorkspace(
     private val state: RuleEditorState,
     // Injected so the open/save sequencing can be tested without a native dialog on screen.

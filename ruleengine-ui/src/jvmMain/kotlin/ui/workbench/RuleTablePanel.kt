@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,10 +35,7 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextSecondary
-import ui.builder.BuilderAction
-import ui.builder.BuilderConditionNode
 import ui.builder.BuilderRule
-import ui.builder.OperandText
 import ui.components.StatusBadge
 import ui.workbench.model.CatalogRule
 import ui.workbench.model.CatalogRuleStatus
@@ -132,6 +130,8 @@ private fun RuleTableRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    // Selection is shown by the row's own background and border rather than by recolouring the id,
+    // so an unselected row's id still reads as the prominent, on-brand thing it is.
     val rowModifier = if (selected) {
         Modifier
             .fillMaxWidth()
@@ -150,133 +150,108 @@ private fun RuleTableRow(
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     }
-    // The rule id is always the prominent, on-brand color — selection is shown by the row
-    // background/border instead, so an unselected row's id no longer reads as plain body text.
-    val idColor = PrimaryBlue
-    val idWeight = FontWeight.SemiBold
 
     Row(modifier = rowModifier, verticalAlignment = Alignment.Top) {
-        Column(
-            modifier = Modifier.weight(weight = 0.22f),
-            verticalArrangement = Arrangement.spacedBy(space = 2.dp),
-        ) {
+        RuleIdCell(rule = rule)
+        RuleStatusCell(status = status)
+        RuleConditionsCell(rule = rule)
+        RuleActionsCell(rule = rule)
+    }
+}
+
+@Suppress("FunctionNaming")
+@Composable
+private fun RowScope.RuleIdCell(rule: BuilderRule) {
+    Column(
+        modifier = Modifier.weight(weight = 0.22f),
+        verticalArrangement = Arrangement.spacedBy(space = 2.dp),
+    ) {
+        Text(
+            text = rule.tableRuleId(),
+            style = MaterialTheme.typography.body2.copy(fontWeight = FontWeight.SemiBold),
+            color = PrimaryBlue,
+        )
+        // Rendered even when empty: an undescribed rule is a gap in the exported overview, and a
+        // blank cell would read as "nothing to say here" rather than "still to write".
+        rule.tableDescription()?.let { description ->
             Text(
-                text = rule.tableRuleId(),
-                style = MaterialTheme.typography.body2.copy(fontWeight = idWeight),
-                color = idColor,
+                text = description.ifBlank { "no description" },
+                style = MaterialTheme.typography.caption,
+                color = if (description.isBlank()) TextMuted else TextSecondary,
             )
-            // Rendered even when empty: an undescribed rule is a gap in the exported overview, and a
-            // blank cell would read as "nothing to say here" rather than "still to write".
-            rule.tableDescription()?.let { description ->
-                Text(
-                    text = description.ifBlank { "no description" },
-                    style = MaterialTheme.typography.caption,
-                    color = if (description.isBlank()) TextMuted else TextSecondary,
-                )
-            }
-        }
-        Box(modifier = Modifier.width(width = 80.dp)) {
-            if (status != null) {
-                StatusBadge(
-                    label = status.status.label,
-                    color = when (status.status) {
-                        CatalogRuleStatus.VALID -> AccentGreen
-                        CatalogRuleStatus.INVALID -> AccentRed
-                        CatalogRuleStatus.DRAFT -> AccentOrange
-                    },
-                )
-            }
-        }
-        Column(
-            modifier = Modifier.weight(weight = 0.48f),
-            verticalArrangement = Arrangement.spacedBy(space = 2.dp),
-        ) {
-            when (rule) {
-                is BuilderRule.Supported -> {
-                    if (rule.conditionNodes.isEmpty()) {
-                        Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
-                    } else {
-                        rule.conditionNodes.flatMap { it.toSummaryLines() }.forEach { line ->
-                            Text(text = line, style = MaterialTheme.typography.body2, color = TextSecondary)
-                        }
-                    }
-                }
-                is BuilderRule.Unsupported -> Text(
-                    text = "⚠ ${rule.reason}",
-                    style = MaterialTheme.typography.body2,
-                    color = AccentOrange,
-                )
-                BuilderRule.None -> Unit
-            }
-        }
-        Column(
-            modifier = Modifier.weight(weight = 0.30f),
-            verticalArrangement = Arrangement.spacedBy(space = 2.dp),
-        ) {
-            when (rule) {
-                is BuilderRule.Supported -> {
-                    if (rule.actions.isEmpty()) {
-                        Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
-                    } else {
-                        rule.actions.forEach { action ->
-                            Text(
-                                text = action.toDisplaySummary(),
-                                style = MaterialTheme.typography.body2,
-                                color = TextSecondary,
-                            )
-                        }
-                    }
-                }
-                else -> Unit
-            }
         }
     }
 }
 
-private fun conditionValuePart(value: String, valueTo: String, listItems: List<String>): String = when {
-    listItems.isNotEmpty() -> "[${listItems.joinToString(separator = ", ")}]"
-    valueTo.isNotBlank() -> "$value … $valueTo"
-    else -> value
-}
-
-private fun BuilderConditionNode.toSummaryLines(indent: String = ""): List<String> {
-    val join = if (joinToPrevious.isNotBlank()) "${joinToPrevious.uppercase()} " else ""
-    val not = if (negated) "NOT " else ""
-    return when (this) {
-        is BuilderConditionNode.Condition -> {
-            val valuePart = conditionValuePart(value = value, valueTo = valueTo, listItems = listItems)
-            listOf("$indent$join$not$field $operator $valuePart")
-        }
-        is BuilderConditionNode.Comparison -> {
-            val left = OperandText.toLabel(operand = left)
-            val right = OperandText.toLabel(operand = right)
-            listOf("$indent$join$not$left $operator $right")
-        }
-        is BuilderConditionNode.Group -> {
-            listOf("$indent$join$not(") +
-                nodes.flatMap { it.toSummaryLines(indent = "$indent  ") } +
-                listOf("$indent)")
+@Suppress("FunctionNaming")
+@Composable
+private fun RuleStatusCell(status: CatalogRule?) {
+    Box(modifier = Modifier.width(width = 80.dp)) {
+        if (status != null) {
+            StatusBadge(
+                label = status.status.label,
+                color = when (status.status) {
+                    CatalogRuleStatus.VALID -> AccentGreen
+                    CatalogRuleStatus.INVALID -> AccentRed
+                    CatalogRuleStatus.DRAFT -> AccentOrange
+                },
+            )
         }
     }
 }
 
-private fun BuilderAction.toDisplaySummary(): String {
-    val args = arguments.joinToString(separator = ", ")
-    return if (args.isEmpty()) name else "$name($args)"
+@Suppress("FunctionNaming")
+@Composable
+private fun RowScope.RuleConditionsCell(rule: BuilderRule) {
+    Column(
+        modifier = Modifier.weight(weight = 0.48f),
+        verticalArrangement = Arrangement.spacedBy(space = 2.dp),
+    ) {
+        when (rule) {
+            is BuilderRule.Supported -> {
+                if (rule.conditionNodes.isEmpty()) {
+                    Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
+                } else {
+                    rule.conditionNodes.flatMap { it.toSummaryLines() }.forEach { line ->
+                        Text(text = line, style = MaterialTheme.typography.body2, color = TextSecondary)
+                    }
+                }
+            }
+
+            is BuilderRule.Unsupported -> Text(
+                text = "⚠ ${rule.reason}",
+                style = MaterialTheme.typography.body2,
+                color = AccentOrange,
+            )
+
+            BuilderRule.None -> Unit
+        }
+    }
 }
 
-private fun BuilderRule.tableRuleId(): String = when (this) {
-    is BuilderRule.Supported -> id
-    is BuilderRule.Unsupported -> id
-    BuilderRule.None -> ""
-}
+@Suppress("FunctionNaming")
+@Composable
+private fun RowScope.RuleActionsCell(rule: BuilderRule) {
+    Column(
+        modifier = Modifier.weight(weight = 0.30f),
+        verticalArrangement = Arrangement.spacedBy(space = 2.dp),
+    ) {
+        when (rule) {
+            is BuilderRule.Supported -> {
+                if (rule.actions.isEmpty()) {
+                    Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
+                } else {
+                    rule.actions.forEach { action ->
+                        Text(
+                            text = action.toDisplaySummary(),
+                            style = MaterialTheme.typography.body2,
+                            color = TextSecondary,
+                        )
+                    }
+                }
+            }
 
-/**
- * Null for a rule the Builder could not map: it never read that rule's body, so reporting "no
- * description" would be a claim it cannot make — the clause may well be there in the file.
- */
-private fun BuilderRule.tableDescription(): String? = when (this) {
-    is BuilderRule.Supported -> description
-    is BuilderRule.Unsupported -> null
-    BuilderRule.None -> null
+            else -> Unit
+        }
+    }
 }

@@ -59,24 +59,7 @@ fun DiagnosticsPanel(
     modifier: Modifier = Modifier,
 ) {
     if (diagnostics.isEmpty()) {
-        Box(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(130.dp)
-                .clip(RoundedCornerShape(6.dp))
-                .background(Bg)
-                .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
-                .padding(14.dp),
-        ) {
-            Text(
-                text = emptyText,
-                style = TextStyle(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    color = if (emptyText.startsWith("No diagnostics")) TextMuted else AccentGreen,
-                ),
-            )
-        }
+        DiagnosticsEmptyState(emptyText = emptyText, modifier = modifier)
         return
     }
 
@@ -88,95 +71,140 @@ fun DiagnosticsPanel(
             .background(Bg)
             .border(1.dp, BorderColor, RoundedCornerShape(6.dp)),
     ) {
-        items(diagnostics) { d ->
-            val rowBg = when (d.severity) {
-                Severity.ERROR -> AccentRed.copy(alpha = 0.07f)
-                Severity.WARNING -> AccentOrange.copy(alpha = 0.07f)
-                Severity.INFO -> Color.Transparent
-            }
-            val dotColor = when (d.severity) {
-                Severity.ERROR -> AccentRed
-                Severity.WARNING -> AccentOrange
-                Severity.INFO -> PrimaryBlue
-            }
-            val lineLabel = d.line?.let { "L$it${d.column?.let { c -> ":$c" } ?: ""}" }
+        items(diagnostics) { diagnostic ->
+            DiagnosticRow(diagnostic = diagnostic, onRowClick = onRowClick, onApplyFix = onApplyFix)
+        }
+    }
+}
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(rowBg)
-                    .clickable { onRowClick(d) }
-                    .padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+/**
+ * Shown instead of the list when there is nothing to report.
+ *
+ * The colour carries meaning: the default "no diagnostics yet" text is muted, but a caller that
+ * passes its own message is reporting a *successful* validation, which reads as green.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun DiagnosticsEmptyState(emptyText: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(130.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Bg)
+            .border(1.dp, BorderColor, RoundedCornerShape(6.dp))
+            .padding(14.dp),
+    ) {
+        Text(
+            text = emptyText,
+            style = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = if (emptyText.startsWith("No diagnostics")) TextMuted else AccentGreen,
+            ),
+        )
+    }
+}
+
+/** One diagnostic: severity dot, message, position, and the hint or quick-fix it carries. */
+// Flat by nature — a dot, a message, a position, then an optional hint/quick-fix line. Splitting
+// further would mean a composable per Text, which is more to read than the tree it replaces.
+//
+// The complexity is the same story counted differently: every branch is one optional element, and
+// two `when`s map severity to a colour. There is no path through here to get lost on.
+@Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod")
+@Composable
+private fun DiagnosticRow(
+    diagnostic: UiDiagnosticWithFix,
+    onRowClick: (UiDiagnosticWithFix) -> Unit,
+    onApplyFix: (QuickFix) -> Unit,
+) {
+    val rowBg = when (diagnostic.severity) {
+        Severity.ERROR -> AccentRed.copy(alpha = 0.07f)
+        Severity.WARNING -> AccentOrange.copy(alpha = 0.07f)
+        Severity.INFO -> Color.Transparent
+    }
+    val dotColor = when (diagnostic.severity) {
+        Severity.ERROR -> AccentRed
+        Severity.WARNING -> AccentOrange
+        Severity.INFO -> PrimaryBlue
+    }
+    val lineLabel = diagnostic.line?.let { "L$it${diagnostic.column?.let { c -> ":$c" } ?: ""}" }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(rowBg)
+            .clickable { onRowClick(diagnostic) }
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(Modifier.size(7.dp).background(dotColor, CircleShape))
+            Text(
+                text = diagnostic.message,
+                style = TextStyle(
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                    color = TextPrimary,
+                ),
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            lineLabel?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.caption,
+                    color = TextMuted,
+                )
+            }
+        }
+
+        // Hint + quick-fix button row
+        val hint = diagnostic.hint
+        val fix = diagnostic.quickFix
+        if (hint != null || fix is QuickFix.ReplaceToken) {
+            Row(
+                modifier = Modifier.padding(start = 15.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Box(Modifier.size(7.dp).background(dotColor, CircleShape))
+                if (hint != null) {
                     Text(
-                        text = d.message,
-                        style = TextStyle(
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            color = TextPrimary,
-                        ),
+                        text = hint,
+                        style = MaterialTheme.typography.caption,
+                        color = AccentGreen,
                         modifier = Modifier.weight(1f),
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    lineLabel?.let {
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (fix is QuickFix.ReplaceToken) {
+                    TextButton(
+                        onClick = { onApplyFix(fix) },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = PrimaryBlue,
+                        ),
+                        modifier = Modifier.height(24.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 6.dp,
+                            vertical = 0.dp,
+                        ),
+                    ) {
                         Text(
-                            text = it,
+                            text = fix.label,
                             style = MaterialTheme.typography.caption,
-                            color = TextMuted,
                         )
                     }
                 }
-
-                // Hint + quick-fix button row
-                val hint = d.hint
-                val fix = d.quickFix
-                if (hint != null || fix is QuickFix.ReplaceToken) {
-                    Row(
-                        modifier = Modifier.padding(start = 15.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        if (hint != null) {
-                            Text(
-                                text = hint,
-                                style = MaterialTheme.typography.caption,
-                                color = AccentGreen,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        } else {
-                            Spacer(Modifier.weight(1f))
-                        }
-                        if (fix is QuickFix.ReplaceToken) {
-                            TextButton(
-                                onClick = { onApplyFix(fix) },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = PrimaryBlue,
-                                ),
-                                modifier = Modifier.height(24.dp),
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                                    horizontal = 6.dp,
-                                    vertical = 0.dp,
-                                ),
-                            ) {
-                                Text(
-                                    text = fix.label,
-                                    style = MaterialTheme.typography.caption,
-                                )
-                            }
-                        }
-                    }
-                }
             }
-            Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
         }
     }
+    Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp)
 }

@@ -49,6 +49,12 @@ private val DrawerMaxWidth = 620.dp
  *
  * Depth is unbounded: pills, drawer and warning are all derived from the path list.
  */
+// 70 lines against a threshold of 60. The body is one FlowRow of pills followed by the filter
+// drawer for whichever pill is selected; there is no second concern in here to lift out, and a
+// composable per pill-and-drawer pair would be read by jumping between two declarations instead of
+// one. The parts that did decompose — the pill itself and its option menu — are already their own
+// composables.
+@Suppress("LongMethod")
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PathBreadcrumb(
