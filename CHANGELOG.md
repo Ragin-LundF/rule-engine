@@ -93,6 +93,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validator, the compiler, the trace, the export and the visual editor, and spelled as literals at
   each of those sites they drift.
 
+- **A project is opened and saved as one thing.** The workbench treated the manifest, the schema, the
+  actions and each rule file as unrelated buffers behind six independent load/save buttons: a loaded
+  schema had no on-disk identity and could not be written back, a save wrote only `manifest.yaml`,
+  and a second manifest could not be opened at all — the first one's rules stayed on screen while the
+  base directory silently pointed at the new file. *Open Project…* now reads a manifest and
+  everything it references; *Save Project* writes the rule files, the schema, the actions and the
+  manifest together, with the manifest written **last** so a save that fails part-way never leaves an
+  index naming files that were not written; *Save Project As…* copies the project to a new folder and
+  rewrites its links for the new depth. Before anything is overwritten the workbench asks: about
+  unsaved work, about writing to a file shared with other projects, and about a file that changed on
+  disk since it was opened — dirtiness being a comparison against what was last read or written, so
+  it can tell *edited* from *edited back to what it was*.
+
+- **A light theme, and the workbench remembers which one you chose.** The colours were fixed
+  constants, so the app was dark and that was that. `ui.theme` now defines an `AppPalette` with a
+  `DarkPalette` and a `LightPalette` behind it, `ThemeController` switches between them, and every
+  colour in `ui.Theme` reads from the active palette rather than from a literal — so a component
+  cannot stay dark because someone spelled a hex value inline. The ☀/☾ button in the top bar
+  toggles it, and `ThemePersistence` writes the choice to the OS user preferences, so it survives a
+  restart instead of resetting to dark on every launch.
+
+- **The side panels collapse, and say what they are while collapsed.** The right inspector/simulate
+  panel and the Builder's rule tree each fold down to a narrow strip with their title rotated onto
+  it, so the editor takes the width back on a small window without the user losing track of what was
+  there or how to bring it back. The diagnostics list starts collapsed — it should not compete with
+  the center panel for height on first launch — while its severity badges stay in the header, so a
+  collapsed panel never hides that there are errors. The split between the schema panel and the
+  editor is draggable.
+
+- **A rule tree down the left of Builder mode** — every rule of the selected manifest entry, grouped
+  under the file it is written in, each marked with its validation status. Picking a rule in another
+  file opens that file and selects the rule, so navigating a multi-file entry no longer means going
+  through the file dropdown first and then hunting for the rule.
+
+- **The workbench manages every entry of a manifest, not just the first one.** A manifest may declare
+  several independent entries — each with its own schema, actions and rule files — and the engine has
+  always run them independently, but the editor collapsed a project to `entries.first()`, hid the
+  rest, and refused a plain Save rather than silently dropping them. All entries are now held, one is
+  active, and the whole workbench follows it.
+
+  - **Pick one.** An entry dropdown sits in the top bar rather than in the Manifest area, because the
+    choice governs every other area: the schema, the actions and the rule files on screen all belong
+    to the entry named there. Switching replaces every buffer, so it goes through the same
+    unsaved-work question as opening a project — and answering it now resumes the switch instead of
+    leaving the user to repeat it.
+  - **Add one.** *+ New entry…* in the dropdown, or *+ Add entry* in the Manifest area, appends an
+    empty entry and makes it active; its name is typed into the entry's card. Nothing is written to
+    disk: an entry the user may yet abandon should not litter the project with empty YAML. Whatever
+    is then linked or written in the Schema, Actions and Rules areas attaches to that entry.
+  - **Remove one.** *Remove…* asks the question that matters — **Delete files** / **Remove from
+    manifest** / **Cancel** — and names the files on both sides of it. Only what the entry owns
+    exclusively can be deleted: a schema a second entry also references, or one linked from outside
+    the project with `../`, is kept regardless and the dialog says so. Either answer rewrites the
+    manifest immediately, so the index never names a file that was just erased. The last entry cannot
+    be removed, since `entries` is required.
+
+  The Manifest area's Builder tab renders one card per entry, with the id, the schema and action
+  paths and the rule-file list editable per entry, and marks the one being edited. Its **Checks** tab
+  now reports duplicate entry ids — which `RuleEngineBuilder.selectEntries` rejects outright, and
+  which are otherwise invisible enough to happen by accident — and reports the blank-path checks per
+  entry rather than for the first one only.
+
 ### Changed
 
 - **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,
@@ -146,6 +208,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the tabs made the two compete for width: the tabs are fixed, so the actions absorbed every
   shortfall, and which actions exist depends on the mode — there is no fixed amount to design
   around.
+
+- **Where an action lives now follows what it acts on.** Linking a schema is no longer a toolbar
+  button but a header at the top of the Schema and Actions areas, showing which file is bound and
+  badging it *SHARED* when it lives outside the project or *NOT FOUND* when it does not resolve —
+  replacing a schema is a statement about *that* file, and the user needs to see what they are
+  replacing. The top bar keeps only the project actions, and Save Project carries a dot when there is
+  work not yet on disk. Every question the workbench asks goes through one dialog with three answers
+  rather than two, because *"unsaved changes"* and *"this file is shared"* both have a safe third
+  option — *Discard*, *Copy into project* — that a yes/no dialog forces the user to guess at.
+
+- **A new file the user never named is named after its entry, once a project has more than one.**
+  Two entries both defaulting to `schemas/schema.yaml` would have the second overwrite the first, so
+  a multi-entry project writes `schemas/<entry>-schema.yaml`, `schemas/<entry>-actions.yaml` and
+  `rules/<entry>/<rule-id>.rule`. A single-entry project keeps the plain names it always had — there
+  is nothing there to collide with. Paths already written in a manifest are never renamed.
+
+- **The manifest is the session, and the manifest text is a view of it.** The Manifest area edited
+  one copy of the manifest while `ProjectSaver` regenerated the file from another, so anything typed
+  in that area was silently discarded on the next Save. The project session is now the single source
+  of truth: the Manifest area writes onto it, and the YAML buffer and parsed model that feed the
+  rule-file picker, the rule tree and the diagrams are produced from it. `ProjectSession` therefore
+  carries `entries` and `activeEntryId` instead of one flattened entry; `entryId`, `schemaLink`,
+  `actionsLink` and `ruleFiles` remain, as views onto the active entry.
 
 - Every sample rule set — the five bundled in the workbench and the fixtures under
   `ruleengine-core/src/test/resources` — now carries a `description` on each rule, as do the complete
@@ -214,6 +299,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Parser.parseRule` expected `when` immediately after `{`, so accepting that completion produced
   `Expected 'when' block`. `RuleAst.description` had existed since the AST was written and was never
   populated by anything. The clause is now parsed, and the field carries what the author wrote.
+
+- **A manifest entry with no files yet disappeared when the manifest was written.**
+  `ManifestYamlBridge.toYaml` dropped any entry whose schema, actions and rules were all blank —
+  which is exactly what a freshly added entry is, so it was deleted before it could be given
+  anything. An entry is now kept as soon as it has an id.
+
+- **Saving a multi-entry project no longer has to be a Save As.** Plain Save was refused with *"This
+  manifest defines several entries. Use 'Save Project As…' to write a single-entry copy"*, because
+  the saver rebuilt the manifest from the one entry it had loaded. It writes the buffers of the
+  active entry and re-emits every entry, so the ones not on screen survive; *Save Project As…* copies
+  the rule files of all of them and relocates each entry's external links.
 
 - **A toolbar button squeezed for width rendered its label one letter per line.** A `Row` of buttons
   narrower than their combined width compresses the last one, and a wrapping caption then reads as a
