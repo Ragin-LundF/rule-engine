@@ -25,16 +25,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
 import ruleengine.core.errors.Severity
-import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
-import ui.builder.BuilderToRuleDsl
 import ui.builder.CatalogActionInfo
 import ui.builder.RuleAstToBuilderMapper
+import ui.builder.generateUniqueRuleId
+import ui.builder.isBuilderStateStale
+import ui.builder.isLocked
+import ui.builder.ruleId
 import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
 import ui.diagrams.DiagramSurface
@@ -61,9 +63,10 @@ import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
 import ui.tester.JvmRuleSimulationService
 import ui.tester.RuleTestPanel
-import ui.tester.SimulationOutcome
 import ui.tester.TestCenterPanel
 import ui.tester.TestInputState
+import ui.tester.runStatusKind
+import ui.tester.runStatusMessage
 import ui.tester.simulateOrFailure
 import ui.util.Words
 import ui.workbench.ActionsAreaScreen
@@ -86,6 +89,7 @@ import ui.workbench.model.RuleTreeFile
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.UiDiagnostic
 import ui.workbench.model.WorkbenchAction
+import ui.workbench.ruleTreeStatusFor
 import ui.workbench.toViewMode
 
 // ── Main composable ───────────────────────────────────────────────────────────
@@ -779,147 +783,4 @@ actual fun RuleEditor(closeController: AppCloseController) {
             }
         }
     }
-}
-
-/** Status-bar text for a finished run, so the verdict is visible even with the panel scrolled away. */
-private fun runStatusMessage(outcome: SimulationOutcome): String {
-    return when (outcome) {
-        is SimulationOutcome.Completed ->
-            "${outcome.matchedCount} of ${outcome.ruleResults.size} rules matched — " +
-                "${outcome.actionCount} action(s)"
-
-        is SimulationOutcome.ValidationFailed -> "Test not run: ${outcome.reason}"
-        is SimulationOutcome.InvalidJson -> "Test not run: invalid JSON — ${outcome.reason}"
-        is SimulationOutcome.Idle -> "Ready"
-    }
-}
-
-private fun runStatusKind(outcome: SimulationOutcome): StatusKind {
-    return when (outcome) {
-        is SimulationOutcome.Completed -> if (outcome.matchedCount > 0) StatusKind.SUCCESS else StatusKind.IDLE
-        is SimulationOutcome.ValidationFailed, is SimulationOutcome.InvalidJson -> StatusKind.ERROR
-        is SimulationOutcome.Idle -> StatusKind.IDLE
-    }
-}
-
-/**
- * Generates a unique rule ID that does not clash with any of the [existingIds].
- */
-private fun generateUniqueRuleId(existingIds: Set<String>): String {
-    var counter = existingIds.size + 1
-    var candidate = "rule-$counter"
-    while (candidate in existingIds) {
-        counter++
-        candidate = "rule-$counter"
-    }
-    return candidate
-}
-
-/**
- * Replaces the DSL block for [ruleId] inside [fullText] with [newRuleDsl].
- * If the rule block is not found, appends [newRuleDsl] at the end.
- *
- * The body is located by counting braces rather than by a `[^}]*` match, because a rule body may
- * legitimately contain `}` — most often inside a regex pattern such as `regex "^DE\\d{20}$"`. A
- * regex-based match fails on those rules, and a failed match silently appends a duplicate instead of
- * replacing the original.
- */
-internal fun replaceRuleDslBlock(fullText: String, ruleId: String, newRuleDsl: String): String {
-    val range = findRuleBlockRange(fullText = fullText, ruleId = ruleId)
-        ?: return if (fullText.isBlank()) newRuleDsl else "$fullText\n$newRuleDsl"
-    return fullText.replaceRange(range = range, replacement = newRuleDsl)
-}
-
-/**
- * Finds the character range of the `rule "<id>" { ... }` block, or null when there is none.
- * Braces inside string literals and `#` comments are ignored.
- */
-internal fun findRuleBlockRange(fullText: String, ruleId: String): IntRange? {
-    val escapedId = Regex.escape(literal = ruleId)
-    val header = Regex(pattern = """rule\s+"$escapedId"\s*\{""")
-    val match = header.find(input = fullText) ?: return null
-
-    var depth = 0
-    var index = match.range.last // positioned on the opening brace
-    var inString = false
-    var inComment = false
-
-    while (index < fullText.length) {
-        val char = fullText[index]
-        when {
-            inComment -> if (char == '\n') inComment = false
-            inString -> when (char) {
-                '\\' -> index++ // skip the escaped character
-                '"' -> inString = false
-            }
-            char == '"' -> inString = true
-            char == '#' -> inComment = true
-            char == '{' -> depth++
-            char == '}' -> {
-                depth--
-                if (depth == 0) return match.range.first..index
-            }
-        }
-        index++
-    }
-    // Unbalanced braces: treat the rule as not found rather than corrupting the text.
-    return null
-}
-
-/**
- * Status shown by a rule tree row.
- *
- * A rule counts as invalid either when a validation error explicitly names its id, or — for
- * rules belonging to the file currently open in the editor — whenever the buffer has any error
- * at all, since a parse-level error rarely names every rule it invalidates. Rules in other files
- * cannot use that fallback: their errors, if any, belong to a different read of the file that has
- * not been checked here, so only a message that names the rule id is trustworthy for them.
- */
-private fun ruleTreeStatusFor(
-    ruleId: String,
-    description: String?,
-    relativePath: String,
-    currentFile: String?,
-    diagnostics: List<ValidationDiagnostic>,
-): CatalogRuleStatus {
-    val namesThisRule = diagnostics.any { it.severity == Severity.ERROR && it.message.contains(ruleId) }
-    val currentFileHasErrors = relativePath == currentFile && diagnostics.any { it.severity == Severity.ERROR }
-    return when {
-        namesThisRule || currentFileHasErrors -> CatalogRuleStatus.INVALID
-        description.isNullOrBlank() -> CatalogRuleStatus.DRAFT
-        else -> CatalogRuleStatus.VALID
-    }
-}
-
-private fun BuilderRule.isLocked(): Boolean = when (this) {
-    is BuilderRule.Supported -> false
-    is BuilderRule.Unsupported -> true
-    BuilderRule.None -> true
-}
-
-private fun BuilderRule.ruleId(): String = when (this) {
-    is BuilderRule.Supported -> id
-    is BuilderRule.Unsupported -> id
-    BuilderRule.None -> ""
-}
-
-/**
- * Returns true when the existing [BuilderEditorState] no longer matches the
- * current DSL text for its rule. This detects externally-applied edits (e.g.,
- * modifications in code mode) so the builder state is rebuilt from the current
- * parse rather than showing stale conditions.
- *
- * The check compares what [BuilderToRuleDsl.generate] would produce from the
- * cached state against the actual rule text. If they differ, the state is stale.
- */
-private fun isBuilderStateStale(
-    existing: BuilderEditorState?,
-    currentFullText: String,
-): Boolean {
-    if (existing == null || existing.isLocked) return false
-    val generated = BuilderToRuleDsl.generate(state = existing) ?: return true
-    // Normalize both to compare: trim whitespace, unify line endings
-    val generatedNorm = generated.trim().replace(oldValue = "\r\n", newValue = "\n")
-    val fullNorm = currentFullText.trim().replace(oldValue = "\r\n", newValue = "\n")
-    return !fullNorm.contains(other = generatedNorm)
 }
