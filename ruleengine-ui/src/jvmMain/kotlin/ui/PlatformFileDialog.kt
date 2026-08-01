@@ -51,42 +51,11 @@ private val jsonFilter = FilenameFilter { _, n -> n.endsWith(".json") }
 
 // ── Platform implementations ──────────────────────────────────────────────────
 
-actual suspend fun pickSchemaFile(): String? =
-    nativeOpen(title = "Open Schema YAML", filter = yamlFilter)?.readText()
-
 actual suspend fun pickRuleFile(): String? =
     nativeOpen(title = "Open Rule File", filter = ruleFilter)?.readText()
 
-actual suspend fun pickActionsFile(): String? =
-    nativeOpen(title = "Open Actions YAML", filter = yamlFilter)?.readText()
-
 actual suspend fun pickInputJsonFile(): String? =
     nativeOpen(title = "Open Input JSON", filter = jsonFilter)?.readText()
-
-actual suspend fun pickManifestFile(): Pair<String, String>? {
-    val file = nativeOpen(title = "Open Manifest YAML", filter = yamlFilter) ?: return null
-    return Pair(file.readText(), file.parent ?: ".")
-}
-
-actual fun saveRuleToFile(filename: String, content: String) {
-    val file = nativeSave(title = "Save Rule", suggestedName = filename) ?: return
-    file.writeText(content)
-}
-
-actual fun saveSchemaToFile(filename: String, content: String) {
-    val file = nativeSave(title = "Save Schema YAML", suggestedName = filename) ?: return
-    file.writeText(content)
-}
-
-actual fun saveActionsToFile(filename: String, content: String) {
-    val file = nativeSave(title = "Save Actions YAML", suggestedName = filename) ?: return
-    file.writeText(content)
-}
-
-actual fun saveManifestToFile(filename: String, content: String) {
-    val file = nativeSave(title = "Save Manifest YAML", suggestedName = filename) ?: return
-    file.writeText(content)
-}
 
 // ── Project dialogs ───────────────────────────────────────────────────────────
 //
@@ -134,15 +103,6 @@ fun saveBytesToFile(title: String, suggestedName: String, bytes: ByteArray): Str
     file.writeBytes(bytes)
 
     return file.name
-}
-
-/** As [saveBytesToFile], for text written as UTF-8. */
-fun saveTextToFile(title: String, suggestedName: String, content: String): String? {
-    return saveBytesToFile(
-        title = title,
-        suggestedName = suggestedName,
-        bytes = content.toByteArray(charset = Charsets.UTF_8),
-    )
 }
 
 /**

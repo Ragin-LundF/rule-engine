@@ -280,25 +280,6 @@ class RuleEditorState(
         }
     }
 
-    /**
-     * Save the current editor content back to the manifest-referenced rule file.
-     * Returns true if the save was handled (manifest-backed), false if the caller
-     * should fall back to a generic save dialog.
-     */
-    fun saveCurrentManifestRuleFile(): Boolean {
-        val relativePath = selectedManifestRuleFile.value ?: return false
-        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return false
-        return runCatching {
-            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
-            Files.writeString(path, ruleValue.value.text)
-            setStatus(msg = "Saved ${path.fileName}", kind = StatusKind.SUCCESS)
-            true
-        }.getOrElse { ex ->
-            reportManifestPathIssue(message = "Failed to save rule file: ${ex.message}")
-            false
-        }
-    }
-
     private fun resolveManifestPathOrThrow(
         baseDir: Path,
         relativePath: String,

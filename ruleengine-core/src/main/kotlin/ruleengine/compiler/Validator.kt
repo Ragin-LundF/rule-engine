@@ -243,6 +243,12 @@ object Validator {
 
             FieldType.DATE, FieldType.DATE_TIME ->
                 validateDateLiteral(cond = cond, def = def, op = op, diagnostics = diagnostics)
+
+            // Structure types carry no literal of their own — a condition addresses one of their
+            // members, which is resolved and validated as that member's scalar type before we get
+            // here. Spelled out rather than left to fall through so that adding a FieldType makes
+            // the compiler ask what its literal rule is.
+            FieldType.COLLECTION, FieldType.OBJECT -> Unit
         }
     }
 

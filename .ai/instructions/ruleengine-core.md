@@ -7,7 +7,7 @@ Use this file when touching `ruleengine-core` or core packages.
 | Package | Purpose |
 |---|---|
 | `ruleengine.core.domain.dto` | Shared domain models such as `FieldSchema`, `FieldDefinition`, `FieldType`, `RuleMatch`, `EvaluationResult`, `ActionSchema`, and the inline value classes `FieldId`, `OperatorId`, `NormalizerId`. One top-level declaration per file. |
-| `ruleengine.core.domain` | Logic over those models: `FieldPathResolver` / `FieldPathResolution` (the single owner of dotted-path resolution), `TemporalFormat` (the single owner of date pattern parsing), `DefaultActionSchema`. |
+| `ruleengine.core.domain` | Logic over those models: `FieldPathResolver` / `FieldPathResolution` (the single owner of dotted-path resolution), `TemporalFormat` (the single owner of date pattern parsing), `OperatorNames`. |
 | `ruleengine.core.errors` | Exception types such as `CompilationException`, `SchemaLoadException`, `RuleEngineException`, plus `ValidationDiagnostic` and `Severity`. |
 | `ruleengine.core.normalizer` | `Normalizer` functional interface, `NormalizerProfile`, and `NormalizerRegistry` singleton. |
 | `ruleengine.dsl.lexer` | `Lexer`, `Token`, `TokenType`; raw tokenisation of the rule DSL. |
@@ -21,8 +21,11 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, `DecisionTree`, and `DecisionNode`. |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader`, and DTO classes. |
 | `ruleengine.manifest` | `ProjectManifest`, `ManifestLoader`. |
-| `ruleengine.jackson` | `JacksonUtil` singleton for JSON and YAML serialization. |
+| `ruleengine.jackson` | `JacksonUtil` singleton exposing the configured `jsonMapper`. YAML is read by feeding a `YAMLFactory` parser to that mapper (see `FieldSchemaLoader`). |
 | `ruleengine.cli` | `EvaluateCli`, `ValidatorCli`; command-line entry points. |
+| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine`; assembles a ready-to-evaluate engine from a manifest or directory. |
+| `ruleengine.export` | Rule catalog export: `RuleCatalogBuilder`, `PlainLanguageRenderer`, `FieldUsage`, `FieldLabels`, plus `docx/`, `markdown/` and `dto/`. |
+| `ruleengine.core.io` | `FileInputSupport`; bounded file reads and rule-file discovery. |
 
 ## Core design patterns
 
@@ -44,14 +47,14 @@ When adding a new `FieldType` or operator:
 3. Add compile logic in `Compiler`, preferably as a focused private `compileXxxCondition` function.
 4. Add validation logic in `Validator.validateCondition`.
 5. Add a new `CompiledExpression` implementation in `ruleengine.evaluator.compiled`.
-6. Update `AutoComplete.kt` in `ruleengine-ui`, especially `defaultOperatorsForType` and `valuePlaceholderForOperator`.
+6. Update `ruleengine-ui`'s `ui/autocompletion/Model.kt`, especially `defaultOperatorsForType` and `valuePlaceholderForOperator`.
 7. Map the YAML spelling and its aliases in `FieldSchemaLoader.parseFieldType`, and list the type's
    operators in `Validator.supportedOperatorsFor` and `ui.builder.OperatorOptions.forField`. The last two
    have a fallback branch and fail *silently* when a type is missing, so cover them with a test; the
    `when` blocks elsewhere are exhaustive and the compiler flags them for you.
 8. Mirror the type in the UI: `ui.schema.SchemaFieldType` (its `yamlValue` must equal the lowercased
-   `FieldType` name, or the YAML bridge silently degrades the field to `TEXT`), `YamlHighlighter`
-   (`FIELD_TYPE_VALUES`, `fieldTypeValueColor`) and `DesktopRuleEditorItems.fieldTypeColor`.
+   `FieldType` name, or the YAML bridge silently degrades the field to `TEXT`) and `YamlHighlighter`
+   (`FIELD_TYPE_VALUES`, `fieldTypeValueColor`).
 
 If the change affects DSL keywords or operators, also update relevant UI syntax highlighting and autocomplete rules.
 

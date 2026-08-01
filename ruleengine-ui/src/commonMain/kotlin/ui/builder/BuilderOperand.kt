@@ -48,10 +48,6 @@ sealed interface BuilderOperand {
     ) : BuilderOperand
 }
 
-/** True when this operand always yields a number, and so requires a numeric comparison. */
-val BuilderOperand.isComputed: Boolean
-    get() = this is BuilderOperand.Aggregate || this is BuilderOperand.Calc
-
 /** Builds a single-segment, unfiltered field reference. */
 fun fieldOperand(name: String): BuilderOperand.FieldRef =
     BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = name)))

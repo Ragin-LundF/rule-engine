@@ -5,16 +5,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Divider
-import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,28 +17,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.ActionDefinition
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldType
-import ui.AccentGreen
-import ui.AccentPurple
-import ui.BgHover
 import ui.BorderColor
-import ui.ColorAction
-import ui.ColorNumber
-import ui.ColorString
 import ui.DslCursorContext
 import ui.DslSection
 import ui.PrimaryBlue
-import ui.TextMuted
-import ui.TextPrimary
 import ui.TextSecondary
-import ui.autocompletion.valuePlaceholderForOperator
 
 enum class ViewMode {
     BUILDER,
@@ -75,18 +55,6 @@ fun isContextuallyImmediate(context: DslCursorContext): Boolean {
             context.precedingField != null && context.precedingOperator == null
     val expectsAction = context.section == DslSection.THEN && context.afterAction == null
     return expectsOperator || expectsAction
-}
-
-private fun fieldTypeColor(type: FieldType): Color {
-    return when (type) {
-        FieldType.INTEGER -> PrimaryBlue
-        FieldType.DECIMAL -> PrimaryBlue
-        FieldType.TEXT -> TextPrimary
-        FieldType.BOOLEAN -> AccentPurple
-        FieldType.STRING_SET -> AccentGreen
-        FieldType.DATE, FieldType.DATE_TIME -> TextSecondary
-        FieldType.COLLECTION, FieldType.OBJECT -> AccentGreen
-    }
 }
 
 @Composable
@@ -165,129 +133,3 @@ private fun ViewModeTab(
         )
     }
 }
-
-@Composable
-fun FieldItem(id: FieldId, def: FieldDefinition, onInsert: (String) -> Unit) {
-    val tc = fieldTypeColor(def.type)
-    val displayName = def.alias ?: id.value
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = displayName,
-                style = MaterialTheme.typography.body1,
-                color = TextPrimary,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Box(
-                modifier = Modifier
-                    .clip(shape = RoundedCornerShape(size = 3.dp))
-                    .background(color = BgHover)
-                    .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 3.dp))
-                    .clickable { onInsert(displayName) }
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-            ) {
-                Text(text = "⤵", style = MaterialTheme.typography.caption, color = TextMuted)
-            }
-            Spacer(Modifier.width(4.dp))
-            Box(
-                modifier = Modifier
-                    .clip(shape = RoundedCornerShape(size = 3.dp))
-                    .background(color = tc.copy(alpha = 0.15f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
-            ) {
-                Text(text = def.type.name.lowercase(), style = MaterialTheme.typography.caption, color = tc)
-            }
-        }
-        if (def.operators.isNotEmpty()) {
-            Spacer(Modifier.height(3.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-                def.operators.forEach { op ->
-                    val opText = op.value
-                    Box(
-                        modifier = Modifier
-                            .clip(shape = RoundedCornerShape(size = 3.dp))
-                            .background(color = BgHover)
-                            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 3.dp))
-                            .clickable {
-                                // Shared with the autocomplete so a declared date format is honoured here too.
-                                val ph = valuePlaceholderForOperator(op = opText, def = def)
-                                onInsert("$displayName $opText $ph".trimEnd())
-                            }
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
-                    ) {
-                        Text(text = opText, style = MaterialTheme.typography.caption, color = TextSecondary)
-                    }
-                }
-            }
-        }
-        Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-@Composable
-fun ActionItem(name: String, def: ActionDefinition, onInsert: (String) -> Unit) {
-    val argColor: (ActionArgType) -> Color = { t ->
-        when (t) {
-            ActionArgType.STRING -> ColorString
-            ActionArgType.INTEGER -> ColorNumber
-            ActionArgType.DECIMAL -> ColorNumber
-        }
-    }
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = name,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.body1,
-                color = ColorAction,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Box(
-                modifier = Modifier
-                    .clip(shape = RoundedCornerShape(3.dp))
-                    .background(color = BgHover)
-                    .border(1.dp, BorderColor, RoundedCornerShape(size = 3.dp))
-                    .clickable {
-                        val args = def.argTypes.joinToString(separator = " ") { argType ->
-                            when (argType) {
-                                ActionArgType.INTEGER -> "0"
-                                ActionArgType.DECIMAL -> "0.0"
-                                ActionArgType.STRING -> "\"value\""
-                            }
-                        }
-                        onInsert(if (args.isNotEmpty()) "$name $args" else name)
-                    }
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-            ) {
-                Text(text = "⤵", style = MaterialTheme.typography.caption, color = TextMuted)
-            }
-        }
-        if (def.argTypes.isNotEmpty()) {
-            Spacer(Modifier.height(3.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                def.argTypes.forEachIndexed { index, argType ->
-                    val ac = argColor(argType)
-                    Box(
-                        modifier = Modifier
-                            .clip(shape = RoundedCornerShape(size = 3.dp))
-                            .background(color = ac.copy(alpha = 0.15f))
-                            .padding(horizontal = 5.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = "arg${index + 1}: ${argType.name.lowercase()}",
-                            style = MaterialTheme.typography.caption,
-                            color = ac,
-                        )
-                    }
-                }
-            }
-        }
-        Divider(color = BorderColor.copy(alpha = 0.4f), thickness = 0.5.dp, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-
-

@@ -42,7 +42,6 @@ import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
-import ui.TextSecondary
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
 import ui.builder.CatalogActionInfo
@@ -493,20 +492,6 @@ private fun DiagramViewKind.label(): String {
         DiagramViewKind.RUN -> "Manifest run"
         DiagramViewKind.OUTCOMES -> "Outcome map"
         DiagramViewKind.FIELDS -> "Field flow"
-    }
-}
-
-@Composable
-private fun TestModePlaceholder(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "Test mode will run the selected rule against sample JSON and show trace results.",
-            style = MaterialTheme.typography.body2,
-            color = TextSecondary,
-        )
     }
 }
 

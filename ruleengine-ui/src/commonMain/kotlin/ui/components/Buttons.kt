@@ -7,12 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Button
 import androidx.compose.material.ButtonDefaults
-import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
@@ -21,10 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import ui.BgElevated
-import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.PrimaryGlow
@@ -107,37 +102,7 @@ private fun ButtonLabel(text: String) {
 }
 
 /**
- * Ghost button: lowest emphasis, no border, hover background only.
- */
-@Composable
-fun GhostButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    val bg = if (enabled) BgHover.copy(alpha = 0.5f) else BgElevated.copy(alpha = 0.3f)
-    Row(
-        modifier = modifier
-            .clip(shape = RoundedCornerShape(size = 8.dp))
-            .background(color = bg)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.button,
-            color = if (enabled) PrimaryBlue else TextSecondary,
-            maxLines = 1,
-            softWrap = false,
-        )
-    }
-}
-
-/**
- * Compact pill button for toolbars (equivalent to the legacy AppButton).
+ * Compact pill button for toolbars.
  */
 @Composable
 fun ToolbarButton(
@@ -160,34 +125,6 @@ fun ToolbarButton(
             onClick = onClick,
             modifier = modifier,
             enabled = enabled,
-        )
-    }
-}
-
-/**
- * Icon-only toolbar button.
- */
-@Composable
-fun ToolbarIconButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    IconButton(
-        onClick = onClick,
-        modifier = modifier
-            .clip(shape = RoundedCornerShape(size = 8.dp))
-            .background(color = if (enabled) BgHover.copy(alpha = 0.5f) else BgElevated.copy(alpha = 0.3f))
-            .size(size = 34.dp),
-        enabled = enabled,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (enabled) MaterialTheme.colors.onSurface else TextSecondary,
-            modifier = Modifier.size(size = 18.dp),
         )
     }
 }

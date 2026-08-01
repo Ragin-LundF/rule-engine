@@ -29,8 +29,6 @@ val BgElevated: Color get() = ThemeController.palette.bgElevated
 val BgHover: Color get() = ThemeController.palette.bgHover
 val BgInput: Color get() = ThemeController.palette.bgInput
 val BorderColor: Color get() = ThemeController.palette.borderColor
-val BorderSubtle: Color get() = ThemeController.palette.borderSubtle
-val DividerColor: Color get() = ThemeController.palette.dividerColor
 
 // Primary / info
 val PrimaryBlue: Color get() = ThemeController.palette.primaryBlue
@@ -42,7 +40,6 @@ val PrimaryGlow: Color get() = PrimaryBlue.copy(alpha = 0.15f)
 val AccentGreen: Color get() = ThemeController.palette.accentGreen
 val AccentGreenSoft: Color get() = AccentGreen.copy(alpha = 0.12f)
 val AccentRed: Color get() = ThemeController.palette.accentRed
-val AccentRedSoft: Color get() = AccentRed.copy(alpha = 0.12f)
 val AccentOrange: Color get() = ThemeController.palette.accentOrange
 val AccentOrangeSoft: Color get() = AccentOrange.copy(alpha = 0.12f)
 val AccentPurple: Color get() = ThemeController.palette.accentPurple

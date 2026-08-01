@@ -3,11 +3,9 @@ package ui.diagrams.model
 /**
  * A representative slice of `ruleengine-core/src/test/resources/warehouse-shipments`, copied verbatim.
  *
- * Seven of the thirteen rules, chosen to cover every AST shape the diagram helpers have to walk:
- * a nested dotted path, an `and` of two conditions, an aggregate over a filtered collection, an
- * arithmetic operand on both sides of a comparison, a filter that reads a nested member of the
- * element it filters, a rule emitting two actions, and two rules whose outputs share a prefix but
- * are separate buckets.
+ * Seven of the thirteen rules, chosen to cover the output shapes [OutcomeKey] has to bucket: a rule
+ * emitting two actions, and rules whose outputs share a prefix but belong to separate families
+ * (`assessment:transit:green` vs `assessment:transit:red`).
  *
  * Inlined rather than read from the core module: parsing needs no schema, `ruleengine-ui` has no
  * dependency on the core module's test resources, and the repository's UI tests already declare rule

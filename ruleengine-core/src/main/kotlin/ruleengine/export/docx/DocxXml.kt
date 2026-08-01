@@ -157,7 +157,7 @@ internal object DocxXml {
         return out.toString()
     }
 
-    fun Char.isXmlSafe(): Boolean {
+    private fun Char.isXmlSafe(): Boolean {
         return this >= ' ' || this == '\n' || this == '\r'
     }
 }

@@ -2,8 +2,8 @@ package ui.workbench
 
 /**
  * Platform-agnostic interface for running rule validation.
- * The actual implementation lives in jvmMain (and jsMain) because it calls
- * core APIs that depend on JVM types (e.g. java.nio.file.Path).
+ * The implementation lives in jvmMain because it calls core APIs that depend on
+ * JVM types (e.g. java.nio.file.Path).
  */
 interface WorkbenchValidator {
     /**

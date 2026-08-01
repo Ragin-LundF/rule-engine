@@ -1,12 +1,10 @@
 package ruleengine.jackson
 
 import com.fasterxml.jackson.annotation.JsonInclude
-import tools.jackson.core.StreamReadFeature
 import tools.jackson.databind.DeserializationFeature
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.databind.cfg.DateTimeFeature
 import tools.jackson.databind.json.JsonMapper
-import tools.jackson.dataformat.yaml.YAMLFactory
 import tools.jackson.module.blackbird.BlackbirdModule
 import tools.jackson.module.kotlin.KotlinModule
 
@@ -22,8 +20,6 @@ object JacksonUtil {
      */
     @JvmStatic
     val jsonMapper: ObjectMapper = createObjectMapper()
-    @JvmStatic
-    val yamlMapper: ObjectMapper = createYamlMapper()
 
     @JvmStatic
     fun createObjectMapper(): ObjectMapper {
@@ -35,13 +31,6 @@ object JacksonUtil {
     @JvmStatic
     fun jsonBuilder(): JsonMapper.Builder {
         return jsonBuilder(builder = JsonMapper.builder())
-    }
-
-    @JvmStatic
-    fun createYamlMapper(): ObjectMapper {
-        // For simplicity / compatibility we reuse the JSON-configured mapper for YAML parsing
-        // callers should create a YAML parser and feed it to the JSON mapper (see FieldSchemaLoader)
-        return jsonMapper
     }
 
     @JvmStatic

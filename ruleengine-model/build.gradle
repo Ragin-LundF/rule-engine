@@ -1,0 +1,12 @@
+plugins {
+    id "java-library"
+    alias(libs.plugins.kotlin.jvm)
+}
+
+ext.publishName = "ruleengine-model"
+ext.publishDescription = "Dependency-free domain vocabulary shared by the rule engine and its UI"
+
+// No dependencies on purpose. This module is the innermost layer: field types, operator names,
+// typed identifiers and severities, with no engine, no I/O and no serialization. Both
+// `ruleengine-core` and `ruleengine-ui`'s commonMain depend on it, which is what lets the UI stop
+// hand-mirroring these values. Adding a dependency here would defeat that.

@@ -10,8 +10,6 @@ data class AppPalette(
     val bgHover: Color,
     val bgInput: Color,
     val borderColor: Color,
-    val borderSubtle: Color,
-    val dividerColor: Color,
     val primaryBlue: Color,
     val primaryBlueDim: Color,
     val primaryBlueLight: Color,
