@@ -12,10 +12,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
 import ui.builder.BuilderEditorState
+import ui.builder.CatalogActionInfo
 import ui.builder.MutableBuilderCondition
 import ui.builder.MutableConditionNode
 import ui.components.SectionTitle
-import ui.workbench.model.CatalogAction
 import ui.workbench.model.CatalogField
 import ui.workbench.model.CatalogRule
 import ui.workbench.model.InspectorItem
@@ -30,7 +30,7 @@ import ui.workbench.model.UiDiagnostic
 fun InspectorPanel(
     selectedItem: InspectorItem?,
     fields: List<CatalogField>,
-    actions: List<CatalogAction>,
+    actions: List<CatalogActionInfo>,
     rules: List<CatalogRule>,
     builderState: BuilderEditorState? = null,
     diagnostics: List<UiDiagnostic> = emptyList(),

@@ -74,20 +74,6 @@ class BuilderEditorState private constructor(
         }
 
         private fun BuilderConditionNode.toMutable(): MutableConditionNode = when (this) {
-            is BuilderCondition -> MutableConditionNode.Leaf(
-                MutableBuilderCondition(
-                    id = id,
-                    field = field,
-                    operator = operator,
-                    value = value,
-                    valueTo = valueTo,
-                    listItems = listItems,
-                    ignoreCase = ignoreCase,
-                    negated = negated,
-                    joinToPrevious = joinToPrevious,
-                )
-            )
-
             is BuilderConditionNode.Condition -> MutableConditionNode.Leaf(
                 MutableBuilderCondition(
                     id = nodeId,

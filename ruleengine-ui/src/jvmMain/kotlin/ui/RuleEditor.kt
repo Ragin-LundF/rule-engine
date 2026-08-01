@@ -79,7 +79,6 @@ import ui.workbench.SchemaAreaScreen
 import ui.workbench.diagramDataFor
 import ui.workbench.inspector.InspectorPanel
 import ui.workbench.model.AppArea
-import ui.workbench.model.CatalogAction
 import ui.workbench.model.CatalogField
 import ui.workbench.model.CatalogRule
 import ui.workbench.model.CatalogRuleStatus
@@ -328,7 +327,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
     }
     val catalogActions = remember(key1 = state.parsedActionSchema.value) {
         state.parsedActionSchema.value?.actions?.values?.map { def ->
-            CatalogAction(
+            CatalogActionInfo(
                 name = def.name,
                 argType = def.argTypes.joinToString { it.name.lowercase() },
             )

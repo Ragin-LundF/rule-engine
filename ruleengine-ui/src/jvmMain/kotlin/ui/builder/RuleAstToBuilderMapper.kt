@@ -127,14 +127,12 @@ object RuleAstToBuilderMapper {
     }
 
     private fun negate(node: BuilderConditionNode): BuilderConditionNode = when (node) {
-        is BuilderCondition -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Condition -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Comparison -> node.copy(negated = !node.negated)
         is BuilderConditionNode.Group -> node.copy(negated = !node.negated)
     }
 
     private fun withJoin(node: BuilderConditionNode, join: String): BuilderConditionNode = when (node) {
-        is BuilderCondition -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Condition -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Comparison -> node.copy(joinToPrevious = join)
         is BuilderConditionNode.Group -> node.copy(joinToPrevious = join)

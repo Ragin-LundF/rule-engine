@@ -12,15 +12,15 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ui.builder.CatalogActionInfo
 import ui.components.SectionTitle
-import ui.workbench.model.CatalogAction
 
 /**
  * Inspector for a selected action schema definition.
  */
 @Composable
 fun ActionInspector(
-    action: CatalogAction,
+    action: CatalogActionInfo,
     modifier: Modifier = Modifier,
 ) {
     Column(

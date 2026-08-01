@@ -35,7 +35,6 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextSecondary
 import ui.builder.BuilderAction
-import ui.builder.BuilderCondition
 import ui.builder.BuilderConditionNode
 import ui.builder.BuilderRule
 import ui.builder.OperandText
@@ -244,10 +243,6 @@ private fun BuilderConditionNode.toSummaryLines(indent: String = ""): List<Strin
     val join = if (joinToPrevious.isNotBlank()) "${joinToPrevious.uppercase()} " else ""
     val not = if (negated) "NOT " else ""
     return when (this) {
-        is BuilderCondition -> {
-            val valuePart = conditionValuePart(value = value, valueTo = valueTo, listItems = listItems)
-            listOf("$indent$join$not$field $operator $valuePart")
-        }
         is BuilderConditionNode.Condition -> {
             val valuePart = conditionValuePart(value = value, valueTo = valueTo, listItems = listItems)
             listOf("$indent$join$not$field $operator $valuePart")

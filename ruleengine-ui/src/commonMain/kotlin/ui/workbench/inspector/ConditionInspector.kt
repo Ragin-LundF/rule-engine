@@ -10,7 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
-import ui.builder.BuilderCondition
+import ui.builder.BuilderConditionNode
 import ui.builder.OperatorOptions
 import ui.components.SectionTitle
 
@@ -20,7 +20,7 @@ import ui.components.SectionTitle
  */
 @Composable
 fun ConditionInspector(
-    condition: BuilderCondition,
+    condition: BuilderConditionNode.Condition,
     modifier: Modifier = Modifier,
 ) {
     Column(

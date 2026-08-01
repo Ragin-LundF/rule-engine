@@ -40,8 +40,8 @@ class MutableBuilderCondition(
     /** Join word (`and` or `or`) placed before this condition in the generated DSL. */
     var joinToPrevious by mutableStateOf(value = joinToPrevious)
 
-    fun toImmutable(): BuilderCondition = BuilderCondition(
-        id = id,
+    fun toImmutable(): BuilderConditionNode.Condition = BuilderConditionNode.Condition(
+        nodeId = id,
         field = field,
         operator = operator,
         value = value,
