@@ -1,5 +1,7 @@
 package ui.diagnostics
 
+import ruleengine.core.errors.Severity
+
 /**
  * Utility object for mapping diagnostic information into a format suitable for UI display.
  *
@@ -12,7 +14,7 @@ object DiagnosticMapper {
      * Maps diagnostic information to a [UiDiagnosticWithFix] object by building a quick fix
      * and a hint based on the given parameters.
      *
-     * @param severity The severity of the diagnostic, typically "error" or "warning".
+     * @param severity How serious the diagnostic is.
      * @param message The main human-readable diagnostic message.
      * @param suggestion An optional suggestion for resolving the diagnostic, or null if not available.
      * @param line The 1-based line number where the diagnostic occurred, or null if not applicable.
@@ -20,7 +22,7 @@ object DiagnosticMapper {
      * @return A [UiDiagnosticWithFix] object encapsulating the diagnostic message, quick fix, and optional hint.
      */
     fun map(
-        severity: String,
+        severity: Severity,
         message: String,
         suggestion: String?,
         line: Int?,

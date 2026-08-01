@@ -7,7 +7,6 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.workbench.model.UiDiagnostic
-import ui.workbench.model.UiDiagnosticSeverity
 import ui.workbench.model.ValidationState
 import ui.workbench.model.WorkbenchValidationResult
 
@@ -28,7 +27,7 @@ class JvmWorkbenchValidator : WorkbenchValidator {
         // 1. Parse field schema
         val schema = if (schemaText.isBlank()) {
             diagnostics += UiDiagnostic(
-                severity = UiDiagnosticSeverity.WARNING,
+                severity = Severity.WARNING,
                 message = "No field schema loaded — validation may be incomplete",
             )
             null
@@ -36,7 +35,7 @@ class JvmWorkbenchValidator : WorkbenchValidator {
             runCatching { FieldSchemaLoader.loadFromString(content = schemaText, nameHint = "schema") }
                 .onFailure { e ->
                     diagnostics += UiDiagnostic(
-                        severity = UiDiagnosticSeverity.ERROR,
+                        severity = Severity.ERROR,
                         message = "Field schema parse error: ${e.message}",
                     )
                 }
@@ -50,7 +49,7 @@ class JvmWorkbenchValidator : WorkbenchValidator {
             runCatching { ActionSchemaLoader.loadFromString(content = actionsText) }
                 .onFailure { e ->
                     diagnostics += UiDiagnostic(
-                        severity = UiDiagnosticSeverity.ERROR,
+                        severity = Severity.ERROR,
                         message = "Action schema parse error: ${e.message}",
                     )
                 }
@@ -60,7 +59,7 @@ class JvmWorkbenchValidator : WorkbenchValidator {
         // 3. Parse rule DSL
         val asts = if (ruleText.isBlank()) {
             diagnostics += UiDiagnostic(
-                severity = UiDiagnosticSeverity.INFO,
+                severity = Severity.INFO,
                 message = "No rule text to validate",
             )
             emptyList()
@@ -68,7 +67,7 @@ class JvmWorkbenchValidator : WorkbenchValidator {
             runCatching { Parser(input = ruleText).parseRules() }
                 .onFailure { e ->
                     diagnostics += UiDiagnostic(
-                        severity = UiDiagnosticSeverity.ERROR,
+                        severity = Severity.ERROR,
                         message = "Rule parse error: ${e.message}",
                     )
                 }
@@ -83,13 +82,13 @@ class JvmWorkbenchValidator : WorkbenchValidator {
                 }
                 .onFailure { e ->
                     diagnostics += UiDiagnostic(
-                        severity = UiDiagnosticSeverity.ERROR,
+                        severity = Severity.ERROR,
                         message = "Validation error: ${e.message}",
                     )
                 }
         }
 
-        val hasError = diagnostics.any { it.severity == UiDiagnosticSeverity.ERROR }
+        val hasError = diagnostics.any { it.severity == Severity.ERROR }
         val validationState = when {
             ruleText.isBlank() && schemaText.isBlank() -> ValidationState.IDLE
             hasError -> ValidationState.INVALID
@@ -114,9 +113,9 @@ class JvmWorkbenchValidator : WorkbenchValidator {
         suggestion = suggestion,
     )
 
-    private fun Severity.toUiSeverity(): UiDiagnosticSeverity = when (this) {
-        Severity.ERROR -> UiDiagnosticSeverity.ERROR
-        Severity.WARNING -> UiDiagnosticSeverity.WARNING
-        Severity.INFO -> UiDiagnosticSeverity.INFO
+    private fun Severity.toUiSeverity(): Severity = when (this) {
+        Severity.ERROR -> Severity.ERROR
+        Severity.WARNING -> Severity.WARNING
+        Severity.INFO -> Severity.INFO
     }
 }

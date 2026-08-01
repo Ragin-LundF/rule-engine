@@ -31,9 +31,6 @@ import ui.builder.OperandRules
 import ui.builder.OperandText
 import ui.components.TinyButton
 
-/** Which side of the comparison currently has its editor expanded. */
-private enum class ExpandedSide { NONE, LEFT, RIGHT }
-
 /**
  * A comparison row: two operand chips around a symbolic operator.
  *

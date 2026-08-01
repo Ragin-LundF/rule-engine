@@ -13,6 +13,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ruleengine.core.errors.Severity
 import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentRed
@@ -22,7 +23,6 @@ import ui.components.StatusBadge
 import ui.workbench.model.CatalogRule
 import ui.workbench.model.CatalogRuleStatus
 import ui.workbench.model.UiDiagnostic
-import ui.workbench.model.UiDiagnosticSeverity
 
 /**
  * Inspector for a selected parsed rule.
@@ -78,9 +78,9 @@ fun RuleInspector(
                     text = "• ${diagnostic.message}",
                     style = MaterialTheme.typography.caption,
                     color = when (diagnostic.severity) {
-                        UiDiagnosticSeverity.ERROR -> AccentRed
-                        UiDiagnosticSeverity.WARNING -> AccentOrange
-                        UiDiagnosticSeverity.INFO -> TextSecondary
+                        Severity.ERROR -> AccentRed
+                        Severity.WARNING -> AccentOrange
+                        Severity.INFO -> TextSecondary
                     },
                 )
             }

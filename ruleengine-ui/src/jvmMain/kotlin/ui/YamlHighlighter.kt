@@ -9,6 +9,8 @@ import androidx.compose.ui.text.font.FontWeight
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.ActionArgType
 import ruleengine.core.domain.dto.FieldType
+import ui.autocompletion.CompletionItem
+import ui.autocompletion.CompletionKind
 import ui.schema.KnownNormalizers
 
 private val FIELD_TYPE_VALUES = FieldType.entries.map { type -> type.name.lowercase() }

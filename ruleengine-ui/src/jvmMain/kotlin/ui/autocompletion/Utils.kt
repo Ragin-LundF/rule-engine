@@ -7,12 +7,6 @@ import ui.ColorKeyword
 import ui.ColorLogic
 import ui.ColorNumber
 import ui.ColorOp
-import ui.util.Words
-
-/** Extract the current word at [cursorPos] in [text]. Returns (start, word). */
-public fun extractCurrentWord(text: String, cursorPos: Int): Pair<Int, String> {
-    return Words.currentWord(text = text, cursorPos = cursorPos)
-}
 
 // Styling helpers used by the dropdown UI
 internal fun kindColor(kind: CompletionKind): Color = when (kind) {

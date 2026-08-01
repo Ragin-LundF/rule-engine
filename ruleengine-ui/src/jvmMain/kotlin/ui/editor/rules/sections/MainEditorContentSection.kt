@@ -44,14 +44,14 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ruleengine.dsl.parser.Parser
-import ui.AutoCompleteDropdown
 import ui.Bg
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.annotateRule
-import ui.buildContextualCompletions
+import ui.autocompletion.AutoCompleteDropdown
+import ui.autocompletion.buildContextualCompletions
 import ui.editor.AUTOCOMPLETE_HINT
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState

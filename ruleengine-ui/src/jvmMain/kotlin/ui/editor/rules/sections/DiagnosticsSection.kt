@@ -51,11 +51,7 @@ fun DiagnosticsSection(state: RuleEditorState) {
     val enriched = remember(diagnosticsList) {
         diagnosticsList.map { d ->
             DiagnosticMapper.map(
-                severity = when (d.severity) {
-                    Severity.ERROR -> "error"
-                    Severity.WARNING -> "warning"
-                    else -> "info"
-                },
+                severity = d.severity,
                 message = d.message,
                 suggestion = d.suggestion,
                 line = d.line,

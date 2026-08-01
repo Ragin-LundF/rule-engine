@@ -65,6 +65,7 @@ import ui.tester.SimulationOutcome
 import ui.tester.TestCenterPanel
 import ui.tester.TestInputState
 import ui.tester.simulateOrFailure
+import ui.util.Words
 import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppAreaIconRail
 import ui.workbench.CenterEditorPanel
@@ -85,7 +86,6 @@ import ui.workbench.model.CatalogRuleStatus
 import ui.workbench.model.RuleTreeFile
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.UiDiagnostic
-import ui.workbench.model.UiDiagnosticSeverity
 import ui.workbench.model.WorkbenchAction
 import ui.workbench.toViewMode
 
@@ -136,7 +136,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
     // ── Track word + DSL context on every cursor move ─────────────────────────
     LaunchedEffect(key1 = state.ruleValue.value.text, key2 = state.ruleValue.value.selection.start) {
         val cursor = state.ruleValue.value.selection.start
-        val (wordStart, word) = extractCurrentWord(text = state.ruleValue.value.text, cursorPos = cursor)
+        val (wordStart, word) = Words.currentWord(text = state.ruleValue.value.text, cursorPos = cursor)
         state.autoCompleteWordStart.value = wordStart
         state.autoCompleteWord.value = word
         state.autoCompleteIndex.value = 0
@@ -342,15 +342,11 @@ actual fun RuleEditor(closeController: AppCloseController) {
             )
         } ?: emptyList()
     }
-    val hasErrors = state.diagnosticsList.value.any { it.severity == ruleengine.core.errors.Severity.ERROR }
+    val hasErrors = state.diagnosticsList.value.any { it.severity == Severity.ERROR }
     val uiDiagnostics = remember(key1 = state.diagnosticsList.value) {
         state.diagnosticsList.value.map { diagnostic ->
             UiDiagnostic(
-                severity = when (diagnostic.severity) {
-                    ruleengine.core.errors.Severity.ERROR -> UiDiagnosticSeverity.ERROR
-                    ruleengine.core.errors.Severity.WARNING -> UiDiagnosticSeverity.WARNING
-                    ruleengine.core.errors.Severity.INFO -> UiDiagnosticSeverity.INFO
-                },
+                severity = diagnostic.severity,
                 message = diagnostic.message,
                 line = diagnostic.line,
                 column = diagnostic.column,

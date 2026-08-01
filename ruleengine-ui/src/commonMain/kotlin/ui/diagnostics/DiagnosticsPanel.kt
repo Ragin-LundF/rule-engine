@@ -31,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ruleengine.core.errors.Severity
 import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentRed
@@ -89,14 +90,14 @@ fun DiagnosticsPanel(
     ) {
         items(diagnostics) { d ->
             val rowBg = when (d.severity) {
-                "error" -> AccentRed.copy(alpha = 0.07f)
-                "warning" -> AccentOrange.copy(alpha = 0.07f)
-                else -> Color.Transparent
+                Severity.ERROR -> AccentRed.copy(alpha = 0.07f)
+                Severity.WARNING -> AccentOrange.copy(alpha = 0.07f)
+                Severity.INFO -> Color.Transparent
             }
             val dotColor = when (d.severity) {
-                "error" -> AccentRed
-                "warning" -> AccentOrange
-                else -> PrimaryBlue
+                Severity.ERROR -> AccentRed
+                Severity.WARNING -> AccentOrange
+                Severity.INFO -> PrimaryBlue
             }
             val lineLabel = d.line?.let { "L$it${d.column?.let { c -> ":$c" } ?: ""}" }
 

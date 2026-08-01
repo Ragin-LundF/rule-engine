@@ -1,6 +1,6 @@
 package ui.workbench
 
-import ui.workbench.model.UiDiagnosticSeverity
+import ruleengine.core.errors.Severity
 import ui.workbench.model.ValidationState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -47,7 +47,7 @@ class JvmWorkbenchValidatorTest {
 
         assertEquals(expected = ValidationState.VALID, actual = result.validationState)
         assertTrue(
-            actual = result.diagnostics.none { it.severity == UiDiagnosticSeverity.ERROR },
+            actual = result.diagnostics.none { it.severity == Severity.ERROR },
             message = "Expected no ERROR diagnostics but got: ${result.diagnostics}",
         )
     }
@@ -71,7 +71,7 @@ class JvmWorkbenchValidatorTest {
 
         assertEquals(expected = ValidationState.INVALID, actual = result.validationState)
         assertTrue(
-            actual = result.diagnostics.any { it.severity == UiDiagnosticSeverity.ERROR },
+            actual = result.diagnostics.any { it.severity == Severity.ERROR },
             message = "Expected at least one ERROR diagnostic for unknown field",
         )
     }
@@ -96,7 +96,7 @@ class JvmWorkbenchValidatorTest {
 
         assertEquals(expected = ValidationState.INVALID, actual = result.validationState)
         assertTrue(
-            actual = result.diagnostics.any { it.severity == UiDiagnosticSeverity.ERROR },
+            actual = result.diagnostics.any { it.severity == Severity.ERROR },
             message = "Expected at least one ERROR diagnostic for wrong operator",
         )
     }
@@ -120,7 +120,7 @@ class JvmWorkbenchValidatorTest {
 
         assertEquals(expected = ValidationState.INVALID, actual = result.validationState)
         assertTrue(
-            actual = result.diagnostics.any { it.severity == UiDiagnosticSeverity.ERROR },
+            actual = result.diagnostics.any { it.severity == Severity.ERROR },
             message = "Expected at least one ERROR diagnostic for unknown action",
         )
     }

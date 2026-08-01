@@ -25,14 +25,6 @@ import ui.DslSection
 import ui.PrimaryBlue
 import ui.TextSecondary
 
-enum class ViewMode {
-    BUILDER,
-    CODE,
-    DIAGRAM,
-    TEST,
-    TABLE,
-}
-
 fun dslLineOpensBlock(trimmedLine: String): Boolean {
     return trimmedLine.endsWith(char = '{') || trimmedLine == "when" || trimmedLine == "then"
 }

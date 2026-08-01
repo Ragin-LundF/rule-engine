@@ -35,9 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ui.autocompletion.AutoCompleteDropdown
 import ui.autocompletion.CompletionItem
-import ui.autocompletion.extractCurrentWord
 import ui.editor.CodeEditing
 import ui.settings.SettingsController
+import ui.util.Words
 
 /** YAML indents two spaces per level. */
 private const val YAML_INDENT = "  "
@@ -88,7 +88,7 @@ fun YamlEditor(
     // Re-compute word + context whenever cursor or text changes.
     LaunchedEffect(value.text, value.selection.start) {
         val cursor = value.selection.start
-        val (wordStart, word) = extractCurrentWord(text = value.text, cursorPos = cursor)
+        val (wordStart, word) = Words.currentWord(text = value.text, cursorPos = cursor)
         autoCompleteWordStart = wordStart
         autoCompleteWord = word
         autoCompleteIndex = 0
@@ -176,7 +176,7 @@ fun YamlEditor(
                     when {
                         // ── Open the completion popup on demand ───────────────
                         SettingsController.autoCompleteShortcut.matches(event = event) -> {
-                            val (wordStart, _) = extractCurrentWord(
+                            val (wordStart, _) = Words.currentWord(
                                 text = value.text,
                                 cursorPos = value.selection.start,
                             )

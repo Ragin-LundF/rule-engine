@@ -1,5 +1,6 @@
 package ui.diagnostics
 
+import ruleengine.core.errors.Severity
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -10,7 +11,7 @@ class DiagnosticMapperTest {
     @Test
     fun `unknown field with suggestion produces ReplaceToken fix`() {
         val result = DiagnosticMapper.map(
-            severity = "error",
+            severity = Severity.ERROR,
             message = """Unknown field "purpse"""",
             suggestion = "purpose",
             line = 3,
@@ -21,7 +22,7 @@ class DiagnosticMapperTest {
         assertEquals(expected = "purpse", actual = fix.oldToken)
         assertEquals(expected = "purpose", actual = fix.newToken)
         assertEquals(expected = """Did you mean "purpose"?""", actual = result.hint)
-        assertEquals(expected = "error", actual = result.severity)
+        assertEquals(expected = Severity.ERROR, actual = result.severity)
         assertEquals(expected = 3, actual = result.line)
         assertEquals(expected = 5, actual = result.column)
     }
@@ -29,7 +30,7 @@ class DiagnosticMapperTest {
     @Test
     fun `message without suggestion produces None fix`() {
         val result = DiagnosticMapper.map(
-            severity = "error",
+            severity = Severity.ERROR,
             message = "Syntax error near '{'",
             suggestion = null,
             line = 1,
@@ -42,7 +43,7 @@ class DiagnosticMapperTest {
     @Test
     fun `message with suggestion but no quoted token produces None fix`() {
         val result = DiagnosticMapper.map(
-            severity = "warning",
+            severity = Severity.WARNING,
             message = "Operator not allowed for this field type",
             suggestion = ">=",
             line = null,
@@ -57,20 +58,20 @@ class DiagnosticMapperTest {
     @Test
     fun `severity is preserved verbatim`() {
         val result = DiagnosticMapper.map(
-            severity = "warning",
+            severity = Severity.WARNING,
             message = """Unknown action "notfy"""",
             suggestion = "notify",
             line = null,
             column = null,
         )
-        assertEquals(expected = "warning", actual = result.severity)
+        assertEquals(expected = Severity.WARNING, actual = result.severity)
         assertIs<QuickFix.ReplaceToken>(value = result.quickFix)
     }
 
     @Test
     fun `blank suggestion produces None fix`() {
         val result = DiagnosticMapper.map(
-            severity = "error",
+            severity = Severity.ERROR,
             message = """Unknown field "xyz"""",
             suggestion = "   ",
             line = null,

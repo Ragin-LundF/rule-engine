@@ -12,8 +12,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
 
-enum class StatusKind { IDLE, SUCCESS, ERROR }
-
 fun Modifier.drawTopLine(w: Dp, color: Color): Modifier = this.drawWithContent {
     drawContent()
     drawLine(

@@ -3,17 +3,35 @@ package ui.autocompletion
 import ruleengine.core.domain.dto.FieldDefinition
 import ruleengine.core.domain.dto.FieldId
 import ruleengine.core.domain.dto.FieldType
+import ui.DslCursorContext
+import ui.DslSection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AutoCompleteTest {
 
+    /**
+     * The completions offered in a `when` block with nothing typed yet.
+     *
+     * These used to go through `buildAllCompletions`, a second entry point no production code
+     * called. The aggregate list it returned is the same one `buildWhenGeneralCompletions` returns,
+     * so the assertions were about live behaviour reached through dead code — they now take the
+     * route the editor actually takes.
+     */
+    private fun whenCompletions(): List<CompletionItem> {
+        return buildContextualCompletions(
+            context = DslCursorContext(section = DslSection.WHEN),
+            schema = null,
+            actionSchema = null,
+        )
+    }
+
     // --- aggregate functions in when block ---
 
     @Test
-    fun `buildAllCompletions includes all aggregate functions`() {
-        val items = buildAllCompletions(schema = null, actionSchema = null)
+    fun `the when block offers every aggregate function`() {
+        val items = whenCompletions()
         val labels = items.map { it.label }
         assertTrue(actual = labels.any { it.startsWith("count") }, message = "Missing count, got: $labels")
         assertTrue(actual = labels.any { it.startsWith("sum") }, message = "Missing sum, got: $labels")
@@ -26,14 +44,14 @@ class AutoCompleteTest {
 
     @Test
     fun `aggregate function completions have aggregate hint`() {
-        val items = buildAllCompletions(schema = null, actionSchema = null)
+        val items = whenCompletions()
         val aggregates = items.filter { it.hint == "aggregate" }
         assertTrue(actual = aggregates.size == 7, message = "Expected 7 aggregate completions, got: ${aggregates.size}")
     }
 
     @Test
     fun `aggregate function insertText contains parentheses`() {
-        val items = buildAllCompletions(schema = null, actionSchema = null)
+        val items = whenCompletions()
         val aggregates = items.filter { it.hint == "aggregate" }
         aggregates.forEach { item ->
             assertTrue(
@@ -45,7 +63,7 @@ class AutoCompleteTest {
 
     @Test
     fun `aggregate function completions have OPERATOR kind`() {
-        val items = buildAllCompletions(schema = null, actionSchema = null)
+        val items = whenCompletions()
         val aggregates = items.filter { it.hint == "aggregate" }
         aggregates.forEach { item ->
             assertTrue(
