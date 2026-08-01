@@ -58,6 +58,8 @@ fun ProjectDialogHost(workspace: ProjectWorkspace) {
             onDismiss = workspace::dismissDialog,
         )
 
+        is ProjectDialog.RemoveEntry -> RemoveEntryDialog(request = current, workspace = workspace)
+
         is ProjectDialog.Error -> ConfirmDialog(
             title = current.title,
             message = current.message,
@@ -66,5 +68,46 @@ fun ProjectDialogHost(workspace: ProjectWorkspace) {
             dismissLabel = "Close",
             onDismiss = workspace::dismissDialog,
         )
+    }
+}
+
+/**
+ * Removing an entry: erase what it owned, or only stop the manifest naming it.
+ *
+ * "Delete files" is the destructive answer and is only offered when the entry exclusively owns
+ * something; with nothing to erase, the question collapses to a plain confirmation.
+ */
+@Composable
+private fun RemoveEntryDialog(request: ProjectDialog.RemoveEntry, workspace: ProjectWorkspace) {
+    val hasOwnFiles = request.deletable.isNotEmpty()
+    ConfirmDialog(
+        title = "Remove entry ${request.entryId}",
+        message = removeEntryMessage(dialog = request),
+        confirmLabel = if (hasOwnFiles) "Delete files" else "Remove from manifest",
+        onConfirm = {
+            if (hasOwnFiles) {
+                workspace.onRemoveEntryDeletingFiles(entryId = request.entryId)
+            } else {
+                workspace.onRemoveEntryKeepingFiles(entryId = request.entryId)
+            }
+        },
+        neutralLabel = "Remove from manifest".takeIf { hasOwnFiles },
+        onNeutral = { workspace.onRemoveEntryKeepingFiles(entryId = request.entryId) },
+        onDismiss = workspace::dismissDialog,
+    )
+}
+
+/** Names the files on both sides of the question, since "delete" does not mean all of them. */
+private fun removeEntryMessage(dialog: ProjectDialog.RemoveEntry): String {
+    return buildString {
+        append("Remove ${dialog.entryId} from the manifest.")
+        if (dialog.deletable.isNotEmpty()) {
+            append("\n\nThese files belong to it alone and can be deleted:\n")
+            append(dialog.deletable.joinToString(separator = "\n") { "• ${it.relativePath}" })
+        }
+        if (dialog.shared.isNotEmpty()) {
+            append("\n\nKept either way — shared with another entry or outside the project:\n")
+            append(dialog.shared.joinToString(separator = "\n") { "• $it" })
+        }
     }
 }

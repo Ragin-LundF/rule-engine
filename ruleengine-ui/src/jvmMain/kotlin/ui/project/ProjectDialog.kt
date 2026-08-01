@@ -18,5 +18,18 @@ sealed interface ProjectDialog {
     /** Offered after exporting a schema, since exporting is how a shared schema comes to exist. */
     data class LinkAfterExport(val kind: ProjectFileKind, val exported: Path) : ProjectDialog
 
+    /**
+     * Dropping an entry: are its files rubbish now, or do they outlive the entry?
+     *
+     * [deletable] is what the entry owns exclusively; [shared] is what stays regardless because
+     * another entry uses it or it lives outside the project, which the user needs told rather than
+     * discovering afterwards that "delete" did not.
+     */
+    data class RemoveEntry(
+        val entryId: String,
+        val deletable: List<ProjectEntryFile>,
+        val shared: List<String>,
+    ) : ProjectDialog
+
     data class Error(val title: String, val message: String) : ProjectDialog
 }

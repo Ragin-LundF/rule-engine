@@ -4,8 +4,6 @@ import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ui.editor.rules.RuleEditorState
-import ui.manifest.EditableManifestEntry
-import ui.manifest.ManifestEditorState
 import ui.manifest.ManifestYamlBridge
 import java.nio.file.Files
 import java.nio.file.Path
@@ -32,19 +30,33 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         val dirtyKey: String,
     )
 
+    /**
+     * Writes the open buffers and the manifest.
+     *
+     * Only the active entry has buffers, so only its files are written; the other entries are carried
+     * through untouched and re-emitted into the manifest, which is the whole point of holding them in
+     * the session rather than dropping everything but the one on screen.
+     */
     fun save(
         state: RuleEditorState,
         session: ProjectSession,
         approvals: ProjectSaveApprovals = ProjectSaveApprovals(),
     ): ProjectSaveOutcome {
-        if (session.isMultiEntry) {
-            return ProjectSaveOutcome.Failed(
-                message = "This manifest defines several entries. Use 'Save Project As…' to write a single-entry copy.",
-            )
-        }
-
         return runCatching { writeProject(state = state, session = session, approvals = approvals) }
             .getOrElse { ex -> ProjectSaveOutcome.Failed(message = ex.message ?: "Save failed") }
+    }
+
+    /**
+     * Writes the manifest alone, leaving every content file as it is.
+     *
+     * Removing an entry deletes files immediately, so the index has to stop naming them at the same
+     * moment; waiting for the next full save would leave a manifest on disk pointing at nothing.
+     */
+    fun saveManifest(session: ProjectSession): ProjectSaveOutcome {
+        return runCatching {
+            writeFile(write = planManifestWrite(session = session))
+            ProjectSaveOutcome.Saved(session = session, filesWritten = 1)
+        }.getOrElse { ex -> ProjectSaveOutcome.Failed(message = ex.message ?: "Save failed") }
     }
 
     /**
@@ -67,14 +79,21 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
             Files.createDirectories(ProjectPaths.rulesDir(root = newRoot))
             Files.createDirectories(ProjectPaths.schemasDir(root = newRoot))
 
-            session.ruleFiles.forEach { relativePath -> copyIntoNewRoot(session, newRoot, relativePath) }
+            // Every entry, not just the open one: the copy is the whole project or it is broken.
+            session.entries
+                .flatMap { entry -> entry.ruleFiles }
+                .distinct()
+                .forEach { relativePath -> copyIntoNewRoot(session, newRoot, relativePath) }
 
             val relocated = session.copy(
                 root = newRoot,
                 manifestFileName = newManifestPath.fileName.toString(),
-                schemaLink = relocateLink(session = session, newRoot = newRoot, link = session.schemaLink),
-                actionsLink = relocateLink(session = session, newRoot = newRoot, link = session.actionsLink),
-                isMultiEntry = false,
+                entries = session.entries.map { entry ->
+                    entry.copy(
+                        schemaLink = relocateLink(session = session, newRoot = newRoot, link = entry.schemaLink),
+                        actionsLink = relocateLink(session = session, newRoot = newRoot, link = entry.actionsLink),
+                    )
+                },
                 missingFiles = emptyList(),
             )
 
@@ -114,11 +133,13 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         val schemaWrite = planSchemaWrite(state = state, session = session)
         val actionsWrite = planActionsWrite(state = state, session = session)
 
-        val updatedSession = session.copy(
-            schemaLink = schemaWrite?.relativePath ?: session.schemaLink,
-            actionsLink = actionsWrite?.relativePath ?: session.actionsLink,
-            ruleFiles = mergeRuleFiles(session = session, added = ruleWrite?.relativePath),
-        )
+        val updatedSession = session.withActive { entry ->
+            entry.copy(
+                schemaLink = schemaWrite?.relativePath ?: entry.schemaLink,
+                actionsLink = actionsWrite?.relativePath ?: entry.actionsLink,
+                ruleFiles = mergeRuleFiles(existing = entry.ruleFiles, added = ruleWrite?.relativePath),
+            )
+        }
 
         val contentWrites = listOfNotNull(ruleWrite, schemaWrite, actionsWrite)
             .filter { write -> currentContent(path = write.path) != write.content }
@@ -136,7 +157,7 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         ruleWrite?.let { write -> state.selectedManifestRuleFile.value = write.relativePath }
 
         // Last, so an aborted save never leaves a manifest indexing files that were not written.
-        val manifestWrite = planManifestWrite(state = state, session = updatedSession)
+        val manifestWrite = planManifestWrite(session = updatedSession)
         writeFile(write = manifestWrite)
 
         return ProjectSaveOutcome.Saved(
@@ -161,7 +182,11 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         // updates it instead of inventing a second file from whatever the buffer now parses to.
         val relativePath = state.selectedManifestRuleFile.value
             ?: session.ruleFiles.singleOrNull()
-            ?: "${ProjectPaths.RULES_DIR}/${defaultRuleFileName(ruleText = content)}"
+            ?: ProjectPaths.defaultRuleFile(
+                entryId = session.entryId,
+                entryCount = session.entries.size,
+                fileName = defaultRuleFileName(ruleText = content),
+            )
 
         val path = resolveRulePath(root = session.root, relativePath = relativePath)
             ?: return null
@@ -180,7 +205,7 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         if (content.isBlank() && session.schemaLink == null) return null
 
         val relativePath = session.schemaLink
-            ?: "${ProjectPaths.SCHEMAS_DIR}/${ProjectPaths.DEFAULT_SCHEMA_FILE}"
+            ?: ProjectPaths.defaultSchemaFile(entryId = session.entryId, entryCount = session.entries.size)
 
         return PlannedWrite(
             kind = ProjectFileKind.SCHEMA,
@@ -196,7 +221,7 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         if (content.isBlank() && session.actionsLink == null) return null
 
         val relativePath = session.actionsLink
-            ?: "${ProjectPaths.SCHEMAS_DIR}/${ProjectPaths.DEFAULT_ACTIONS_FILE}"
+            ?: ProjectPaths.defaultActionsFile(entryId = session.entryId, entryCount = session.entries.size)
 
         return PlannedWrite(
             kind = ProjectFileKind.ACTIONS,
@@ -207,20 +232,8 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         )
     }
 
-    private fun planManifestWrite(state: RuleEditorState, session: ProjectSession): PlannedWrite {
-        val yaml = ManifestYamlBridge.toYaml(
-            state = ManifestEditorState(
-                name = state.parsedManifest.value?.name ?: session.displayName,
-                entries = listOf(
-                    EditableManifestEntry(
-                        id = session.entryId,
-                        schemaPath = session.schemaLink.orEmpty(),
-                        actionsPath = session.actionsLink.orEmpty(),
-                        rulePaths = session.ruleFiles,
-                    ),
-                ),
-            ),
-        )
+    private fun planManifestWrite(session: ProjectSession): PlannedWrite {
+        val yaml = ManifestYamlBridge.toYaml(state = session.toEditorState())
 
         return PlannedWrite(
             kind = ProjectFileKind.RULE,
@@ -276,19 +289,15 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         }
     }
 
-    private fun mergeRuleFiles(session: ProjectSession, added: String?): List<String> {
-        if (added == null || added in session.ruleFiles) return session.ruleFiles
-        return session.ruleFiles + added
+    private fun mergeRuleFiles(existing: List<String>, added: String?): List<String> {
+        if (added == null || added in existing) return existing
+        return existing + added
     }
 
     /** Names a brand-new rule file after the first rule in it, which is what the user just wrote. */
     private fun defaultRuleFileName(ruleText: String): String {
         val ruleId = runCatching { Parser(input = ruleText).parseRules().firstOrNull()?.id }.getOrNull()
-        val slug = ruleId?.takeIf { it.isNotBlank() }
-            ?.lowercase()
-            ?.replace(regex = Regex(pattern = "[^a-z0-9]+"), replacement = "-")
-            ?.trim('-')
-            ?.takeIf { it.isNotBlank() }
+        val slug = ruleId?.takeIf { it.isNotBlank() }?.let { id -> ProjectPaths.slug(value = id) }
         return "${slug ?: "rules"}.rule"
     }
 }

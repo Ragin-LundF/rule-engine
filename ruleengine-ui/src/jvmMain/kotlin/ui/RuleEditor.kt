@@ -27,7 +27,6 @@ import ruleengine.compiler.Validator
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
-import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
@@ -54,6 +53,7 @@ import ui.project.LinkedFileHeader
 import ui.project.ProjectDialogHost
 import ui.project.ProjectFileKind
 import ui.project.ProjectWorkspace
+import ui.project.toEditorState
 import ui.samples.SampleGalleryScreen
 import ui.samples.loadSample
 import ui.schema.FieldSchemaYamlBridge
@@ -403,7 +403,16 @@ actual fun RuleEditor(closeController: AppCloseController) {
     ProjectDialogHost(workspace = workspace)
 
     RuleWorkbenchScreen(
-        topBar = { TopBarSection(workspace = workspace) },
+        topBar = {
+            TopBarSection(
+                workspace = workspace,
+                onManageEntries = {
+                    workbenchViewModel.dispatch(
+                        action = WorkbenchAction.SelectAppArea(area = AppArea.MANIFEST),
+                    )
+                },
+            )
+        },
         iconRail = {
             AppAreaIconRail(
                 selectedArea = workbenchState.appArea,
@@ -646,20 +655,21 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     )
                 }
 
+                // The session is the manifest: edits here go straight onto it rather than into a
+                // text buffer the saver would regenerate over.
                 AppArea.MANIFEST -> ManifestAreaScreen(
-                    manifestYaml = state.manifestText.value,
+                    state = workspace.session.value?.toEditorState()
+                        ?: ManifestYamlBridge.fromYaml(yaml = state.manifestText.value),
+                    onStateChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
+                    activeEntryId = workspace.session.value?.activeEntryId,
+                    onSelectEntry = { entryId -> workspace.selectEntry(entryId = entryId) },
+                    onAddEntry = { workspace.addEntry(entryId = workspace.suggestEntryId()) },
+                    onRemoveEntry = { entryId -> workspace.requestRemoveEntry(entryId = entryId) },
                     fromYaml = { yaml ->
                         ManifestYamlBridge.fromYaml(yaml = yaml)
                     },
                     toYaml = { editorState ->
                         ManifestYamlBridge.toYaml(state = editorState)
-                    },
-                    onManifestYamlChange = { newYaml ->
-                        state.manifestText.value = newYaml
-                        state.manifestFieldValue.value = TextFieldValue(text = newYaml)
-                        state.parsedManifest.value = runCatching {
-                            ManifestLoader.loadFromString(content = newYaml)
-                        }.getOrNull()
                     },
                     modifier = Modifier.fillMaxSize(),
                 )

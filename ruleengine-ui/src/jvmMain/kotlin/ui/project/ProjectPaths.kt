@@ -25,6 +25,37 @@ object ProjectPaths {
     fun schemasDir(root: Path): Path = root.resolve(SCHEMAS_DIR)
 
     /**
+     * Where a file the user never named should go, for an entry that has not linked one yet.
+     *
+     * Entries are independent, so two of them defaulting to the same `schemas/schema.yaml` would
+     * have the second silently overwrite the first. The entry id is folded into the name once a
+     * project has more than one entry; a single-entry project keeps the plain names it always had,
+     * since there is nothing there to collide with.
+     */
+    fun defaultSchemaFile(entryId: String, entryCount: Int): String {
+        if (entryCount <= 1) return "$SCHEMAS_DIR/$DEFAULT_SCHEMA_FILE"
+        return "$SCHEMAS_DIR/${slug(value = entryId)}-schema.yaml"
+    }
+
+    fun defaultActionsFile(entryId: String, entryCount: Int): String {
+        if (entryCount <= 1) return "$SCHEMAS_DIR/$DEFAULT_ACTIONS_FILE"
+        return "$SCHEMAS_DIR/${slug(value = entryId)}-actions.yaml"
+    }
+
+    fun defaultRuleFile(entryId: String, entryCount: Int, fileName: String): String {
+        if (entryCount <= 1) return "$RULES_DIR/$fileName"
+        return "$RULES_DIR/${slug(value = entryId)}/$fileName"
+    }
+
+    /** Reduces a user-typed id to something safe to put in a path. */
+    fun slug(value: String): String {
+        val cleaned = value.lowercase()
+            .replace(regex = Regex(pattern = "[^a-z0-9]+"), replacement = "-")
+            .trim('-')
+        return cleaned.ifBlank { "entry" }
+    }
+
+    /**
      * The path of [target] as it should be written into a manifest stored in [root].
      *
      * Relative, using `../` when the target sits outside the project, so that a project and the

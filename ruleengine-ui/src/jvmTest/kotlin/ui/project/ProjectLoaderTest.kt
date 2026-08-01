@@ -138,9 +138,54 @@ class ProjectLoaderTest {
         assertTrue(actual = state.schemaText.value.contains(other = "shared"))
     }
 
+    /** Every entry has to survive the load: the ones not on screen are still part of the project. */
     @Test
-    fun `manifest with several entries is flagged`() {
+    fun `manifest with several entries keeps them all and opens the first`() {
+        val root = multiEntryProject()
+        val state = newState()
+
+        val result = ProjectLoader(dirtyState = ProjectDirtyState()).load(
+            manifestPath = root.resolve("manifest.yaml"),
+            into = state,
+        )
+
+        val session = assertIs<ProjectLoadResult.Loaded>(value = result).session
+        assertEquals(expected = listOf("first", "second"), actual = session.entries.map { it.id })
+        assertEquals(expected = "first", actual = session.activeEntryId)
+        assertEquals(expected = "schemas/schema.yaml", actual = session.schemaLink)
+        assertTrue(actual = state.ruleValue.value.text.contains(other = "alpha-rule"))
+    }
+
+    /**
+     * Switching entries has to replace the buffers, not add to them.
+     *
+     * The second entry has no schema, so the first entry's must be gone rather than lingering as a
+     * schema the rules are then validated against.
+     */
+    @Test
+    fun `activating another entry swaps the buffers`() {
+        val root = multiEntryProject()
+        val state = newState()
+        val loader = ProjectLoader(dirtyState = ProjectDirtyState())
+        val session = assertIs<ProjectLoadResult.Loaded>(
+            value = loader.load(manifestPath = root.resolve("manifest.yaml"), into = state),
+        ).session
+
+        loader.activate(session = session, entryId = "second", into = state)
+
+        assertEquals(expected = "second", actual = state.selectedManifestEntry.value)
+        assertEquals(expected = "", actual = state.schemaText.value)
+        assertEquals(expected = "rules/second.rule", actual = state.selectedManifestRuleFile.value)
+        assertTrue(actual = state.ruleValue.value.text.contains(other = "beta-rule"))
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private fun newState() = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+
+    private fun multiEntryProject(): Path {
         val root = createProject(name = "alpha", ruleId = "alpha-rule")
+        Files.writeString(root.resolve("rules/second.rule"), ruleText(ruleId = "beta-rule"))
         Files.writeString(
             root.resolve("manifest.yaml"),
             """
@@ -151,22 +196,11 @@ class ProjectLoaderTest {
                       - rules/main.rule
                   - id: second
                     rules:
-                      - rules/main.rule
+                      - rules/second.rule
             """.trimIndent(),
         )
-        val state = newState()
-
-        val result = ProjectLoader(dirtyState = ProjectDirtyState()).load(
-            manifestPath = root.resolve("manifest.yaml"),
-            into = state,
-        )
-
-        assertTrue(actual = assertIs<ProjectLoadResult.Loaded>(value = result).session.isMultiEntry)
+        return root
     }
-
-    // ── helpers ───────────────────────────────────────────────────────────────
-
-    private fun newState() = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
 
     private fun createProject(name: String, ruleId: String, includeSchema: Boolean = true): Path {
         val root = Files.createTempDirectory("project-$name")

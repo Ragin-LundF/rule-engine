@@ -127,6 +127,24 @@ class RuleEditorState(
      * left alone — that is the user's workspace, not the project's content.
      */
     fun reset() {
+        resetEntryBuffers()
+
+        manifestText.value = ""
+        manifestFieldValue.value = TextFieldValue(text = "")
+        manifestBaseDir.value = null
+        parsedManifest.value = null
+        selectedManifestEntry.value = null
+    }
+
+    /**
+     * Clears everything that belongs to one manifest entry, leaving the manifest itself in place.
+     *
+     * Switching entries has to start from nothing the same way opening a project does — an entry
+     * without a `schema:` key must show an empty schema rather than the previous entry's — but the
+     * manifest, its base directory and the parsed model describe the whole project and outlive the
+     * switch.
+     */
+    fun resetEntryBuffers() {
         schemaText.value = ""
         schemaFieldValue.value = TextFieldValue(text = "")
         parsedSchema.value = null
@@ -139,12 +157,6 @@ class RuleEditorState(
         allRulesText.value = ""
         showAllRules.value = false
         entryRuleSources.value = emptyList()
-
-        manifestText.value = ""
-        manifestFieldValue.value = TextFieldValue(text = "")
-        manifestBaseDir.value = null
-        parsedManifest.value = null
-        selectedManifestEntry.value = null
         selectedManifestRuleFile.value = null
 
         diagnosticsList.value = emptyList()
@@ -177,7 +189,18 @@ class RuleEditorState(
      * was written in.
      */
     fun loadAllRuleFilesForCurrentEntry() {
-        val loaded = readCurrentEntryRuleFiles()
+        loadRuleFiles(relativePaths = currentEntryRulePaths())
+    }
+
+    /**
+     * The same, for a caller that already knows which files it wants.
+     *
+     * The project loader is one: it activates an entry whose paths come from the session, and going
+     * back through [parsedManifest] would tie loading to a buffer that has not necessarily caught up
+     * with the entry being switched to.
+     */
+    fun loadRuleFiles(relativePaths: List<String>) {
+        val loaded = readRuleFiles(relativePaths = relativePaths)
         allRulesText.value = loaded.joinToString(separator = "\n\n") { (_, content) -> content }
         entryRuleSources.value = parseRuleSources(loaded = loaded)
         showAllRules.value = true
@@ -196,7 +219,7 @@ class RuleEditorState(
      * rules with no way for the reader to tell which was which.
      */
     fun parsedRuleFilesForCurrentEntry(): List<RuleSource> {
-        return parseRuleSources(loaded = readCurrentEntryRuleFiles())
+        return parseRuleSources(loaded = readRuleFiles(relativePaths = currentEntryRulePaths()))
     }
 
     /** True when the open rule file differs from what is on disk. */
@@ -210,13 +233,15 @@ class RuleEditorState(
         }.getOrDefault(defaultValue = false)
     }
 
-    private fun readCurrentEntryRuleFiles(): List<Pair<String, String>> {
+    private fun currentEntryRulePaths(): List<String> {
+        return parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value }?.rules.orEmpty()
+    }
+
+    private fun readRuleFiles(relativePaths: List<String>): List<Pair<String, String>> {
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
             ?: return emptyList()
-        val entry = parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value }
-            ?: return emptyList()
 
-        return entry.rules.mapNotNull { relativePath ->
+        return relativePaths.mapNotNull { relativePath ->
             runCatching {
                 val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
                 relativePath to Files.readString(path)

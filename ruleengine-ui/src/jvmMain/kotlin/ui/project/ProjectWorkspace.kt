@@ -3,11 +3,14 @@ package ui.project
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.text.input.TextFieldValue
+import ruleengine.manifest.ManifestLoader
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
+import ui.manifest.ManifestEditorState
+import ui.manifest.ManifestYamlBridge
 import ui.pickActionsFilePath
 import ui.pickProjectManifestPath
 import ui.pickProjectManifestSavePath
@@ -65,9 +68,9 @@ class ProjectWorkspace(
 
     // ── Open / New ────────────────────────────────────────────────────────────
 
-    fun openProject() = guardUnsavedWork(action = PendingProjectAction.OPEN_PROJECT) { performOpen() }
+    fun openProject() = guardUnsavedWork(action = PendingProjectAction.OpenProject) { performOpen() }
 
-    fun newProject() = guardUnsavedWork(action = PendingProjectAction.NEW_PROJECT) { performNew() }
+    fun newProject() = guardUnsavedWork(action = PendingProjectAction.NewProject) { performNew() }
 
     /**
      * Opens without asking about unsaved work.
@@ -114,8 +117,178 @@ class ProjectWorkspace(
         }
         dialog.value = ProjectDialog.UnsavedChanges(
             projectName = session.value?.displayName ?: "This project",
-            pending = PendingProjectAction.CLOSE_WINDOW,
+            pending = PendingProjectAction.CloseWindow,
         )
+    }
+
+    // ── Manifest entries ──────────────────────────────────────────────────────
+
+    /**
+     * Makes [entryId] the entry the editor is working on.
+     *
+     * Guarded like an open, because it replaces every buffer: the schema, the actions and the rule
+     * files all belong to the entry being left behind.
+     */
+    fun selectEntry(entryId: String) {
+        val current = session.value ?: return
+        if (current.activeEntryId == entryId || current.entry(id = entryId) == null) return
+        guardUnsavedWork(action = PendingProjectAction.SwitchEntry(entryId = entryId)) {
+            performSelectEntry(entryId = entryId)
+        }
+    }
+
+    private fun performSelectEntry(entryId: String) {
+        val current = session.value ?: return
+        val missing = loader.activate(session = current, entryId = entryId, into = state)
+        session.value = current.copy(activeEntryId = entryId, missingFiles = missing)
+        revision.value++
+        state.setStatus(msg = "Entry $entryId", kind = StatusKind.IDLE)
+    }
+
+    /**
+     * Adds an empty entry and switches to it.
+     *
+     * Nothing is written: the entry exists in the manifest with an id and no files until the user
+     * gives it a schema, actions or rules and saves. Creating placeholder files here would litter the
+     * project with empty YAML for an entry the user may yet abandon.
+     */
+    fun addEntry(entryId: String): Boolean {
+        val current = session.value ?: run {
+            dialog.value = ProjectDialog.Error(
+                title = "No project",
+                message = "Save this project before adding manifest entries.",
+            )
+            return false
+        }
+        val trimmed = entryId.trim()
+        if (trimmed.isBlank() || current.entry(id = trimmed) != null) {
+            val reason = if (trimmed.isBlank()) {
+                "An entry needs a name."
+            } else {
+                "An entry named $trimmed already exists."
+            }
+            dialog.value = ProjectDialog.Error(title = "Cannot add entry", message = reason)
+            return false
+        }
+
+        val added = current.copy(entries = current.entries + ProjectEntry(id = trimmed))
+        session.value = added
+        syncManifestBuffers()
+        performSelectEntry(entryId = trimmed)
+        return true
+    }
+
+    /** A name no existing entry uses, so "+ Add entry" never has to fail on the first click. */
+    fun suggestEntryId(): String {
+        val existing = session.value?.entries?.map { it.id }.orEmpty().toSet()
+        return generateSequence(seed = existing.size + 1) { it + 1 }
+            .map { index -> "entry-$index" }
+            .first { candidate -> candidate !in existing }
+    }
+
+    fun requestRemoveEntry(entryId: String) {
+        val current = session.value ?: return
+        if (current.entries.size <= 1) {
+            dialog.value = ProjectDialog.Error(
+                title = "Cannot remove entry",
+                message = "A manifest needs at least one entry.",
+            )
+            return
+        }
+        if (current.entry(id = entryId) == null) return
+
+        dialog.value = ProjectDialog.RemoveEntry(
+            entryId = entryId,
+            deletable = ManifestEntryRemoval.deletableFiles(session = current, entryId = entryId),
+            shared = ManifestEntryRemoval.keptFiles(session = current, entryId = entryId),
+        )
+    }
+
+    fun onRemoveEntryDeletingFiles(entryId: String) {
+        val current = session.value ?: return
+        val deletable = ManifestEntryRemoval.deletableFiles(session = current, entryId = entryId)
+        val failures = ManifestEntryRemoval.delete(files = deletable)
+        deletable.forEach { file ->
+            dirtyState.forget(key = ProjectDirtyState.ruleKey(relativePath = file.relativePath))
+        }
+
+        removeEntry(entryId = entryId)
+        if (failures.isEmpty()) {
+            state.setStatus(msg = "Removed $entryId — ${deletable.size} file(s) deleted", kind = StatusKind.SUCCESS)
+            return
+        }
+        // The entry is gone either way; saying which files survived beats a silent partial delete.
+        dialog.value = ProjectDialog.Error(
+            title = "Some files were not deleted",
+            message = failures.joinToString(separator = "\n"),
+        )
+    }
+
+    fun onRemoveEntryKeepingFiles(entryId: String) {
+        removeEntry(entryId = entryId)
+        state.setStatus(msg = "Removed $entryId from the manifest — files kept", kind = StatusKind.SUCCESS)
+    }
+
+    private fun removeEntry(entryId: String) {
+        dialog.value = null
+        val current = session.value ?: return
+        val remaining = current.entries.filterNot { it.id == entryId }
+        if (remaining.isEmpty()) return
+
+        val reduced = current.copy(entries = remaining, activeEntryId = current.activeEntryId)
+        session.value = reduced
+        syncManifestBuffers()
+
+        if (current.activeEntryId == entryId) performSelectEntry(entryId = remaining.first().id)
+
+        // Files may have just been deleted, so the index must stop naming them now, not at next save.
+        session.value?.let { updated -> saver.saveManifest(session = updated) }
+        revision.value++
+    }
+
+    /**
+     * Applies what the Manifest area edited back onto the session.
+     *
+     * The session is the source of truth; without this the saver would regenerate the manifest from
+     * the session and silently throw away everything typed in that area.
+     */
+    fun applyManifestEditorState(edited: ManifestEditorState) {
+        val current = session.value ?: return
+        val entries = edited.toProjectEntries().filter { it.id.isNotBlank() }
+        if (entries.isEmpty()) return
+
+        val activeBefore = current.active
+        val active = entries.firstOrNull { it.id == current.activeEntryId } ?: entries.first()
+        val updated = current.copy(
+            entries = entries,
+            activeEntryId = active.id,
+            manifestName = edited.name.takeIf { it.isNotBlank() },
+        )
+        if (updated == current) return
+
+        session.value = updated
+        syncManifestBuffers()
+
+        // Only a change to what the active entry points at can invalidate the buffers on screen.
+        val pathsChanged = active.schemaLink != activeBefore.schemaLink ||
+                active.actionsLink != activeBefore.actionsLink ||
+                active.ruleFiles != activeBefore.ruleFiles
+        if (pathsChanged) performSelectEntry(entryId = active.id) else revision.value++
+    }
+
+    /**
+     * Regenerates the manifest buffers from the session.
+     *
+     * [RuleEditorState.parsedManifest] still drives the rule-file picker, the rule tree and the
+     * diagrams, so it has to follow the session rather than drift into being a second source of truth
+     * that the saver would overrule.
+     */
+    private fun syncManifestBuffers() {
+        val current = session.value
+        val yaml = current?.let { ManifestYamlBridge.toYaml(state = it.toEditorState()) }.orEmpty()
+        state.manifestText.value = yaml
+        state.manifestFieldValue.value = TextFieldValue(text = yaml)
+        state.parsedManifest.value = runCatching { ManifestLoader.loadFromString(content = yaml) }.getOrNull()
     }
 
     // ── Save ──────────────────────────────────────────────────────────────────
@@ -149,12 +322,15 @@ class ProjectWorkspace(
         }
         val root = manifestPath.parent ?: return null
 
-        return ProjectSession(
+        return ProjectSession.singleEntry(
             root = root,
             manifestFileName = manifestPath.fileName.toString(),
-            entryId = state.parsedManifest.value?.entries?.firstOrNull()?.id ?: "default",
-            schemaLink = scratchSchemaLink?.let { ProjectPaths.relativize(root = root, target = it) },
-            actionsLink = scratchActionsLink?.let { ProjectPaths.relativize(root = root, target = it) },
+            entry = ProjectEntry(
+                id = state.parsedManifest.value?.entries?.firstOrNull()?.id ?: ProjectSession.DEFAULT_ENTRY_ID,
+                schemaLink = scratchSchemaLink?.let { ProjectPaths.relativize(root = root, target = it) },
+                actionsLink = scratchActionsLink?.let { ProjectPaths.relativize(root = root, target = it) },
+            ),
+            manifestName = state.parsedManifest.value?.name,
         )
     }
 
@@ -162,6 +338,8 @@ class ProjectWorkspace(
         return when (val outcome = attempt()) {
             is ProjectSaveOutcome.Saved -> {
                 session.value = outcome.session
+                // The manifest on disk was just regenerated from the session; the buffer has to agree.
+                syncManifestBuffers()
                 scratchSchemaLink = null
                 scratchActionsLink = null
                 approvals = ProjectSaveApprovals()
@@ -232,13 +410,23 @@ class ProjectWorkspace(
         dialog.value = null
         val current = session.value ?: return
         session.value = when (kind) {
-            ProjectFileKind.SCHEMA -> current.copy(
-                schemaLink = "${ProjectPaths.SCHEMAS_DIR}/${ProjectPaths.DEFAULT_SCHEMA_FILE}",
-            )
+            ProjectFileKind.SCHEMA -> current.withActive { entry ->
+                entry.copy(
+                    schemaLink = ProjectPaths.defaultSchemaFile(
+                        entryId = entry.id,
+                        entryCount = current.entries.size,
+                    ),
+                )
+            }
 
-            ProjectFileKind.ACTIONS -> current.copy(
-                actionsLink = "${ProjectPaths.SCHEMAS_DIR}/${ProjectPaths.DEFAULT_ACTIONS_FILE}",
-            )
+            ProjectFileKind.ACTIONS -> current.withActive { entry ->
+                entry.copy(
+                    actionsLink = ProjectPaths.defaultActionsFile(
+                        entryId = entry.id,
+                        entryCount = current.entries.size,
+                    ),
+                )
+            }
 
             ProjectFileKind.RULE -> current
         }
@@ -269,9 +457,10 @@ class ProjectWorkspace(
     /** Runs the interrupted action now that the unsaved-work question has been answered. */
     private fun resume(action: PendingProjectAction) {
         when (action) {
-            PendingProjectAction.OPEN_PROJECT -> performOpen()
-            PendingProjectAction.NEW_PROJECT -> performNew()
-            PendingProjectAction.CLOSE_WINDOW -> closeRequested.value = true
+            PendingProjectAction.OpenProject -> performOpen()
+            PendingProjectAction.NewProject -> performNew()
+            PendingProjectAction.CloseWindow -> closeRequested.value = true
+            is PendingProjectAction.SwitchEntry -> performSelectEntry(entryId = action.entryId)
         }
     }
 
@@ -338,11 +527,14 @@ class ProjectWorkspace(
             if (kind == ProjectFileKind.SCHEMA) scratchSchemaLink = path else scratchActionsLink = path
         } else {
             val relative = ProjectPaths.relativize(root = current.root, target = path)
-            session.value = if (kind == ProjectFileKind.SCHEMA) {
-                current.copy(schemaLink = relative)
-            } else {
-                current.copy(actionsLink = relative)
+            session.value = current.withActive { entry ->
+                if (kind == ProjectFileKind.SCHEMA) {
+                    entry.copy(schemaLink = relative)
+                } else {
+                    entry.copy(actionsLink = relative)
+                }
             }
+            syncManifestBuffers()
         }
 
         revision.value++
@@ -357,7 +549,7 @@ class ProjectWorkspace(
                 state.parsedSchema.value = null
                 dirtyState.forget(key = ProjectDirtyState.SCHEMA)
                 scratchSchemaLink = null
-                session.value = session.value?.copy(schemaLink = null)
+                session.value = session.value?.withActive { entry -> entry.copy(schemaLink = null) }
             }
 
             ProjectFileKind.ACTIONS -> {
@@ -366,11 +558,12 @@ class ProjectWorkspace(
                 state.parsedActionSchema.value = null
                 dirtyState.forget(key = ProjectDirtyState.ACTIONS)
                 scratchActionsLink = null
-                session.value = session.value?.copy(actionsLink = null)
+                session.value = session.value?.withActive { entry -> entry.copy(actionsLink = null) }
             }
 
             ProjectFileKind.RULE -> return
         }
+        syncManifestBuffers()
         revision.value++
         state.setStatus(msg = "Unlinked ${kind.label}", kind = StatusKind.IDLE)
     }

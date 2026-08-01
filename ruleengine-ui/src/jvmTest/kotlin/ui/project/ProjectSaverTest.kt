@@ -66,7 +66,7 @@ class ProjectSaverTest {
 
         val state = newState(ruleId = "discount")
         state.schemaText.value = schemaYaml() + "\n# locally edited"
-        val session = scratchSession(root = root).copy(schemaLink = "../shared/common.yaml")
+        val session = scratchSession(root = root).withActive { it.copy(schemaLink = "../shared/common.yaml") }
 
         val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(state = state, session = session)
 
@@ -89,7 +89,7 @@ class ProjectSaverTest {
 
         val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(
             state = state,
-            session = scratchSession(root = root).copy(schemaLink = "../shared/common.yaml"),
+            session = scratchSession(root = root).withActive { it.copy(schemaLink = "../shared/common.yaml") },
             approvals = ProjectSaveApprovals(externalWrites = setOf(ProjectFileKind.SCHEMA)),
         )
 
@@ -131,7 +131,7 @@ class ProjectSaverTest {
         val saved = assertIs<ProjectSaveOutcome.Saved>(
             value = saver.save(
                 state = state,
-                session = scratchSession(root = origin).copy(schemaLink = "../shared/common.yaml"),
+                session = scratchSession(root = origin).withActive { it.copy(schemaLink = "../shared/common.yaml") },
                 approvals = ProjectSaveApprovals(externalWrites = setOf(ProjectFileKind.SCHEMA)),
             ),
         )
@@ -152,23 +152,119 @@ class ProjectSaverTest {
         assertTrue(actual = Files.exists(origin.resolve("rules/discount.rule")))
     }
 
+    /**
+     * The entries the user is not looking at must survive a save.
+     *
+     * Only the active entry has buffers behind it, so the others exist purely in the session — if the
+     * saver rebuilt the manifest from the buffers alone they would be silently deleted from a project
+     * the user only meant to edit one part of.
+     */
     @Test
-    fun `multi entry project refuses a plain save`() {
+    fun `saving a multi entry project keeps every entry and leaves the inactive files alone`() {
         val root = Files.createTempDirectory("multi")
-        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(
-            state = newState(ruleId = "discount"),
-            session = scratchSession(root = root).copy(isMultiEntry = true),
+        Files.createDirectories(root.resolve("rules"))
+        val otherRule = root.resolve("rules/other.rule")
+        Files.writeString(otherRule, ruleText(ruleId = "untouched"))
+
+        val session = ProjectSession(
+            root = root,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "primary"),
+                ProjectEntry(
+                    id = "secondary",
+                    schemaLink = "schemas/other.yaml",
+                    ruleFiles = listOf("rules/other.rule"),
+                ),
+            ),
+            activeEntryId = "primary",
         )
 
-        assertIs<ProjectSaveOutcome.Failed>(value = outcome)
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(
+            state = newState(ruleId = "discount"),
+            session = session,
+        )
+
+        val saved = assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertEquals(expected = listOf("primary", "secondary"), actual = saved.session.entries.map { it.id })
+
+        val manifest = Files.readString(root.resolve("manifest.yaml"))
+        assertTrue(actual = manifest.contains(other = "id: primary"))
+        assertTrue(actual = manifest.contains(other = "id: secondary"))
+        assertTrue(actual = manifest.contains(other = "rules/other.rule"))
+        assertEquals(expected = ruleText(ruleId = "untouched"), actual = Files.readString(otherRule))
+    }
+
+    /** Two entries defaulting to the same `schemas/schema.yaml` would have one overwrite the other. */
+    @Test
+    fun `a new file in a multi entry project is named after its entry`() {
+        val root = Files.createTempDirectory("multi-names")
+        val session = ProjectSession(
+            root = root,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(ProjectEntry(id = "risk"), ProjectEntry(id = "other")),
+            activeEntryId = "risk",
+        )
+
+        ProjectSaver(dirtyState = ProjectDirtyState()).save(state = newState(ruleId = "discount"), session = session)
+
+        assertTrue(actual = Files.exists(root.resolve("schemas/risk-schema.yaml")))
+        assertTrue(actual = Files.exists(root.resolve("schemas/risk-actions.yaml")))
+        assertTrue(actual = Files.exists(root.resolve("rules/risk/discount.rule")))
+    }
+
+    @Test
+    fun `save as copies the rule files of every entry`() {
+        val parent = Files.createTempDirectory("copy-all")
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        Files.createDirectories(origin.resolve("rules"))
+        Files.writeString(origin.resolve("rules/other.rule"), ruleText(ruleId = "untouched"))
+
+        val session = ProjectSession(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "primary"),
+                ProjectEntry(id = "secondary", ruleFiles = listOf("rules/other.rule")),
+            ),
+            activeEntryId = "primary",
+        )
+
+        val target = Files.createDirectories(parent.resolve("copy"))
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).saveAs(
+            state = newState(ruleId = "discount"),
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertTrue(actual = Files.exists(target.resolve("rules/other.rule")))
+    }
+
+    /** Writing the index alone, for when files were just deleted and it must stop naming them. */
+    @Test
+    fun `save manifest writes only the manifest`() {
+        val root = Files.createTempDirectory("manifest-only")
+        val session = ProjectSession(
+            root = root,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(ProjectEntry(id = "only")),
+            activeEntryId = "only",
+        )
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).saveManifest(session = session)
+
+        assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertTrue(actual = Files.readString(root.resolve("manifest.yaml")).contains(other = "id: only"))
+        assertTrue(actual = Files.notExists(root.resolve("schemas/schema.yaml")))
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun scratchSession(root: Path) = ProjectSession(
+    private fun scratchSession(root: Path) = ProjectSession.singleEntry(
         root = root,
         manifestFileName = "manifest.yaml",
-        entryId = "default",
+        entry = ProjectEntry(id = "default"),
     )
 
     private fun newState(ruleId: String): RuleEditorState {

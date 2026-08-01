@@ -35,14 +35,14 @@ object ManifestYamlBridge {
     }
 
     fun toYaml(state: ManifestEditorState): String {
-        val nonEmptyEntries = state.entries.filter {
-            it.schemaPath.isNotBlank() || it.actionsPath.isNotBlank() || it.rulePaths.isNotEmpty()
-        }
+        // An entry is kept as soon as it has an id. Dropping the ones with no files yet would make a
+        // freshly added entry disappear on save, before the user has had the chance to give it any.
+        val nonEmptyEntries = state.entries.filter { it.id.isNotBlank() }
         val manifest = ProjectManifest(
             name = state.name.takeIf { it.isNotBlank() },
             entries = nonEmptyEntries.map {
                 ruleengine.manifest.ManifestEntry(
-                    id = it.id.ifBlank { "default" },
+                    id = it.id,
                     schema = it.schemaPath.takeIf { path -> path.isNotBlank() },
                     actions = it.actionsPath.takeIf { path -> path.isNotBlank() },
                     rules = it.rulePaths.filter { path -> path.isNotBlank() },
@@ -53,6 +53,9 @@ object ManifestYamlBridge {
             manifest.name?.takeIf { it.isNotBlank() }?.let { name ->
                 appendLine("name: ${scalar(value = name)}")
             }
+            // `entries:` with nothing under it reads back as null rather than an empty list, so a
+            // manifest with no entries yet is written without the key at all.
+            if (manifest.entries.isEmpty()) return@buildString
             appendLine("entries:")
             manifest.entries.forEach { entry ->
                 appendLine("  - id: ${scalar(value = entry.id)}")

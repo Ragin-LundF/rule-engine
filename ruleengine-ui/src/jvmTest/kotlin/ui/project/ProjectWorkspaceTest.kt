@@ -22,7 +22,7 @@ class ProjectWorkspaceTest {
         workspace.openProject()
 
         val dialog = assertIs<ProjectDialog.UnsavedChanges>(value = workspace.dialog.value)
-        assertEquals(expected = PendingProjectAction.OPEN_PROJECT, actual = dialog.pending)
+        assertEquals(expected = PendingProjectAction.OpenProject, actual = dialog.pending)
     }
 
     /**
@@ -39,7 +39,7 @@ class ProjectWorkspaceTest {
         )
 
         workspace.openProject()
-        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.OPEN_PROJECT)
+        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.OpenProject)
 
         assertNull(actual = workspace.dialog.value)
         assertEquals(expected = project, actual = workspace.session.value?.root)
@@ -52,7 +52,7 @@ class ProjectWorkspaceTest {
         val workspace = ProjectWorkspace(state = state)
 
         workspace.newProject()
-        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.NEW_PROJECT)
+        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.NewProject)
 
         assertNull(actual = workspace.dialog.value)
         assertNull(actual = workspace.session.value)
@@ -64,7 +64,7 @@ class ProjectWorkspaceTest {
         val workspace = ProjectWorkspace(state = scratchState())
 
         workspace.requestClose()
-        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.CLOSE_WINDOW)
+        workspace.onUnsavedChangesDiscard(pending = PendingProjectAction.CloseWindow)
 
         assertTrue(actual = workspace.closeRequested.value)
     }
@@ -82,7 +82,7 @@ class ProjectWorkspaceTest {
         )
 
         workspace.openProject()
-        workspace.onUnsavedChangesSave(pending = PendingProjectAction.OPEN_PROJECT)
+        workspace.onUnsavedChangesSave(pending = PendingProjectAction.OpenProject)
 
         assertNull(actual = workspace.dialog.value)
         assertTrue(actual = Files.exists(destination.resolve("manifest.yaml")))
@@ -101,7 +101,7 @@ class ProjectWorkspaceTest {
         )
 
         workspace.openProject()
-        workspace.onUnsavedChangesSave(pending = PendingProjectAction.OPEN_PROJECT)
+        workspace.onUnsavedChangesSave(pending = PendingProjectAction.OpenProject)
 
         assertNull(actual = workspace.dialog.value)
         assertTrue(actual = state.ruleValue.value.text.contains(other = "scratch-rule"))
