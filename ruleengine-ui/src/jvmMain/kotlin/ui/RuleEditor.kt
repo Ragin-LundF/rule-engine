@@ -60,13 +60,9 @@ import ui.schema.FieldSchemaYamlBridge
 import ui.settings.SettingsController
 import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
-import ui.tester.JvmRuleSimulationService
+import ui.tester.RuleTestController
 import ui.tester.RuleTestPanel
 import ui.tester.TestCenterPanel
-import ui.tester.TestInputState
-import ui.tester.runStatusKind
-import ui.tester.runStatusMessage
-import ui.tester.simulateOrFailure
 import ui.util.Words
 import ui.workbench.ActionsAreaScreen
 import ui.workbench.AppAreaIconRail
@@ -191,47 +187,10 @@ actual fun RuleEditor(closeController: AppCloseController) {
     }
 
     // ── Test panel state ──────────────────────────────────────────────────────
-    var testInputState by remember { mutableStateOf(TestInputState.Empty) }
-    val simulationService = remember { JvmRuleSimulationService() }
-
-    // One place for a run, shared by the center Test mode and the right-panel Simulate tab.
-    // The runCatching is what keeps a thrown simulation from stranding the button on "Running…", and the
-    // status message means a run always leaves a mark outside the panel's own scroll area.
-    fun runTest(ruleText: String) {
-        scope.launch {
-            testInputState = testInputState.copy(isRunning = true)
-            val result = simulationService.simulateOrFailure(
-                schemaText = state.schemaText.value,
-                actionsText = state.actionSchemaText.value,
-                ruleText = ruleText,
-                // All-files mode disables the rule selector without clearing its value, so a rule picked
-                // earlier would keep filtering the run while the panel reads "All rules". The rule text
-                // and the rule filter have to agree, and this is the one place both are read.
-                ruleId = if (state.showAllRules.value) "" else testInputState.selectedRuleId,
-                inputJson = testInputState.inputJson,
-            )
-            testInputState = testInputState.copy(
-                isRunning = false,
-                outcome = result.outcome,
-            )
-            state.setStatus(
-                msg = runStatusMessage(outcome = result.outcome),
-                kind = runStatusKind(outcome = result.outcome),
-            )
-        }
-    }
-
-    fun loadInputJson() {
-        scope.launch {
-            val content = pickInputJsonFile()
-            if (content == null) {
-                state.setStatus(msg = "Input JSON load cancelled", kind = StatusKind.IDLE)
-                return@launch
-            }
-            testInputState = testInputState.copy(inputJson = content)
-            state.setStatus(msg = "Input JSON loaded", kind = StatusKind.SUCCESS)
-        }
-    }
+    // Created by remember with no keys, so the controller and its caret-visible run state live for
+    // the whole window session exactly as the `remember { mutableStateOf(...) }` it replaces did.
+    val testController = remember { RuleTestController(state = state, scope = scope) }
+    var testInputState by testController.input
 
     // ── Parsed rules of the open file, for the builder and the rule roster ─────
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
@@ -470,7 +429,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
                             state = testInputState,
                             onStateChange = { testInputState = it },
                             onRunTest = {
-                                runTest(
+                                testController.run(
                                     ruleText = if (state.showAllRules.value) {
                                         state.allRulesText.value
                                     } else {
@@ -478,7 +437,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
                                     },
                                 )
                             },
-                            onLoadJson = { loadInputJson() },
+                            onLoadJson = { testController.loadInputJson() },
                             ruleIds = catalogRules.map { it.id },
                             ruleSelectionEnabled = !state.showAllRules.value,
                             runEnabled = state.parsedSchema.value != null
@@ -697,7 +656,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     RuleTestPanel(
                         state = testInputState,
                         onJsonChange = { testInputState = testInputState.copy(inputJson = it) },
-                        onRunTest = { runTest(ruleText = state.ruleValue.value.text) },
+                        onRunTest = { testController.run(ruleText = state.ruleValue.value.text) },
                         modifier = Modifier.fillMaxSize(),
                     )
                 },
