@@ -3,9 +3,9 @@ package ui.autocompletion
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.TemporalFormat
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldType
-import ruleengine.core.domain.dto.isTemporal
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isTemporal
 
 /** Numbers and dates are ordered, so both accept the same named comparisons. */
 internal val ORDERED_OPS = listOf(

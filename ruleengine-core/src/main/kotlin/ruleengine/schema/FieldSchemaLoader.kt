@@ -2,14 +2,14 @@ package ruleengine.schema
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.TemporalFormat
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.OperatorId
-import ruleengine.core.domain.dto.isStructure
-import ruleengine.core.domain.dto.isTemporal
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isStructure
+import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
 import ruleengine.core.normalizer.NormalizerRegistry

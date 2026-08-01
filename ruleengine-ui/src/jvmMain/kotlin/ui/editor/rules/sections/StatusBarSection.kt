@@ -28,7 +28,7 @@ import ui.BorderColor
 import ui.TextMuted
 import ui.TextSecondary
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.StatusKind
+import ui.editor.rules.model.StatusKind
 import ui.project.ProjectPaths
 import ui.project.ProjectWorkspace
 

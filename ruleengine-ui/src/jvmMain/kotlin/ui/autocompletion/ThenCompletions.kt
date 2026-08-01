@@ -1,7 +1,9 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.action.ActionArgType
+import ruleengine.core.domain.dto.action.ActionSchema
+import ui.autocompletion.model.CompletionItem
+import ui.autocompletion.model.CompletionKind
 
 /** Completions offered inside a rule's `then` block. */
 internal fun buildActionNameCompletions(actionSchema: ActionSchema?): List<CompletionItem> {

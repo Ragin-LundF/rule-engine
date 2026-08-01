@@ -11,6 +11,8 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test

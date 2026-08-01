@@ -1,6 +1,9 @@
 package ui.builder
 
 import ui.builder.OperandText.LABEL_MAX_SEGMENTS
+import ui.builder.model.BuilderFilter
+import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
 
 /**
  * Renders [BuilderOperand] trees as text.

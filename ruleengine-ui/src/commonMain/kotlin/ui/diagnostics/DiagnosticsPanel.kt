@@ -40,6 +40,8 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
+import ui.diagnostics.model.QuickFix
+import ui.diagnostics.model.UiDiagnosticWithFix
 
 /**
  * Enhanced diagnostics list with quick-fix buttons.

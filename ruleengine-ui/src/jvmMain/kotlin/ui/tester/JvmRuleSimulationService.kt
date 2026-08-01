@@ -2,10 +2,10 @@ package ui.tester
 
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.domain.dto.RuleAction
 import ruleengine.core.domain.dto.RuleMatch
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
@@ -19,6 +19,11 @@ import ruleengine.evaluator.trace.dto.NodeType
 import ruleengine.jackson.JacksonUtil
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.tester.model.RuleResult
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.SimulationResult
+import ui.tester.model.TraceNode
+import ui.tester.model.TraceRow
 
 /**
  * JVM implementation of [RuleSimulationService].

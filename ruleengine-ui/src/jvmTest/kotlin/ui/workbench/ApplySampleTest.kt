@@ -2,10 +2,11 @@ package ui.workbench
 
 import kotlinx.coroutines.CoroutineScope
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.StatusKind
-import ui.samples.LoadedSample
-import ui.samples.SampleCategory
-import ui.samples.SampleDescriptor
+import ui.editor.rules.model.StatusKind
+import ui.samples.model.LoadedSample
+import ui.samples.model.SampleCategory
+import ui.samples.model.SampleDescriptor
+import ui.workbench.areas.applySample
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals

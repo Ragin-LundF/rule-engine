@@ -28,10 +28,10 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.builder.BuilderOperand
-import ui.builder.CatalogFieldInfo
 import ui.builder.OperandRules
 import ui.builder.OperandText
+import ui.builder.model.BuilderOperand
+import ui.builder.model.catalog.CatalogFieldInfo
 
 /**
  * One side of a comparison, rendered as a chip: a kind badge, the operand's readable label, and a

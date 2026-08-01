@@ -25,6 +25,7 @@ import ui.AccentRed
 import ui.Bg
 import ui.TextMuted
 import ui.TextPrimary
+import ui.tester.model.TraceRow
 
 /**
  * Renders a list of [TraceRow] items produced by the evaluator.

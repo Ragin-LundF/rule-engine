@@ -1,5 +1,7 @@
 package ui.manifest
 
+import ui.manifest.model.EditableManifestEntry
+import ui.manifest.model.ManifestEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

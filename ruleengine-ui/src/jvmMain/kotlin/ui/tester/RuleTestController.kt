@@ -5,8 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.StatusKind
+import ui.editor.rules.model.StatusKind
 import ui.pickInputJsonFile
+import ui.tester.model.TestInputState
 
 /**
  * Runs a test and owns what the test panels show while it runs.

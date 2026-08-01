@@ -6,19 +6,21 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
-import ui.DslCursorContext
-import ui.DslSection
-import ui.autocompletion.CompletionItem
-import ui.diagrams.DiagramViewKind
+import ui.autocompletion.model.CompletionItem
+import ui.diagrams.model.DiagramViewKind
 import ui.diagrams.model.RuleSource
+import ui.dsl.model.DslCursorContext
+import ui.dsl.model.DslSection
 import ui.editor.CodeEditing
+import ui.editor.rules.model.StatusKind
+import ui.editor.rules.model.ViewMode
 import java.nio.file.Files
 import java.nio.file.Path
 

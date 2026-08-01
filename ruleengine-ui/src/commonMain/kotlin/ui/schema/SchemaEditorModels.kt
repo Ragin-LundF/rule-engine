@@ -1,8 +1,9 @@
 package ui.schema
 
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ui.builder.OperatorOptions
+import ui.schema.model.EditableField
 
 /**
  * The lowercase spelling of a field type, used both as the `type:` value written into schema YAML

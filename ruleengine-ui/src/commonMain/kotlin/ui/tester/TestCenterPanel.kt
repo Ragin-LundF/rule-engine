@@ -33,10 +33,14 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
-import ui.builder.components.DropdownSelector
+import ui.builder.components.dropdown.DropdownSelector
 import ui.components.PrimaryButton
 import ui.components.SecondaryButton
 import ui.components.SectionTitle
+import ui.tester.model.RuleResult
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.TestInputState
+import ui.tester.model.TestResultTab
 
 /**
  * Full center Test mode.

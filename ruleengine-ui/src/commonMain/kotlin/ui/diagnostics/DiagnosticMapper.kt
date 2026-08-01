@@ -1,6 +1,8 @@
 package ui.diagnostics
 
 import ruleengine.core.errors.Severity
+import ui.diagnostics.model.QuickFix
+import ui.diagnostics.model.UiDiagnosticWithFix
 
 /**
  * Utility object for mapping diagnostic information into a format suitable for UI display.

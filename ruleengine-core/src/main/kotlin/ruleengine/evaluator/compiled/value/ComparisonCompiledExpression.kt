@@ -3,6 +3,13 @@ package ruleengine.evaluator.compiled.value
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
+import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
+import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.result.ObjectExpressionValue
+import ruleengine.evaluator.compiled.value.result.TextExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.TraceCollector
 import ruleengine.evaluator.trace.dto.NodeMeta

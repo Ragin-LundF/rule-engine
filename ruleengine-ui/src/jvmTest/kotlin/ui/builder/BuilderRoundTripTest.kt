@@ -1,12 +1,18 @@
 package ui.builder
 
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.OperatorId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.dsl.parser.Parser
+import ui.builder.model.BuilderAction
+import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.mutable.MutableConditionNode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

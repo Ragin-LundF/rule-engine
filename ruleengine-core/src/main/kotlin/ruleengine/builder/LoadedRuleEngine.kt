@@ -1,8 +1,8 @@
 package ruleengine.builder
 
-import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.domain.dto.EvaluationResult
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.RuleEngine

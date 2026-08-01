@@ -1,5 +1,14 @@
 package ui.builder
 
+import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
+import ui.builder.model.BuilderTerm
+import ui.builder.model.catalog.CatalogFieldInfo
+import ui.builder.model.catalog.fieldAtPath
+import ui.builder.model.catalog.fieldsAtPath
+import ui.builder.model.catalog.scalarPaths
+import ui.builder.model.names
+
 
 /**
  * The rules that decide which operand kinds a comparison row may offer, and which comparison

@@ -2,6 +2,9 @@ package ruleengine.evaluator.compiled.value
 
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
+import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 
 class ArithmeticCompiledValueExpression(

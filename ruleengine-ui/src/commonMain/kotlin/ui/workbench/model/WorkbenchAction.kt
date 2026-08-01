@@ -1,5 +1,12 @@
 package ui.workbench.model
 
+import ui.workbench.model.mode.ActionMode
+import ui.workbench.model.mode.AppArea
+import ui.workbench.model.mode.ManifestMode
+import ui.workbench.model.mode.RightPanelTab
+import ui.workbench.model.mode.RuleMode
+import ui.workbench.model.mode.SchemaMode
+
 /**
  * Sealed hierarchy of all user-initiated actions that can mutate [RuleWorkbenchState].
  * Each action carries only the data needed to produce the next state.

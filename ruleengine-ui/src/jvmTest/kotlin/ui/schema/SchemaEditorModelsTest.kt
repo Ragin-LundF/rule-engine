@@ -1,11 +1,13 @@
 package ui.schema
 
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.dto.FieldType
-import ruleengine.core.domain.dto.isNormalizable
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isNormalizable
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.FieldSchemaLoader
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

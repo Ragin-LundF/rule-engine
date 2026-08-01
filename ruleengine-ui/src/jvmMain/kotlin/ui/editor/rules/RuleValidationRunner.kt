@@ -1,9 +1,10 @@
 package ui.editor.rules
 
 import ruleengine.compiler.Validator
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.dsl.parser.Parser
+import ui.editor.rules.model.RuleValidationOutcome
 
 /**
  * The one place rule text is parsed and validated.

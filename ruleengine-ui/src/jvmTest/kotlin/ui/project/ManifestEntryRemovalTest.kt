@@ -1,5 +1,8 @@
 package ui.project
 
+import ui.project.manifest.ManifestEntryRemoval
+import ui.project.model.ProjectEntry
+import ui.project.model.ProjectSession
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test

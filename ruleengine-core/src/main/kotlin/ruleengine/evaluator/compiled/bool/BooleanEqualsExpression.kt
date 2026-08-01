@@ -1,6 +1,6 @@
 package ruleengine.evaluator.compiled.bool
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.context.PreparedRuleContext

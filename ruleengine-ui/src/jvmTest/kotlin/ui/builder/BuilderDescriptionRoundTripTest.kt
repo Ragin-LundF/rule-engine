@@ -1,6 +1,8 @@
 package ui.builder
 
 import ruleengine.dsl.parser.Parser
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

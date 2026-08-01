@@ -2,9 +2,9 @@ package ruleengine.compiler.operators
 
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.TemporalFormat
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst

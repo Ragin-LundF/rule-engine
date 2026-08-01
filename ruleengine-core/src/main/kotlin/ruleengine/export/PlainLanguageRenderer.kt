@@ -4,9 +4,9 @@ import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
-import ruleengine.core.domain.dto.isTemporal
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.dsl.ast.ArithmeticValueAst

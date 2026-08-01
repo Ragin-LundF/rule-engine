@@ -1,8 +1,8 @@
 package ui.builder
 
 import ruleengine.core.domain.OperatorNames
-import ruleengine.core.domain.dto.FieldType
-import ruleengine.core.domain.dto.isStructure
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.evaluator.compiled.AggregateFunctionName
 
 /**

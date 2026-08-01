@@ -1,5 +1,7 @@
 package ui.actions
 
+import ui.actions.model.ActionEditorState
+import ui.actions.model.EditableAction
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

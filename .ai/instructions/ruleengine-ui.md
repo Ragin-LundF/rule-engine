@@ -17,6 +17,22 @@ A browser/JS target is explicitly out of scope. Do not add `expect`/`actual` ind
 - Put only platform-specific I/O or platform API calls in `jvmMain` `actual` implementations.
 - Do not duplicate shared UI state or business rules across platform source sets.
 
+## Package layout
+
+Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `ui.diagrams`, `ui.yaml`, `ui.dsl`, …) is organised the same way:
+
+| Package | Holds |
+|---|---|
+| `ui.<feature>` | Composables, controllers, services, mappers — anything with behavior. |
+| `ui.<feature>.model` | Every model and enum of that feature. See the Models and DTOs rules in `coding-guidelines.md`. |
+| `ui.<feature>.<role>` | Further behavior groups when the feature package exceeds 8 files: `ui.workbench.areas`, `ui.builder.view`, `ui.diagrams.render`, `ui.builder.components.dropdown`. |
+| `ui.<feature>.model.<group>` | Model groups when `model` itself exceeds 8 files: `ui.workbench.model.mode`, `ui.project.model.dialog`. |
+
+- A new data class or enum goes in `model`, never beside the composable that uses it.
+- `ui.components` holds only cross-feature Compose widgets — nothing feature-specific.
+- Keep at most 8 files per directory.
+- `RuleEditor` and the other `actual` declarations must stay in package `ui` in `jvmMain`, matching their `expect` in `commonMain`.
+
 ## Architecture & Constraints
 
 ### Kotlin Multiplatform (KMP) Boundaries

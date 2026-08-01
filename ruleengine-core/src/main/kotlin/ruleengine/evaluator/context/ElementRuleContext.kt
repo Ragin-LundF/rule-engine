@@ -1,6 +1,6 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 
 class ElementRuleContext(private val element: Map<*, *>) : RuleContext {
     override fun get(field: FieldId): Any? {

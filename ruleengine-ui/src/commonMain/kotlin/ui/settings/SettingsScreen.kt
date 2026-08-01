@@ -30,6 +30,7 @@ import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.components.SectionTitle
+import ui.settings.model.AutoCompleteShortcut
 
 /**
  * Application preferences that are not part of a project.

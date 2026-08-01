@@ -32,6 +32,8 @@ import ui.TextMuted
 import ui.TextPrimary
 import ui.components.PrimaryButton
 import ui.components.SectionTitle
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.TestInputState
 
 /**
  * Test panel composable — allows the user to paste sample JSON and run the selected rule.

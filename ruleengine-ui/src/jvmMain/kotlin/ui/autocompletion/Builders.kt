@@ -1,9 +1,11 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldSchema
-import ui.DslCursorContext
-import ui.DslSection
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
+import ui.autocompletion.model.CompletionItem
+import ui.autocompletion.model.CompletionKind
+import ui.dsl.model.DslCursorContext
+import ui.dsl.model.DslSection
 
 /**
  * Resolves a field identifier from user input to the actual field definition.

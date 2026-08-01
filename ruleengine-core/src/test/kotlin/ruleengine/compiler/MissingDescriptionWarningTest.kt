@@ -1,9 +1,9 @@
 package ruleengine.compiler
 
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test

@@ -5,6 +5,7 @@ import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
+import ui.diagrams.OutcomeKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

@@ -3,18 +3,18 @@ package ui.workbench
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import ui.builder.BuilderEditorState
-import ui.builder.CatalogActionInfo
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.mutable.BuilderEditorState
 import ui.editor.rules.RuleEditorState
 import ui.tester.RuleTestController
 import ui.tester.RuleTestPanel
-import ui.tester.TestInputState
+import ui.tester.model.TestInputState
 import ui.workbench.inspector.InspectorPanel
-import ui.workbench.model.CatalogField
-import ui.workbench.model.CatalogRule
 import ui.workbench.model.InspectorItem
-import ui.workbench.model.RightPanelTab
 import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.catalog.CatalogField
+import ui.workbench.model.catalog.CatalogRule
+import ui.workbench.model.mode.RightPanelTab
 
 /**
  * The right panel: Inspector and Simulate, plus the collapse toggle.

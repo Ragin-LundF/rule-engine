@@ -49,6 +49,8 @@ import ui.PrimaryGlow
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.samples.model.SampleCategory
+import ui.samples.model.SampleDescriptor
 
 @Composable
 fun SampleGalleryScreen(

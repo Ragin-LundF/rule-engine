@@ -7,6 +7,7 @@ import ui.ColorKeyword
 import ui.ColorLogic
 import ui.ColorNumber
 import ui.ColorOp
+import ui.autocompletion.model.CompletionKind
 
 // Styling helpers used by the dropdown UI
 internal fun kindColor(kind: CompletionKind): Color = when (kind) {

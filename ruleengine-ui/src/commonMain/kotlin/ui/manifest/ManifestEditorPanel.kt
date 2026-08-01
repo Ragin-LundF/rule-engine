@@ -34,7 +34,9 @@ import ui.components.PathListEditor
 import ui.components.SectionTitle
 import ui.components.StatusBadge
 import ui.components.ToolbarButton
-import ui.workbench.model.ManifestMode
+import ui.manifest.model.EditableManifestEntry
+import ui.manifest.model.ManifestEditorState
+import ui.workbench.model.mode.ManifestMode
 
 /**
  * Manifest builder panel with Builder / YAML / Checks tabs.

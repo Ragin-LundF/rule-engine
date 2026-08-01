@@ -1,6 +1,6 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 
 interface RuleContext {
     fun get(field: FieldId): Any?

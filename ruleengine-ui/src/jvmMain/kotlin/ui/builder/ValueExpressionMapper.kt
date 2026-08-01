@@ -19,6 +19,11 @@ import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ui.builder.model.BuilderFilter
+import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
+import ui.builder.model.BuilderTerm
+import ui.builder.model.LiteralValue
 
 // Value expressions — field paths, filters, arithmetic and literals — mapped to Builder operands.
 // Split out of RuleAstToBuilderMapper, which owns the condition *tree*. These are pure: unlike the

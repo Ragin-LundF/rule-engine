@@ -1,6 +1,7 @@
 package ui.tester
 
-import ui.editor.rules.StatusKind
+import ui.editor.rules.model.StatusKind
+import ui.tester.model.SimulationOutcome
 
 /** Status-bar text for a finished run, so the verdict is visible even with the panel scrolled away. */
 internal fun runStatusMessage(outcome: SimulationOutcome): String {

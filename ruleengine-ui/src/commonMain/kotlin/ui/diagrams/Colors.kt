@@ -2,6 +2,7 @@ package ui.diagrams
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import ui.diagrams.model.DiagramPalette
 import ui.theme.ThemeController
 
 // ── Colours used only in the diagram ─────────────────────────────────────────

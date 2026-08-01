@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.builder.OperatorOptions
 import ui.components.SectionTitle
-import ui.workbench.model.CatalogField
+import ui.workbench.model.catalog.CatalogField
 
 /**
  * Inspector for a selected field schema definition.

@@ -3,6 +3,7 @@ package ui.workbench
 import kotlinx.coroutines.CoroutineScope
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.RuleEditorState
+import ui.workbench.export.RuleOverviewExport
 import java.io.ByteArrayInputStream
 import java.nio.file.Path
 import java.time.LocalDate

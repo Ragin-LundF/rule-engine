@@ -1,10 +1,12 @@
 package ui.schema
 
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.isStructure
-import ruleengine.core.domain.dto.isTemporal
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.isStructure
+import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.schema.FieldSchemaLoader
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 
 /**
  * Converts between [SchemaEditorState] and YAML text understood by [FieldSchemaLoader].

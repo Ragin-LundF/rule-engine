@@ -20,9 +20,9 @@ import ui.AccentRed
 import ui.TextSecondary
 import ui.components.SectionTitle
 import ui.components.StatusBadge
-import ui.workbench.model.CatalogRule
-import ui.workbench.model.CatalogRuleStatus
 import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.catalog.CatalogRule
+import ui.workbench.model.catalog.CatalogRuleStatus
 
 /**
  * Inspector for a selected parsed rule.

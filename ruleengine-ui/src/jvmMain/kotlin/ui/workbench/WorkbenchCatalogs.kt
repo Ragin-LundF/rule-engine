@@ -1,16 +1,16 @@
 package ui.workbench
 
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.RuleAst
-import ui.builder.CatalogActionInfo
-import ui.builder.CatalogFieldInfo
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.toCatalogFieldInfo
-import ui.workbench.model.CatalogField
-import ui.workbench.model.CatalogRule
-import ui.workbench.model.CatalogRuleStatus
 import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.catalog.CatalogField
+import ui.workbench.model.catalog.CatalogRule
+import ui.workbench.model.catalog.CatalogRuleStatus
 
 /**
  * The lists the workbench derives from a parsed schema, action schema and rule set.

@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import ui.schema.SchemaEditorPanel
-import ui.schema.SchemaEditorState
+import ui.schema.model.SchemaEditorState
 
 /**
  * Field Schema editor area.

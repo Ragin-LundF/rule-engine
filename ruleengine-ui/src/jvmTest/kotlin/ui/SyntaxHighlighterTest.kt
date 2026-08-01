@@ -8,6 +8,7 @@ import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.dsl.annotateRule
 import ui.theme.ThemeController
 import kotlin.test.Test
 import kotlin.test.assertEquals

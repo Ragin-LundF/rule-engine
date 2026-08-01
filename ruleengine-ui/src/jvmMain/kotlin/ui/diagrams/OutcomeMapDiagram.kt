@@ -18,7 +18,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
-import ui.diagrams.model.OutcomeKey
+import ui.diagrams.render.DiagramChip
+import ui.diagrams.render.DiagramConditionLine
+import ui.diagrams.render.DiagramIdentifier
+import ui.diagrams.render.DiagramNote
+import ui.diagrams.render.DiagramPlaceholderContent
 import ui.util.Plurals
 
 /**

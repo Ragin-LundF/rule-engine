@@ -34,9 +34,11 @@ import ui.Bg
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.builder.components.DropdownSelector
+import ui.builder.components.dropdown.DropdownSelector
 import ui.components.InfoChip
 import ui.components.StatusBadge
+import ui.tester.model.RuleMatchStatus
+import ui.tester.model.RuleResult
 
 private const val FILTER_ALL = "All"
 private const val FILTER_MATCHED = "Matched"

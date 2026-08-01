@@ -20,10 +20,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ui.BorderColor
-import ui.DslCursorContext
-import ui.DslSection
 import ui.PrimaryBlue
 import ui.TextSecondary
+import ui.dsl.model.DslCursorContext
+import ui.dsl.model.DslSection
+import ui.editor.rules.model.ViewMode
 
 fun dslLineOpensBlock(trimmedLine: String): Boolean {
     return trimmedLine.endsWith(char = '{') || trimmedLine == "when" || trimmedLine == "then"

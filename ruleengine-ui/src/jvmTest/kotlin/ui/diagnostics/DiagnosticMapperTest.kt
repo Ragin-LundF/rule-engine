@@ -1,6 +1,7 @@
 package ui.diagnostics
 
 import ruleengine.core.errors.Severity
+import ui.diagnostics.model.QuickFix
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

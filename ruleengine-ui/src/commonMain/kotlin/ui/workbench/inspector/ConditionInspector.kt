@@ -10,8 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
-import ui.builder.BuilderConditionNode
 import ui.builder.OperatorOptions
+import ui.builder.model.BuilderConditionNode
 import ui.components.SectionTitle
 
 /**

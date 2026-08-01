@@ -11,15 +11,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
-import ui.builder.BuilderEditorState
-import ui.builder.CatalogActionInfo
-import ui.builder.MutableBuilderCondition
-import ui.builder.MutableConditionNode
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.mutable.MutableConditionNode
 import ui.components.SectionTitle
-import ui.workbench.model.CatalogField
-import ui.workbench.model.CatalogRule
 import ui.workbench.model.InspectorItem
 import ui.workbench.model.UiDiagnostic
+import ui.workbench.model.catalog.CatalogField
+import ui.workbench.model.catalog.CatalogRule
 
 /**
  * Top-level inspector panel that delegates to the appropriate sub-inspector

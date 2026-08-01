@@ -1,5 +1,8 @@
 package ui.samples
 
+import ui.samples.model.SampleCategory
+import ui.samples.model.SampleDescriptor
+
 object SampleRegistry {
 
     val all: List<SampleDescriptor> = listOf(

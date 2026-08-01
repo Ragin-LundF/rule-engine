@@ -1,5 +1,7 @@
 package ui.editor
 
+import ui.editor.model.TextEdit
+
 /**
  * The editing rules shared by the rule editor and the YAML editor.
  *

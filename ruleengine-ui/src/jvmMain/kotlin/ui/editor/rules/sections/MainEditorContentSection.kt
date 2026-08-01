@@ -49,9 +49,9 @@ import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
-import ui.annotateRule
 import ui.autocompletion.AutoCompleteDropdown
 import ui.autocompletion.buildContextualCompletions
+import ui.dsl.annotateRule
 import ui.editor.AUTOCOMPLETE_HINT
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
@@ -60,8 +60,8 @@ import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
 import ui.settings.SettingsController
 import ui.theme.ThemeController
-import ui.workbench.DiagramModeHost
-import ui.workbench.diagramDataFor
+import ui.workbench.diagram.DiagramModeHost
+import ui.workbench.diagram.diagramDataFor
 
 /** The rule DSL indents four spaces per level. */
 private const val DSL_INDENT = "    "

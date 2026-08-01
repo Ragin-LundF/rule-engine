@@ -1,10 +1,12 @@
 package ui.autocompletion
 
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldType
-import ui.DslCursorContext
-import ui.DslSection
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldType
+import ui.autocompletion.model.CompletionItem
+import ui.autocompletion.model.CompletionKind
+import ui.dsl.model.DslCursorContext
+import ui.dsl.model.DslSection
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

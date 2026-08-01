@@ -9,6 +9,8 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.parser.Parser
+import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderRule
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

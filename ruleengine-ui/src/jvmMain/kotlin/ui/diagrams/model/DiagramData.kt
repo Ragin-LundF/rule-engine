@@ -1,6 +1,6 @@
 package ui.diagrams.model
 
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.dsl.ast.RuleAst
 
 /**

@@ -1,6 +1,7 @@
 package ui.theme
 
 import androidx.compose.ui.graphics.Color
+import ui.theme.model.AppPalette
 
 /** Light theme palette, matching the CSS variables of `prototype-a2-refined.html`. */
 val LightPalette = AppPalette(

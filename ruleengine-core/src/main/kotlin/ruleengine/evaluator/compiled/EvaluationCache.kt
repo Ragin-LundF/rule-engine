@@ -1,7 +1,7 @@
 package ruleengine.evaluator.compiled
 
 import ruleengine.evaluator.compiled.value.CompiledValueExpression
-import ruleengine.evaluator.compiled.value.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
 
 class EvaluationCache {
     private val aggregateValues = mutableMapOf<CompiledValueExpression, ExpressionValue>()

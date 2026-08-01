@@ -4,7 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import ui.actions.ActionEditorPanel
-import ui.actions.ActionEditorState
+import ui.actions.model.ActionEditorState
 
 /**
  * Action schema editor area.

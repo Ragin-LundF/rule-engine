@@ -2,15 +2,20 @@ package ruleengine.compiler
 
 import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.compiler.support.FieldPathMessages
+import ruleengine.compiler.support.LiteralValidation
+import ruleengine.compiler.support.OperatorSupport
+import ruleengine.compiler.support.Suggestions
+import ruleengine.compiler.value.ValueExpressionValidator
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.action.ActionArgType
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst

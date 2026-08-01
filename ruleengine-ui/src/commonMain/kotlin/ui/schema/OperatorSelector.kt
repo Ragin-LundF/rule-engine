@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldType
 import ui.components.ToggleChip
 
 /**

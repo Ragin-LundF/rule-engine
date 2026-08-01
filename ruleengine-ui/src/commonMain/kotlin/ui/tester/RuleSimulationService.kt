@@ -1,5 +1,7 @@
 package ui.tester
 
+import ui.tester.model.SimulationResult
+
 /**
  * Platform-agnostic contract for running a rule simulation.
  *

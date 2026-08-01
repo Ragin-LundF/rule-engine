@@ -2,14 +2,14 @@ package ruleengine.export
 
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.isStructure
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.isStructure
 
 /**
  * Turns a field path written in a rule into a label a business reader recognises.
  *
  * `shipment.customer.tier` is precise and unreadable; "Customer › Tier" is neither ambiguous nor
- * jargon. The schema is consulted first — an [ruleengine.core.domain.dto.FieldDefinition.alias] is
+ * jargon. The schema is consulted first — an [ruleengine.core.domain.dto.field.FieldDefinition.alias] is
  * the author's own name for the field and always wins — and only the derived form guesses.
  */
 object FieldLabels {

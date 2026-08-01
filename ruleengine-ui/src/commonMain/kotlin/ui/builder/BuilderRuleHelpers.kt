@@ -1,5 +1,8 @@
 package ui.builder
 
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
+
 /**
  * Small facts about a [BuilderRule] and its editor state, used by the screen that hosts the builder.
  *

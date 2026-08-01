@@ -1,6 +1,11 @@
 package ui.tester
 
 import ruleengine.evaluator.trace.dto.NodeType
+import ui.tester.model.RuleMatchStatus
+import ui.tester.model.RuleResult
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.TraceNode
+import ui.tester.model.TraceRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

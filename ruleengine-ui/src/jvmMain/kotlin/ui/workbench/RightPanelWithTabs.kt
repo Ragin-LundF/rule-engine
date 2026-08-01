@@ -31,7 +31,7 @@ import ui.TextOnPrimary
 import ui.TextSecondary
 import ui.components.TinyButton
 import ui.components.rotateVertically
-import ui.workbench.model.RightPanelTab
+import ui.workbench.model.mode.RightPanelTab
 
 /**
  * Right panel with two tabs: Inspector and Simulate.

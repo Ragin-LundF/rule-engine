@@ -17,8 +17,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.evaluator.trace.dto.NodeType
-import ui.tester.RuleResult
-import ui.tester.TraceNode
+import ui.diagrams.render.DiagramChip
+import ui.diagrams.render.DiagramConditionLine
+import ui.diagrams.render.DiagramEyebrow
+import ui.diagrams.render.DiagramIdentifier
+import ui.diagrams.render.DiagramNote
+import ui.diagrams.render.DiagramPlaceholderContent
+import ui.tester.model.RuleResult
+import ui.tester.model.TraceNode
 import ui.util.Plurals
 
 /**

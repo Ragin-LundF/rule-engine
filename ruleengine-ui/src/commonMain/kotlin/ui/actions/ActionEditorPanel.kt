@@ -23,9 +23,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import ui.TextSecondary
+import ui.actions.model.ActionEditorState
 import ui.components.SectionTitle
 import ui.editor.YamlEditorPane
-import ui.workbench.model.ActionMode
+import ui.workbench.model.mode.ActionMode
 
 /**
  * A composable function representing the Action Editor Panel. It allows users

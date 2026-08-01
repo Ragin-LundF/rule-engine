@@ -12,7 +12,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ui.builder.CatalogActionInfo
+import ui.builder.model.catalog.CatalogActionInfo
 import ui.components.SectionTitle
 
 /**

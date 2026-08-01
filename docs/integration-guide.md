@@ -238,7 +238,7 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.dsl.parser.Parser
 import ruleengine.compiler.Validator
 import ruleengine.compiler.Compiler
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -855,7 +855,9 @@ fields:
 | Package | Contents |
 |---|---|
 | `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
-| `ruleengine.core.domain.dto` | Domain model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId`, `OperatorId`, `NormalizerId`, `ActionSchema`, `ActionDefinition`, `ActionArgType`, `RuleMatch`, `EvaluationResult`, `RuleAction` |
+| `ruleengine.core.domain.dto` | Evaluation results: `RuleMatch`, `EvaluationResult`, `RuleAction`, plus `OperatorId`, `NormalizerId` |
+| `ruleengine.core.domain.dto.field` | Field model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId` |
+| `ruleengine.core.domain.dto.action` | Action model: `ActionSchema`, `ActionDefinition`, `ActionArgType` |
 | `ruleengine.core.domain` | Logic over that model: `FieldPathResolver` / `FieldPathResolution` (dotted-path resolution), `TemporalFormat` (date pattern parsing), `DefaultActionSchema` |
 | `ruleengine.core.normalizer` | `NormalizerRegistry`, `NormalizerProfile`, built-in normalizers |
 | `ruleengine.core.errors` | `RuleEngineException`, `RuleEngineBuildException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |

@@ -1,11 +1,11 @@
 package ruleengine.evaluator
 
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.OperatorId
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonExpression
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonOperator
 import ruleengine.evaluator.compiled.stringset.StringSetContainsAllExpression

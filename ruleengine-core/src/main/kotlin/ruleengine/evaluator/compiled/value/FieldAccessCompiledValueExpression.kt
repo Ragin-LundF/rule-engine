@@ -1,7 +1,17 @@
 package ruleengine.evaluator.compiled.value
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
+import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
+import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
+import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
+import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
+import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.result.ObjectExpressionValue
+import ruleengine.evaluator.compiled.value.result.TextExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDecimal

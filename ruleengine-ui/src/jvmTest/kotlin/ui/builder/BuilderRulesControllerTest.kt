@@ -1,5 +1,6 @@
 package ui.builder
 
+import ui.builder.model.BuilderRule
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

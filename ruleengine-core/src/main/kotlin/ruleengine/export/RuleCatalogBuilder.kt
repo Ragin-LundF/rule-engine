@@ -1,6 +1,6 @@
 package ruleengine.export
 
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.io.FileInputSupport
 import ruleengine.dsl.ast.ActionAst

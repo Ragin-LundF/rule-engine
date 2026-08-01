@@ -3,6 +3,7 @@ package ui.editor.rules
 import ruleengine.core.errors.Severity
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
+import ui.editor.rules.model.RuleValidationOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs

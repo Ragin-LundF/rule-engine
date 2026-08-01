@@ -1,7 +1,7 @@
 package ruleengine.compiler.operators
 
 import ruleengine.core.domain.OperatorNames
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst

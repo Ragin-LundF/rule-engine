@@ -39,8 +39,8 @@ import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.components.StatusBadge
 import ui.components.ToolbarButton
-import ui.project.ProjectFileKind
 import ui.project.ProjectWorkspace
+import ui.project.model.ProjectFileKind
 import ui.theme.ThemeController
 import ui.theme.ThemePersistence
 

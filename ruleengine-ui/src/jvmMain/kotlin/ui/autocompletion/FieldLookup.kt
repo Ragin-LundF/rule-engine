@@ -2,8 +2,8 @@ package ui.autocompletion
 
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldSchema
 
 /** Field-name resolution shared by the completion builders. */
 internal fun FieldDefinition.getDisplayId(): String {

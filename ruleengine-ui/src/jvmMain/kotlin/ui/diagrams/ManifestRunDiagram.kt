@@ -26,6 +26,12 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ui.diagrams.model.DiagramData
 import ui.diagrams.model.RuleSource
+import ui.diagrams.render.DiagramChip
+import ui.diagrams.render.DiagramConditionLine
+import ui.diagrams.render.DiagramEyebrow
+import ui.diagrams.render.DiagramIdentifier
+import ui.diagrams.render.DiagramNote
+import ui.diagrams.render.DiagramPlaceholderContent
 import ui.util.Plurals
 
 /**

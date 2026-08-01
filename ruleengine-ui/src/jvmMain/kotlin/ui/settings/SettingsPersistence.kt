@@ -1,5 +1,6 @@
 package ui.settings
 
+import ui.settings.model.AutoCompleteShortcut
 import java.util.prefs.Preferences
 
 /** Stores non-project preferences in the OS-level user preferences, alongside the theme choice. */

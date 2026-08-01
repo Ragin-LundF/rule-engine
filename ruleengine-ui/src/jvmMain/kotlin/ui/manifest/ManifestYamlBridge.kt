@@ -2,6 +2,8 @@ package ui.manifest
 
 import ruleengine.manifest.ManifestLoader
 import ruleengine.manifest.ProjectManifest
+import ui.manifest.model.EditableManifestEntry
+import ui.manifest.model.ManifestEditorState
 import ui.util.YamlScalars
 
 /**

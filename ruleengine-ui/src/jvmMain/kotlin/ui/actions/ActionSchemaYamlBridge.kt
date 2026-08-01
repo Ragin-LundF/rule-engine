@@ -1,7 +1,9 @@
 package ui.actions
 
-import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.schema.ActionSchemaLoader
+import ui.actions.model.ActionEditorState
+import ui.actions.model.EditableAction
 import ui.util.YamlScalars
 
 /**

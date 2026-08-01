@@ -1,7 +1,9 @@
 package ui.autocompletion
 
 import ruleengine.core.domain.FieldPathResolver
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
+import ui.autocompletion.model.CompletionItem
+import ui.autocompletion.model.CompletionKind
 
 /** Completions offered inside a rule's `when` block. */
 internal fun buildAggregateFunctionCompletions(): List<CompletionItem> {

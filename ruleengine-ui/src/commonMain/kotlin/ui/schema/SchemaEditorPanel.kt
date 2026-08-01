@@ -25,7 +25,8 @@ import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
 import ui.editor.YamlEditorPane
-import ui.workbench.model.SchemaMode
+import ui.schema.model.SchemaEditorState
+import ui.workbench.model.mode.SchemaMode
 
 /**
  * A composable panel for editing schemas, supporting both a visual editor and a YAML-based editor

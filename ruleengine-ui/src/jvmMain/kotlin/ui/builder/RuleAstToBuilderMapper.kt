@@ -16,6 +16,9 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ui.builder.model.BuilderAction
+import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderRule
 
 /**
  * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
@@ -132,7 +135,7 @@ object RuleAstToBuilderMapper {
      * Collects children of an And/Or container.
      *
      * Single-condition children are inlined. Multi-node children (from nested
-     * containers with a different join type) are wrapped in a [ui.builder.BuilderConditionNode.Group] so that
+     * containers with a different join type) are wrapped in a [ui.builder.model.BuilderConditionNode.Group] so that
      * parentheses are preserved in the DSL round-trip.
      */
     private fun collectGroupedChildren(

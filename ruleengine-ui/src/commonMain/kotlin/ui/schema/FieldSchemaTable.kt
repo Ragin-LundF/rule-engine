@@ -34,10 +34,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import ruleengine.core.domain.dto.FieldType
-import ruleengine.core.domain.dto.isNormalizable
-import ruleengine.core.domain.dto.isStructure
-import ruleengine.core.domain.dto.isTemporal
+import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.isNormalizable
+import ruleengine.core.domain.dto.field.isStructure
+import ruleengine.core.domain.dto.field.isTemporal
 import ui.BgElevated
 import ui.BgSurface
 import ui.BorderColor
@@ -45,8 +45,10 @@ import ui.PrimaryBlue
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.builder.components.DropdownSelector
+import ui.builder.components.dropdown.DropdownSelector
 import ui.components.HeaderCell
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 
 /**
  * Renders a composable table for editing a schema, displaying fields with their respective

@@ -1,7 +1,7 @@
 package ruleengine.schema
 
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.SchemaLoadException
 import ruleengine.core.io.FileInputSupport
 import java.nio.file.Files
@@ -19,10 +19,10 @@ class FieldSchemaLoaderTest {
         val schema = FieldSchemaLoader.load(path = path)
 
         assertEquals(expected = "transaction-v1", actual = schema.name)
-        val purpose = schema.fields[ruleengine.core.domain.dto.FieldId("purpose")]!!
+        val purpose = schema.fields[FieldId("purpose")]!!
         assertEquals(expected = FieldType.TEXT, actual = purpose.type)
 
-        val amount = schema.fields[ruleengine.core.domain.dto.FieldId("amount")]!!
+        val amount = schema.fields[FieldId("amount")]!!
         assertEquals(expected = FieldType.DECIMAL, actual = amount.type)
     }
 

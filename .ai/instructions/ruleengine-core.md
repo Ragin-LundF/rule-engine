@@ -6,18 +6,26 @@ Use this file when touching `ruleengine-core` or core packages.
 
 | Package | Purpose |
 |---|---|
-| `ruleengine.core.domain.dto` | Shared domain models such as `FieldSchema`, `FieldDefinition`, `FieldType`, `RuleMatch`, `EvaluationResult`, `ActionSchema`, and the inline value classes `FieldId`, `OperatorId`, `NormalizerId`. One top-level declaration per file. |
+| `ruleengine.core.domain.dto` | Evaluation results (`RuleMatch`, `EvaluationResult`, `RuleAction`) and the `OperatorId` / `NormalizerId` value classes. Subject-specific models live in the subpackages below. One top-level declaration per file. |
+| `ruleengine.core.domain.dto.field` | **Lives in `ruleengine-model`.** `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldTypeCategories`, and the `FieldId` value class. |
+| `ruleengine.core.domain.dto.action` | **Lives in `ruleengine-model`.** `ActionSchema`, `ActionDefinition`, `ActionArgType`. |
 | `ruleengine.core.domain` | Logic over those models: `FieldPathResolver` / `FieldPathResolution` (the single owner of dotted-path resolution), `TemporalFormat` (the single owner of date pattern parsing), `OperatorNames`. |
 | `ruleengine.core.errors` | Exception types such as `CompilationException`, `SchemaLoadException`, `RuleEngineException`, plus `ValidationDiagnostic` and `Severity`. |
 | `ruleengine.core.normalizer` | **Lives in `ruleengine-model`.** `Normalizer` functional interface, `NormalizerProfile`, and the `NormalizerRegistry` singleton (`ids` enumerates the built-ins). |
 | `ruleengine.dsl.lexer` | `Lexer`, `Token`, `TokenType`; raw tokenisation of the rule DSL. |
 | `ruleengine.dsl.parser` | `Parser`; converts token stream into AST nodes. |
-| `ruleengine.dsl.ast` | Immutable AST data classes such as `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, and literals. |
+| `ruleengine.dsl.ast` | Immutable AST data classes such as `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, and literals. Stays a single flat package despite its size: almost every type is a direct subclass of the `ExpressionAst` / `LiteralAst` / `ValueExpressionAst` / `PathSegmentAst` sealed hierarchies, and Kotlin requires those to share one package. Do not try to split it. |
 | `ruleengine.dsl.diagnostics` | `ParseException`. |
-| `ruleengine.compiler` | `Validator` / `ValidationResult`, `Compiler`, plus `OperatorSupport` (which operators a type accepts), `LiteralValidation`, `Suggestions`, and `operators/` helpers. |
+| `ruleengine.compiler` | The public entry points only: `Compiler`, `Validator`, `ValidationResult`. |
+| `ruleengine.compiler.support` | Internal helpers: `OperatorSupport` (which operators a type accepts), `LiteralValidation`, `Suggestions`, `FieldPathMessages`. |
+| `ruleengine.compiler.value` | `ValueExpressionCompiler`, `ValueExpressionValidator`; the value-expression half of compilation. |
+| `ruleengine.compiler.operators` | Per-type operator compilation helpers. |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule`. |
-| `ruleengine.evaluator.compiled` | `CompiledExpression` interface, `EvaluationCost`, `EvaluationCache`, `CompiledActionArgument`. Concrete expressions live in subpackages, grouped by the field type they test: `text/`, `numeric/`, `temporal/`, `stringset/`, `bool/`, the structural combinators in `logic/`, and the value-expression machinery (incl. `ExpressionValue` and `CompiledPathSegment`) in `value/`. Kotlin does not import from a parent package, so a new expression needs an explicit `import ruleengine.evaluator.compiled.CompiledExpression`. |
-| `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`, and `PreparedValue` sealed hierarchy. |
+| `ruleengine.evaluator.compiled` | `CompiledExpression` interface, `EvaluationCost`, `EvaluationCache`, `CompiledActionArgument`. Concrete expressions live in subpackages, grouped by the field type they test: `text/`, `numeric/`, `temporal/`, `stringset/`, `bool/`, the structural combinators in `logic/`, and the value-expression machinery in `value/`. Kotlin does not import from a parent package, so a new expression needs an explicit `import ruleengine.evaluator.compiled.CompiledExpression`. |
+| `ruleengine.evaluator.compiled.value` | `CompiledValueExpression` and its implementations (arithmetic, field access, function call, literal, comparison). |
+| `ruleengine.evaluator.compiled.value.result` | The `ExpressionValue` sealed hierarchy — what a value expression evaluates to. |
+| `ruleengine.evaluator.compiled.value.path` | The `CompiledPathSegment` sealed hierarchy: `CompiledFieldSegment`, `CompiledFilterSegment`. |
+| `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`. Its `dto/` holds the whole `PreparedValue` sealed hierarchy and stays flat — sealed subclasses must share a package. |
 | `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, plus the internal `MutableNode` the collector builds. Immutable `DecisionTree` / `DecisionNode` live in its `dto/`. |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader`, and DTO classes. |
 | `ruleengine.manifest` | `ProjectManifest`, `ManifestLoader`. |

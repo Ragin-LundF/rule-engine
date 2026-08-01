@@ -3,6 +3,8 @@ package ui.project
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
 import ui.editor.rules.RuleEditorState
+import ui.project.model.dialog.PendingProjectAction
+import ui.project.model.dialog.ProjectDialog
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.coroutines.EmptyCoroutineContext

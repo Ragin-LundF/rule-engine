@@ -5,7 +5,6 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
 ## 1.5.0
 
 ### Added
@@ -156,6 +155,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry rather than for the first one only.
 
 ### Changed
+
+- **BREAKING: the field and action model moved into subpackages of `ruleengine.core.domain.dto`.**
+  `FieldSchema`, `FieldDefinition`, `FieldType` (with its `isStructure` / `isTemporal` extensions),
+  `FieldTypeCategories` and `FieldId` are now in `ruleengine.core.domain.dto.field`; `ActionSchema`,
+  `ActionDefinition` and `ActionArgType` are now in `ruleengine.core.domain.dto.action`.
+  `RuleMatch`, `RuleAction`, `EvaluationResult`, `OperatorId` and `NormalizerId` stay in
+  `ruleengine.core.domain.dto`. Only the package changed — every type, member and default value is
+  untouched, so updating an integration means adding `.field` or `.action` to the affected imports
+  (`import ruleengine.core.domain.dto.FieldSchema` becomes
+  `import ruleengine.core.domain.dto.field.FieldSchema`).
+
+- Internal packages split so that no source directory holds more than eight files. `Compiler`,
+  `Validator` and `ValidationResult` stay in `ruleengine.compiler` — the public entry points are
+  unmoved — while its helpers moved to `ruleengine.compiler.support` (`OperatorSupport`,
+  `LiteralValidation`, `Suggestions`, `FieldPathMessages`) and `ruleengine.compiler.value`
+  (`ValueExpressionCompiler`, `ValueExpressionValidator`). In the evaluator, the `ExpressionValue`
+  hierarchy moved to `ruleengine.evaluator.compiled.value.result` and `CompiledPathSegment` to
+  `ruleengine.evaluator.compiled.value.path`.
+
+- `ruleengine-ui` reorganised so every feature package keeps its models and enums in a `model`
+  subpackage (`ui.builder.model`, `ui.tester.model`, `ui.project.model`, …), with behaviour grouped
+  by role beside it (`ui.workbench.areas`, `ui.builder.view`, `ui.diagrams.render`). UI-internal only.
+
+- `ruleengine.dsl.ast` and `ruleengine.evaluator.context.dto` deliberately stay flat: nearly every
+  type in them is a direct subclass of a sealed hierarchy, and Kotlin requires those to share a
+  package with their parent.
 
 - **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,
   `FieldType` (with its `isStructure` / `isTemporal` extensions), `FieldId`, `OperatorId`, `NormalizerId`,

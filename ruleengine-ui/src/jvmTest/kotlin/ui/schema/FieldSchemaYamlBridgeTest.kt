@@ -1,6 +1,8 @@
 package ui.schema
 
-import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.field.FieldType
+import ui.schema.model.EditableField
+import ui.schema.model.SchemaEditorState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse

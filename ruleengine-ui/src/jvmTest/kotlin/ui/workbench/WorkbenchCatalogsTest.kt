@@ -1,19 +1,20 @@
 package ui.workbench
 
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.ActionDefinition
-import ruleengine.core.domain.dto.ActionSchema
-import ruleengine.core.domain.dto.FieldDefinition
-import ruleengine.core.domain.dto.FieldId
-import ruleengine.core.domain.dto.FieldSchema
-import ruleengine.core.domain.dto.FieldType
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.OperatorId
+import ruleengine.core.domain.dto.action.ActionArgType
+import ruleengine.core.domain.dto.action.ActionDefinition
+import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldDefinition
+import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ui.diagrams.model.RuleSource
-import ui.workbench.model.CatalogRuleStatus
+import ui.workbench.model.catalog.CatalogRuleStatus
+import ui.workbench.rules.ruleTreeFilesFrom
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -18,7 +18,7 @@ import ui.BgHover
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.TextSecondary
-import ui.workbench.model.SchemaMode
+import ui.workbench.model.mode.SchemaMode
 
 /**
  * Tab switcher for the Field Schema editor area: Visual / YAML / Usages.

@@ -1,8 +1,8 @@
 package ruleengine.core.domain
 
-import ruleengine.core.domain.dto.ActionArgType
-import ruleengine.core.domain.dto.ActionDefinition
-import ruleengine.core.domain.dto.ActionSchema
+import ruleengine.core.domain.dto.action.ActionArgType
+import ruleengine.core.domain.dto.action.ActionDefinition
+import ruleengine.core.domain.dto.action.ActionSchema
 
 object DefaultActionSchema {
     val basic = ActionSchema(actions = mapOf(

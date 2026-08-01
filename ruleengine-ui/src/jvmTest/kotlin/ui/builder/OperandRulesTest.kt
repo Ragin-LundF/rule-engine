@@ -1,5 +1,7 @@
 package ui.builder
 
+import ui.builder.model.BuilderPathStep
+import ui.builder.model.catalog.CatalogFieldInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

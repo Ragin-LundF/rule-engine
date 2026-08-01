@@ -28,6 +28,7 @@ import ui.BorderColor
 import ui.TextMuted
 import ui.TextPrimary
 import ui.TextSecondary
+import ui.autocompletion.model.CompletionItem
 
 /** Floating dropdown showing autocomplete suggestions. */
 @Composable

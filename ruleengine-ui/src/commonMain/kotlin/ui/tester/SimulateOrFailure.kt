@@ -1,5 +1,8 @@
 package ui.tester
 
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.SimulationResult
+
 /**
  * Runs [RuleSimulationService.simulate] and turns a thrown failure into a
  * [SimulationOutcome.ValidationFailed] result instead of letting it escape.

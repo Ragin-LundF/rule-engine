@@ -4,8 +4,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import ui.manifest.ManifestEditorPanel
-import ui.manifest.ManifestEditorState
-import ui.workbench.model.ManifestMode
+import ui.manifest.model.ManifestEditorState
+import ui.workbench.model.mode.ManifestMode
 
 /**
  * Manifest builder area.

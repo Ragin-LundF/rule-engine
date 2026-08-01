@@ -1,12 +1,17 @@
 package ui
 
+import ui.autocompletion.model.CompletionItem
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
-import ui.autocompletion.CompletionKind
+import ui.autocompletion.model.CompletionKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import ui.yaml.model.YamlCursorContext
+import ui.yaml.model.YamlEditorType
+import ui.yaml.annotateYaml
+import ui.yaml.buildYamlCompletions
 
 /**
  * Characterization tests for YAML completions and highlighting, neither of which had any.
@@ -34,7 +39,7 @@ class YamlHighlighterTest {
         editorType = editorType,
     )
 
-    private fun labels(items: List<ui.autocompletion.CompletionItem>) = items.map { it.label }
+    private fun labels(items: List<CompletionItem>) = items.map { it.label }
 
     // ── values ────────────────────────────────────────────────────────────────
 

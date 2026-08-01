@@ -35,8 +35,8 @@ import ui.TextSecondary
 import ui.components.StatusBadge
 import ui.diagnostics.DiagnosticMapper
 import ui.diagnostics.DiagnosticsPanel
-import ui.diagnostics.QuickFix
 import ui.diagnostics.QuickFixes
+import ui.diagnostics.model.QuickFix
 import ui.editor.rules.RuleEditorState
 import ui.util.Plurals
 

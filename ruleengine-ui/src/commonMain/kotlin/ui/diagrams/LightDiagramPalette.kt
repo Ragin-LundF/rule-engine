@@ -1,6 +1,7 @@
 package ui.diagrams
 
 import androidx.compose.ui.graphics.Color
+import ui.diagrams.model.DiagramPalette
 import ui.theme.LightPalette
 
 /**

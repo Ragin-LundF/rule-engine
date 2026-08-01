@@ -40,30 +40,35 @@ import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
-import ui.builder.BuilderEditorState
-import ui.builder.BuilderRule
-import ui.builder.CatalogActionInfo
-import ui.builder.CatalogFieldInfo
-import ui.builder.RuleBuilderView
+import ui.builder.model.BuilderRule
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.catalog.CatalogFieldInfo
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.view.RuleBuilderView
 import ui.components.SecondaryButton
 import ui.components.ToolbarButton
 import ui.copyToClipboard
-import ui.diagrams.DiagramViewKind
+import ui.diagrams.model.DiagramViewKind
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.RuleValidationOutcome
 import ui.editor.rules.RuleValidationRunner
-import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewModeToggle
+import ui.editor.rules.model.RuleValidationOutcome
+import ui.editor.rules.model.StatusKind
+import ui.editor.rules.model.ViewMode
 import ui.editor.rules.sections.MainEditorContentSection
 import ui.pickRuleFile
 import ui.saveDiagramAsPng
-import ui.workbench.model.CatalogRule
-import ui.workbench.model.RuleMode
-import ui.workbench.model.RuleTreeFile
+import ui.workbench.export.ExportOverviewButton
+import ui.workbench.model.catalog.CatalogRule
+import ui.workbench.model.catalog.RuleTreeFile
+import ui.workbench.model.mode.RuleMode
+import ui.workbench.rules.RuleTablePanel
+import ui.workbench.rules.toRuleMode
+import ui.workbench.rules.toViewMode
 
 @Suppress("FunctionNaming")
 @Composable
-private fun ManifestFilePicker(state: RuleEditorState, viewMode: ui.editor.rules.ViewMode) {
+private fun ManifestFilePicker(state: RuleEditorState, viewMode: ViewMode) {
     val parsedManifest by state.parsedManifest
     val selectedManifestEntry by state.selectedManifestEntry
     val selectedManifestRuleFile by state.selectedManifestRuleFile
@@ -78,7 +83,7 @@ private fun ManifestFilePicker(state: RuleEditorState, viewMode: ui.editor.rules
     // "All files" is only meaningful where the view can show more than one at once, and only when
     // the entry actually has more than one.
     val showAllFilesOption = currentEntryRuleFiles.size >= 2 &&
-        (viewMode == ui.editor.rules.ViewMode.DIAGRAM || viewMode == ui.editor.rules.ViewMode.TEST)
+        (viewMode == ViewMode.DIAGRAM || viewMode == ViewMode.TEST)
 
     if (currentEntryRuleFiles.isEmpty()) return
 
@@ -144,7 +149,7 @@ fun CenterEditorPanel(
     scope: CoroutineScope,
     ruleMode: RuleMode,
     onRuleModeChange: (RuleMode) -> Unit,
-    builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(ui.builder.BuilderRule.None),
+    builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(BuilderRule.None),
     allRuleIds: List<String> = emptyList(),
     allBuilderRules: List<BuilderRule> = emptyList(),
     catalogRules: List<CatalogRule> = emptyList(),
@@ -184,7 +189,7 @@ fun CenterEditorPanel(
 
         Box(modifier = Modifier.weight(weight = 1f)) {
             when (viewMode) {
-                ui.editor.rules.ViewMode.BUILDER -> BuilderModeContent(
+                ViewMode.BUILDER -> BuilderModeContent(
                     state = state,
                     builderEditorState = builderEditorState,
                     allRuleIds = allRuleIds,
@@ -199,18 +204,18 @@ fun CenterEditorPanel(
                     onTreeRuleSelected = onTreeRuleSelected,
                 )
 
-                ui.editor.rules.ViewMode.CODE,
-                ui.editor.rules.ViewMode.DIAGRAM,
+                ViewMode.CODE,
+                ViewMode.DIAGRAM,
                 -> Column(modifier = Modifier.fillMaxSize()) {
                     MainEditorContentSection(
                         state = state,
                         diagramGraphicsLayer = diagramGraphicsLayer,
-                        isDiagram = viewMode == ui.editor.rules.ViewMode.DIAGRAM,
+                        isDiagram = viewMode == ViewMode.DIAGRAM,
                     )
                 }
 
-                ui.editor.rules.ViewMode.TEST -> testContent()
-                ui.editor.rules.ViewMode.TABLE -> RuleTablePanel(
+                ViewMode.TEST -> testContent()
+                ViewMode.TABLE -> RuleTablePanel(
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
                     selectedRuleId = builderEditorState.ruleId,
@@ -283,7 +288,7 @@ private fun BuilderModeContent(
 private fun CenterPanelHeader(
     state: RuleEditorState,
     scope: CoroutineScope,
-    viewMode: ui.editor.rules.ViewMode,
+    viewMode: ViewMode,
     onRuleModeChange: (RuleMode) -> Unit,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
@@ -313,7 +318,7 @@ private fun CenterPanelHeader(
 private fun CenterPanelActions(
     state: RuleEditorState,
     scope: CoroutineScope,
-    viewMode: ui.editor.rules.ViewMode,
+    viewMode: ViewMode,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
     var ruleValue by state.ruleValue
@@ -328,20 +333,20 @@ private fun CenterPanelActions(
     ) {
         ManifestFilePicker(state = state, viewMode = viewMode)
         when (viewMode) {
-            ui.editor.rules.ViewMode.CODE -> CodeModeActions(
+            ViewMode.CODE -> CodeModeActions(
                 state = state,
                 scope = scope,
                 ruleValue = ruleValue,
                 onRuleValueChange = { ruleValue = it },
             )
 
-            ui.editor.rules.ViewMode.DIAGRAM -> DiagramModeActions(
+            ViewMode.DIAGRAM -> DiagramModeActions(
                 state = state,
                 scope = scope,
                 diagramGraphicsLayer = diagramGraphicsLayer,
             )
 
-            ui.editor.rules.ViewMode.BUILDER, ui.editor.rules.ViewMode.TEST, ui.editor.rules.ViewMode.TABLE -> {}
+            ViewMode.BUILDER, ViewMode.TEST, ViewMode.TABLE -> {}
         }
     }
 }

@@ -3,6 +3,7 @@ package ui.settings
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import ui.settings.model.AutoCompleteShortcut
 
 /**
  * User preferences that are not part of a project.

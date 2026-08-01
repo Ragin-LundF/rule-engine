@@ -5,7 +5,9 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.runBlocking
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.StatusKind
+import ui.editor.rules.model.StatusKind
+import ui.tester.model.SimulationOutcome
+import ui.tester.model.SimulationResult
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals

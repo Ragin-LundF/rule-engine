@@ -1,5 +1,11 @@
 package ui.builder
 
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.mutable.MutableBuilderAction
+import ui.builder.model.mutable.MutableBuilderComparison
+import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.mutable.MutableConditionNode
+
 
 /**
  * Generates valid rule DSL text from a [BuilderEditorState].

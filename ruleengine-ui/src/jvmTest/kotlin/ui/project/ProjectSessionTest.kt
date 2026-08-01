@@ -1,5 +1,7 @@
 package ui.project
 
+import ui.project.model.ProjectEntry
+import ui.project.model.ProjectSession
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals

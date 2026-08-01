@@ -23,10 +23,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.core.analysis.FieldUsage
-import ruleengine.core.domain.dto.FieldSchema
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.dsl.ast.RuleAst
-import ui.diagrams.model.OutcomeKey
-import ui.diagrams.model.SchemaLeaves
+import ui.diagrams.model.FieldNode
+import ui.diagrams.model.FlowModel
+import ui.diagrams.render.DiagramEyebrow
+import ui.diagrams.render.DiagramIdentifier
+import ui.diagrams.render.DiagramNote
+import ui.diagrams.render.DiagramPlaceholderContent
 import ui.util.Plurals
 
 /**

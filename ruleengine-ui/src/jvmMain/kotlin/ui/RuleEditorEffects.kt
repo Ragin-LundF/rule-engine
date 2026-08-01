@@ -3,11 +3,12 @@ package ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
+import ui.dsl.analyzeDslContext
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.RuleValidationOutcome
 import ui.editor.rules.RuleValidationRunner
-import ui.editor.rules.StatusKind
+import ui.editor.rules.model.RuleValidationOutcome
+import ui.editor.rules.model.StatusKind
 import ui.util.Words
 
 private const val VALIDATION_DEBOUNCE_MS = 700L

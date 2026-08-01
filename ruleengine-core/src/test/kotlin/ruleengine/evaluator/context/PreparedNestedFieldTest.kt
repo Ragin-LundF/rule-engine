@@ -1,6 +1,6 @@
 package ruleengine.evaluator.context
 
-import ruleengine.core.domain.dto.FieldId
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.schema.FieldSchemaLoader

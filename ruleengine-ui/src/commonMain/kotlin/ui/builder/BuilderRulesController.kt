@@ -2,6 +2,9 @@ package ui.builder
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import ui.builder.model.BuilderRule
+import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.mutable.toImmutable
 import ui.replaceRuleDslBlock
 
 /**
