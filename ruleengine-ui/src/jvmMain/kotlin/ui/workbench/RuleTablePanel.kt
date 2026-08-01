@@ -33,7 +33,6 @@ import ui.AccentRed
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextMuted
-import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderAction
 import ui.builder.BuilderCondition
@@ -150,8 +149,10 @@ private fun RuleTableRow(
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     }
-    val idColor = if (selected) PrimaryBlue else TextPrimary
-    val idWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+    // The rule id is always the prominent, on-brand color — selection is shown by the row
+    // background/border instead, so an unselected row's id no longer reads as plain body text.
+    val idColor = PrimaryBlue
+    val idWeight = FontWeight.SemiBold
 
     Row(modifier = rowModifier, verticalAlignment = Alignment.Top) {
         Column(

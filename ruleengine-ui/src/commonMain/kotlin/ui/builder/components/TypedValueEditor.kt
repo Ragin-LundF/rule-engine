@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -90,16 +89,13 @@ private fun SingleValueEditor(
     valueHint: String = "",
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
+    CompactTextField(
         value = condition.value,
         onValueChange = {
             condition.value = it
             onChanged()
         },
-        singleLine = true,
-        placeholder = if (valueHint.isBlank()) null else {
-            { Text(text = valueHint, style = MaterialTheme.typography.body2) }
-        },
+        placeholder = valueHint,
         modifier = modifier.defaultMinSize(minWidth = 120.dp),
     )
 }
@@ -111,39 +107,29 @@ private fun BetweenValueEditor(
     valueHint: String = "",
     modifier: Modifier = Modifier,
 ) {
-    // The bound boxes are narrow, so the hint goes in the placeholder rather than into the label.
-    val hint: (@Composable () -> Unit)? = if (valueHint.isBlank()) {
-        null
-    } else {
-        { Text(text = valueHint, style = MaterialTheme.typography.caption) }
-    }
     val boundWidth = if (valueHint.isBlank()) 100.dp else 140.dp
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedTextField(
+        CompactTextField(
             value = condition.value,
             onValueChange = {
                 condition.value = it
                 onChanged()
             },
-            singleLine = true,
-            label = { Text(text = "from") },
-            placeholder = hint,
+            placeholder = valueHint.ifBlank { "from" },
             modifier = Modifier.width(width = boundWidth),
         )
         Text(text = "..", style = MaterialTheme.typography.body2)
-        OutlinedTextField(
+        CompactTextField(
             value = condition.valueTo,
             onValueChange = {
                 condition.valueTo = it
                 onChanged()
             },
-            singleLine = true,
-            label = { Text(text = "to") },
-            placeholder = hint,
+            placeholder = valueHint.ifBlank { "to" },
             modifier = Modifier.width(width = boundWidth),
         )
     }
@@ -162,11 +148,10 @@ private fun ListValueEditor(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            OutlinedTextField(
+            CompactTextField(
                 value = newItem,
                 onValueChange = { newItem = it },
-                singleLine = true,
-                label = { Text(text = "value") },
+                placeholder = "value",
                 modifier = Modifier.defaultMinSize(minWidth = 120.dp),
             )
             IconButton(onClick = {

@@ -410,9 +410,9 @@ private fun AnnotatedString.Builder.colorInlineListItems(
 /** Returns a [SpanStyle] whose colour represents the YAML `type:` field value. */
 private fun fieldTypeValueColor(value: String): SpanStyle {
     val color: Color = when (value.lowercase().trim()) {
-        "text", "string" -> Color(0xFF79C0FF)
-        "integer", "int", "long" -> Color(0xFF58A6FF)
-        "decimal", "bigdecimal", "number" -> Color(0xFF58A6FF)
+        "text", "string" -> PrimaryBlueLight
+        "integer", "int", "long" -> PrimaryBlue
+        "decimal", "bigdecimal", "number" -> PrimaryBlue
         "boolean", "bool" -> AccentPurple
         "stringset", "string_set", "set" -> AccentGreen
         "date", "date_time", "datetime", "timestamp" -> AccentOrange

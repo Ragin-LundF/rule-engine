@@ -1,5 +1,6 @@
 package ui.components
 
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,9 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ui.Bg
 import ui.BgSurface
@@ -87,7 +90,10 @@ fun WorkbenchShell(
     centerContent: @Composable () -> Unit,
     rightPanel: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    rightPanelWidth: Dp = 320.dp,
 ) {
+    val animatedRightPanelWidth by animateDpAsState(targetValue = rightPanelWidth)
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -120,7 +126,7 @@ fun WorkbenchShell(
             PanelContainer(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(width = 320.dp),
+                    .width(width = animatedRightPanelWidth),
             ) {
                 rightPanel()
             }
@@ -136,7 +142,7 @@ private fun PanelContainer(
 ) {
     Box(
         modifier = modifier
-            .clip(shape = RoundedCornerShape(size = 14.dp))
+            .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = BgSurface)
             .padding(all = 14.dp),
     ) {

@@ -20,6 +20,8 @@ import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import ruleengine.compiler.Validator
+import ruleengine.core.errors.Severity
+import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
@@ -66,6 +68,7 @@ import ui.workbench.InspectorPanel
 import ui.workbench.JvmWorkbenchValidator
 import ui.workbench.ManifestAreaScreen
 import ui.workbench.RightPanelWithTabs
+import ui.workbench.RuleTreeFile
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchState
 import ui.workbench.RuleWorkbenchViewModel
@@ -348,6 +351,43 @@ actual fun RuleEditor() {
         }
     }
 
+    // ── Rule tree for Builder mode: one file node per manifest rule file ─────
+    // Falls back to a single synthetic "current" file when no manifest is loaded, so the tree
+    // always has something to show for the rule text already in the editor.
+    val ruleTreeFiles = remember(
+        key1 = state.selectedManifestEntry.value,
+        key2 = state.ruleValue.value.text,
+        key3 = state.diagnosticsList.value,
+    ) {
+        val parsedFiles = state.parsedRuleFilesForCurrentEntry()
+        if (parsedFiles.isEmpty()) {
+            listOf(
+                RuleTreeFile(
+                    relativePath = "current",
+                    rules = builderStateMap.keys.filter { it.isNotBlank() }.map { CatalogRule(id = it) },
+                ),
+            )
+        } else {
+            parsedFiles.map { source ->
+                RuleTreeFile(
+                    relativePath = source.relativePath,
+                    rules = source.rules.map { ast ->
+                        CatalogRule(
+                            id = ast.id,
+                            status = ruleTreeStatusFor(
+                                ruleId = ast.id,
+                                description = ast.description,
+                                relativePath = source.relativePath,
+                                currentFile = state.selectedManifestRuleFile.value,
+                                diagnostics = state.diagnosticsList.value,
+                            ),
+                        )
+                    },
+                )
+            }
+        }
+    }
+
     RuleWorkbenchScreen(
         topBar = { TopBarSection(state = state, scope = scope) },
         iconRail = {
@@ -434,6 +474,15 @@ actual fun RuleEditor() {
                         workbenchViewModel.dispatch(
                             action = WorkbenchAction.SelectCondition(conditionId = conditionId),
                         )
+                    },
+                    ruleTreeFiles = ruleTreeFiles,
+                    onTreeRuleSelected = { relativePath, ruleId ->
+                        if (relativePath == state.selectedManifestRuleFile.value || relativePath == "current") {
+                            selectedBuilderRuleId = ruleId
+                        } else {
+                            state.loadSingleManifestRuleFile(relativePath)
+                            pendingBuilderRuleId = ruleId
+                        }
                     },
                     testContent = {
                         TestCenterPanel(
@@ -644,12 +693,15 @@ actual fun RuleEditor() {
                         modifier = Modifier.fillMaxSize(),
                     )
                 },
+                expanded = state.rightPanelExpanded.value,
+                onToggleExpanded = { state.rightPanelExpanded.value = !state.rightPanelExpanded.value },
             )
         },
         bottomBar = {
             DiagnosticsSection(state = state)
             StatusBarSection(state = state)
         },
+        rightPanelWidth = if (state.rightPanelExpanded.value) 320.dp else 56.dp,
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
@@ -759,6 +811,31 @@ internal fun findRuleBlockRange(fullText: String, ruleId: String): IntRange? {
     }
     // Unbalanced braces: treat the rule as not found rather than corrupting the text.
     return null
+}
+
+/**
+ * Status shown by a rule tree row.
+ *
+ * A rule counts as invalid either when a validation error explicitly names its id, or — for
+ * rules belonging to the file currently open in the editor — whenever the buffer has any error
+ * at all, since a parse-level error rarely names every rule it invalidates. Rules in other files
+ * cannot use that fallback: their errors, if any, belong to a different read of the file that has
+ * not been checked here, so only a message that names the rule id is trustworthy for them.
+ */
+private fun ruleTreeStatusFor(
+    ruleId: String,
+    description: String?,
+    relativePath: String,
+    currentFile: String?,
+    diagnostics: List<ValidationDiagnostic>,
+): CatalogRuleStatus {
+    val namesThisRule = diagnostics.any { it.severity == Severity.ERROR && it.message.contains(ruleId) }
+    val currentFileHasErrors = relativePath == currentFile && diagnostics.any { it.severity == Severity.ERROR }
+    return when {
+        namesThisRule || currentFileHasErrors -> CatalogRuleStatus.INVALID
+        description.isNullOrBlank() -> CatalogRuleStatus.DRAFT
+        else -> CatalogRuleStatus.VALID
+    }
 }
 
 private fun BuilderRule.isLocked(): Boolean = when (this) {

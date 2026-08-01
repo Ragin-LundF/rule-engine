@@ -277,6 +277,7 @@ private fun renderNodes(
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         ) {
             // Show checkbox only for first-level leaf nodes (for grouping)
             if (isFirstLevel && node is MutableConditionNode.Leaf && selectedGroupIds != null) {

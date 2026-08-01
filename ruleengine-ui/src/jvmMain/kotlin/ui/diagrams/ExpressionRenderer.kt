@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -222,7 +221,7 @@ internal fun OperatorBadge(operator: String, ignoreCase: Boolean) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(Color(0xFF1F2D3D))
+            .background(LabelOp.copy(alpha = 0.12f))
             .border(1.dp, LabelOp.copy(alpha = 0.4f), RoundedCornerShape(4.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp),
         contentAlignment = Alignment.Center,

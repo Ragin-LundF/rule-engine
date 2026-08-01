@@ -2,6 +2,8 @@ package ui.workbench
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import ui.components.WorkbenchShell
 
 /**
@@ -17,6 +19,7 @@ fun RuleWorkbenchScreen(
     centerContent: @Composable () -> Unit,
     rightPanel: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
+    rightPanelWidth: Dp = 320.dp,
 ) {
     WorkbenchShell(
         topBar = topBar,
@@ -25,5 +28,6 @@ fun RuleWorkbenchScreen(
         centerContent = centerContent,
         rightPanel = rightPanel,
         modifier = modifier,
+        rightPanelWidth = rightPanelWidth,
     )
 }

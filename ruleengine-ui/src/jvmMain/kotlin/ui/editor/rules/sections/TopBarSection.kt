@@ -6,10 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -25,7 +23,6 @@ import kotlinx.coroutines.launch
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
-import java.nio.file.Path
 import ui.BgSurface
 import ui.PrimaryBlue
 import ui.TextPrimary
@@ -39,6 +36,9 @@ import ui.pickSchemaFile
 import ui.saveActionsToFile
 import ui.saveManifestToFile
 import ui.saveSchemaToFile
+import ui.theme.ThemeController
+import ui.theme.ThemePersistence
+import java.nio.file.Path
 
 /** Top bar section: app brand, mode badge and Load Manifest action. */
 @Composable
@@ -173,6 +173,16 @@ fun TopBarSection(
                 },
             )
         }
+
+        Spacer(modifier = Modifier.width(width = 16.dp))
+
+        ToolbarButton(
+            label = if (ThemeController.isDark) "☀" else "☾",
+            onClick = {
+                ThemeController.isDark = !ThemeController.isDark
+                ThemePersistence.saveIsDark(ThemeController.isDark)
+            },
+        )
     }
 }
 

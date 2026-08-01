@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -157,6 +158,8 @@ fun CenterEditorPanel(
     onBuilderDslChange: (String) -> Unit = {},
     onConditionSelected: (String) -> Unit = {},
     testContent: @Composable () -> Unit = {},
+    ruleTreeFiles: List<RuleTreeFile> = emptyList(),
+    onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val viewMode = ruleMode.toViewMode()
@@ -165,7 +168,7 @@ fun CenterEditorPanel(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .clip(shape = RoundedCornerShape(size = 12.dp))
+            .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = BgElevated)
             .padding(all = 16.dp),
     ) {
@@ -183,18 +186,34 @@ fun CenterEditorPanel(
 
         Box(modifier = Modifier.weight(weight = 1f)) {
             when (viewMode) {
-                ui.editor.rules.ViewMode.BUILDER -> RuleBuilderView(
-                    editorState = builderEditorState,
-                    allRuleIds = allRuleIds,
-                    onRuleSelected = onRuleSelected,
-                    onAddRule = onAddRule,
-                    onRenameRule = onRenameRule,
-                    catalogFields = catalogFields,
-                    catalogActions = catalogActions,
-                    onConditionSelected = onConditionSelected,
-                    onDslChange = onBuilderDslChange,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                ui.editor.rules.ViewMode.BUILDER -> Row(modifier = Modifier.fillMaxSize()) {
+                    RuleTreePanel(
+                        files = ruleTreeFiles,
+                        selectedRuleId = builderEditorState.ruleId,
+                        onRuleSelected = onTreeRuleSelected,
+                        onAddRule = onAddRule,
+                        expanded = state.ruleTreeExpanded.value,
+                        onToggleExpanded = {
+                            state.ruleTreeExpanded.value = !state.ruleTreeExpanded.value
+                        },
+                    )
+                    Divider(
+                        color = BorderColor,
+                        modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
+                    )
+                    RuleBuilderView(
+                        editorState = builderEditorState,
+                        allRuleIds = allRuleIds,
+                        onRuleSelected = onRuleSelected,
+                        onAddRule = onAddRule,
+                        onRenameRule = onRenameRule,
+                        catalogFields = catalogFields,
+                        catalogActions = catalogActions,
+                        onConditionSelected = onConditionSelected,
+                        onDslChange = onBuilderDslChange,
+                        modifier = Modifier.weight(weight = 1f).fillMaxSize(),
+                    )
+                }
 
                 ui.editor.rules.ViewMode.CODE, ui.editor.rules.ViewMode.DIAGRAM -> Column(modifier = Modifier.fillMaxSize()) {
                     MainEditorContentSection(
