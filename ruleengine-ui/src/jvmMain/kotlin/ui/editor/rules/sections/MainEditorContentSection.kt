@@ -40,7 +40,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ruleengine.dsl.parser.Parser
@@ -48,16 +47,16 @@ import ui.AutoCompleteDropdown
 import ui.Bg
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.RuleDiagramView
 import ui.TextMuted
 import ui.TextPrimary
 import ui.annotateRule
 import ui.buildContextualCompletions
 import ui.editor.rules.RuleEditorState
-import ui.editor.rules.ViewMode
 import ui.editor.rules.autoClosingBraceDedent
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
+import ui.workbench.DiagramModeHost
+import ui.workbench.diagramDataFor
 
 /** Main editor content: the code editor with line numbers and autocomplete, or the diagram view. */
 @Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod")
@@ -84,6 +83,7 @@ fun ColumnScope.MainEditorContentSection(
     // ── Parsed rules for live diagram view ────────────────────────────────────
     val showAllRules by state.showAllRules
     val allRulesText by state.allRulesText
+    val diagramView by state.diagramView
     val diagramRules = remember(ruleValue.text, showAllRules, allRulesText) {
         val text = if (showAllRules && isDiagram) allRulesText else ruleValue.text
         runCatching { Parser(input = text).parseRules() }.getOrElse { emptyList() }
@@ -140,8 +140,9 @@ fun ColumnScope.MainEditorContentSection(
         ) {
             // Pass the capture layer down so recording happens on the
             // full-height content column, not on this clipped viewport box.
-            RuleDiagramView(
-                rules = diagramRules,
+            DiagramModeHost(
+                view = diagramView,
+                data = diagramDataFor(state = state, rules = diagramRules),
                 captureLayer = diagramGraphicsLayer,
             )
         }

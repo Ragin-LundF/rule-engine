@@ -1,5 +1,6 @@
 package ui.tester
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,10 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,6 +53,9 @@ import ui.components.SectionTitle
  * @param runEnabled      Whether the run control is enabled.
  * @param runReason       Optional explanation shown when [runEnabled] is false.
  * @param onLoadJson      Called when the user picks an input JSON file; null hides the load control.
+ * @param traceContent    Draws the recorded decision trees. Supplied by the platform because the
+ *   diagram renderer is JVM-side, the same way `CenterEditorPanel` takes its `testContent`. Null
+ *   leaves the results as the only presentation and hides the tab strip.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -60,6 +68,7 @@ fun TestCenterPanel(
     runReason: String? = null,
     ruleSelectionEnabled: Boolean = true,
     onLoadJson: (() -> Unit)? = null,
+    traceContent: (@Composable (List<RuleResult>) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -99,7 +108,11 @@ fun TestCenterPanel(
         )
 
         if (state.outcome !is SimulationOutcome.Idle) {
-            ResultArea(state = state, modifier = Modifier.weight(weight = 1f))
+            ResultArea(
+                state = state,
+                traceContent = traceContent,
+                modifier = Modifier.weight(weight = 1f),
+            )
         }
 
         Divider(color = BorderColor, thickness = 1.dp)
@@ -116,16 +129,63 @@ fun TestCenterPanel(
 /**
  * Result and trace of the last run, scrolling within the share of the panel it is given. The caller
  * omits it entirely while idle so the input box gets the whole panel before the first run.
+ *
+ * The two presentations are tabs rather than one below the other: they answer the same question at
+ * different depths, and stacking them would push the roster off the top on every run.
  */
 @Composable
-private fun ResultArea(state: TestInputState, modifier: Modifier = Modifier) {
+private fun ResultArea(
+    state: TestInputState,
+    traceContent: (@Composable (List<RuleResult>) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    val outcome = state.outcome
+    val completed = outcome as? SimulationOutcome.Completed
+    var tab by remember { mutableStateOf(TestResultTab.RESULTS) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(state = rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(space = 8.dp),
     ) {
-        ResultSection(state = state)
+        // Only a completed run has trees to draw; a validation failure has one message and no tabs.
+        if (completed != null && traceContent != null) {
+            ResultTabs(current = tab, onSelect = { selected -> tab = selected })
+        }
+        if (completed != null && traceContent != null && tab == TestResultTab.TRACE) {
+            traceContent(completed.ruleResults)
+        } else {
+            ResultSection(state = state)
+        }
+    }
+}
+
+@Composable
+private fun ResultTabs(current: TestResultTab, onSelect: (TestResultTab) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TestResultTab.entries.forEach { entry ->
+            val isSelected = entry == current
+            Text(
+                text = entry.label(),
+                style = MaterialTheme.typography.caption,
+                color = if (isSelected) PrimaryBlue else TextMuted,
+                modifier = Modifier
+                    .clickable { onSelect(entry) }
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+private fun TestResultTab.label(): String {
+    return when (this) {
+        TestResultTab.RESULTS -> "Results"
+        TestResultTab.TRACE -> "Trace diagram"
     }
 }
 

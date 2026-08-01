@@ -47,6 +47,11 @@ fun ActionEditorPanel(
     onYamlChange: (String) -> Unit,
     initialMode: ActionMode = ActionMode.VISUAL,
     modifier: Modifier = Modifier,
+    /**
+     * Draws which rules emit which action. Supplied by the platform because the diagram renderer is
+     * JVM-side; null keeps the "later phase" placeholder.
+     */
+    usagesContent: (@Composable () -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -137,7 +142,7 @@ fun ActionEditorPanel(
                 },
                 yamlEditor = yamlEditor,
             )
-            ActionMode.USAGES -> ActionUsagesPanel()
+            ActionMode.USAGES -> usagesContent?.invoke() ?: ActionUsagesPanel()
         }
     }
 }

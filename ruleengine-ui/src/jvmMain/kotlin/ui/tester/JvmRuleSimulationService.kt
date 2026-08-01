@@ -134,7 +134,7 @@ class JvmRuleSimulationService : RuleSimulationService {
 
         // 8. Report what every evaluated rule decided.
         //    A trace we cannot read must not cost the caller its result.
-        val tracesByRule = runCatching { traceRowsByRule(trace = evalResult.trace) }
+        val tracesByRule = runCatching { traceTreesByRule(trace = evalResult.trace) }
             .getOrElse { emptyMap() }
 
         return SimulationResult(
@@ -159,16 +159,18 @@ class JvmRuleSimulationService : RuleSimulationService {
     private fun buildRuleResults(
         ruleIds: List<String>,
         matches: List<RuleMatch>,
-        tracesByRule: Map<String, List<TraceRow>>,
+        tracesByRule: Map<String, TraceNode>,
     ): List<RuleResult> {
         val matchesById = matches.associateBy { match -> match.ruleId }
         return ruleIds.map { id ->
             val match = matchesById[id]
+            val tree = tracesByRule[id]
             RuleResult(
                 ruleId = id,
                 matched = match != null,
                 actions = match?.actions?.map { action -> formatAction(action = action) }.orEmpty(),
-                traceRows = tracesByRule[id].orEmpty(),
+                traceRows = tree?.let { root -> conditionRows(node = root) }.orEmpty(),
+                traceTree = tree,
             )
         }
     }
@@ -181,49 +183,72 @@ class JvmRuleSimulationService : RuleSimulationService {
     // ── trace helpers ─────────────────────────────────────────────────────────
 
     /**
-     * Condition rows grouped by the rule that produced them.
+     * Each rule's decision tree, keyed by the rule that produced it.
      *
      * The engine already wraps each rule in a [NodeType.RULE] node carrying its `ruleId`, so the
      * attribution is present in the tree. Flattening the whole tree into a single list threw it away,
      * which made an unrelated rule's failing condition look like part of the selected rule's verdict.
      */
-    private fun traceRowsByRule(trace: Any?): Map<String, List<TraceRow>> {
+    private fun traceTreesByRule(trace: Any?): Map<String, TraceNode> {
         val root = (trace as? DecisionTree)?.root ?: return emptyMap()
-        val rowsByRule = mutableMapOf<String, MutableList<TraceRow>>()
-        collectRuleNodes(node = root, rowsByRule = rowsByRule)
-        return rowsByRule
+        val treesByRule = mutableMapOf<String, TraceNode>()
+        collectRuleNodes(node = root, treesByRule = treesByRule)
+        return treesByRule
     }
 
-    private fun collectRuleNodes(
-        node: DecisionNode,
-        rowsByRule: MutableMap<String, MutableList<TraceRow>>,
-    ) {
+    private fun collectRuleNodes(node: DecisionNode, treesByRule: MutableMap<String, TraceNode>) {
         val ruleId = node.ruleId
         if (node.type == NodeType.RULE && ruleId != null) {
-            val rows = rowsByRule.getOrPut(key = ruleId) { mutableListOf() }
-            collectConditionRows(node = node, rows = rows)
+            treesByRule[ruleId] = toTraceNode(node = node)
             return
         }
-        node.children.forEach { child -> collectRuleNodes(node = child, rowsByRule = rowsByRule) }
+        node.children.forEach { child -> collectRuleNodes(node = child, treesByRule = treesByRule) }
     }
 
-    private fun collectConditionRows(node: DecisionNode, rows: MutableList<TraceRow>) {
-        when (node.type) {
-            NodeType.CONDITION -> {
-                rows += TraceRow(
-                    label = buildConditionLabel(node),
-                    result = node.result,
-                    actual = node.actual?.toString(),
-                )
-            }
-            else -> node.children.forEach { collectConditionRows(node = it, rows = rows) }
+    private fun toTraceNode(node: DecisionNode): TraceNode {
+        return TraceNode(
+            type = toTraceNodeType(type = node.type),
+            label = buildLabel(node = node),
+            result = node.result,
+            actual = node.actual?.toString(),
+            children = node.children.map { child -> toTraceNode(node = child) },
+        )
+    }
+
+    private fun toTraceNodeType(type: NodeType): TraceNodeType {
+        return when (type) {
+            NodeType.EVALUATION -> TraceNodeType.EVALUATION
+            NodeType.CONDITION -> TraceNodeType.CONDITION
+            NodeType.AND -> TraceNodeType.AND
+            NodeType.OR -> TraceNodeType.OR
+            NodeType.NOT -> TraceNodeType.NOT
+            NodeType.RULE -> TraceNodeType.RULE
         }
     }
 
-    private fun buildConditionLabel(node: DecisionNode): String {
-        val field = node.field ?: "?"
-        val op = node.operator ?: "?"
-        val expected = node.expected?.toString() ?: "?"
-        return "$field $op $expected"
+    private fun buildLabel(node: DecisionNode): String {
+        return when (node.type) {
+            NodeType.CONDITION -> {
+                val field = node.field ?: "?"
+                val op = node.operator ?: "?"
+                val expected = node.expected?.toString() ?: "?"
+                "$field $op $expected"
+            }
+
+            NodeType.RULE -> node.ruleId.orEmpty()
+            // A logical node's meaning is its type; giving it "? ? ?" would only look like missing data.
+            else -> ""
+        }
+    }
+
+    /**
+     * The flat condition list the results view shows, derived from the tree so the two can never
+     * disagree about what was evaluated.
+     */
+    private fun conditionRows(node: TraceNode): List<TraceRow> {
+        if (node.type == TraceNodeType.CONDITION) {
+            return listOf(TraceRow(label = node.label, result = node.result, actual = node.actual))
+        }
+        return node.children.flatMap { child -> conditionRows(node = child) }
     }
 }

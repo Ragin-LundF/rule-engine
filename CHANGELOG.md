@@ -8,6 +8,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## 1.5.0
 
+### Added
+
+- **Three diagrams beside the existing rule tree, picked in the Diagram toolbar.** The per-rule
+  condition tree is unchanged and stays the default.
+  - **Manifest run** — the selected manifest entry as the single connected unit the engine actually
+    runs: every rule of every listed `.rule` file on one spine, numbered in evaluation order
+    (manifest file order, then in-file source order), ending in the `EvaluationResult` that collects
+    them. File names are shown as quiet provenance bands labelled *grouping only — no runtime
+    boundary*, because `RuleEngineBuilder` flattens an entry's files into one list and validates and
+    compiles them as one set.
+  - **Outcome map** — rules grouped by the output they produce. Draws the display family
+    (`assessment:transit`) and the real `RuleEngine.staticOutputKeys` bucket
+    (`assessment:transit:green`) as separate layers, and states each bucket's size, so it is visible
+    when `shortCircuitByOutput` would have no effect on a rule set.
+  - **Field flow** — schema field → rule → outcome, with selection isolating everything on a path
+    through a node. Reports schema fields no rule reads, which no other view can show. Field paths
+    written inside a collection filter resolve against that collection, so
+    `parcels[origin.hub == "HAM"]` counts as a use of `parcels.origin.hub`.
+- **Trace diagram** in Test mode, beside the existing results list. Renders each rule's recorded
+  decision tree with its nesting instead of a flat condition list, coloured by result with the
+  actual value beside the expected one. A false `and` is annotated with where evaluation stopped:
+  `AndExpression` returns on the first false child without calling the trace collector for the rest,
+  so a condition that was never evaluated is absent from the tree rather than present and undecided.
+- `RuleResult.traceTree` (`ui.tester`) — the rule's decision tree as `TraceNode` / `TraceNodeType`,
+  a `commonMain` mirror of the core's JVM-only `DecisionNode`. The existing flat `traceRows` is now
+  derived from it in the same walk, so the two cannot disagree about what was evaluated.
+- The **Usages** tabs of the schema and action editors, previously placeholders reading *"will be
+  shown here in a later phase"*, now render the field flow and the outcome map respectively.
+
 ### Changed
 
 - **BREAKING: the domain model moved to `ruleengine.core.domain.dto`.** `FieldSchema`, `FieldDefinition`,

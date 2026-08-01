@@ -38,7 +38,7 @@ Build everything:
 | **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
 | **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
-| **Diagram view** | See a rule's condition tree |
+| **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
 | **Test panel** | Evaluate the rule set against JSON input: every action the run emitted grouped by the rule that emitted it, plus one row per rule — matched or not — whose condition trace expands on click |
 

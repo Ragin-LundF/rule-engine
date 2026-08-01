@@ -1,18 +1,17 @@
 package ui.workbench
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -23,12 +22,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +48,7 @@ import ui.builder.RuleBuilderView
 import ui.components.SecondaryButton
 import ui.components.ToolbarButton
 import ui.copyToClipboard
+import ui.diagrams.DiagramViewKind
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewModeToggle
@@ -391,6 +391,7 @@ private fun DiagramModeActions(
         horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        DiagramViewPicker(state = state)
         ToolbarButton(
             label = "Export PNG",
             onClick = {
@@ -409,6 +410,66 @@ private fun DiagramModeActions(
             text = "Expand",
             onClick = { showExpandedDiagram = true },
         )
+    }
+}
+
+/**
+ * Picks which diagram is drawn.
+ *
+ * Choosing the run or field view also switches the scope to the whole entry. An entry drawn from a
+ * single open file would be a lie about what the engine runs, and "no rule reads this field" is a
+ * claim about the entry — from one file it would report every field the other files read as dead.
+ * Both drive the existing `showAllRules` mechanism rather than a scope selector of their own, so this
+ * and the `☰` file picker can never end up disagreeing about what is on screen.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun DiagramViewPicker(state: RuleEditorState) {
+    var expanded by remember { mutableStateOf(false) }
+    val current by state.diagramView
+
+    Box {
+        ToolbarButton(label = "▤ ${current.label()}", onClick = { expanded = true })
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .background(color = BgElevated)
+                .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
+        ) {
+            DiagramViewKind.entries.forEach { kind ->
+                val isSelected = kind == current
+                DropdownMenuItem(
+                    onClick = {
+                        state.diagramView.value = kind
+                        if (kind == DiagramViewKind.RUN || kind == DiagramViewKind.FIELDS) {
+                            state.loadAllRuleFilesForCurrentEntry()
+                        }
+                        expanded = false
+                    },
+                    modifier = Modifier.background(
+                        color = if (isSelected) BgHover else BgElevated,
+                        shape = RoundedCornerShape(size = 6.dp),
+                    ),
+                ) {
+                    Text(
+                        text = kind.label(),
+                        style = MaterialTheme.typography.body2,
+                        color = if (isSelected) PrimaryBlue else TextPrimary,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun DiagramViewKind.label(): String {
+    return when (this) {
+        DiagramViewKind.TREE -> "Rule trees"
+        DiagramViewKind.RUN -> "Manifest run"
+        DiagramViewKind.OUTCOMES -> "Outcome map"
+        DiagramViewKind.FIELDS -> "Field flow"
     }
 }
 

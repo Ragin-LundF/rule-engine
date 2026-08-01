@@ -50,6 +50,11 @@ fun SchemaEditorPanel(
     onYamlChange: (String) -> Unit,
     initialMode: SchemaMode = SchemaMode.VISUAL,
     modifier: Modifier = Modifier,
+    /**
+     * Draws which rules read which field. Supplied by the platform because the diagram renderer is
+     * JVM-side; null keeps the "later phase" placeholder.
+     */
+    usagesContent: (@Composable () -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -140,7 +145,7 @@ fun SchemaEditorPanel(
                 },
                 yamlEditor = yamlEditor,
             )
-            SchemaMode.USAGES -> FieldUsagesPanel()
+            SchemaMode.USAGES -> usagesContent?.invoke() ?: FieldUsagesPanel()
         }
     }
 }

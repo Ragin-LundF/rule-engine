@@ -18,6 +18,7 @@ fun SchemaAreaScreen(
     toYaml: (SchemaEditorState) -> String,
     onSchemaYamlChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    usagesContent: (@Composable () -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -37,6 +38,7 @@ fun SchemaAreaScreen(
         toYaml = toYaml,
         onYamlChange = onSchemaYamlChange,
         modifier = modifier,
+        usagesContent = usagesContent,
         yamlEditor = yamlEditor,
     )
 }

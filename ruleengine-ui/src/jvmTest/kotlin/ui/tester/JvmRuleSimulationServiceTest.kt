@@ -3,6 +3,7 @@ package ui.tester
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private val SCHEMA_TEXT = """
@@ -14,6 +15,35 @@ fields:
   amount:
     type: decimal
     operators: [gte, lte, gt, lt, equals]
+  items:
+    type: collection
+    fields:
+      price:
+        type: decimal
+""".trimIndent()
+
+/**
+ * An aggregate comparison rather than a plain condition, because only `ComparisonCompiledExpression`
+ * records the value it actually computed — a plain `amount >= 500` leaf reports no `actual`.
+ */
+private val AGGREGATE_RULE = """
+rule "big-basket" {
+  when
+    sum(items.price) > 100
+  then
+    label "big"
+}
+""".trimIndent()
+
+private val BASKET_INPUT = """
+{
+  "purpose": "Groceries",
+  "amount": 105.00,
+  "items": [
+    { "price": 60.00 },
+    { "price": 45.00 }
+  ]
+}
 """.trimIndent()
 
 private val ACTIONS_TEXT = """
@@ -371,5 +401,108 @@ class JvmRuleSimulationServiceTest {
             inputJson = POSITIVE_INPUT,
         )
         assertIs<SimulationOutcome.ValidationFailed>(value = result.outcome)
+    }
+
+    // ── trace tree ────────────────────────────────────────────────────────────
+
+    private fun treeOf(ruleText: String, ruleId: String, inputJson: String): TraceNode {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = ruleText,
+            ruleId = ruleId,
+            inputJson = inputJson,
+        )
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        return assertNotNull(actual = outcome.ruleResults.single().traceTree)
+    }
+
+    private fun conditionCount(node: TraceNode): Int {
+        if (node.type == TraceNodeType.CONDITION) {
+            return 1
+        }
+        return node.children.sumOf { child -> conditionCount(node = child) }
+    }
+
+    /**
+     * The structure the flat row list cannot carry: the rule node, the `and` beneath it, and the two
+     * conditions beneath that. The results view only ever needed the leaves; the trace diagram draws
+     * the nesting, so it has to survive the mapping out of the core's `DecisionTree`.
+     */
+    @Test
+    fun `the trace tree keeps the rule, its and node and the conditions beneath it`() {
+        val tree = treeOf(ruleText = RENT_RULE, ruleId = "rent-payment", inputJson = POSITIVE_INPUT)
+
+        assertEquals(expected = TraceNodeType.RULE, actual = tree.type)
+        assertEquals(expected = "rent-payment", actual = tree.label)
+        assertTrue(actual = tree.result)
+
+        val and = tree.children.single()
+        assertEquals(expected = TraceNodeType.AND, actual = and.type)
+        assertTrue(actual = and.result)
+        assertEquals(expected = 2, actual = and.children.size)
+        assertTrue(
+            actual = and.children.all { child -> child.type == TraceNodeType.CONDITION },
+            message = "Expected two condition leaves, got: ${and.children.map { it.type }}",
+        )
+    }
+
+    /**
+     * The reason [TraceNode.result] is not nullable. `AndExpression` returns on the first false child
+     * without ever calling the collector for the rest, so a condition that was not evaluated is absent
+     * from the tree rather than present and undecided. Here `purpose contains "rent"` would have held,
+     * but the cheaper amount check failed first and it was never reached — so the `and` must carry one
+     * child, not two with one marked unknown.
+     */
+    @Test
+    fun `a short-circuited and records only the child it actually evaluated`() {
+        val tree = treeOf(ruleText = SHORT_CIRCUITED_RULE, ruleId = "large-rent-payment", inputJson = POSITIVE_INPUT)
+
+        val and = tree.children.single()
+        assertEquals(expected = TraceNodeType.AND, actual = and.type)
+        assertEquals(expected = false, actual = and.result)
+        assertEquals(
+            expected = 1,
+            actual = and.children.size,
+            message = "The unevaluated condition must be absent, not recorded: ${and.children.map { it.label }}",
+        )
+        assertEquals(expected = false, actual = and.children.single().result)
+    }
+
+    /** The rows are derived from the tree, so they can never disagree about what was evaluated. */
+    @Test
+    fun `the flat rows are exactly the condition leaves of the tree`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = RENT_AND_COFFEE_RULES,
+            ruleId = "",
+            inputJson = POSITIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        outcome.ruleResults.forEach { ruleResult ->
+            val tree = assertNotNull(actual = ruleResult.traceTree)
+            assertEquals(
+                expected = conditionCount(node = tree),
+                actual = ruleResult.traceRows.size,
+                message = "Rows and tree disagree for ${ruleResult.ruleId}",
+            )
+        }
+    }
+
+    /**
+     * The value beside the expected one is what makes the trace diagram worth drawing, so the
+     * passthrough out of `DecisionNode.actual` needs a test of its own. `sum(items.price)` over 60 and
+     * 45 must report what it computed, not just that the comparison held.
+     */
+    @Test
+    fun `a comparison leaf carries the value it actually computed`() {
+        val tree = treeOf(ruleText = AGGREGATE_RULE, ruleId = "big-basket", inputJson = BASKET_INPUT)
+        val comparison = tree.children.single()
+
+        assertEquals(expected = TraceNodeType.CONDITION, actual = comparison.type)
+        assertTrue(actual = comparison.result)
+        assertEquals(expected = "105.0", actual = comparison.actual)
     }
 }

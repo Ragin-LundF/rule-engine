@@ -10,13 +10,16 @@ package ui.tester
  * @param ruleId     Id of the rule as declared in the DSL.
  * @param matched    Whether the rule's `when` clause held.
  * @param actions    Formatted action strings the rule emitted; empty unless [matched].
- * @param traceRows  Condition rows belonging to this rule only.
+ * @param traceRows  Condition rows belonging to this rule only, derived from [traceTree].
+ * @param traceTree  The rule's recorded decision tree, kept whole for the trace diagram. Null when
+ *   the run produced no readable trace.
  */
 data class RuleResult(
     val ruleId: String,
     val matched: Boolean,
     val actions: List<String>,
     val traceRows: List<TraceRow>,
+    val traceTree: TraceNode? = null,
 ) {
     /**
      * Derived here rather than in the view so the dot, the badge colour, the badge label and the

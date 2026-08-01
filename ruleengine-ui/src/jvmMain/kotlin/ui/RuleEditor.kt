@@ -33,6 +33,10 @@ import ui.builder.RuleAstToBuilderMapper
 import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
 import ui.components.PlaceholderPanel
+import ui.diagrams.DiagramSurface
+import ui.diagrams.FieldFlowDiagram
+import ui.diagrams.OutcomeMapDiagram
+import ui.diagrams.TraceDiagram
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.StatusKind
 import ui.editor.rules.isContextuallyImmediate
@@ -57,6 +61,7 @@ import ui.workbench.CatalogField
 import ui.workbench.CatalogRule
 import ui.workbench.CatalogRuleStatus
 import ui.workbench.CenterEditorPanel
+import ui.workbench.DiagramModeHost
 import ui.workbench.InspectorPanel
 import ui.workbench.JvmWorkbenchValidator
 import ui.workbench.ManifestAreaScreen
@@ -68,6 +73,7 @@ import ui.workbench.SchemaAreaScreen
 import ui.workbench.UiDiagnostic
 import ui.workbench.UiDiagnosticSeverity
 import ui.workbench.WorkbenchAction
+import ui.workbench.diagramDataFor
 import ui.workbench.toViewMode
 
 // ── Main composable ───────────────────────────────────────────────────────────
@@ -199,9 +205,21 @@ actual fun RuleEditor() {
         }
     }
 
-    // ── Parsed rules for the expanded diagram window ───────────────────────────
+    // ── Parsed rules of the open file, for the builder and the rule roster ─────
     val diagramRulesForWindow = remember(key1 = state.ruleValue.value.text) {
         runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
+    }
+
+    // ── Parsed rules for the expanded diagram window ───────────────────────────
+    // Honours "All files" like the inline canvas does, so expanding a view does not silently
+    // narrow it back to the open file.
+    val expandedDiagramRules = remember(
+        key1 = state.ruleValue.value.text,
+        key2 = state.showAllRules.value,
+        key3 = state.allRulesText.value,
+    ) {
+        val text = if (state.showAllRules.value) state.allRulesText.value else state.ruleValue.value.text
+        runCatching { Parser(input = text).parseRules() }.getOrElse { emptyList() }
     }
 
     // ── All builder rules derived from all parsed rule ASTs ──────────────────────
@@ -442,6 +460,7 @@ actual fun RuleEditor() {
                                 hasErrors -> "Fix rule validation errors before running"
                                 else -> null
                             },
+                            traceContent = { results -> TraceDiagram(results = results) },
                         )
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -466,6 +485,18 @@ actual fun RuleEditor() {
                         }.getOrNull()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    // The same field-flow diagram the rule editor shows, filling the "Usages" tab
+                    // that has been a placeholder: here the schema is the subject, so the fields
+                    // nothing reads are the point.
+                    usagesContent = {
+                        DiagramSurface {
+                            FieldFlowDiagram(
+                                rules = expandedDiagramRules,
+                                schema = state.parsedSchema.value,
+                                entryWide = state.showAllRules.value,
+                            )
+                        }
+                    },
                     yamlEditor = { value, onValueChange, editorModifier ->
                         YamlEditor(
                             value = value,
@@ -503,6 +534,13 @@ actual fun RuleEditor() {
                         }.getOrNull()
                     },
                     modifier = Modifier.fillMaxSize(),
+                    // The outcome map rather than the field flow: in the actions area the question is
+                    // which rules emit an action and which of them share an output bucket.
+                    usagesContent = {
+                        DiagramSurface {
+                            OutcomeMapDiagram(rules = expandedDiagramRules)
+                        }
+                    },
                     yamlEditor = { value, onValueChange, editorModifier ->
                         YamlEditor(
                             value = value,
@@ -628,7 +666,10 @@ actual fun RuleEditor() {
                     modifier = Modifier.fillMaxSize(),
                     color = Bg,
                 ) {
-                    RuleDiagramView(rules = diagramRulesForWindow)
+                    DiagramModeHost(
+                        view = state.diagramView.value,
+                        data = diagramDataFor(state = state, rules = expandedDiagramRules),
+                    )
                 }
             }
         }

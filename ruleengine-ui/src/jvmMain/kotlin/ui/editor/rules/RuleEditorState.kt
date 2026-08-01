@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import ruleengine.core.domain.dto.ActionSchema
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
@@ -18,6 +19,8 @@ import ruleengine.schema.FieldSchemaLoader
 import ui.DslCursorContext
 import ui.DslSection
 import ui.autocompletion.CompletionItem
+import ui.diagrams.DiagramViewKind
+import ui.diagrams.model.RuleSource
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -59,6 +62,15 @@ class RuleEditorState(
     val showAllRules: MutableState<Boolean> = mutableStateOf(value = false)
     val allRulesText: MutableState<String> = mutableStateOf(value = "")
 
+    /**
+     * The current entry's rule files parsed one by one, keeping the file each rule came from.
+     *
+     * [allRulesText] cannot answer that: it is the files joined together, and the join is exactly
+     * where the provenance is lost. The manifest run diagram needs it to label the file bands that
+     * show grouping into files is an organisation choice and not a runtime boundary.
+     */
+    val entryRuleSources: MutableState<List<RuleSource>> = mutableStateOf(value = emptyList())
+
     // Diagnostics
     val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
     val diagnosticsText: MutableState<String> = mutableStateOf(value = "")
@@ -88,6 +100,12 @@ class RuleEditorState(
     val viewMode: MutableState<ViewMode> = mutableStateOf(value = ViewMode.CODE)
     val showExpandedDiagram: MutableState<Boolean> = mutableStateOf(value = false)
 
+    /**
+     * Which diagram Diagram mode draws. Held here rather than inside the diagram because the
+     * selector lives in the center panel's toolbar and the canvas lives further down the tree.
+     */
+    val diagramView: MutableState<DiagramViewKind> = mutableStateOf(value = DiagramViewKind.TREE)
+
     // Parsed rules for diagram are derived in UI; kept as helper nullable here if needed
 
     // Helper methods
@@ -111,6 +129,8 @@ class RuleEditorState(
     fun loadManifestEntry(entry: ManifestEntry) {
         selectedManifestEntry.value = entry.id
         selectedManifestRuleFile.value = null
+        // Belongs to the entry being left; keeping it would draw the previous entry's file bands.
+        entryRuleSources.value = emptyList()
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
             reportManifestPathIssue(message = "Manifest base directory is not set")
             return
@@ -204,17 +224,33 @@ class RuleEditorState(
         }
     }
 
-    /** Load all rule files for the current manifest entry and expose them via [allRulesText]. */
+    /**
+     * Load all rule files for the current manifest entry and expose them via [allRulesText] and
+     * [entryRuleSources].
+     *
+     * Both come out of the same read so they can never disagree about which files were loaded: the
+     * concatenated text is what the code editor and the tester consume, while the per-file parse is
+     * what the manifest run diagram needs, since joining the files first would lose which file a rule
+     * was written in.
+     */
     fun loadAllRuleFilesForCurrentEntry() {
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return
         val entry = parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value } ?: return
-        val combined = entry.rules.mapNotNull { relativePath ->
+        val loaded = entry.rules.mapNotNull { relativePath ->
             runCatching {
                 val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
-                Files.readString(path)
+                relativePath to Files.readString(path)
             }.getOrNull()
-        }.joinToString(separator = "\n\n")
-        allRulesText.value = combined
+        }
+        allRulesText.value = loaded.joinToString(separator = "\n\n") { (_, content) -> content }
+        entryRuleSources.value = loaded.map { (relativePath, content) ->
+            RuleSource(
+                relativePath = relativePath,
+                // A file edited into a temporarily unparseable state keeps its band in the diagram,
+                // it just contributes no rules — the same way the editor keeps showing the file.
+                rules = runCatching { Parser(input = content).parseRules() }.getOrElse { emptyList() },
+            )
+        }
         showAllRules.value = true
     }
 
