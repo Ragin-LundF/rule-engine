@@ -23,7 +23,6 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import ruleengine.compiler.Validator
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.ActionSchemaLoader
@@ -43,6 +42,8 @@ import ui.diagrams.OutcomeMapDiagram
 import ui.diagrams.TraceDiagram
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
+import ui.editor.rules.RuleValidationOutcome
+import ui.editor.rules.RuleValidationRunner
 import ui.editor.rules.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
@@ -170,20 +171,28 @@ actual fun RuleEditor(closeController: AppCloseController) {
             return@LaunchedEffect
         }
         delay(timeMillis = 700)
-        runCatching {
-            if (state.parsedSchema.value == null) return@LaunchedEffect
-            val asts = Parser(input = state.ruleValue.value.text).parseRules()
-            val result = Validator.validate(
-                asts = asts,
-                schema = state.parsedSchema.value!!,
+        // The guard stays a return from the effect, not from a lambda: with no schema there is
+        // nothing to validate against and the previous diagnostics must be left as they are.
+        val schema = state.parsedSchema.value ?: return@LaunchedEffect
+
+        when (
+            val outcome = RuleValidationRunner.run(
+                ruleText = state.ruleValue.value.text,
+                schema = schema,
                 actions = state.parsedActionSchema.value,
             )
-            state.diagnosticsList.value = result.diagnostics
-            state.diagnosticsText.value = if (result.isValid) "No issues found" else ""
-            state.setStatus(
-                msg = if (result.isValid) "✓ Validation passed" else "✗ ${result.diagnostics.size} issue(s)",
-                kind = if (result.isValid) StatusKind.SUCCESS else StatusKind.ERROR,
-            )
+        ) {
+            is RuleValidationOutcome.Completed -> {
+                state.diagnosticsList.value = outcome.diagnostics
+                state.diagnosticsText.value = if (outcome.isValid) "No issues found" else ""
+                state.setStatus(
+                    msg = if (outcome.isValid) "✓ Validation passed" else "✗ ${outcome.diagnostics.size} issue(s)",
+                    kind = if (outcome.isValid) StatusKind.SUCCESS else StatusKind.ERROR,
+                )
+            }
+            // Deliberately silent: this pass runs while the author is still typing, so a parse
+            // failure is the normal state of half-written text, not something to report.
+            is RuleValidationOutcome.Threw -> Unit
         }
     }
 

@@ -35,8 +35,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import ruleengine.compiler.Validator
-import ruleengine.dsl.parser.Parser
 import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
@@ -52,6 +50,8 @@ import ui.components.ToolbarButton
 import ui.copyToClipboard
 import ui.diagrams.DiagramViewKind
 import ui.editor.rules.RuleEditorState
+import ui.editor.rules.RuleValidationOutcome
+import ui.editor.rules.RuleValidationRunner
 import ui.editor.rules.StatusKind
 import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.sections.MainEditorContentSection
@@ -364,39 +364,44 @@ private fun CodeModeActions(
             primary = true,
             onClick = {
                 scope.launch {
-                    runCatching {
-                        if (state.parsedSchema.value == null) {
-                            state.setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
-                            return@launch
-                        }
-                        if (ruleValue.text.isBlank()) {
-                            state.setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
-                            return@launch
-                        }
-                        val asts = Parser(input = ruleValue.text).parseRules()
-                        val result = Validator.validate(
-                            asts = asts,
-                            schema = state.parsedSchema.value!!,
+                    val schema = state.parsedSchema.value
+                    if (schema == null) {
+                        state.setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
+                        return@launch
+                    }
+                    if (ruleValue.text.isBlank()) {
+                        state.setStatus(msg = "Rule is empty", kind = StatusKind.IDLE)
+                        return@launch
+                    }
+
+                    when (
+                        val outcome = RuleValidationRunner.run(
+                            ruleText = ruleValue.text,
+                            schema = schema,
                             actions = state.parsedActionSchema.value,
                         )
-                        if (result.isValid) {
+                    ) {
+                        is RuleValidationOutcome.Completed -> if (outcome.isValid) {
                             state.setStatus(msg = "Validation passed", kind = StatusKind.SUCCESS)
                             diagnosticsText = "No issues found"
                             diagnosticsList = emptyList()
                         } else {
                             state.setStatus(
-                                msg = "${result.diagnostics.size} issue(s) found",
+                                msg = "${outcome.diagnostics.size} issue(s) found",
                                 kind = StatusKind.ERROR,
                             )
-                            diagnosticsList = result.diagnostics
-                            diagnosticsText = result.diagnostics.joinToString(separator = "\n") { d ->
+                            diagnosticsList = outcome.diagnostics
+                            diagnosticsText = outcome.diagnostics.joinToString(separator = "\n") { d ->
                                 "[${d.severity}] ${d.message}${d.suggestion?.let { " → $it" } ?: ""}"
                             }
                         }
-                    }.onFailure { e ->
-                        state.setStatus(msg = "Parse error: ${e.message}", kind = StatusKind.ERROR)
-                        diagnosticsText = e.toString()
-                        diagnosticsList = emptyList()
+
+                        // Unlike the debounced pass, an explicit Validate click reports the failure.
+                        is RuleValidationOutcome.Threw -> {
+                            state.setStatus(msg = "Parse error: ${outcome.cause.message}", kind = StatusKind.ERROR)
+                            diagnosticsText = outcome.cause.toString()
+                            diagnosticsList = emptyList()
+                        }
                     }
                 }
             },
