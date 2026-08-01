@@ -14,6 +14,8 @@ sealed interface BuilderRule {
         val description: String = "",
         val conditionNodes: List<BuilderConditionNode>,
         val actions: List<BuilderAction>,
+        /** `set` rows of the THEN block, rendered above the actions. */
+        val variables: List<BuilderVariable> = emptyList(),
     ) : BuilderRule
 
     /** Rule that contains syntax the Builder cannot safely render. */

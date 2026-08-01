@@ -9,6 +9,7 @@ import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.parser.Parser
+import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.builder.model.BuilderRule
@@ -33,10 +34,19 @@ class SampleProjectBuilderTest {
 
     private fun sample(name: String): Path = samplesDir.resolve(name)
 
-    private fun ruleFiles(sample: Path): List<Path> =
-        Files.list(sample.resolve("rules")).use { stream ->
-            stream.filter { it.toString().endsWith(suffix = ".rule") }.sorted().toList()
-        }
+    /**
+     * The sample's rule files in manifest order, which is the order the engine evaluates them in.
+     *
+     * Alphabetical order would do for rules that are independent of each other, but a rule reading a
+     * variable an earlier rule publishes is only valid in the declared order — so validating a
+     * differently-ordered concatenation would report forward references the shipped sample does not
+     * have.
+     */
+    private fun ruleFiles(sample: Path): List<Path> {
+        val manifest = ManifestLoader.load(path = sample.resolve("manifest.yaml"))
+
+        return manifest.entries.flatMap { entry -> entry.rules }.map { relativePath -> sample.resolve(relativePath) }
+    }
 
     /**
      * Rewrites word-form operators to the symbols the Builder's dropdowns offer, so `hour lt 8` and

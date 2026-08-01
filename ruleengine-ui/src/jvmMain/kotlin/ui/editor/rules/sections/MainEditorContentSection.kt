@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ruleengine.core.analysis.VariableUsage
 import ruleengine.dsl.parser.Parser
 import ui.Bg
 import ui.BorderColor
@@ -125,12 +126,21 @@ fun ColumnScope.MainEditorContentSection(
         composition = ruleValue.composition,
     )
 
+    // Variables the open buffer publishes. Derived from the text rather than from the saved entry so
+    // a `set` clause is offered as soon as it is typed, before the file is written to disk.
+    val variableNames = remember(ruleValue.text) {
+        runCatching {
+            Parser(input = ruleValue.text).parseRules().flatMap { rule -> VariableUsage.writesOf(rule = rule) }
+        }.getOrDefault(defaultValue = emptyList()).distinct()
+    }
+
     // ── Context-aware autocomplete suggestions ────────────────────────────────
-    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema) {
+    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema, variableNames) {
         val candidates = buildContextualCompletions(
             context = dslContext,
             schema = parsedSchema,
             actionSchema = parsedActionSchema,
+            variableNames = variableNames,
         )
         CodeEditing.filterSuggestions(
             candidates = candidates,

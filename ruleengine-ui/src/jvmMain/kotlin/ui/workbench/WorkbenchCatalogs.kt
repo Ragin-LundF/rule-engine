@@ -3,10 +3,21 @@ package ui.workbench
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.dsl.ast.ArithmeticValueAst
+import ruleengine.dsl.ast.BooleanLiteral
+import ruleengine.dsl.ast.FieldAccessAst
+import ruleengine.dsl.ast.FunctionCallValueAst
+import ruleengine.dsl.ast.LiteralValueAst
+import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
+import ui.builder.OperatorOptions
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.toCatalogFieldInfo
+import ui.diagrams.model.RuleSource
 import ui.workbench.model.UiDiagnostic
 import ui.workbench.model.catalog.CatalogField
 import ui.workbench.model.catalog.CatalogRule
@@ -36,6 +47,58 @@ internal fun catalogFieldsFrom(schema: FieldSchema?): List<CatalogField> {
 /** Schema fields as the builder's path picker needs them: recursive, with a format hint. */
 internal fun builderCatalogFieldsFrom(schema: FieldSchema?): List<CatalogFieldInfo> {
     return schema?.fields?.values?.map { def -> def.toCatalogFieldInfo() } ?: emptyList()
+}
+
+/**
+ * Rule output variables in scope at [uptoRuleId], as extra entries for the builder's operand picker.
+ *
+ * Scope follows the engine's own rule: a `$name` only resolves when an *earlier* rule of the entry
+ * assigns it, where "earlier" means manifest file order and then in-file source order — exactly the
+ * order [files] arrives in. Passing `null` for [uptoRuleId] returns every variable of the entry.
+ *
+ * Ids carry the `$` prefix so the picker writes the DSL spelling straight through, and so
+ * `scalarPaths` can keep them out of plain condition rows, where the parser would read `$total` as
+ * a field name.
+ */
+internal fun builderCatalogVariablesFrom(
+    files: List<RuleSource>,
+    uptoRuleId: String?,
+): List<CatalogFieldInfo> {
+    val variables = LinkedHashMap<String, CatalogFieldInfo>()
+    for (file in files) {
+        for (rule in file.rules) {
+            if (rule.id == uptoRuleId) {
+                return variables.values.toList()
+            }
+            for (assignment in rule.assignments) {
+                variables[assignment.name] = CatalogFieldInfo(
+                    id = "\$${assignment.name}",
+                    type = inferredVariableType(expr = assignment.expression),
+                )
+            }
+        }
+    }
+    return variables.values.toList()
+}
+
+/**
+ * Best-effort value type of a `set` expression, used only to pick the operator list.
+ *
+ * An aggregate or a calculation is always numeric and a literal types itself. A field path or
+ * another variable is left as [OperatorOptions.VARIABLE_TYPE]: resolving a path here would duplicate
+ * the schema walk the engine already does, and the engine puts no type restriction on a variable
+ * anyway, so the wider operator list is the honest answer rather than a guess.
+ */
+private fun inferredVariableType(expr: ValueExpressionAst): String = when (expr) {
+    is FunctionCallValueAst, is ArithmeticValueAst -> "decimal"
+    is LiteralValueAst -> when (expr.literal) {
+        is NumberLiteral -> "decimal"
+        is StringLiteral -> "text"
+        is BooleanLiteral -> "boolean"
+        else -> OperatorOptions.VARIABLE_TYPE
+    }
+
+    is FieldAccessAst, is VariableRefAst -> OperatorOptions.VARIABLE_TYPE
 }
 
 /**

@@ -36,6 +36,8 @@ fun RuleInspector(
     rule: CatalogRule,
     conditionCount: Int = 0,
     actionCount: Int = 0,
+    /** Names of the variables this rule publishes with `set`, without the `$` prefix. */
+    variableNames: List<String> = emptyList(),
     diagnostics: List<UiDiagnostic> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
@@ -73,6 +75,15 @@ fun RuleInspector(
 
         InspectorRow(label = "Conditions", value = conditionCount.toString())
         InspectorRow(label = "Actions", value = actionCount.toString())
+
+        // Listed by name rather than counted: which variables a rule publishes is what decides what
+        // the rules after it can read, and a bare number would not say that.
+        if (variableNames.isNotEmpty()) {
+            InspectorRow(
+                label = "Sets",
+                value = variableNames.joinToString(separator = ", ") { name -> "\$$name" },
+            )
+        }
 
         if (diagnostics.isNotEmpty()) {
             Divider()

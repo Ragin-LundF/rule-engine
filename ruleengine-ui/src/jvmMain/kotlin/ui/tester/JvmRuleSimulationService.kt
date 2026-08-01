@@ -204,6 +204,7 @@ class JvmRuleSimulationService : RuleSimulationService {
                 ruleId = id,
                 matched = match != null,
                 actions = match?.actions?.map { action -> formatAction(action = action) }.orEmpty(),
+                assignments = match?.assignments?.map { (name, value) -> "$name = $value" }.orEmpty(),
                 traceRows = tree?.let { root -> conditionRows(node = root) }.orEmpty(),
                 traceTree = tree,
             )

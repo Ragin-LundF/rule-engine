@@ -14,6 +14,7 @@ import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
 
 /**
  * Which field paths a rule reads.
@@ -31,10 +32,19 @@ import ruleengine.dsl.ast.ValueExpressionAst
  */
 object FieldUsage {
 
-    /** Every field path read by [rule]'s condition. Actions read no fields. */
+    /**
+     * Every field path read by [rule], from its condition and from its `set` expressions.
+     *
+     * Assignments count: `set totalWeightKg = sum(parcels.weightKg)` is a read of `parcels.weightKg`
+     * as much as a condition would be, and leaving it out would drop the field from the flow view
+     * exactly when a rule set moves an aggregate into a variable. Actions read no fields.
+     */
     fun fieldsOf(rule: RuleAst): Set<String> {
         val fields = mutableSetOf<String>()
         collectFromExpression(expr = rule.condition, prefix = "", into = fields)
+        rule.assignments.forEach { assignment ->
+            collectFromValue(expr = assignment.expression, prefix = "", into = fields)
+        }
         return fields
     }
 
@@ -61,6 +71,8 @@ object FieldUsage {
         when (expr) {
             is FieldAccessAst -> collectFromPath(expr = expr, prefix = prefix, into = into)
             is LiteralValueAst -> Unit
+            // A variable is produced by another rule, not read from the input — see VariableUsage.
+            is VariableRefAst -> Unit
             is FunctionCallValueAst -> expr.arguments.forEach { argument ->
                 collectFromValue(expr = argument, prefix = prefix, into = into)
             }

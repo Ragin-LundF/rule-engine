@@ -118,6 +118,18 @@ object DocxCatalogWriter {
                     "earlier one.",
             )
         )
+        // Only when the rule set actually uses them: a reader of a rule set without variables should
+        // not have to hold a caveat that never applies to what they are reading.
+        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() }) {
+            out.append(
+                DocxXml.paragraph(
+                    style = "Normal",
+                    text = "Some rules publish a named value that the rules after them read. Those " +
+                        "rules are order-dependent: the value only reaches a rule listed later, and " +
+                        "only if the rule that publishes it matched.",
+                )
+            )
+        }
         out.append(
             DocxXml.paragraph(
                 style = "Normal",
@@ -218,6 +230,13 @@ object DocxCatalogWriter {
         out.append(DocxXml.paragraph(style = "FieldLabel", text = CatalogText.intro(condition = rule.condition)))
         CatalogText.walk(condition = rule.condition, depth = 0, unwrapRoot = true) { text, depth ->
             out.append(DocxXml.bullet(text = text, depth = depth))
+        }
+
+        if (rule.publishes.isNotEmpty()) {
+            out.append(DocxXml.paragraph(style = "FieldLabel", text = "Publishes for later rules"))
+            rule.publishes.forEach { name ->
+                out.append(DocxXml.bullet(text = name, depth = 0, code = true))
+            }
         }
 
         if (rule.outcomes.isNotEmpty()) {

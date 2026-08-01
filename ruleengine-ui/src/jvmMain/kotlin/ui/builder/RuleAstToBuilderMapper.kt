@@ -19,6 +19,7 @@ import ruleengine.dsl.ast.ValueExpressionRenderer
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderRule
+import ui.builder.model.BuilderVariable
 
 /**
  * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
@@ -54,11 +55,21 @@ object RuleAstToBuilderMapper {
                 reason = unsupportedReason(expr = rule.condition),
             )
 
+        val variables = rule.assignments.map { assignment ->
+            val expression = mapValueExpression(expr = assignment.expression)
+                ?: return BuilderRule.Unsupported(
+                    id = rule.id,
+                    reason = "Rule assigns '${assignment.name}' from an expression the Builder cannot edit yet.",
+                )
+            BuilderVariable(id = nextId(prefix = "var"), name = assignment.name, expression = expression)
+        }
+
         return BuilderRule.Supported(
             id = rule.id,
             description = rule.description.orEmpty(),
             conditionNodes = conditionNodes,
             actions = rule.actions.map { mapAction(action = it) },
+            variables = variables,
         )
     }
 

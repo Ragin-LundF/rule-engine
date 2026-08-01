@@ -158,6 +158,22 @@ object RuleEngineBuilder {
             fail(manifestPath = manifestPath, entryId = entry.id, details = "rule compilation failed", cause = cause)
         }
 
+        // Short-circuiting groups rules by output and so reorders them, while a `set` clause only
+        // reaches the rules declared after it. Combining the two would make which variable a rule
+        // sees depend on grouping, so the build fails instead of quietly changing the outcome.
+        if (shortCircuitByOutput) {
+            val assigningRules = compiledRules.filter { rule -> rule.assignments.isNotEmpty() }
+            if (assigningRules.isNotEmpty()) {
+                fail(
+                    manifestPath = manifestPath,
+                    entryId = entry.id,
+                    details = "shortCircuitByOutput cannot be used with variables, because it evaluates " +
+                            "rules by output group rather than in declaration order; " +
+                            "rules with a 'set' clause: ${assigningRules.joinToString { rule -> rule.id }}",
+                )
+            }
+        }
+
         return LoadedRuleEngine(
             entryId = entry.id,
             engine = RuleEngine(compiledRules = compiledRules, shortCircuitByOutput = shortCircuitByOutput),

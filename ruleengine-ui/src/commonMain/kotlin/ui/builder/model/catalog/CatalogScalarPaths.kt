@@ -40,6 +40,10 @@ private fun collectScalarPaths(
             // filtered comparison row can handle — never a plain condition.
             OperatorOptions.isStructureType(fieldType = field.type) -> Unit
 
+            // A rule output variable is only legal in a symbolic comparison: the parser routes a
+            // named-operator condition down the legacy path, which reads `$total` as a field name.
+            field.id.startsWith(prefix = "$") -> Unit
+
             else -> target += field.copy(id = path)
         }
     }

@@ -13,11 +13,18 @@ import ui.dsl.model.DslSection
  * Delegates to the core resolver, so a nested path (`shipment.customer.tier`) offers the same operator and
  * value completions as a top-level field or an alias.
  */
-/** Forwarding function for contextual completions. */
+/**
+ * Forwarding function for contextual completions.
+ *
+ * [variableNames] are the rule output variables the open file publishes, without the `$` prefix.
+ * They are passed in rather than derived here because this module never parses — the caller already
+ * holds the parsed buffer.
+ */
 public fun buildContextualCompletions(
     context: DslCursorContext,
     schema: FieldSchema?,
     actionSchema: ActionSchema?,
+    variableNames: List<String> = emptyList(),
 ): List<CompletionItem> {
     return when (context.section) {
         DslSection.TOP_LEVEL -> buildTopLevelCompletions()
@@ -25,10 +32,23 @@ public fun buildContextualCompletions(
         DslSection.WHEN -> buildWhenCompletions(
             context = context,
             schema = schema
-        )
+        ) + buildVariableCompletions(variableNames = variableNames)
         DslSection.THEN -> buildThenCompletions(
             context = context,
-            actionSchema = actionSchema
+            actionSchema = actionSchema,
+            variableNames = variableNames,
+        )
+    }
+}
+
+/** A `$name` entry per known variable, offered wherever a value can stand. */
+private fun buildVariableCompletions(variableNames: List<String>): List<CompletionItem> {
+    return variableNames.map { name ->
+        CompletionItem(
+            label = "\$$name",
+            insertText = "\$$name",
+            kind = CompletionKind.FIELD,
+            hint = "variable"
         )
     }
 }
@@ -93,16 +113,22 @@ private fun buildWhenCompletions(
 
 private fun buildThenCompletions(
     context: DslCursorContext,
-    actionSchema: ActionSchema?
+    actionSchema: ActionSchema?,
+    variableNames: List<String>,
 ): List<CompletionItem> {
     return if (context.afterAction == null) {
-        buildActionNameCompletions(
-            actionSchema = actionSchema
-        )
+        buildActionNameCompletions(actionSchema = actionSchema) + SET_KEYWORD_COMPLETION
     } else {
         buildActionArgCompletions(
             actionName = context.afterAction,
             actionSchema = actionSchema
-        )
+        ) + buildVariableCompletions(variableNames = variableNames)
     }
 }
+
+private val SET_KEYWORD_COMPLETION = CompletionItem(
+    label = "set",
+    insertText = "set name = ",
+    kind = CompletionKind.KEYWORD,
+    hint = "publish a variable for later rules"
+)

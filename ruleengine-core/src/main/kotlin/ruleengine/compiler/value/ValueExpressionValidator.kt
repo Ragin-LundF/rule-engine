@@ -22,6 +22,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 
 internal object ValueExpressionValidator {
@@ -62,6 +63,19 @@ internal object ValueExpressionValidator {
         }
     }
 
+    /**
+     * Validates a value expression standing on its own rather than as one side of a comparison —
+     * the right-hand side of a `set` clause. Only the operand itself is checked; there is no second
+     * operand to be type-compatible with.
+     */
+    fun validateValue(
+        expr: ValueExpressionAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        validateValueExpression(expr = expr, schema = schema, diagnostics = diagnostics)
+    }
+
     private fun validateValueExpression(
         expr: ValueExpressionAst,
         schema: FieldSchema,
@@ -77,6 +91,10 @@ internal object ValueExpressionValidator {
             is FieldAccessAst -> validateFieldAccess(expr = expr, schema = schema, diagnostics = diagnostics)
             is ArithmeticValueAst -> validateArithmetic(expr = expr, schema = schema, diagnostics = diagnostics)
             is FunctionCallValueAst -> validateFunctionCall(expr = expr, schema = schema, diagnostics = diagnostics)
+            // A variable carries whatever the assigning expression produced, and which rule assigned
+            // it is a runtime question, so it has no static kind. UNKNOWN suppresses the operand-type
+            // check rather than guessing; that a variable exists at all is checked by `Validator`.
+            is VariableRefAst -> ValueKind.UNKNOWN
         }
     }
 

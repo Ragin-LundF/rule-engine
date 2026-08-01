@@ -68,7 +68,12 @@ object OperandRules {
             is BuilderOperand.Aggregate, is BuilderOperand.Calc -> true
             is BuilderOperand.Literal -> operand.numeric || operand.text.trim().toDoubleOrNull() != null
             is BuilderOperand.FieldRef -> fields.fieldAtPath(segments = operand.path.names)
-                ?.let { OperatorOptions.isNumericType(fieldType = it.type) } ?: false
+                // An untyped variable counts as numeric so the row still offers ordering
+                // comparisons; the engine places no type restriction on one either.
+                ?.let {
+                    OperatorOptions.isNumericType(fieldType = it.type) ||
+                        OperatorOptions.isVariableType(fieldType = it.type)
+                } ?: false
         }
 
     /**

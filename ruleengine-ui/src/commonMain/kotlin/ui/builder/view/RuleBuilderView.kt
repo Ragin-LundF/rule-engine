@@ -96,6 +96,7 @@ fun RuleBuilderView(
             ThenSection(
                 editorState = editorState,
                 catalogActions = catalogActions,
+                catalogFields = catalogFields,
                 onDslChange = onDslChange,
             )
         }

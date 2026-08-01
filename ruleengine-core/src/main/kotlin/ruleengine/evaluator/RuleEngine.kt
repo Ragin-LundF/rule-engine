@@ -3,6 +3,7 @@ package ruleengine.evaluator
 import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.evaluator.compiled.CompiledActionArgument
+import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.NoopTraceCollector
 import ruleengine.evaluator.trace.RecordingTraceCollector
@@ -25,6 +26,10 @@ import ruleengine.evaluator.trace.dto.NodeType
  * reflects manifest file order followed by in-file source order. With [shortCircuitByOutput]
  * enabled this guarantee does NOT hold: `matches` are ordered by output group, not declaration
  * order. Enable it only when the consumer does not depend on match order.
+ *
+ * Declaration order is merely observable for a rule set without variables, but it is *semantic* for
+ * one with them: a `set` clause publishes a value that only the rules after it can read. That is why
+ * `RuleEngineBuilder` refuses to combine [shortCircuitByOutput] with variables.
  */
 class RuleEngine(
     private val compiledRules: List<CompiledRule>,
@@ -55,7 +60,15 @@ class RuleEngine(
         }
     }
 
+    /**
+     * Evaluates every rule against [prepared].
+     *
+     * Variables left behind by a previous evaluation are discarded first: [PreparedRuleContext] is
+     * documented as reusable across records, and carrying a variable over would let one record's
+     * outcome decide another's.
+     */
     fun evaluate(prepared: PreparedRuleContext, includeTrace: Boolean = false): EvaluationResult {
+        prepared.clearVariables()
         if (shortCircuitByOutput) {
             return evaluateGrouped(prepared = prepared, includeTrace = includeTrace)
         }
@@ -75,7 +88,8 @@ class RuleEngine(
             matches = matches,
             collector = collector,
             matchedRuleIds = matchedRuleIds,
-            includeTrace = includeTrace
+            includeTrace = includeTrace,
+            prepared = prepared
         )
     }
 
@@ -103,7 +117,8 @@ class RuleEngine(
             matches = matches,
             collector = collector,
             matchedRuleIds = matchedRuleIds.toList(),
-            includeTrace = includeTrace
+            includeTrace = includeTrace,
+            prepared = prepared
         )
     }
 
@@ -119,10 +134,26 @@ class RuleEngine(
         if (matched) {
             matches += RuleMatch(
                 ruleId = rule.id,
+                // Assignments run before the actions resolve, so an action of this same rule can
+                // read a variable this rule just published.
+                assignments = applyAssignments(rule = rule, prepared = prepared),
                 actions = rule.actions.map { action -> action.resolve(context = prepared) }
             )
         }
         return matched
+    }
+
+    private fun applyAssignments(rule: CompiledRule, prepared: PreparedRuleContext): Map<String, Any?> {
+        if (rule.assignments.isEmpty()) {
+            return emptyMap()
+        }
+        val applied = LinkedHashMap<String, Any?>(rule.assignments.size)
+        for (assignment in rule.assignments) {
+            assignment.apply(context = prepared)
+            applied[assignment.name] = prepared.variables[assignment.name]
+                ?.let { value -> ExpressionValues.unwrap(value = value) }
+        }
+        return applied
     }
 
     private fun traceCollector(includeTrace: Boolean): TraceCollector {
@@ -133,14 +164,19 @@ class RuleEngine(
         matches: List<RuleMatch>,
         collector: TraceCollector,
         matchedRuleIds: List<String>,
-        includeTrace: Boolean
+        includeTrace: Boolean,
+        prepared: PreparedRuleContext
     ): EvaluationResult {
         val tree = if (includeTrace) {
             DecisionTree(root = collector.root(), matchedRules = matchedRuleIds)
         } else {
             null
         }
-        return EvaluationResult(matches = matches, trace = tree)
+        return EvaluationResult(
+            matches = matches,
+            trace = tree,
+            variables = prepared.variables.mapValues { (_, value) -> ExpressionValues.unwrap(value = value) }
+        )
     }
 
     private fun staticOutputKeys(rule: CompiledRule): Set<String> {

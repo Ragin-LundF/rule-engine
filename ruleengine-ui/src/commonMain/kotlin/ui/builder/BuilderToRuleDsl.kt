@@ -4,6 +4,7 @@ import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableBuilderAction
 import ui.builder.model.mutable.MutableBuilderComparison
 import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.mutable.MutableBuilderVariable
 import ui.builder.model.mutable.MutableConditionNode
 
 
@@ -55,6 +56,11 @@ object BuilderToRuleDsl {
         )
 
         sb.appendLine("  then")
+        // Assignments first: the engine applies them before it resolves the actions, so an action
+        // reading `$name` must be written after the `set` that publishes it.
+        state.variables.forEach { variable ->
+            sb.appendLine("    ${renderVariable(variable)}")
+        }
         state.actions.forEach { action ->
             sb.appendLine("    ${renderAction(action)}")
         }
@@ -137,6 +143,9 @@ object BuilderToRuleDsl {
     }
 
     private fun ignoreCaseSuffix(ignoreCase: Boolean): String = if (ignoreCase) " ignoreCase" else ""
+
+    private fun renderVariable(variable: MutableBuilderVariable): String =
+        "set ${variable.name} = ${OperandText.toDsl(operand = variable.expression)}"
 
     private fun renderAction(action: MutableBuilderAction): String {
         val args = action.arguments.joinToString(" ") { quoteIfNeeded(it) }

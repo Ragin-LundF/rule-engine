@@ -19,6 +19,7 @@ object ValueExpressionRenderer {
         return when (expr) {
             is FieldAccessAst -> renderPath(path = expr.path)
             is LiteralValueAst -> renderLiteral(literal = expr.literal)
+            is VariableRefAst -> $$"$$${expr.name}"
             is FunctionCallValueAst -> {
                 val args = expr.arguments.joinToString(separator = ", ") { argument -> render(expr = argument) }
                 "${expr.name}($args)"
@@ -81,7 +82,13 @@ object ValueExpressionRenderer {
             // is read as the condition the author wrote.
             is BetweenLiteral -> "${literal.low} ${literal.high}"
             is ExtractionRefLiteral -> $$"$$${literal.groupIndex}"
+            is VariableRefLiteral -> $$"$$${literal.name}"
         }
+    }
+
+    /** Renders a `set` clause, e.g. `set orderTotal = sum(orders[*].amount)`. */
+    fun renderAssignment(assignment: VariableAssignmentAst): String {
+        return "set ${assignment.name} = ${render(expr = assignment.expression)}"
     }
 
     /** The DSL spelling of a comparison operator, e.g. [ComparisonOperatorAst.GTE] -> `>=`. */

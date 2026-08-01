@@ -45,6 +45,7 @@ class RuleCatalogBuilderTest {
     fun `keeps the rule files separate and in manifest order`() {
         assertEquals(
             expected = listOf(
+                "rules/shipment-totals.rule",
                 "rules/delivery-quality.rule",
                 "rules/parcel-condition.rule",
                 "rules/route-risk.rule",
@@ -59,6 +60,7 @@ class RuleCatalogBuilderTest {
         // in, so a reader following the document follows the engine.
         assertEquals(
             expected = listOf(
+                "shipment-totals",
                 "premium-service-promise",
                 "transit-within-promise",
                 "transit-over-promise",

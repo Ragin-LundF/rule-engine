@@ -30,6 +30,7 @@ class BuilderEditorState private constructor(
     description: String,
     val conditionNodes: SnapshotStateList<MutableConditionNode>,
     val actions: SnapshotStateList<MutableBuilderAction>,
+    val variables: SnapshotStateList<MutableBuilderVariable>,
     val isLocked: Boolean,
     val lockReason: String,
     val lockKind: BuilderLockKind = BuilderLockKind.NONE,
@@ -39,6 +40,7 @@ class BuilderEditorState private constructor(
 
     private var nextConditionId = conditionNodes.size + 1
     private var nextActionId = actions.size + 1
+    private var nextVariableId = variables.size + 1
 
     companion object {
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
@@ -53,6 +55,13 @@ class BuilderEditorState private constructor(
                         arguments = it.arguments,
                     )
                 }.toMutableStateList(),
+                variables = rule.variables.map {
+                    MutableBuilderVariable(
+                        id = it.id,
+                        name = it.name,
+                        expression = it.expression,
+                    )
+                }.toMutableStateList(),
                 isLocked = false,
                 lockReason = "",
                 lockKind = BuilderLockKind.NONE,
@@ -63,6 +72,7 @@ class BuilderEditorState private constructor(
                 description = "",
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
+                variables = mutableStateListOf(),
                 isLocked = true,
                 lockReason = rule.reason,
                 lockKind = BuilderLockKind.UNSUPPORTED_SYNTAX,
@@ -73,6 +83,7 @@ class BuilderEditorState private constructor(
                 description = "",
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
+                variables = mutableStateListOf(),
                 isLocked = true,
                 lockReason = "No rule selected.",
                 lockKind = BuilderLockKind.NO_RULE_SELECTED,
@@ -302,5 +313,27 @@ class BuilderEditorState private constructor(
     /** Removes the action with the given [id]. */
     fun removeAction(id: String) {
         actions.removeAll { it.id == id }
+    }
+
+    /**
+     * Adds a new `set` row after the existing ones.
+     *
+     * The default expression is a blank literal rather than a field reference: a `set` clause is
+     * usually written to hold something computed, and an empty value box is the one starting point
+     * that is wrong for no one.
+     */
+    fun addVariable(defaultName: String = ""): MutableBuilderVariable {
+        val variable = MutableBuilderVariable(
+            id = "var-${nextVariableId++}",
+            name = defaultName,
+            expression = BuilderOperand.Literal(text = "", numeric = false),
+        )
+        variables.add(variable)
+        return variable
+    }
+
+    /** Removes the `set` row with the given [id]. */
+    fun removeVariable(id: String) {
+        variables.removeAll { it.id == id }
     }
 }

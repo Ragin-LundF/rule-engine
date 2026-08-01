@@ -2,23 +2,18 @@ package ruleengine.dsl.parser
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.OperatorNames
-import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FieldSegmentAst
 import ruleengine.dsl.ast.FilterSegmentAst
 import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
@@ -28,15 +23,34 @@ import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
 
+/**
+ * The rule DSL parser: rule blocks, the `when` grammar and value expressions.
+ *
+ * The `then` grammar lives in [ThenBlockParser] and literals in [LiteralParser]; all three read
+ * through the same [TokenCursor], so a production can be moved between them without changing how
+ * the source is consumed.
+ */
 @Suppress("TooManyFunctions")
 class Parser(private val input: String) {
-    private val tokens: List<Token> = Lexer(input = input).tokenize()
-    private var pos = 0
+    private val cursor = TokenCursor(tokens = Lexer(input = input).tokenize())
+    private val literals = LiteralParser(cursor = cursor)
+    private val thenBlockParser = ThenBlockParser(
+        cursor = cursor,
+        literals = literals,
+        parseValueExpression = { parseValueExpression() },
+    )
+
+    private var pos: Int
+        get() = cursor.pos
+        set(value) {
+            cursor.pos = value
+        }
 
     private companion object {
         /**
@@ -46,29 +60,13 @@ class Parser(private val input: String) {
         val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "and", "or", "ignoreCase")
     }
 
-    private fun current(): Token {
-        return tokens.getOrElse(index = pos) { tokens.last() }
-    }
+    private fun current(): Token = cursor.current()
 
-    private fun advance() {
-        if (pos < tokens.size) {
-            pos++
-        }
-    }
+    private fun advance() = cursor.advance()
 
-    private fun expect(type: TokenType): Token {
-        val t = current()
-        if (t.type != type) {
-            throw ParseException(
-                line = t.line,
-                column = t.col,
-                messageText = "Expected $type but found ${t.type} (${t.text})"
-            )
-        }
+    private fun expect(type: TokenType): Token = cursor.expect(type = type)
 
-        advance()
-        return t
-    }
+    private fun previousLine(): Int = cursor.previousLine()
 
     fun parseRules(): List<RuleAst> {
         val rules = mutableListOf<RuleAst>()
@@ -122,52 +120,18 @@ class Parser(private val input: String) {
         }
 
         advance()
-        val actions = parseActions()
+        val thenBlock = thenBlockParser.parse()
 
         expect(type = TokenType.RBRACE)
         return RuleAst(
             id = id,
             description = description,
             condition = condition,
-            actions = actions,
+            actions = thenBlock.actions,
+            assignments = thenBlock.assignments,
             line = first.line,
             column = first.col,
         )
-    }
-
-    /** The body of a `then` block: actions until the closing brace. */
-    private fun parseActions(): List<ActionAst> {
-        val actions = mutableListOf<ActionAst>()
-        while (true) {
-            val token = current()
-            if (token.type == TokenType.RBRACE || token.type == TokenType.EOF) {
-                break
-            }
-
-            if (token.type != TokenType.IDENT) {
-                throw ParseException(
-                    line = token.line,
-                    column = token.col,
-                    messageText = "Expected action identifier but found ${token.text}"
-                )
-            }
-
-            if (token.text == "extract") {
-                advance()
-                actions += parseExtractAction()
-            } else {
-                val name = token.text
-                advance()
-
-                // The argument is optional: an action declared with `argTypes: []` takes none, so a
-                // literal is only consumed when one actually follows. Argument count is checked
-                // against the action schema by the validator.
-                val arg = if (startsLiteral(token = current())) parseLiteral() else null
-                actions += ActionAst(name = name, arguments = listOfNotNull(arg))
-            }
-        }
-
-        return actions
     }
 
     /**
@@ -250,9 +214,6 @@ class Parser(private val input: String) {
             else -> false
         }
     }
-
-    /** Line of the most recently consumed token, or 0 before anything has been consumed. */
-    private fun previousLine(): Int = if (pos > 0) tokens[pos - 1].line else 0
 
     private fun parseUnary(): ExpressionAst {
         val token = current()
@@ -340,6 +301,9 @@ class Parser(private val input: String) {
         return when (expr) {
             is FunctionCallValueAst -> true
             is ArithmeticValueAst -> true
+            // A legacy ConditionAst names its left side by a plain field string and cannot hold a
+            // variable, so any comparison touching one must take the modern path.
+            is VariableRefAst -> true
             is FieldAccessAst -> expr.path.any { it is FilterSegmentAst }
             is LiteralValueAst -> false
         }
@@ -412,9 +376,15 @@ class Parser(private val input: String) {
                 advance()
                 LiteralValueAst(literal = StringLiteral(value = token.text))
             }
+            // Must precede the field-access branch: `$` is not a legal identifier start, so a
+            // variable read would otherwise be taken for a field path and reported as unknown.
+            TokenType.IDENT if token.text.startsWith(prefix = "$") -> {
+                advance()
+                VariableRefAst(name = LiteralParser.referenceName(token = token))
+            }
             // Must precede the field-access branch, or `isActive == true` would read `true` as a
             // field name and report an unknown field.
-            TokenType.IDENT if isBooleanText(text = token.text) -> {
+            TokenType.IDENT if LiteralParser.isBooleanText(text = token.text) -> {
                 advance()
                 LiteralValueAst(
                     literal = BooleanLiteral(value = token.text.equals(other = "true", ignoreCase = true))
@@ -445,9 +415,20 @@ class Parser(private val input: String) {
         }
     }
 
+    /**
+     * Reads a dotted path with optional `[...]` filter segments.
+     *
+     * A continuation token must sit on the same line as the token before it. A path is always
+     * written on one line, whereas the token that follows a finished path may well be a `[` opening
+     * the list argument of the next action — `set total = amount` followed by `tags ["a"]` would
+     * otherwise silently read the list as a filter on `amount`.
+     */
     private fun parseFieldPath(firstIdentifier: String): FieldAccessAst {
         val segments = mutableListOf<PathSegmentAst>(FieldSegmentAst(name = firstIdentifier))
-        while (current().type == TokenType.LBRACKET || current().type == TokenType.DOT) {
+        while (
+            (current().type == TokenType.LBRACKET || current().type == TokenType.DOT) &&
+            current().line == previousLine()
+        ) {
             when (current().type) {
                 TokenType.LBRACKET -> {
                     advance()
@@ -548,35 +529,10 @@ class Parser(private val input: String) {
 
     private fun parseConditionValue(operator: String): LiteralAst {
         return if (OperatorUtils.normalizeOperator(op = operator) == OperatorNames.BETWEEN) {
-            parseBetweenLiteral()
+            literals.parseBetween()
         } else {
-            parseLiteral()
+            literals.parse()
         }
-    }
-
-    /**
-     * Parses the two bounds of `between`.
-     *
-     * Bounds are numbers for numeric fields and quoted ISO dates for date fields; [BetweenLiteral]
-     * carries both as text and the field's compiler decides how to read them.
-     */
-    private fun parseBetweenLiteral(): BetweenLiteral {
-        val low = parseBoundToken(label = "lower")
-        val high = parseBoundToken(label = "upper")
-        return BetweenLiteral(low = low, high = high)
-    }
-
-    private fun parseBoundToken(label: String): String {
-        val token = current()
-        if (token.type != TokenType.NUMBER && token.type != TokenType.STRING) {
-            throw ParseException(
-                line = token.line,
-                column = token.col,
-                messageText = "Expected $label bound (number or quoted date) for 'between'"
-            )
-        }
-        advance()
-        return token.text
     }
 
     private fun parseIgnoreCaseModifier(): Boolean {
@@ -588,156 +544,4 @@ class Parser(private val input: String) {
         return false
     }
 
-    /**
-     * True when [token] can begin an action argument: a string, a number, a list, or an extraction
-     * reference such as `$1`. Anything else means the action has no argument.
-     */
-    private fun startsLiteral(token: Token): Boolean = when (token.type) {
-        TokenType.STRING, TokenType.NUMBER, TokenType.LBRACKET -> true
-        TokenType.IDENT -> token.text.startsWith(prefix = "$")
-        else -> false
-    }
-
-    private fun parseLiteral(): LiteralAst {
-        val token = current()
-        val result: LiteralAst = when (token.type) {
-            TokenType.STRING -> {
-                advance()
-                StringLiteral(value = token.text)
-            }
-
-            TokenType.NUMBER -> {
-                advance()
-                NumberLiteral(value = token.text)
-            }
-
-            TokenType.LBRACKET -> {
-                advance()
-                val items = mutableListOf<LiteralAst>()
-                while (current().type != TokenType.RBRACKET) {
-                    items += parseLiteral()
-                    if (current().type == TokenType.COMMA) {
-                        advance()
-                    }
-                }
-
-                expect(type = TokenType.RBRACKET)
-                ListLiteral(items = items)
-            }
-
-            TokenType.IDENT if isBooleanText(text = token.text) -> {
-                advance()
-                BooleanLiteral(value = token.text.equals(other = "true", ignoreCase = true))
-            }
-
-            else -> {
-                throw ParseException(
-                    line = token.line,
-                    column = token.col,
-                    messageText = "Expected literal (string/number/list/true/false)"
-                )
-            }
-        }
-
-        return result
-    }
-
-    /** True for the two identifiers the parser treats as boolean literals in value position. */
-    private fun isBooleanText(text: String): Boolean =
-        text.equals(other = "true", ignoreCase = true) || text.equals(other = "false", ignoreCase = true)
-
-    /**
-     * Parses a literal or an extraction reference (`$N`).
-     * Extraction references may only appear as arguments to an action that
-     * also carries an [ExtractionAst].
-     */
-    private fun parseLiteralOrRef(): LiteralAst {
-        val token = current()
-        if (token.type == TokenType.IDENT && token.text.startsWith(prefix = "$")) {
-            advance()
-            val groupIndex = token.text.removePrefix(prefix = "$").toIntOrNull()
-                ?: throw ParseException(
-                    line = token.line,
-                    column = token.col,
-                    messageText = "Invalid extraction reference '${token.text}'; expected \$N where N is an integer"
-                )
-            return ExtractionRefLiteral(groupIndex = groupIndex)
-        }
-        return parseLiteral()
-    }
-
-    /**
-     * Parses the body of an `extract` clause:
-     * ```
-     * extract <sourceField> regex("<pattern>", <groupIndex>) <actionName> <arg>
-     * ```
-     */
-    @Suppress("ThrowsCount", "LongMethod")
-    private fun parseExtractAction(): ActionAst {
-        val fieldTok = current()
-        if (fieldTok.type != TokenType.IDENT) {
-            throw ParseException(
-                line = fieldTok.line,
-                column = fieldTok.col,
-                messageText = "Expected source field name after 'extract' but found '${fieldTok.text}'"
-            )
-        }
-        val sourceField = fieldTok.text
-        advance()
-
-        val methodTok = current()
-        if (methodTok.type != TokenType.IDENT || methodTok.text != "regex") {
-            throw ParseException(
-                line = methodTok.line,
-                column = methodTok.col,
-                messageText = "Expected extraction method 'regex' but found '${methodTok.text}'"
-            )
-        }
-        advance()
-
-        expect(type = TokenType.LPAREN)
-        val patternTok = expect(type = TokenType.STRING)
-        expect(type = TokenType.COMMA)
-        val groupIndexTok = current()
-        if (groupIndexTok.type != TokenType.NUMBER) {
-            throw ParseException(
-                line = groupIndexTok.line,
-                column = groupIndexTok.col,
-                messageText = "Expected integer group index in regex extraction but found '${groupIndexTok.text}'"
-            )
-        }
-        val groupIndex = groupIndexTok.text.toIntOrNull()
-            ?: throw ParseException(
-                line = groupIndexTok.line,
-                column = groupIndexTok.col,
-                messageText = "Invalid group index '${groupIndexTok.text}': must be a non-negative integer"
-            )
-        advance()
-        expect(type = TokenType.RPAREN)
-
-        val extraction = ExtractionAst.RegexExtraction(
-            sourceField = sourceField,
-            pattern = patternTok.text,
-            groupIndex = groupIndex
-        )
-
-        val actionNameTok = current()
-        if (actionNameTok.type != TokenType.IDENT) {
-            throw ParseException(
-                line = actionNameTok.line,
-                column = actionNameTok.col,
-                messageText = "Expected action name after extraction definition but found '${actionNameTok.text}'"
-            )
-        }
-        val actionName = actionNameTok.text
-        advance()
-
-        val arg = parseLiteralOrRef()
-
-        return ActionAst(
-            name = actionName,
-            arguments = listOf(arg),
-            extraction = extraction
-        )
-    }
 }

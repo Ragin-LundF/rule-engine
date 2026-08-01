@@ -40,6 +40,7 @@ class SampleRegistryTest {
         val files = listOf(
             "schema.yaml",
             "actions.yaml",
+            "rules/shipment-totals.rule",
             "rules/delivery-quality.rule",
             "rules/parcel-condition.rule",
             "rules/route-risk.rule",

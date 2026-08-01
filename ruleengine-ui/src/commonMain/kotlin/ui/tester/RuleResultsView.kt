@@ -90,6 +90,7 @@ fun RuleResultsView(
         verticalArrangement = Arrangement.spacedBy(space = 10.dp),
     ) {
         SummaryLine(results = results)
+        VariablesSetBlock(results = results)
         ActionsEmittedBlock(results = results)
         RulesHeaderRow(filter = filter, onFilterChange = { selected -> filter = selected })
 
@@ -155,6 +156,49 @@ private fun SummaryLine(results: List<RuleResult>) {
         style = MaterialTheme.typography.subtitle1,
         color = color,
     )
+}
+
+/**
+ * Every variable the run published, grouped under the rule that set it.
+ *
+ * Sits above the actions because a variable is an input to the rules that follow, so reading the run
+ * top to bottom should show it before the outcomes it helped decide.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun VariablesSetBlock(results: List<RuleResult>) {
+    val assigning = results.filter { result -> result.assignments.isNotEmpty() }
+    if (assigning.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape = RoundedCornerShape(size = 6.dp))
+            .background(color = Bg)
+            .padding(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(space = 4.dp),
+    ) {
+        Text(
+            text = "VARIABLES SET",
+            style = MaterialTheme.typography.caption,
+            color = TextMuted,
+        )
+        assigning.forEach { result ->
+            Text(
+                text = result.ruleId,
+                style = MaterialTheme.typography.caption,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            result.assignments.forEach { assignment ->
+                Text(
+                    text = assignment,
+                    style = MonoText,
+                    modifier = Modifier.padding(start = 12.dp),
+                )
+            }
+        }
+    }
 }
 
 /**

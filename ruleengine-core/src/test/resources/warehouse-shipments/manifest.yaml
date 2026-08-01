@@ -5,6 +5,8 @@ entries:
     schema: schema.yaml
     actions: actions.yaml
     rules:
+      # First, so the totals it publishes are visible to every rule that follows.
+      - rules/shipment-totals.rule
       - rules/delivery-quality.rule
       - rules/parcel-condition.rule
       - rules/route-risk.rule

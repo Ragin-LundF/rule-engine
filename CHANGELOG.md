@@ -5,6 +5,49 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Rule output variables.** A rule's `then` block can publish a named value with `set name = <value
+  expression>`, and the rules after it read it as `$name`. Use it when several rules need the same
+  computed value: express it once, refer to it by name.
+  - The right-hand side is a full value expression — field, literal, aggregate, arithmetic, or another
+    variable — so nothing new had to be added to the expression grammar. A `$name` is likewise usable
+    wherever a value expression can stand, including inside a filter predicate and as an action
+    argument (`score $turnover`).
+  - Scope is one manifest entry and one evaluation. A variable reaches only the rules declared after
+    the one that sets it (manifest file order, then in-file order), and only if that rule matched.
+    Reading a variable nothing set yields a missing value, so the condition is `false` — evaluation
+    never fails on it. Variables never touch the input data and never carry to the next record.
+  - Validated at load time: a `$name` with no earlier `set` is an error with a "did you mean"
+    suggestion, as is a variable named like a schema field; two rules assigning the same name is a
+    warning.
+  - **`shortCircuitByOutput` cannot be combined with variables** — it evaluates rules by output group
+    rather than in declaration order. `RuleEngineBuilder` now fails the build with an explicit message
+    instead of producing an order-dependent result.
+  - `EvaluationResult.variables` carries the final value of each variable, and `RuleMatch.assignments`
+    says which rule published what.
+  - Exported rule overviews (Markdown and Word) list what each rule publishes, and state the ordering
+    caveat — but only for a rule set that actually uses variables.
+- **Variables in the visual editor.** The THEN block has a `+ Variable` row whose right-hand side is
+  the same operand chip a condition row uses; in-scope variables appear as `$name` in every operand
+  picker and in code-mode autocompletion, alongside the `set` keyword. The rule inspector lists what a
+  rule publishes, and the test panel shows the value each variable took for the input you ran.
+- The `warehouse-shipments` sample now computes the shipment weight once in `shipment-totals.rule` and
+  reads it back as `$totalWeightKg` / `$fragileWeightKg`.
+
+### Changed
+
+- `Parser` was split into `TokenCursor`, `LiteralParser` and `ThenBlockParser`, which share one read
+  position. No grammar change beyond the `set` clause.
+- `FieldUsage.fieldsOf` now also walks a rule's `set` expressions, so the field-flow diagram does not
+  lose a field when a rule set moves an aggregate into a variable.
+- A boolean literal operand in the visual builder is written back unquoted. Previously
+  `isActive == true` round-tripped as a comparison against the text `"true"`.
+- A `[` opening a path filter must now sit on the same line as the segment it filters, so an action's
+  list argument on the line after a `set` clause is no longer read as a filter.
+
 ## 1.5.0
 
 ### Added

@@ -43,7 +43,10 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.evaluator.CompiledAction
+import ruleengine.evaluator.CompiledAssignment
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
@@ -94,7 +97,34 @@ object Compiler {
         val compiledActions = ast.actions.map { action ->
             compileAction(action = action, schema = schema, ruleId = ast.id)
         }
-        return CompiledRule(id = ast.id, expression = expr, actions = compiledActions)
+        val compiledAssignments = ast.assignments.map { assignment ->
+            compileAssignment(assignment = assignment, schema = schema, ruleId = ast.id)
+        }
+        return CompiledRule(
+            id = ast.id,
+            expression = expr,
+            actions = compiledActions,
+            assignments = compiledAssignments
+        )
+    }
+
+    private fun compileAssignment(
+        assignment: VariableAssignmentAst,
+        schema: FieldSchema,
+        ruleId: String?
+    ): CompiledAssignment {
+        val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
+            compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
+        }
+        return CompiledAssignment(
+            name = assignment.name,
+            expression = ValueExpressionCompiler.compile(
+                expr = assignment.expression,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+        )
     }
 
     private fun compileAction(action: ActionAst, schema: FieldSchema, ruleId: String?): CompiledAction {
@@ -103,14 +133,18 @@ object Compiler {
         }
 
         val compiledArguments = action.arguments.map { literal ->
-            if (literal is ExtractionRefLiteral) {
-                val extraction = compiledExtraction ?: throw CompilationException(
-                    ruleId = ruleId,
-                    details = "Action '${action.name}' uses extraction reference but has no 'extract' clause"
-                )
-                CompiledActionArgument.ExtractionRef(extraction = extraction)
-            } else {
-                CompiledActionArgument.Static(
+            when (literal) {
+                is ExtractionRefLiteral -> {
+                    val extraction = compiledExtraction ?: throw CompilationException(
+                        ruleId = ruleId,
+                        details = "Action '${action.name}' uses extraction reference but has no 'extract' clause"
+                    )
+                    CompiledActionArgument.ExtractionRef(extraction = extraction)
+                }
+
+                is VariableRefLiteral -> CompiledActionArgument.VariableRef(name = literal.name)
+
+                else -> CompiledActionArgument.Static(
                     value = staticArgumentValue(literal = literal, actionName = action.name, ruleId = ruleId)
                 )
             }

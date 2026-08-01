@@ -52,6 +52,16 @@ object MarkdownCatalogRenderer {
                 "matches contributes its own outcome — a later rule never overrides an earlier one.\n\n"
         )
 
+        // Only when the rule set actually uses them: a reader of a rule set without variables should
+        // not have to hold a caveat that never applies to what they are reading.
+        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() }) {
+            out.append(
+                "Some rules publish a named value that the rules after them read. Those rules are " +
+                    "order-dependent: the value only reaches a rule listed later, and only if the " +
+                    "rule that publishes it matched.\n\n"
+            )
+        }
+
         out.append("Each rule below has a permanent identifier. Quote it when asking for a change, ")
         out.append("so it is unambiguous which rule is meant.\n\n")
     }
@@ -145,6 +155,11 @@ object MarkdownCatalogRenderer {
             out.append(INDENT.repeat(n = depth)).append("- ").append(text).append("\n")
         }
         out.append("\n")
+
+        if (rule.publishes.isNotEmpty()) {
+            val names = rule.publishes.joinToString(separator = ", ") { name -> "`$name`" }
+            out.append("**Publishes for later rules:** ").append(names).append("\n\n")
+        }
 
         if (rule.outcomes.isNotEmpty()) {
             val outcomes = rule.outcomes.joinToString(separator = ", ") { outcome ->

@@ -6,6 +6,7 @@ import ruleengine.compiler.support.FieldPathMessages
 import ruleengine.compiler.support.LiteralValidation
 import ruleengine.compiler.support.OperatorSupport
 import ruleengine.compiler.support.Suggestions
+import ruleengine.compiler.support.VariableScopeValidator
 import ruleengine.compiler.value.ValueExpressionValidator
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
@@ -33,6 +34,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.VariableRefLiteral
 
 object Validator {
 
@@ -40,7 +42,29 @@ object Validator {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
         val ids = mutableSetOf<String>()
 
-        // Check for duplicate aliases in the schema
+        validateAliasUniqueness(schema = schema, diagnostics = diagnostics)
+
+        for (rule in asts) {
+            if (!ids.add(rule.id)) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Duplicate rule id: ${rule.id}",
+                    line = rule.line,
+                    column = rule.column,
+                )
+            }
+            validateRule(rule = rule, schema = schema, actions = actions, diagnostics = diagnostics)
+        }
+
+        // Runs over the whole entry rather than per rule: "an earlier rule assigns it" only has a
+        // meaning once every rule of the entry is known, in evaluation order.
+        VariableScopeValidator.validate(asts = asts, schema = schema, diagnostics = diagnostics)
+
+        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+    }
+
+    /** Two fields sharing an alias make every rule that uses it ambiguous. */
+    private fun validateAliasUniqueness(schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
         val aliasToFieldId = mutableMapOf<String, FieldId>()
         schema.fields.forEach { (fieldId, definition) ->
             definition.alias?.let { alias ->
@@ -56,54 +80,57 @@ object Validator {
                 }
             }
         }
+    }
 
-        for (rule in asts) {
-            if (!ids.add(rule.id)) {
-                diagnostics += ValidationDiagnostic(
-                    severity = Severity.ERROR,
-                    message = "Duplicate rule id: ${rule.id}",
-                    line = rule.line,
-                    column = rule.column,
-                )
-            }
+    /** Everything checkable about one rule on its own; cross-rule checks run over the whole list. */
+    private fun validateRule(
+        rule: RuleAst,
+        schema: FieldSchema,
+        actions: ActionSchema?,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
+        // A missing description never blocks execution — it only degrades the exported rule
+        // overview, where the id and the raw condition would be all a reader gets.
+        if (rule.description.isNullOrBlank()) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.WARNING,
+                message = "Rule '${rule.id}' has no description",
+                suggestion = "Add a description \"...\" clause so the rule can be explained " +
+                        "in an exported overview",
+                line = rule.line,
+                column = rule.column,
+            )
+        }
 
-            // A missing description never blocks execution — it only degrades the exported rule
-            // overview, where the id and the raw condition would be all a reader gets.
-            if (rule.description.isNullOrBlank()) {
-                diagnostics += ValidationDiagnostic(
-                    severity = Severity.WARNING,
-                    message = "Rule '${rule.id}' has no description",
-                    suggestion = "Add a description \"...\" clause so the rule can be explained " +
-                            "in an exported overview",
-                    line = rule.line,
-                    column = rule.column,
-                )
-            }
+        validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
 
-            validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
+        for (assignment in rule.assignments) {
+            ValueExpressionValidator.validateValue(
+                expr = assignment.expression,
+                schema = schema,
+                diagnostics = diagnostics
+            )
+        }
 
-            // Always validate extraction clauses so invalid patterns / unknown fields are caught
-            // even when no action schema is supplied.
-            for (a in rule.actions) {
-                if (a.extraction != null) {
-                    validateExtraction(
-                        extraction = a.extraction,
-                        fieldSchema = schema,
-                        diagnostics = diagnostics
-                    )
-                }
-            }
-
-            if (actions != null) {
-                validateActions(
-                    actions = rule.actions,
-                    actionSchema = actions,
+        // Always validate extraction clauses so invalid patterns / unknown fields are caught
+        // even when no action schema is supplied.
+        for (a in rule.actions) {
+            if (a.extraction != null) {
+                validateExtraction(
+                    extraction = a.extraction,
+                    fieldSchema = schema,
                     diagnostics = diagnostics
                 )
             }
         }
 
-        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+        if (actions != null) {
+            validateActions(
+                actions = rule.actions,
+                actionSchema = actions,
+                diagnostics = diagnostics
+            )
+        }
     }
 
     private fun validateExpression(
@@ -386,6 +413,11 @@ object Validator {
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
                 val lit = a.arguments.getOrNull(index = idx)
+                // A variable carries whatever the assigning rule produced, so its type is only known
+                // at evaluation time; that it exists at all is checked by VariableScopeValidator.
+                if (lit is VariableRefLiteral) {
+                    continue
+                }
                 // ExtractionRefLiteral resolves to a String at evaluation time
                 if (lit is ExtractionRefLiteral) {
                     if (a.extraction == null) {

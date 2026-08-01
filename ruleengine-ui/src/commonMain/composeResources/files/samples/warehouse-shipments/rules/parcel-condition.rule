@@ -1,5 +1,8 @@
 # 2. Parcel condition and handling — aggregates and filters over the `parcels` collection.
 #
+# The two weight rules read `$totalWeightKg` and `$fragileWeightKg` instead of aggregating again:
+# both are published by shipment-totals.rule, which the manifest lists before this file.
+#
 # Schema: schema.yaml
 
 rule "all-parcels-intact" {
@@ -25,7 +28,7 @@ rule "damaged-parcels-reported" {
 rule "two-person-lift" {
   description "The shipment is too heavy for one person to handle safely and must be lifted by two."
   when
-    sum(parcels.weightKg) > 100
+    $totalWeightKg > 100
 
   then
     assessment "handling:two-person-lift"
@@ -35,7 +38,7 @@ rule "two-person-lift" {
 rule "fragile-load" {
   description "More than a quarter of the load is fragile, so the whole shipment is handled as fragile rather than only the individual parcels."
   when
-    sum(parcels[category == "fragile"].weightKg) > sum(parcels.weightKg) * 0.25
+    $fragileWeightKg > $totalWeightKg * 0.25
 
   then
     assessment "handling:fragile-load"

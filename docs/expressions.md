@@ -39,6 +39,20 @@ A value expression is one of:
 | Field path | `transactions.amount`, `orders[status == "paid"].items.price` | Navigate into nested fields to any depth, optionally filtering at each level |
 | Aggregate function call | `sum(transactions.amount)` | Apply an aggregate function to a collection |
 | Arithmetic expression | `sum(...) * 0.03` | Combine value expressions with `+`, `-`, `*`, `/` |
+| Variable read | `$orderTotal` | A value published by an earlier rule's `set` clause — see [rules.md](rules.md#variables--the-set-clause) |
+
+A variable is usable wherever any other value expression is: as either side of a comparison, as an
+operand of arithmetic, as the argument of an aggregate, inside a filter predicate, and as the
+right-hand side of another `set`.
+
+```
+$orderTotal * 0.03 > 25
+count(orders[amount > $threshold]) >= 2
+```
+
+A variable has no declared type — it carries whatever its `set` expression produced — so the operand
+type check that applies to fields is skipped for it. A comparison against a variable that no matching
+rule assigned is `false`, the same as one against a missing field.
 
 ---
 

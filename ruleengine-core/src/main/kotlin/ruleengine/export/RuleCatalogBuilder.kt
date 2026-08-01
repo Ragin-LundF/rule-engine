@@ -13,6 +13,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.dsl.parser.Parser
 import ruleengine.export.dto.CatalogOutcome
 import ruleengine.export.dto.CatalogRule
@@ -176,6 +177,7 @@ object RuleCatalogBuilder {
             condition = PlainLanguageRenderer.render(expr = rule.condition, schema = schema),
             technicalCondition = ValueExpressionRenderer.renderExpression(expr = rule.condition),
             outcomes = rule.actions.map { action -> outcome(action = action) },
+            publishes = rule.assignments.map { assignment -> assignment.name },
         )
     }
 
@@ -206,6 +208,7 @@ object RuleCatalogBuilder {
 
             is BetweenLiteral -> "${literal.low} - ${literal.high}"
             is ExtractionRefLiteral -> "\$${literal.groupIndex}"
+            is VariableRefLiteral -> "\$${literal.name}"
         }
     }
 }

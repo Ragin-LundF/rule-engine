@@ -51,9 +51,9 @@ class RuleOverviewExportTest {
 
     @Test
     fun `exports the whole entry, not only the open file`() {
-        // The open file is one of three. Which file the author happens to be editing is a detail of
+        // The open file is one of four. Which file the author happens to be editing is a detail of
         // editing; the document describes the rule set a customer is assessed against.
-        assertEquals(expected = 13, actual = ready(format = RuleOverviewExport.Format.MARKDOWN).ruleCount)
+        assertEquals(expected = 14, actual = ready(format = RuleOverviewExport.Format.MARKDOWN).ruleCount)
     }
 
     @Test

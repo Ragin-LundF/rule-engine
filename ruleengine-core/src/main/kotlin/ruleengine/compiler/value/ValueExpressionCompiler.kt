@@ -14,6 +14,7 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
@@ -21,6 +22,7 @@ import ruleengine.evaluator.compiled.value.CompiledValueExpression
 import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
 import ruleengine.evaluator.compiled.value.FunctionCallCompiledValueExpression
 import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.value.VariableRefCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
@@ -58,6 +60,8 @@ internal object ValueExpressionCompiler {
                 ruleId = ruleId,
                 filterCompiler = filterCompiler
             )
+
+            is VariableRefAst -> VariableRefCompiledValueExpression(name = expr.name)
         }
     }
 

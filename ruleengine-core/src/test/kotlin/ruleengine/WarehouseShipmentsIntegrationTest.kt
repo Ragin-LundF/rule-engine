@@ -1,7 +1,9 @@
 package ruleengine
 
 import ruleengine.builder.RuleEngineBuilder
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.jackson.JacksonUtil
+import java.math.BigDecimal
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -26,7 +28,7 @@ class WarehouseShipmentsIntegrationTest {
         entryId = "shipment-assessment"
     )
 
-    private fun assessmentsFor(inputFile: String): Set<String> {
+    private fun evaluate(inputFile: String): EvaluationResult {
         val inputPath = manifestPath.parent.resolve("inputs/$inputFile")
 
         @Suppress("UNCHECKED_CAST")
@@ -35,7 +37,11 @@ class WarehouseShipmentsIntegrationTest {
             Map::class.java
         ) as Map<String, Any?>
 
-        return loaded.evaluate(input = input).matches
+        return loaded.evaluate(input = input)
+    }
+
+    private fun assessmentsFor(inputFile: String): Set<String> {
+        return evaluate(inputFile = inputFile).matches
             .flatMap { match -> match.actions }
             .filter { action -> action.name == "assessment" }
             .map { action -> action.arguments.first().toString() }
@@ -94,12 +100,31 @@ class WarehouseShipmentsIntegrationTest {
         }
 
         assertTrue(actual = matches.isNotEmpty(), message = "Expected the problem shipment to match rules")
-        for (match in matches) {
+        // A rule whose `then` block only publishes variables emits no action by design, so it is
+        // excluded rather than being made to carry an assessment it has no opinion about.
+        for (match in matches.filter { it.assignments.isEmpty() }) {
             assertEquals(
                 expected = listOf("assessment", "reason"),
                 actual = match.actions.map { it.name },
                 message = "Rule '${match.ruleId}' should emit an assessment and a reason"
             )
         }
+    }
+
+    /**
+     * The weight rules read `$totalWeightKg` / `$fragileWeightKg` rather than aggregating again, so
+     * this pins the values the totals rule publishes — the handling assessments above depend on them.
+     */
+    @Test
+    fun `the totals rule publishes the weights the handling rules read`() {
+        val result = evaluate(inputFile = "problem-shipment.json")
+
+        val totals = result.matches.single { match -> match.ruleId == "shipment-totals" }
+        assertEquals(expected = setOf("totalWeightKg", "fragileWeightKg"), actual = totals.assignments.keys)
+        assertEquals(expected = totals.assignments, actual = result.variables)
+        assertTrue(
+            actual = (result.variables["totalWeightKg"] as BigDecimal) > BigDecimal("100"),
+            message = "two-person-lift only fires above 100 kg, but got ${result.variables["totalWeightKg"]}"
+        )
     }
 }

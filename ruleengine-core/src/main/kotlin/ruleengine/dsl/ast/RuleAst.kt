@@ -6,6 +6,11 @@ data class RuleAst(
     val condition: ExpressionAst,
     val actions: List<ActionAst>,
     /**
+     * `set` clauses of the `then` block, in source order. They are applied before [actions] resolve
+     * and only when the rule matches.
+     */
+    val assignments: List<VariableAssignmentAst> = emptyList(),
+    /**
      * Where the `rule` keyword sits in the source, 1-based, or null when the node was not built by
      * the parser.
      */
@@ -21,7 +26,8 @@ data class RuleAst(
         return id == other.id &&
                 description == other.description &&
                 condition == other.condition &&
-                actions == other.actions
+                actions == other.actions &&
+                assignments == other.assignments
     }
 
     override fun hashCode(): Int {
@@ -29,6 +35,7 @@ data class RuleAst(
         result = 31 * result + (description?.hashCode() ?: 0)
         result = 31 * result + condition.hashCode()
         result = 31 * result + actions.hashCode()
+        result = 31 * result + assignments.hashCode()
         return result
     }
 }

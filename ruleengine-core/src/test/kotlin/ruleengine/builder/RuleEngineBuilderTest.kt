@@ -396,6 +396,40 @@ class RuleEngineBuilderTest {
         assertTrue(actual = result.matches.isNotEmpty())
     }
 
+    @Test
+    fun `a variable set in one rule file is visible to the next rule file of the same entry`() {
+        val dir = writeProject()
+        Files.writeString(dir.resolve("rules/a.rule"), VARIABLE_WRITER_RULE)
+        Files.writeString(dir.resolve("rules/b.rule"), VARIABLE_READER_RULE)
+        writeManifest(dir = dir, rules = listOf("rules/a.rule", "rules/b.rule"))
+
+        val loaded = RuleEngineBuilder.fromManifestEntry(manifestPath = dir.resolve("manifest.yaml"), entryId = "e")
+        val result = loaded.evaluate(input = MATCHING_INPUT)
+
+        assertEquals(expected = listOf("writer", "reader"), actual = result.matches.map { it.ruleId })
+        assertEquals(expected = "seen", actual = result.variables["marker"])
+    }
+
+    @Test
+    fun `shortCircuitByOutput is rejected when a rule assigns a variable`() {
+        val dir = writeProject()
+        Files.writeString(dir.resolve("rules/a.rule"), VARIABLE_WRITER_RULE)
+        writeManifest(dir = dir, rules = listOf("rules/a.rule"))
+
+        val failure = assertFailsWithBuildException {
+            RuleEngineBuilder.fromManifestEntry(
+                manifestPath = dir.resolve("manifest.yaml"),
+                entryId = "e",
+                shortCircuitByOutput = true,
+            )
+        }
+
+        assertTrue(
+            actual = failure.message.orEmpty().contains("shortCircuitByOutput cannot be used with variables"),
+            message = "unexpected message: ${failure.message}"
+        )
+    }
+
     private fun assertFailsWithBuildException(block: () -> Unit): RuleEngineBuildException =
         runCatching(block).fold(
             onSuccess = { throw AssertionError("expected RuleEngineBuildException, but the call succeeded") },
@@ -504,6 +538,24 @@ class RuleEngineBuilderTest {
             actions:
               label:
                 argTypes: [string]
+        """.trimIndent()
+
+        val VARIABLE_WRITER_RULE: String = """
+            rule "writer" {
+              when
+                p equals "x"
+              then
+                set marker = "seen"
+            }
+        """.trimIndent()
+
+        val VARIABLE_READER_RULE: String = """
+            rule "reader" {
+              when
+                ${'$'}marker == "seen"
+              then
+                label "found"
+            }
         """.trimIndent()
     }
 }

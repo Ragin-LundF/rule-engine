@@ -78,6 +78,15 @@ object OperatorOptions {
     /** Operators available inside a filter segment (`orders[...]`). */
     val FILTER_OPERATORS: List<String> = COMPARISON_NUMERIC
 
+    /**
+     * Catalog type of a rule output variable whose value type could not be inferred from its `set`
+     * expression — a field path, or another variable.
+     *
+     * Not a schema field type: the engine types a variable at evaluation time and its validator
+     * accepts every comparison operator on one, so the editor must not narrow the choice either.
+     */
+    const val VARIABLE_TYPE: String = "variable"
+
     /** Field types that can take part in numeric comparisons and arithmetic. */
     private val NUMERIC_TYPES: Set<String> = setOf("integer", "decimal")
 
@@ -90,6 +99,9 @@ object OperatorOptions {
 
     /** True when [fieldType] is a collection or object, i.e. navigable rather than comparable. */
     fun isStructureType(fieldType: String): Boolean = fieldType.lowercase() in STRUCTURE_TYPES
+
+    /** True when [fieldType] is an untyped rule output variable — see [VARIABLE_TYPE]. */
+    fun isVariableType(fieldType: String): Boolean = fieldType.lowercase() == VARIABLE_TYPE
 
     /**
      * Comparison operators for a comparison row, given whether the operands are numeric.
@@ -138,6 +150,8 @@ object OperatorOptions {
             "date", "date_time" -> DATE
             // A structure is navigated into or aggregated over, never compared directly.
             "collection", "object" -> return emptyList()
+            // An untyped variable takes any symbolic comparison; the engine checks neither side.
+            VARIABLE_TYPE -> return COMPARISON_NUMERIC
             else -> TEXT
         }
         return if (schemaOperators.isEmpty()) {

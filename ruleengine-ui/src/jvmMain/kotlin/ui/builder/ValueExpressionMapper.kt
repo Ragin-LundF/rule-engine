@@ -19,6 +19,8 @@ import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.VariableRefLiteral
 import ui.builder.model.BuilderFilter
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
@@ -35,6 +37,9 @@ internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = whe
     is LiteralValueAst -> when (val literal = expr.literal) {
         is StringLiteral -> BuilderOperand.Literal(text = literal.value, numeric = false)
         is NumberLiteral -> BuilderOperand.Literal(text = literal.value, numeric = true)
+        // Rendered unquoted by `OperandText.literalToDsl`, so `isActive == true` stays a boolean
+        // comparison instead of turning into one against the text "true".
+        is BooleanLiteral -> BuilderOperand.Literal(text = literal.value.toString(), numeric = false)
         else -> null
     }
 
@@ -47,6 +52,10 @@ internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = whe
     }
 
     is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
+
+    // A variable read rides on the existing path operand: `OperandText.pathToDsl` writes a
+    // single unfiltered segment out verbatim, so `$total` survives the round-trip as itself.
+    is VariableRefAst -> BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "\$${expr.name}")))
 }
 
 /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
@@ -173,6 +182,7 @@ internal fun literalToValue(lit: LiteralAst): LiteralValue? = when (lit) {
         LiteralValue(value = "", listItems = items)
     }
     is BetweenLiteral -> LiteralValue(value = lit.low, valueTo = lit.high)
+    is VariableRefLiteral -> LiteralValue(value = "\$${lit.name}")
     else -> null
 }
 
@@ -180,5 +190,6 @@ internal fun literalText(lit: LiteralAst): String? = when (lit) {
     is StringLiteral -> lit.value
     is NumberLiteral -> lit.value
     is BooleanLiteral -> lit.value.toString()
+    is VariableRefLiteral -> "\$${lit.name}"
     else -> null
 }

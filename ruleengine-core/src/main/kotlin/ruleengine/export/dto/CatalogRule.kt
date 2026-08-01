@@ -12,6 +12,8 @@ package ruleengine.export.dto
  * @param condition The condition restated as sentences.
  * @param technicalCondition The condition in DSL syntax, for a technical reviewer.
  * @param outcomes The actions the rule produces, in declaration order.
+ * @param publishes Names of the variables the rule publishes with `set`, in declaration order. A
+ *   variable is not an outcome — it is read by the rules that follow — so it is listed separately.
  */
 data class CatalogRule(
     val id: String,
@@ -19,4 +21,5 @@ data class CatalogRule(
     val condition: PlainCondition,
     val technicalCondition: String,
     val outcomes: List<CatalogOutcome>,
+    val publishes: List<String> = emptyList(),
 )

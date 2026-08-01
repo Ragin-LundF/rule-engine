@@ -21,6 +21,21 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "loan-decisioning",
+            name = "Loan Decisioning",
+            description = "Underwrite a retail loan application: rule variables derive debt-to-income, " +
+                "disposable income and loan-to-value once, and the policy and pricing rules read them back.",
+            category = SampleCategory.FINANCE,
+            schemaResPath = "files/samples/loan-decisioning/schema.yaml",
+            actionsResPath = "files/samples/loan-decisioning/actions.yaml",
+            ruleResPaths = listOf(
+                // First: the rules that follow are written in the ratios it publishes.
+                "files/samples/loan-decisioning/rules/applicant-ratios.rule",
+                "files/samples/loan-decisioning/rules/underwriting-decision.rule",
+                "files/samples/loan-decisioning/rules/risk-pricing.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "log-filter",
             name = "Log Filter",
             description = "Route, suppress, and escalate application log events by severity level, " +
@@ -57,6 +72,8 @@ object SampleRegistry {
             schemaResPath = "files/samples/warehouse-shipments/schema.yaml",
             actionsResPath = "files/samples/warehouse-shipments/actions.yaml",
             ruleResPaths = listOf(
+                // First: the rules that follow read the variables it publishes.
+                "files/samples/warehouse-shipments/rules/shipment-totals.rule",
                 "files/samples/warehouse-shipments/rules/delivery-quality.rule",
                 "files/samples/warehouse-shipments/rules/parcel-condition.rule",
                 "files/samples/warehouse-shipments/rules/route-risk.rule",

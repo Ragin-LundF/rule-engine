@@ -52,8 +52,9 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 ### Key Principles
 
 - The engine **validates everything at load time**. Typos, unknown fields, wrong operators, and wrong argument types are all caught before any rule runs.
-- Rules are **independent** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
-- The engine **never modifies** input data. It only reads it and returns results.
+- Rules are **independent by default** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
+- The one exception is a **variable**: a rule's `then` block may `set` a named value that the rules after it read as `$name` (see §5.6). Order is then part of the meaning, not just of the output.
+- The engine **never modifies** input data. It only reads it and returns results. A variable lives for the duration of one evaluation and is never written back into the input.
 
 ---
 
@@ -611,7 +612,7 @@ rule "<rule-id>" {
 | `rule "<id>"` | ✅ | ID must be unique across all loaded rule files. Use lowercase-hyphenated or UPPER_UNDERSCORE identifiers. |
 | `description "<text>"` | ⬜ | One double-quoted sentence. If present it must be the **first** thing inside `{`, before `when`. May appear at most once per rule. |
 | `when` | ✅ | Keyword, followed by one or more conditions. |
-| `then` | ✅ | Keyword, followed by one or more actions. |
+| `then` | ✅ | Keyword, followed by one or more actions and/or `set` clauses (§5.6). |
 
 **No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags`, `salience` or `else` — the engine rejects them.
 
@@ -844,7 +845,73 @@ then
 - A rule may have **any number of actions**.
 - All declared actions are returned when the rule matches.
 
-### 5.6 Rule ID conventions
+### 5.6 Variables — the `set` clause
+
+A rule's `then` block may publish a named value that the rules **after** it read. Use it when several
+rules need the same computed value, so it is expressed and evaluated once.
+
+```
+then
+  set <name> = <value expression>
+```
+
+Read it with a `$` prefix, anywhere a value expression may stand (§5.9):
+
+```
+when
+  $<name> >= 1000
+```
+
+Worked example — the setter must come first:
+
+```
+rule "account-totals" {
+  description "Computes the account turnover once for the tier rules that follow."
+
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+}
+
+rule "high-turnover-account" {
+  description "An account with a very high turnover is reviewed by hand."
+
+  when
+    $turnover >= 100000
+
+  then
+    label "manual-review"
+    flag "high-turnover"
+}
+```
+
+Rules:
+
+| Aspect | Behaviour |
+|---|---|
+| Visibility | Only rules **after** the assigning rule, in the same manifest entry. "After" means manifest `rules:` file order, then declaration order within the file. |
+| When it runs | Only if the rule matched — `set` sits in `then`, like an action. |
+| Own actions | Assignments are applied **before** the same rule's actions resolve, so `score $turnover` in that rule works. |
+| Never set | Reading it yields a missing value, so the condition is **false**. Evaluation never fails. |
+| Re-assignment | Allowed; the last matching rule wins. Produces a **warning**. |
+| Type | None declared — a variable carries whatever its expression produced, and the operand type check is skipped for it. |
+| Lifetime | One evaluation of one entry. Never written back into the input; never carried to the next record. |
+
+Writing rules:
+
+- The name is written **without** `$` after `set`, and **with** `$` everywhere it is read.
+- Name spelling follows field names: letters, digits, `_`, `-`; must not start with a digit.
+- `$1`, `$2`, … are **not** variables — an all-digit name is a regex capture group of an `extract`
+  clause (see `docs/rules.md`).
+- A variable must not be named like a schema field.
+- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is only
+  valid with a symbolic comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
+- Variables make rule order semantically significant. Say so in the manifest with a comment when you
+  generate one (§6).
+
+### 5.7 Rule ID conventions
 
 - Must be **unique across all rule files** in the same manifest entry.
 - Recommended formats:
@@ -852,7 +919,7 @@ then
   - Uppercase underscore for formal codes: `LEGAL_1`, `AML_HIGH_RISK`
 - Be descriptive — the ID appears in evaluation results and logs.
 
-### 5.7 Complete rule file example
+### 5.8 Complete rule file example
 
 ```
 # transaction-classification.rule
@@ -900,7 +967,7 @@ rule "premium-customer-transfer" {
 }
 ```
 
-### 5.8 Value expressions — aggregate functions and arithmetic
+### 5.9 Value expressions — aggregate functions and arithmetic
 
 Value expressions allow conditions to aggregate data from **nested lists of objects**.
 Use them when a rule must reason about a collection (e.g. all transactions on an account) rather than a single field.
@@ -1446,6 +1513,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | Named `equals` inside a filter | `transactions[label equals "risk"]` (use `==`) |
 | Text operator inside a filter | `transactions[label contains "risk"]` |
 | `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
+| Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
+| Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
+| Writing `$` on the left of `set` | `set $turnover = …` (the name is written bare after `set`) |
 
 > **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
 > produces a warning and the rule still loads, because the root may be an undeclared structure read

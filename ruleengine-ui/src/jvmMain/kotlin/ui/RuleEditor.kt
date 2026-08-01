@@ -39,6 +39,7 @@ import ui.workbench.areas.SamplesAreaContent
 import ui.workbench.areas.SchemaAreaContent
 import ui.workbench.builderCatalogActionsFrom
 import ui.workbench.builderCatalogFieldsFrom
+import ui.workbench.builderCatalogVariablesFrom
 import ui.workbench.catalogActionsFrom
 import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
@@ -166,6 +167,22 @@ actual fun RuleEditor(closeController: AppCloseController) {
     val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
         builderCatalogFieldsFrom(schema = state.parsedSchema.value)
     }
+    // Variables in scope depend on which rule is open, so this keys on the selected rule as well as
+    // on the entry's text. Appended to the schema fields so every operand picker offers them without
+    // a second catalog to thread through the tree.
+    val builderCatalogVariables = remember(
+        key1 = state.selectedManifestEntry.value,
+        key2 = state.ruleValue.value.text,
+        key3 = activeBuilderEditorState.ruleId,
+    ) {
+        builderCatalogVariablesFrom(
+            files = state.parsedRuleFilesForCurrentEntry(),
+            uptoRuleId = activeBuilderEditorState.ruleId.takeIf { it.isNotBlank() },
+        )
+    }
+    val builderFieldsAndVariables = remember(key1 = builderCatalogFields, key2 = builderCatalogVariables) {
+        builderCatalogFields + builderCatalogVariables
+    }
     val catalogActions = remember(key1 = state.parsedActionSchema.value) {
         catalogActionsFrom(actions = state.parsedActionSchema.value)
     }
@@ -235,7 +252,7 @@ actual fun RuleEditor(closeController: AppCloseController) {
                     allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
-                    catalogFields = builderCatalogFields,
+                    catalogFields = builderFieldsAndVariables,
                     catalogActions = builderCatalogActions,
                     ruleTreeFiles = ruleTreeFiles,
                     onConditionSelected = { conditionId ->

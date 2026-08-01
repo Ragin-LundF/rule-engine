@@ -8,6 +8,7 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.compiled.EvaluationCache
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDate
 import ruleengine.evaluator.context.dto.PreparedDateTime
@@ -22,20 +23,41 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
+/**
+ * The evaluation context: input values typed and normalised against the field schema, plus the
+ * scratch state one evaluation needs.
+ *
+ * [values] is immutable — the engine never modifies input data. [variables] is not: it holds the
+ * values published by `set` clauses of rules that matched earlier in the same evaluation, and it is
+ * the one place where a rule can affect a later one. It is reset by `RuleEngine.evaluate`, so a
+ * context reused across records never carries a variable over.
+ */
 class PreparedRuleContext(
     private val values: Map<FieldId, PreparedValue>,
     val rawContext: RuleContext,
-    val cache: EvaluationCache = EvaluationCache()
+    val cache: EvaluationCache = EvaluationCache(),
+    /** Variables published by `set` clauses so far, keyed by name without the `$` prefix. */
+    val variables: MutableMap<String, ExpressionValue> = mutableMapOf()
 ) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
     }
 
+    /** Drops every variable, so the next evaluation starts from a clean slate. */
+    fun clearVariables() {
+        variables.clear()
+    }
+
+    /**
+     * A context scoped to one element of a filtered collection. It shares [cache] and [variables]
+     * with its parent so a filter predicate reads the same variables the surrounding rule does.
+     */
     fun child(element: Map<*, *>): PreparedRuleContext {
         return PreparedRuleContext(
             values = emptyMap(),
             rawContext = ElementRuleContext(element = element),
-            cache = cache
+            cache = cache,
+            variables = variables
         )
     }
 

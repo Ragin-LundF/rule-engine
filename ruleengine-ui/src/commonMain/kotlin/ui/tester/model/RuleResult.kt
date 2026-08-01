@@ -10,6 +10,9 @@ package ui.tester.model
  * @param ruleId     Id of the rule as declared in the DSL.
  * @param matched    Whether the rule's `when` clause held.
  * @param actions    Formatted action strings the rule emitted; empty unless [matched].
+ * @param assignments Formatted `set` results the rule published, e.g. `orderTotal = 300`; empty
+ *   unless [matched]. Shown per rule rather than as one final map, because that is what says which
+ *   rule a value came from when several assign the same name.
  * @param traceRows  Condition rows belonging to this rule only, derived from [traceTree].
  * @param traceTree  The rule's recorded decision tree, kept whole for the trace diagram. Null when
  *   the run produced no readable trace.
@@ -18,6 +21,7 @@ data class RuleResult(
     val ruleId: String,
     val matched: Boolean,
     val actions: List<String>,
+    val assignments: List<String> = emptyList(),
     val traceRows: List<TraceRow>,
     val traceTree: TraceNode? = null,
 ) {

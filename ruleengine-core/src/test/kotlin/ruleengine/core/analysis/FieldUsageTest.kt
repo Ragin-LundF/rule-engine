@@ -76,9 +76,24 @@ class FieldUsageTest {
 
     @Test
     fun `both operands of a comparison and both sides of arithmetic are walked`() {
+        // `$fragileWeightKg > $totalWeightKg * 0.25` — both sides are variables, which are produced
+        // by another rule rather than read from the input, so this rule reads no field at all.
         assertEquals(
-            expected = setOf("parcels.category", "parcels.weightKg"),
+            expected = emptySet(),
             actual = FieldUsage.fieldsOf(rule = ruleNamed(id = "fragile-load")),
+        )
+    }
+
+    /**
+     * A `set` expression reads fields the same way a condition does. Without walking assignments the
+     * two weight paths would look unreferenced, because the only rules that touch them now read them
+     * through `$totalWeightKg` and `$fragileWeightKg`.
+     */
+    @Test
+    fun `fields read by a set expression are reported`() {
+        assertEquals(
+            expected = setOf("parcels", "parcels.category", "parcels.weightKg"),
+            actual = FieldUsage.fieldsOf(rule = ruleNamed(id = "shipment-totals")),
         )
     }
 
@@ -123,6 +138,6 @@ class FieldUsageTest {
 
     @Test
     fun `the fixture bundle parses to the full rule set`() {
-        assertEquals(expected = 13, actual = rules.size)
+        assertEquals(expected = 14, actual = rules.size)
     }
 }

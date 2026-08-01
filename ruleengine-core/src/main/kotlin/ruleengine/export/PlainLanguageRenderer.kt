@@ -30,6 +30,8 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.export.dto.PlainAll
 import ruleengine.export.dto.PlainAny
@@ -188,6 +190,7 @@ object PlainLanguageRenderer {
             is FieldAccessAst -> fieldOperand(path = expr.path, schema = schema)
             is FunctionCallValueAst -> aggregate(call = expr, schema = schema)
             is ArithmeticValueAst -> arithmetic(expr = expr, schema = schema)
+            is VariableRefAst -> "the value of ${expr.name}"
         }
     }
 
@@ -359,6 +362,7 @@ object PlainLanguageRenderer {
             is BetweenLiteral -> "${value.low} and ${value.high}"
             is ListLiteral -> value.items.joinToString(separator = ", ") { item -> literal(value = item) }
             is ExtractionRefLiteral -> "the text captured by group ${value.groupIndex}"
+            is VariableRefLiteral -> "the value of ${value.name}"
         }
     }
 

@@ -420,6 +420,127 @@ All of them are returned when the rule matches.
 
 ---
 
+## Variables — the `set` Clause
+
+A rule can publish a named value that the rules **after** it can read.
+Use it when several rules need the same computed value: work it out once, then refer to it by name.
+
+### Syntax
+
+Write the assignment in the `then` block:
+
+```
+then
+  set <name> = <expression>
+```
+
+Read it anywhere a value can stand, with a `$` in front of the name:
+
+```
+when
+  $<name> >= 1000
+```
+
+The right-hand side of `set` is a full [value expression](expressions.md) — a field, a literal, an
+aggregate, arithmetic, or another variable.
+
+### Example
+
+```
+# totals.rule — listed first in the manifest
+rule "account-totals" {
+  description "Computes the account turnover once for the rules that follow."
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+}
+
+# tiers.rule — listed after totals.rule
+rule "active-account" {
+  description "An account with meaningful turnover is treated as active."
+  when
+    $turnover >= 100
+
+  then
+    label "active"
+}
+
+rule "high-turnover-account" {
+  description "A very high turnover is reviewed by hand."
+  when
+    $turnover >= 100000
+
+  then
+    label "manual-review"
+    flag "high-turnover"
+}
+```
+
+A variable can also be an action argument:
+
+```
+rule "turnover-score" {
+  description "Reports the account turnover as a score."
+  when
+    count(transactions) > 0
+
+  then
+    set turnover = sum(transactions.amount)
+    score $turnover
+}
+```
+
+### Scope and Ordering
+
+| Question | Answer |
+|---|---|
+| Who can read `$name`? | Only rules that come **after** the rule that sets it, within the same manifest entry. |
+| What is "after"? | Manifest rule-file order first, then declaration order inside each file. See [manifest.md](manifest.md). |
+| When does the assignment run? | Only if the rule **matched** — a `set` sits in `then`, like an action. |
+| Can the same rule's actions read it? | Yes. Assignments are applied before the rule's own actions resolve. |
+| What if nothing set it? | The read yields a missing value, so the condition is simply **false**. Evaluation never fails. |
+| Can two rules set the same name? | Yes; the last matching rule wins. The validator warns, because it is usually unintended. |
+| Does a variable change the input? | No. The engine never modifies input data; a variable lives only for the duration of one evaluation. |
+
+> **This makes rule order significant.**
+> Without variables, rules are independent and order only affects the order of the results. A rule that
+> reads `$name` depends on an earlier rule having run and matched, so moving rule files around in the
+> manifest can change the outcome.
+
+### Naming
+
+A variable name is written without the `$` in the `set` clause and with it everywhere else.
+It follows the same spelling rules as a field name — letters, digits, `_` and `-`, starting with a
+letter or `_`.
+
+`$1`, `$2`, … are **not** variables; an all-digit name is a capture group of an
+[`extract` clause](#extracting-values-into-actions--the-extract-clause).
+
+### Validation Rules
+
+| Rule | Severity |
+|---|---|
+| `$name` must be assigned by an earlier rule of the entry | ❌ error (with a "did you mean" suggestion) |
+| A variable must not be named like a schema field | ❌ error |
+| A `set` name must be written without the `$` prefix | ❌ parse error |
+| The `set` expression is checked like any other value expression (unknown fields, bad aggregates) | ❌ error |
+| Two rules assigning the same name | ⚠️ warning |
+
+The "assigned by an earlier rule" check is deliberately generous: it only asks that *some* earlier rule
+assigns the name, not that the rule will actually match at runtime. Catching typos and forward
+references is the point; proving a variable is always populated is not possible before the data arrives.
+
+### Not Compatible With `shortCircuitByOutput`
+
+`shortCircuitByOutput` groups rules by their output and stops each group at its first match, which
+reorders evaluation. That is incompatible with variables, so a build that combines the two fails with
+an explicit message rather than producing an order-dependent result. See
+[integration-guide.md](integration-guide.md).
+
+---
+
 ## Extracting Values into Actions — the `extract` Clause
 
 Sometimes the argument you want to pass to an action is not a fixed string but a **value computed from the input data at the time the rule fires**.

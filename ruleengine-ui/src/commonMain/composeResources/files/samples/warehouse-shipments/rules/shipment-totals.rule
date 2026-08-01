@@ -1,0 +1,23 @@
+# 0. Shipment totals — computed once, reused by every rule that follows.
+#
+# A `set` clause publishes a value under a name that later rules read as `$name`. The aggregate is
+# evaluated here, in one place, instead of being repeated in each rule that needs it — so a change
+# to how the total is defined happens once.
+#
+# Two things to know about the scope:
+#   * the variable only exists if this rule matched, and reading one that was never set makes the
+#     reading condition false rather than failing the run;
+#   * only rules *after* this one can read it, where "after" follows the manifest's rule file order.
+#     That is why this file is listed first in manifest.yaml.
+#
+# Schema: schema.yaml
+
+rule "shipment-totals" {
+  description "Computes the shipment's total and fragile weight once, for the handling rules that follow."
+  when
+    count(parcels) > 0
+
+  then
+    set totalWeightKg = sum(parcels.weightKg)
+    set fragileWeightKg = sum(parcels[category == "fragile"].weightKg)
+}

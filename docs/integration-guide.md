@@ -494,6 +494,11 @@ Behaviour notes:
 - With the flag enabled, `result.matches` is ordered by output group rather than by rule
   declaration order.
 
+- The flag **cannot be combined with rule variables**. A `set` clause only reaches the rules declared
+  after it, and grouping by output reorders evaluation, so `RuleEngineBuilder` fails the build with
+  `shortCircuitByOutput cannot be used with variables` rather than producing an order-dependent
+  result.
+
 Leave the flag at its default (`false`) when you need every matching rule reported or must
 preserve declaration order — behaviour is then identical to previous versions.
 
@@ -589,14 +594,40 @@ for (match: RuleMatch in result.matches) {
 `EvaluationResult`:
 - `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.7)
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
+- `variables: Map<String, Any?>` — the final value of every variable a matching rule published with a
+  `set` clause, keyed by name without the `$`. Empty for a rule set that uses none.
 
 `RuleMatch`:
 - `ruleId: String` — the rule's ID
 - `actions: List<RuleAction>` — the actions the rule declared
+- `assignments: Map<String, Any?>` — the variables **this** rule published, in assignment order
 
 `RuleAction`:
 - `name: String` — the action name (e.g. `"label"`)
 - `arguments: List<Any?>` — the argument values (e.g. `["rent"]` or `[10]`)
+
+#### Reading Variables
+
+Use `result.variables` for the state at the end of the run, and `RuleMatch.assignments` when you need
+to know **which** rule produced a value — `variables` only carries the last write when several rules
+assign the same name.
+
+```kotlin
+val result = engine.evaluate(prepared = prepared)
+
+println("orderTotal = ${result.variables["orderTotal"]}")
+
+for (match in result.matches) {
+    for ((name, value) in match.assignments) {
+        println("${match.ruleId} set $name = $value")
+    }
+}
+```
+
+Values are plain Kotlin types: `BigDecimal` for numbers, `String` for text, `Boolean` for booleans and
+`List<Any?>` for a projected array. A variable no matching rule assigned is simply absent from the map.
+
+See [rules.md](rules.md#variables--the-set-clause) for the DSL side and the ordering rules.
 
 ---
 

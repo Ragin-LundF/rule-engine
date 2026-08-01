@@ -17,6 +17,7 @@
 # ── SEPA code-based classification ──────────────────────────────────────────
 
 rule "direct-debit" {
+  description "The SEPA purpose code identifies the booking as a direct debit."
   when
     sepaCode in ["DMCT", "DRNL", "PRCT"]
 
@@ -26,6 +27,7 @@ rule "direct-debit" {
 }
 
 rule "card-payment" {
+  description "The SEPA purpose code identifies the booking as a card payment."
   when
     sepaCode in ["CCRD", "DCRD", "PMNT"]
 
@@ -35,6 +37,7 @@ rule "card-payment" {
 }
 
 rule "salary-credit" {
+  description "An incoming booking carrying the SEPA salary code."
   when
     sepaCode equals "SALA"
     and amount > 0
@@ -46,8 +49,8 @@ rule "salary-credit" {
 
 # ── Purpose text classification ──────────────────────────────────────────────
 
-# Rent: purpose must contain "miete" or "rent" (after normalization to lowercase)
 rule "rent-payment" {
+  description "The normalized purpose text names rent or a lease, for an amount that plausibly is one."
   when
     (purposeNorm contains "miete"
     or purposeNorm contains "rent"
@@ -59,8 +62,8 @@ rule "rent-payment" {
     category "housing"
 }
 
-# Utility bills: purpose starts with known provider keywords (case-insensitive)
 rule "utility-bill" {
+  description "The purpose text starts with the name of a known energy or utility provider."
   when
     (purpose startsWith "Stadtwerke" ignoreCase
     or purpose startsWith "Gaswerk" ignoreCase
@@ -73,8 +76,8 @@ rule "utility-bill" {
     category "household"
 }
 
-# Insurance: purpose ends with "Versicherung" (case-insensitive)
 rule "insurance-payment" {
+  description "An outgoing booking whose purpose text ends in \"Versicherung\"."
   when
     purpose endsWith "Versicherung" ignoreCase
     and amount < 0
@@ -84,8 +87,8 @@ rule "insurance-payment" {
     category "insurance"
 }
 
-# Streaming services: exact match on known providers
 rule "streaming-subscription" {
+  description "The counterparty is one of the known streaming providers, matched exactly."
   when
     (counterparty equals "NETFLIX" ignoreCase
     or counterparty equals "Spotify AB" ignoreCase
@@ -100,6 +103,7 @@ rule "streaming-subscription" {
 # ── Negative amount rules ────────────────────────────────────────────────────
 
 rule "outgoing-transfer" {
+  description "Money left the account by some route other than a direct debit."
   when
     amount < 0
     and not sepaCode in ["DMCT", "DRNL"]
@@ -109,6 +113,7 @@ rule "outgoing-transfer" {
 }
 
 rule "large-outgoing" {
+  description "More than 1000 units left the account on a booking that is not a salary."
   when
     amount < -1000
     and not sepaCode equals "SALA"
@@ -121,6 +126,7 @@ rule "large-outgoing" {
 # ── Tags-based classification (string_set) ───────────────────────────────────
 
 rule "premium-customer-transfer" {
+  description "An incoming booking for a customer tagged both premium and verified."
   when
     tags containsAll ["premium", "verified"]
     and amount > 0
@@ -131,6 +137,7 @@ rule "premium-customer-transfer" {
 }
 
 rule "flagged-customer" {
+  description "The customer carries a compliance tag, so the booking is blocked and reported."
   when
     tags containsAny ["blocked", "sanctioned", "aml-watch"]
 
@@ -139,4 +146,3 @@ rule "flagged-customer" {
     alert "flagged-customer-transaction"
     reject "aml-block"
 }
-
