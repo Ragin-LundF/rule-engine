@@ -31,13 +31,11 @@ import ruleengine.schema.FieldSchemaLoader
 import ui.actions.ActionSchemaYamlBridge
 import ui.builder.BuilderEditorState
 import ui.builder.BuilderRule
-import ui.builder.CatalogActionInfo
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.generateUniqueRuleId
 import ui.builder.isBuilderStateStale
 import ui.builder.isLocked
 import ui.builder.ruleId
-import ui.builder.toCatalogFieldInfo
 import ui.builder.toImmutable
 import ui.diagrams.DiagramSurface
 import ui.diagrams.FieldFlowDiagram
@@ -79,18 +77,19 @@ import ui.workbench.RightPanelWithTabs
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchViewModel
 import ui.workbench.SchemaAreaScreen
+import ui.workbench.builderCatalogActionsFrom
+import ui.workbench.builderCatalogFieldsFrom
+import ui.workbench.catalogActionsFrom
+import ui.workbench.catalogFieldsFrom
+import ui.workbench.catalogRulesFrom
 import ui.workbench.diagramDataFor
 import ui.workbench.inspector.InspectorPanel
 import ui.workbench.model.AppArea
-import ui.workbench.model.CatalogField
-import ui.workbench.model.CatalogRule
-import ui.workbench.model.CatalogRuleStatus
-import ui.workbench.model.RuleTreeFile
 import ui.workbench.model.RuleWorkbenchState
-import ui.workbench.model.UiDiagnostic
 import ui.workbench.model.WorkbenchAction
-import ui.workbench.ruleTreeStatusFor
+import ui.workbench.ruleTreeFilesFrom
 import ui.workbench.toViewMode
+import ui.workbench.uiDiagnosticsFrom
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -315,96 +314,45 @@ actual fun RuleEditor(closeController: AppCloseController) {
         ?: BuilderEditorState.fromBuilderRule(rule = BuilderRule.None)
 
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
+    // The remember keys stay here on purpose: they are what decides when each list goes stale, and
+    // catalogRules deliberately does not key on the diagnostics it reads.
     val catalogFields = remember(key1 = state.parsedSchema.value) {
-        state.parsedSchema.value?.fields?.values?.map { def ->
-            CatalogField(
-                id = def.id.value,
-                type = def.type.name.lowercase(),
-                operators = def.operators.map { it.value },
-                normalizers = def.normalizers.map { it.value },
-                alias = def.alias,
-            )
-        } ?: emptyList()
+        catalogFieldsFrom(schema = state.parsedSchema.value)
     }
     val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
-        state.parsedSchema.value?.fields?.values?.map { def -> def.toCatalogFieldInfo() } ?: emptyList()
+        builderCatalogFieldsFrom(schema = state.parsedSchema.value)
     }
     val catalogActions = remember(key1 = state.parsedActionSchema.value) {
-        state.parsedActionSchema.value?.actions?.values?.map { def ->
-            CatalogActionInfo(
-                name = def.name,
-                argType = def.argTypes.joinToString { it.name.lowercase() },
-            )
-        } ?: emptyList()
+        catalogActionsFrom(actions = state.parsedActionSchema.value)
     }
     val builderCatalogActions = remember(key1 = state.parsedActionSchema.value) {
-        state.parsedActionSchema.value?.actions?.values?.map { def ->
-            CatalogActionInfo(
-                name = def.name,
-                argType = def.argTypes.firstOrNull()?.name?.lowercase() ?: "string",
-            )
-        } ?: emptyList()
+        builderCatalogActionsFrom(actions = state.parsedActionSchema.value)
     }
     val hasErrors = state.diagnosticsList.value.any { it.severity == Severity.ERROR }
     val uiDiagnostics = remember(key1 = state.diagnosticsList.value) {
-        state.diagnosticsList.value.map { diagnostic ->
-            UiDiagnostic(
-                severity = diagnostic.severity,
-                message = diagnostic.message,
-                line = diagnostic.line,
-                column = diagnostic.column,
-            )
-        }
+        uiDiagnosticsFrom(diagnostics = state.diagnosticsList.value)
     }
     val catalogRules = remember(key1 = diagramRulesForWindow, key2 = hasErrors) {
-        diagramRulesForWindow.map { ast ->
-            CatalogRule(
-                id = ast.id,
-                status = when {
-                    hasErrors -> CatalogRuleStatus.INVALID
-                    state.diagnosticsList.value.isEmpty() &&
-                            state.ruleValue.value.text.isNotBlank() -> CatalogRuleStatus.VALID
-                    else -> CatalogRuleStatus.DRAFT
-                },
-            )
-        }
+        catalogRulesFrom(
+            rules = diagramRulesForWindow,
+            hasErrors = hasErrors,
+            diagnosticsEmpty = state.diagnosticsList.value.isEmpty(),
+            ruleTextNotBlank = state.ruleValue.value.text.isNotBlank(),
+        )
     }
 
     // ── Rule tree for Builder mode: one file node per manifest rule file ─────
-    // Falls back to a single synthetic "current" file when no manifest is loaded, so the tree
-    // always has something to show for the rule text already in the editor.
     val ruleTreeFiles = remember(
         key1 = state.selectedManifestEntry.value,
         key2 = state.ruleValue.value.text,
         key3 = state.diagnosticsList.value,
     ) {
-        val parsedFiles = state.parsedRuleFilesForCurrentEntry()
-        if (parsedFiles.isEmpty()) {
-            listOf(
-                RuleTreeFile(
-                    relativePath = "current",
-                    rules = builderStateMap.keys.filter { it.isNotBlank() }.map { CatalogRule(id = it) },
-                ),
-            )
-        } else {
-            parsedFiles.map { source ->
-                RuleTreeFile(
-                    relativePath = source.relativePath,
-                    rules = source.rules.map { ast ->
-                        CatalogRule(
-                            id = ast.id,
-                            status = ruleTreeStatusFor(
-                                ruleId = ast.id,
-                                description = ast.description,
-                                relativePath = source.relativePath,
-                                currentFile = state.selectedManifestRuleFile.value,
-                                diagnostics = state.diagnosticsList.value,
-                            ),
-                        )
-                    },
-                )
-            }
-        }
+        ruleTreeFilesFrom(
+            parsedFiles = state.parsedRuleFilesForCurrentEntry(),
+            fallbackRuleIds = builderStateMap.keys,
+            currentFile = state.selectedManifestRuleFile.value,
+            diagnostics = state.diagnosticsList.value,
+        )
     }
 
     ProjectDialogHost(workspace = workspace)
