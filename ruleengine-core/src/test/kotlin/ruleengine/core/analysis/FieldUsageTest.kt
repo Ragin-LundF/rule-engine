@@ -1,4 +1,4 @@
-package ruleengine.export
+package ruleengine.core.analysis
 
 import ruleengine.core.io.FileInputSupport
 import ruleengine.dsl.ast.RuleAst

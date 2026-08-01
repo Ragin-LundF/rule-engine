@@ -1,10 +1,8 @@
 package ruleengine.evaluator.trace
 
 import ruleengine.evaluator.trace.dto.DecisionNode
-import ruleengine.evaluator.trace.dto.MutableNode
 import ruleengine.evaluator.trace.dto.NodeMeta
 import ruleengine.evaluator.trace.dto.NodeType
-import ruleengine.evaluator.trace.dto.toDecisionNode
 
 class RecordingTraceCollector : TraceCollector {
     private val stack = ArrayDeque<MutableNode>()

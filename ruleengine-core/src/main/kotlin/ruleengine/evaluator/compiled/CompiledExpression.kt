@@ -1,16 +1,13 @@
 package ruleengine.evaluator.compiled
 
-enum class EvaluationCost { VERY_CHEAP, CHEAP, MEDIUM, EXPENSIVE }
+import ruleengine.evaluator.context.PreparedRuleContext
+import ruleengine.evaluator.trace.TraceCollector
 
+/** One compiled boolean test, ready to run against a prepared context. */
 interface CompiledExpression {
     val cost: EvaluationCost
     fun evaluate(
-        context: ruleengine.evaluator.context.PreparedRuleContext,
-        trace: ruleengine.evaluator.trace.TraceCollector? = null
+        context: PreparedRuleContext,
+        trace: TraceCollector? = null
     ): Boolean
 }
-
-enum class ComparisonOperator { EQ, GT, GTE, LT, LTE }
-
-enum class IntegerComparisonOperator { EQ, GT, GTE, LT, LTE }
-

@@ -14,18 +14,19 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.dsl.parser` | `Parser`; converts token stream into AST nodes. |
 | `ruleengine.dsl.ast` | Immutable AST data classes such as `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, and literals. |
 | `ruleengine.dsl.diagnostics` | `ParseException`. |
-| `ruleengine.compiler` | `Validator`, `Compiler`, and `operators/` helpers. |
+| `ruleengine.compiler` | `Validator` / `ValidationResult`, `Compiler`, plus `OperatorSupport` (which operators a type accepts), `LiteralValidation`, `Suggestions`, and `operators/` helpers. |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule`. |
 | `ruleengine.evaluator.compiled` | `CompiledExpression` interface and concrete expression implementations. |
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`, and `PreparedValue` sealed hierarchy. |
-| `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, `DecisionTree`, and `DecisionNode`. |
+| `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, plus the internal `MutableNode` the collector builds. Immutable `DecisionTree` / `DecisionNode` live in its `dto/`. |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader`, and DTO classes. |
 | `ruleengine.manifest` | `ProjectManifest`, `ManifestLoader`. |
 | `ruleengine.jackson` | `JacksonUtil` singleton exposing the configured `jsonMapper`. YAML is read by feeding a `YAMLFactory` parser to that mapper (see `FieldSchemaLoader`). |
 | `ruleengine.cli` | `EvaluateCli`, `ValidatorCli`; command-line entry points. |
 | `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine`; assembles a ready-to-evaluate engine from a manifest or directory. |
-| `ruleengine.export` | Rule catalog export: `RuleCatalogBuilder`, `PlainLanguageRenderer`, `FieldUsage`, `FieldLabels`, plus `docx/`, `markdown/` and `dto/`. |
+| `ruleengine.export` | Rule catalog export: `RuleCatalogBuilder`, `PlainLanguageRenderer`, `CatalogText`, `FieldLabels`, plus `docx/`, `markdown/` and `dto/`. |
 | `ruleengine.core.io` | `FileInputSupport`; bounded file reads and rule-file discovery. |
+| `ruleengine.core.analysis` | `FieldUsage`; reports which field paths a rule reads, by walking the AST. Used by the export catalog and by the UI's field-flow diagram. |
 
 ## Core design patterns
 

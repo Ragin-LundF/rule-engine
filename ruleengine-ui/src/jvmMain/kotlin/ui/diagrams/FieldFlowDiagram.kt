@@ -22,9 +22,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.dsl.ast.RuleAst
-import ruleengine.export.FieldUsage
 import ui.diagrams.model.OutcomeKey
 import ui.diagrams.model.SchemaLeaves
 

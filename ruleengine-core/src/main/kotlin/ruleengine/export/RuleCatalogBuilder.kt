@@ -1,5 +1,6 @@
 package ruleengine.export
 
+import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.FieldSchema
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.io.FileInputSupport

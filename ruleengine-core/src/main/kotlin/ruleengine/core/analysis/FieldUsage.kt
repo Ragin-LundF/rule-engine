@@ -1,4 +1,4 @@
-package ruleengine.export
+package ruleengine.core.analysis
 
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticValueAst

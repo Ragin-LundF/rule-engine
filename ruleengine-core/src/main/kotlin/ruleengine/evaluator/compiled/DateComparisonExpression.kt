@@ -44,5 +44,3 @@ class DateComparisonExpression(
         return result
     }
 }
-
-enum class DateComparisonOperator { EQ, GT, GTE, LT, LTE }
