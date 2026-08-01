@@ -16,9 +16,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ruleengine.evaluator.trace.dto.NodeType
 import ui.tester.RuleResult
 import ui.tester.TraceNode
-import ui.tester.TraceNodeType
 
 /**
  * A run's decision trees, drawn with the same nesting as the condition diagram.
@@ -122,18 +122,18 @@ private fun TracedRule(result: RuleResult) {
 @Composable
 private fun TraceNodeView(node: TraceNode) {
     when (node.type) {
-        TraceNodeType.CONDITION -> TraceLeafRow(node = node)
-        TraceNodeType.AND ->
+        NodeType.CONDITION -> TraceLeafRow(node = node)
+        NodeType.AND ->
             TraceLogicBox(node = node, label = "AND", bg = NodeBgAnd, labelColor = LabelAnd)
 
-        TraceNodeType.OR ->
+        NodeType.OR ->
             TraceLogicBox(node = node, label = "OR", bg = NodeBgOr, labelColor = LabelOr)
 
-        TraceNodeType.NOT ->
+        NodeType.NOT ->
             TraceLogicBox(node = node, label = "NOT", bg = NodeBgNot, labelColor = LabelNot)
 
         // A rule or evaluation node never appears below a rule's own root.
-        TraceNodeType.RULE, TraceNodeType.EVALUATION -> node.children.forEach { child -> TraceNodeView(node = child) }
+        NodeType.RULE, NodeType.EVALUATION -> node.children.forEach { child -> TraceNodeView(node = child) }
     }
 }
 
@@ -163,7 +163,7 @@ private fun TraceLogicBox(node: TraceNode, label: String, bg: Color, labelColor:
             )
         }
         node.children.forEach { child -> TraceNodeView(node = child) }
-        if (!node.result && node.type == TraceNodeType.AND) {
+        if (!node.result && node.type == NodeType.AND) {
             DiagramNote(
                 text = "⤵ stopped here — any remaining conditions were never evaluated, " +
                     "so they are not recorded. Children are shown in evaluation order, which " +
@@ -217,7 +217,7 @@ private fun countLeaves(node: TraceNode?, wanted: Boolean): Int {
     if (node == null) {
         return 0
     }
-    if (node.type == TraceNodeType.CONDITION) {
+    if (node.type == NodeType.CONDITION) {
         return if (node.result == wanted) 1 else 0
     }
     return node.children.sumOf { child -> countLeaves(node = child, wanted = wanted) }

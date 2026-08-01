@@ -207,23 +207,12 @@ class JvmRuleSimulationService : RuleSimulationService {
 
     private fun toTraceNode(node: DecisionNode): TraceNode {
         return TraceNode(
-            type = toTraceNodeType(type = node.type),
+            type = node.type,
             label = buildLabel(node = node),
             result = node.result,
             actual = node.actual?.toString(),
             children = node.children.map { child -> toTraceNode(node = child) },
         )
-    }
-
-    private fun toTraceNodeType(type: NodeType): TraceNodeType {
-        return when (type) {
-            NodeType.EVALUATION -> TraceNodeType.EVALUATION
-            NodeType.CONDITION -> TraceNodeType.CONDITION
-            NodeType.AND -> TraceNodeType.AND
-            NodeType.OR -> TraceNodeType.OR
-            NodeType.NOT -> TraceNodeType.NOT
-            NodeType.RULE -> TraceNodeType.RULE
-        }
     }
 
     private fun buildLabel(node: DecisionNode): String {
@@ -246,7 +235,7 @@ class JvmRuleSimulationService : RuleSimulationService {
      * disagree about what was evaluated.
      */
     private fun conditionRows(node: TraceNode): List<TraceRow> {
-        if (node.type == TraceNodeType.CONDITION) {
+        if (node.type == NodeType.CONDITION) {
             return listOf(TraceRow(label = node.label, result = node.result, actual = node.actual))
         }
         return node.children.flatMap { child -> conditionRows(node = child) }

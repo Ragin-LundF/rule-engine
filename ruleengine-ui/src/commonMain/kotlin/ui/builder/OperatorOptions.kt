@@ -1,47 +1,49 @@
 package ui.builder
 
+import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.isStructure
+import ruleengine.evaluator.compiled.AggregateFunctionName
+
 /**
  * The operator vocabulary for the visual editor: the names themselves, and the default list offered
  * per field type when the schema does not restrict them.
  *
- * Mirrors `ruleengine.core.domain.OperatorNames`, which is the engine's authority. It has to be a
- * mirror rather than a reference: this file is in `commonMain`, and the core module is JVM-only, so
- * `commonMain` cannot see it. `OperatorOptionsTest` asserts the two agree — the same arrangement
- * [AGGREGATE_FUNCTIONS] already uses for the engine's aggregate enum.
+ * The names are re-exported from [OperatorNames] rather than restated, so there is one spelling of
+ * each operator in the repository and the compiler enforces it. This object stays the UI's single
+ * entry point for them: every other file in the UI takes its operator names from here.
  *
- * Every other file in the UI takes its operator names from here rather than spelling them again.
+ * What is *not* shared is the per-type default lists below. They are a presentation choice — which
+ * operators to offer in a dropdown — and deliberately differ from the engine's
+ * `Validator.supportedOperatorsFor`, which decides what is *legal*. See the note on [forField].
  */
 object OperatorOptions {
 
-    // ── operator names, mirroring ruleengine.core.domain.OperatorNames ────────
+    // ── operator names, re-exported from the engine's authority ───────────────
 
-    const val EQUALS = "equals"
-    const val GT = "gt"
-    const val GTE = "gte"
-    const val LT = "lt"
-    const val LTE = "lte"
-    const val BETWEEN = "between"
-    const val CONTAINS = "contains"
-    const val STARTS_WITH = "startsWith"
-    const val ENDS_WITH = "endsWith"
-    const val IN = "in"
-    const val CONTAINS_ANY = "containsAny"
-    const val CONTAINS_ALL = "containsAll"
-    const val REGEX = "regex"
+    const val EQUALS = OperatorNames.EQUALS
+    const val GT = OperatorNames.GT
+    const val GTE = OperatorNames.GTE
+    const val LT = OperatorNames.LT
+    const val LTE = OperatorNames.LTE
+    const val BETWEEN = OperatorNames.BETWEEN
+    const val CONTAINS = OperatorNames.CONTAINS
+    const val STARTS_WITH = OperatorNames.STARTS_WITH
+    const val ENDS_WITH = OperatorNames.ENDS_WITH
+    const val IN = OperatorNames.IN
+    const val CONTAINS_ANY = OperatorNames.CONTAINS_ANY
+    const val CONTAINS_ALL = OperatorNames.CONTAINS_ALL
+    const val REGEX = OperatorNames.REGEX
 
-    const val SYMBOL_EQUALS = "=="
-    const val SYMBOL_NOT_EQUALS = "!="
-    const val SYMBOL_GT = ">"
-    const val SYMBOL_GTE = ">="
-    const val SYMBOL_LT = "<"
-    const val SYMBOL_LTE = "<="
+    const val SYMBOL_EQUALS = OperatorNames.SYMBOL_EQUALS
+    const val SYMBOL_NOT_EQUALS = OperatorNames.SYMBOL_NOT_EQUALS
+    const val SYMBOL_GT = OperatorNames.SYMBOL_GT
+    const val SYMBOL_GTE = OperatorNames.SYMBOL_GTE
+    const val SYMBOL_LT = OperatorNames.SYMBOL_LT
+    const val SYMBOL_LTE = OperatorNames.SYMBOL_LTE
 
     /** The canonical names, in the order the engine documents them. */
-    val ALL: List<String> = listOf(
-        EQUALS, GT, GTE, LT, LTE, BETWEEN,
-        CONTAINS, STARTS_WITH, ENDS_WITH, IN,
-        CONTAINS_ANY, CONTAINS_ALL, REGEX,
-    )
+    val ALL: List<String> = OperatorNames.ALL
 
     // ── defaults per field type ───────────────────────────────────────────────
 
@@ -67,15 +69,9 @@ object OperatorOptions {
     /** Text operands support equality only — the engine rejects ordering comparisons on text. */
     val COMPARISON_TEXT: List<String> = listOf(SYMBOL_EQUALS, SYMBOL_NOT_EQUALS)
 
-    /**
-     * Aggregate functions understood by the engine, lowercase.
-     *
-     * Must stay in sync with `ruleengine.evaluator.compiled.AggregateFunctionName`, which lives in
-     * the JVM-only core module and so cannot be referenced from `commonMain`. `OperatorOptionsTest`
-     * asserts the two lists match.
-     */
+    /** Aggregate functions understood by the engine, lowercase, in declaration order. */
     val AGGREGATE_FUNCTIONS: List<String> =
-        listOf("count", "sum", "subtract", "avg", "median", "max", "min")
+        AggregateFunctionName.entries.map { function -> function.name.lowercase() }
 
     /** Arithmetic operators available in a calculation, in display order. */
     val ARITHMETIC_OPERATORS: List<String> = listOf("+", "-", "*", "/")
@@ -87,7 +83,8 @@ object OperatorOptions {
     private val NUMERIC_TYPES: Set<String> = setOf("integer", "decimal")
 
     /** Field types whose members are navigated with a path instead of compared directly. */
-    private val STRUCTURE_TYPES: Set<String> = setOf("collection", "object")
+    private val STRUCTURE_TYPES: Set<String> =
+        FieldType.entries.filter { type -> type.isStructure }.map { type -> type.name.lowercase() }.toSet()
 
     /** True when [fieldType] holds a number, so aggregates and arithmetic apply. */
     fun isNumericType(fieldType: String): Boolean = fieldType.lowercase() in NUMERIC_TYPES
@@ -120,6 +117,14 @@ object OperatorOptions {
 
     /**
      * Returns the effective operator list for a field.
+     *
+     * Known divergence, deliberately left alone: the defaults here are not the same set as the
+     * engine's `Validator.supportedOperatorsFor`, nor as `ui.schema.SchemaEditorModels.operatorsFor`
+     * or `ui.autocompletion.defaultOperatorsForType`. A `date` field offers `>` here but `gt` in
+     * autocomplete, and `text` offers `!=` here but not in the schema editor. Collapsing the four
+     * onto one source would change what each surface shows, so it needs a product decision rather
+     * than a refactor. Both this and `supportedOperatorsFor` also fall back silently on an unknown
+     * type — here to [TEXT], there to the empty set.
      *
      * @param fieldType lowercase field type string (e.g. "text", "integer").
      * @param schemaOperators operators declared in the schema for this field; empty means "no restriction".

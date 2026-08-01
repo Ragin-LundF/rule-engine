@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
@@ -188,7 +187,7 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
             overflow = TextOverflow.Ellipsis,
         )
 
-        OperatorBadge(operator = comparisonSymbol(op = expr.operator), ignoreCase = false)
+        OperatorBadge(operator = ValueExpressionRenderer.symbol(operator = expr.operator), ignoreCase = false)
 
         Text(
             text     = ValueExpressionRenderer.render(expr = expr.right),
@@ -201,17 +200,6 @@ internal fun ComparisonLeafRow(expr: ComparisonExpressionAst) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-private fun comparisonSymbol(op: ComparisonOperatorAst): String {
-    return when (op) {
-        ComparisonOperatorAst.EQ  -> "=="
-        ComparisonOperatorAst.NEQ -> "!="
-        ComparisonOperatorAst.GT  -> ">"
-        ComparisonOperatorAst.GTE -> ">="
-        ComparisonOperatorAst.LT  -> "<"
-        ComparisonOperatorAst.LTE -> "<="
     }
 }
 

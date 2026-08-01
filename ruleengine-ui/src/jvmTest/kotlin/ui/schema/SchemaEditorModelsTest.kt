@@ -1,6 +1,8 @@
 package ui.schema
 
 import ruleengine.compiler.Validator
+import ruleengine.core.domain.dto.FieldType
+import ruleengine.core.domain.dto.isNormalizable
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.FieldSchemaLoader
@@ -11,10 +13,11 @@ import kotlin.test.assertTrue
 /**
  * Parity between what the visual schema editor offers and what the engine accepts.
  *
- * The editor lives in `commonMain` and cannot reference the JVM-only core module, so its type, operator
- * and normalizer lists are hand-mirrored. These tests are what keeps the copies honest — the editor
- * shipped for a while with three field types missing from "+ Add field", four operators the engine has
- * never had, and two normalizers it could not express.
+ * The editor shares the engine's [FieldType] now, so the type list cannot drift. What is still
+ * hand-written is the per-type *operator* table and the normalizer list, and the templates behind
+ * "+ Add field" — these tests are what keeps those honest. The editor shipped for a while with three
+ * field types missing from the menu, four operators the engine has never had, and two normalizers it
+ * could not express.
  */
 class SchemaEditorModelsTest {
 
@@ -27,7 +30,7 @@ class SchemaEditorModelsTest {
             .drop(n = 1)
 
         assertEquals(
-            expected = SchemaFieldType.entries.toList(),
+            expected = FieldType.entries.toList(),
             actual = templated,
             message = "every type needs a template, in enum order, or it is unreachable from the menu",
         )
@@ -81,7 +84,7 @@ class SchemaEditorModelsTest {
 
     @Test
     fun `every offered operator is accepted by the engine for that field type`() {
-        SchemaFieldType.entries.forEach { type ->
+        FieldType.entries.forEach { type ->
             operatorsFor(type = type).forEach { operator ->
                 val condition = conditionFor(type = type, operator = operator)
                     ?: error("no sample condition for $type $operator — extend the test, not the list")
@@ -96,8 +99,8 @@ class SchemaEditorModelsTest {
 
     @Test
     fun `structure types offer no operators`() {
-        assertEquals(expected = emptyList(), actual = operatorsFor(type = SchemaFieldType.COLLECTION))
-        assertEquals(expected = emptyList(), actual = operatorsFor(type = SchemaFieldType.OBJECT))
+        assertEquals(expected = emptyList(), actual = operatorsFor(type = FieldType.COLLECTION))
+        assertEquals(expected = emptyList(), actual = operatorsFor(type = FieldType.OBJECT))
     }
 
     @Test
@@ -109,7 +112,7 @@ class SchemaEditorModelsTest {
 
     @Test
     fun `regex is offered for text fields`() {
-        assertTrue(actual = "regex" in operatorsFor(type = SchemaFieldType.TEXT))
+        assertTrue(actual = "regex" in operatorsFor(type = FieldType.TEXT))
     }
 
     // ── normalizers ───────────────────────────────────────────────────────────
@@ -137,7 +140,7 @@ class SchemaEditorModelsTest {
     // ── helpers ───────────────────────────────────────────────────────────────
 
     private fun validate(
-        type: SchemaFieldType,
+        type: FieldType,
         operators: List<String>,
         condition: String,
     ): List<String> {
@@ -166,7 +169,7 @@ class SchemaEditorModelsTest {
     }
 
     /** A condition exercising [operator] on a `value` field of [type], or null when none applies. */
-    private fun conditionFor(type: SchemaFieldType, operator: String): String? {
+    private fun conditionFor(type: FieldType, operator: String): String? {
         val single = singleLiteralFor(type = type) ?: return null
         return when (operator) {
             "between" -> "value between ${rangeLiteralFor(type = type)}"
@@ -177,24 +180,24 @@ class SchemaEditorModelsTest {
         }
     }
 
-    private fun singleLiteralFor(type: SchemaFieldType): String? {
+    private fun singleLiteralFor(type: FieldType): String? {
         return when (type) {
-            SchemaFieldType.TEXT, SchemaFieldType.STRING_SET -> "\"a\""
-            SchemaFieldType.INTEGER -> "1"
-            SchemaFieldType.DECIMAL -> "1.5"
-            SchemaFieldType.BOOLEAN -> "true"
-            SchemaFieldType.DATE -> "\"2024-01-31\""
-            SchemaFieldType.DATE_TIME -> "\"2024-01-31T09:00:00\""
-            SchemaFieldType.COLLECTION, SchemaFieldType.OBJECT -> null
+            FieldType.TEXT, FieldType.STRING_SET -> "\"a\""
+            FieldType.INTEGER -> "1"
+            FieldType.DECIMAL -> "1.5"
+            FieldType.BOOLEAN -> "true"
+            FieldType.DATE -> "\"2024-01-31\""
+            FieldType.DATE_TIME -> "\"2024-01-31T09:00:00\""
+            FieldType.COLLECTION, FieldType.OBJECT -> null
         }
     }
 
-    private fun rangeLiteralFor(type: SchemaFieldType): String {
+    private fun rangeLiteralFor(type: FieldType): String {
         return when (type) {
-            SchemaFieldType.INTEGER -> "1 10"
-            SchemaFieldType.DECIMAL -> "1.5 10.5"
-            SchemaFieldType.DATE -> "\"2024-01-01\" \"2024-12-31\""
-            SchemaFieldType.DATE_TIME -> "\"2024-01-01T00:00:00\" \"2024-12-31T23:59:59\""
+            FieldType.INTEGER -> "1 10"
+            FieldType.DECIMAL -> "1.5 10.5"
+            FieldType.DATE -> "\"2024-01-01\" \"2024-12-31\""
+            FieldType.DATE_TIME -> "\"2024-01-01T00:00:00\" \"2024-12-31T23:59:59\""
             else -> "1 10"
         }
     }

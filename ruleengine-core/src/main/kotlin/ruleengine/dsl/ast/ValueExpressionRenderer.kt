@@ -84,7 +84,8 @@ object ValueExpressionRenderer {
         }
     }
 
-    private fun symbol(operator: ComparisonOperatorAst): String {
+    /** The DSL spelling of a comparison operator, e.g. [ComparisonOperatorAst.GTE] -> `>=`. */
+    fun symbol(operator: ComparisonOperatorAst): String {
         return when (operator) {
             ComparisonOperatorAst.EQ -> "=="
             ComparisonOperatorAst.NEQ -> "!="
@@ -95,7 +96,8 @@ object ValueExpressionRenderer {
         }
     }
 
-    private fun symbol(operator: ArithmeticOperatorAst): String {
+    /** The DSL spelling of an arithmetic operator, e.g. [ArithmeticOperatorAst.MULTIPLY] -> `*`. */
+    fun symbol(operator: ArithmeticOperatorAst): String {
         return when (operator) {
             ArithmeticOperatorAst.ADD -> "+"
             ArithmeticOperatorAst.SUBTRACT -> "-"

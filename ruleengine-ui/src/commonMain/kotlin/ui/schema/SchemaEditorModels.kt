@@ -1,5 +1,6 @@
 package ui.schema
 
+import ruleengine.core.domain.dto.FieldType
 import ui.builder.OperatorOptions
 
 /**
@@ -11,16 +12,16 @@ import ui.builder.OperatorOptions
 data class EditableField(
     val path: String = "",
     val alias: String = "",
-    val type: SchemaFieldType = SchemaFieldType.TEXT,
+    val type: FieldType = FieldType.TEXT,
     /**
-     * Date pattern for a [SchemaFieldType.DATE] / [SchemaFieldType.DATE_TIME] field, e.g. `dd.MM.yyyy`.
+     * Date pattern for a [FieldType.DATE] / [FieldType.DATE_TIME] field, e.g. `dd.MM.yyyy`.
      * Empty means ISO-8601. Always empty for every other type.
      */
     val format: String = "",
     val normalizers: List<String> = emptyList(),
     val operators: List<String> = emptyList(),
     /**
-     * Members of a [SchemaFieldType.COLLECTION] or [SchemaFieldType.OBJECT] field.
+     * Members of a [FieldType.COLLECTION] or [FieldType.OBJECT] field.
      *
      * Recursive, mirroring [ruleengine.core.domain.dto.FieldDefinition.fields], so a collection of objects
      * that themselves contain collections is expressible to any depth.
@@ -29,37 +30,15 @@ data class EditableField(
 )
 
 /**
- * Supported field types exposed in the visual editor.
- * Maps 1-to-1 with [ruleengine.core.domain.dto.FieldType].
- */
-enum class SchemaFieldType(val displayName: String, val yamlValue: String) {
-    TEXT("text", "text"),
-    INTEGER("integer", "integer"),
-    DECIMAL("decimal", "decimal"),
-    BOOLEAN("boolean", "boolean"),
-    STRING_SET("string_set", "string_set"),
-    DATE("date", "date"),
-    DATE_TIME("date_time", "date_time"),
-    COLLECTION("collection", "collection"),
-    OBJECT("object", "object"),
-}
-
-/** True for the types whose [EditableField.fields] describe nested members. */
-val SchemaFieldType.isStructure: Boolean
-    get() = this == SchemaFieldType.COLLECTION || this == SchemaFieldType.OBJECT
-
-/** True for the date types that accept an [EditableField.format] pattern. */
-val SchemaFieldType.isTemporal: Boolean
-    get() = this == SchemaFieldType.DATE || this == SchemaFieldType.DATE_TIME
-
-/**
- * True for the types whose values are normalized before comparison.
+ * The lowercase spelling of a field type, used both as the `type:` value written into schema YAML
+ * and as the label in the editor's type dropdown.
  *
- * The engine applies normalizers to text values only, so offering them elsewhere would suggest an
- * effect that never happens.
+ * Derived rather than tabulated: the visual editor used to carry its own `SchemaFieldType` enum
+ * whose `yamlValue` had to equal the lowercased [FieldType] name, and the YAML bridge silently
+ * degraded a field to `TEXT` whenever the two drifted. There is nothing left to drift.
  */
-val SchemaFieldType.isNormalizable: Boolean
-    get() = this == SchemaFieldType.TEXT || this == SchemaFieldType.STRING_SET
+val FieldType.yamlValue: String
+    get() = name.lowercase()
 
 /**
  * All normalizer ids known to the engine, used to populate the selector.
@@ -96,8 +75,8 @@ private val ORDERED_OPERATORS: List<String> = listOf(
  *
  * A structure type is navigated into or aggregated over, never compared, so it has no operators.
  */
-val OperatorsByType: Map<SchemaFieldType, List<String>> = mapOf(
-    SchemaFieldType.TEXT to listOf(
+val OperatorsByType: Map<FieldType, List<String>> = mapOf(
+    FieldType.TEXT to listOf(
         OperatorOptions.EQUALS,
         OperatorOptions.CONTAINS,
         OperatorOptions.STARTS_WITH,
@@ -105,18 +84,18 @@ val OperatorsByType: Map<SchemaFieldType, List<String>> = mapOf(
         OperatorOptions.IN,
         OperatorOptions.REGEX,
     ),
-    SchemaFieldType.INTEGER to ORDERED_OPERATORS,
-    SchemaFieldType.DECIMAL to ORDERED_OPERATORS,
-    SchemaFieldType.BOOLEAN to listOf(OperatorOptions.EQUALS),
-    SchemaFieldType.STRING_SET to listOf(OperatorOptions.CONTAINS_ANY, OperatorOptions.CONTAINS_ALL),
-    SchemaFieldType.DATE to ORDERED_OPERATORS,
-    SchemaFieldType.DATE_TIME to ORDERED_OPERATORS,
-    SchemaFieldType.COLLECTION to emptyList(),
-    SchemaFieldType.OBJECT to emptyList(),
+    FieldType.INTEGER to ORDERED_OPERATORS,
+    FieldType.DECIMAL to ORDERED_OPERATORS,
+    FieldType.BOOLEAN to listOf(OperatorOptions.EQUALS),
+    FieldType.STRING_SET to listOf(OperatorOptions.CONTAINS_ANY, OperatorOptions.CONTAINS_ALL),
+    FieldType.DATE to ORDERED_OPERATORS,
+    FieldType.DATE_TIME to ORDERED_OPERATORS,
+    FieldType.COLLECTION to emptyList(),
+    FieldType.OBJECT to emptyList(),
 )
 
 /** Operators offered for [type]. Empty for a structure type. */
-fun operatorsFor(type: SchemaFieldType): List<String> {
+fun operatorsFor(type: FieldType): List<String> {
     return OperatorsByType[type] ?: emptyList()
 }
 
@@ -124,7 +103,7 @@ fun operatorsFor(type: SchemaFieldType): List<String> {
 val KnownOperators: List<String> = OperatorsByType.values.flatten().distinct()
 
 /**
- * Starting points offered by "+ Add field", one per [SchemaFieldType] plus a blank row.
+ * Starting points offered by "+ Add field", one per [FieldType] plus a blank row.
  *
  * Each template's `operators` are the full set the engine allows for that type, so a freshly added field
  * is usable without editing the chips. `SchemaEditorModelsTest` asserts the list covers every type, which
@@ -134,51 +113,51 @@ val FieldTemplates: List<Pair<String, EditableField>> = listOf(
     "Blank field" to EditableField(),
     "Text field" to EditableField(
         path = "field",
-        type = SchemaFieldType.TEXT,
+        type = FieldType.TEXT,
         normalizers = listOf("trim", "lowercase"),
-        operators = operatorsFor(type = SchemaFieldType.TEXT),
+        operators = operatorsFor(type = FieldType.TEXT),
     ),
     "Integer field" to EditableField(
         path = "count",
-        type = SchemaFieldType.INTEGER,
-        operators = operatorsFor(type = SchemaFieldType.INTEGER),
+        type = FieldType.INTEGER,
+        operators = operatorsFor(type = FieldType.INTEGER),
     ),
     "Decimal field" to EditableField(
         path = "amount",
-        type = SchemaFieldType.DECIMAL,
-        operators = operatorsFor(type = SchemaFieldType.DECIMAL),
+        type = FieldType.DECIMAL,
+        operators = operatorsFor(type = FieldType.DECIMAL),
     ),
     "Boolean field" to EditableField(
         path = "flag",
-        type = SchemaFieldType.BOOLEAN,
-        operators = operatorsFor(type = SchemaFieldType.BOOLEAN),
+        type = FieldType.BOOLEAN,
+        operators = operatorsFor(type = FieldType.BOOLEAN),
     ),
     "String set field (tags)" to EditableField(
         path = "tags",
-        type = SchemaFieldType.STRING_SET,
+        type = FieldType.STRING_SET,
         normalizers = listOf("trim", "lowercase"),
-        operators = operatorsFor(type = SchemaFieldType.STRING_SET),
+        operators = operatorsFor(type = FieldType.STRING_SET),
     ),
     // No `format`: ISO is the default, and the row's Format box shows the hint for changing it.
     "Date field" to EditableField(
         path = "bookingDate",
-        type = SchemaFieldType.DATE,
-        operators = operatorsFor(type = SchemaFieldType.DATE),
+        type = FieldType.DATE,
+        operators = operatorsFor(type = FieldType.DATE),
     ),
     "Date-time field" to EditableField(
         path = "bookedAt",
-        type = SchemaFieldType.DATE_TIME,
-        operators = operatorsFor(type = SchemaFieldType.DATE_TIME),
+        type = FieldType.DATE_TIME,
+        operators = operatorsFor(type = FieldType.DATE_TIME),
     ),
     "Collection (list of objects)" to EditableField(
         path = "items",
-        type = SchemaFieldType.COLLECTION,
-        fields = listOf(EditableField(path = "amount", type = SchemaFieldType.DECIMAL)),
+        type = FieldType.COLLECTION,
+        fields = listOf(EditableField(path = "amount", type = FieldType.DECIMAL)),
     ),
     "Object (nested fields)" to EditableField(
         path = "customer",
-        type = SchemaFieldType.OBJECT,
-        fields = listOf(EditableField(path = "country", type = SchemaFieldType.TEXT)),
+        type = FieldType.OBJECT,
+        fields = listOf(EditableField(path = "country", type = FieldType.TEXT)),
     ),
 )
 

@@ -42,19 +42,30 @@ Use this file when touching `ruleengine-core` or core packages.
 
 When adding a new `FieldType` or operator:
 
-1. Add the constant to `FieldType` in the domain model.
+`FieldType`, `ActionArgType`, `OperatorNames`, `Severity` and `AggregateFunctionName` live in
+`ruleengine-model`, which both `ruleengine-core` and `ruleengine-ui`'s `commonMain` depend on. There is
+one declaration of each, so the UI can no longer drift from the engine, and most of what used to be a
+manual sync checklist is now a compile error. What is left:
+
+1. Add the constant to `FieldType` in `ruleengine-model`.
 2. Add a case to `PreparedRuleContext.prepare()` to produce the matching `PreparedValue` subtype.
 3. Add compile logic in `Compiler`, preferably as a focused private `compileXxxCondition` function.
 4. Add validation logic in `Validator.validateCondition`.
 5. Add a new `CompiledExpression` implementation in `ruleengine.evaluator.compiled`.
-6. Update `ruleengine-ui`'s `ui/autocompletion/Model.kt`, especially `defaultOperatorsForType` and `valuePlaceholderForOperator`.
-7. Map the YAML spelling and its aliases in `FieldSchemaLoader.parseFieldType`, and list the type's
-   operators in `Validator.supportedOperatorsFor` and `ui.builder.OperatorOptions.forField`. The last two
-   have a fallback branch and fail *silently* when a type is missing, so cover them with a test; the
-   `when` blocks elsewhere are exhaustive and the compiler flags them for you.
-8. Mirror the type in the UI: `ui.schema.SchemaFieldType` (its `yamlValue` must equal the lowercased
-   `FieldType` name, or the YAML bridge silently degrades the field to `TEXT`) and `YamlHighlighter`
-   (`FIELD_TYPE_VALUES`, `fieldTypeValueColor`).
+6. Map the YAML spelling and its aliases in `FieldSchemaLoader.parseFieldType`.
+7. **The two that still fail silently**: list the type's operators in `Validator.supportedOperatorsFor`
+   (`else -> emptySet()`) and `ui.builder.OperatorOptions.forField` (`else -> TEXT`). Neither is
+   exhaustive, so cover both with a test. Also check `YamlHighlighter.fieldTypeValueColor`, which
+   colours by raw string and already lags `parseFieldType`'s alias table.
+
+Everything else is an exhaustive `when` that the compiler flags for you.
+
+**Known divergence, not a bug to "fix" casually.** Four per-type operator tables disagree today:
+`Validator.supportedOperatorsFor`, `ui.builder.OperatorOptions.forField`,
+`ui.schema.OperatorsByType` and `ui.autocompletion.defaultOperatorsForType`. A `date` field offers
+`>` in the Builder but `gt` in autocomplete; `text` offers `!=` in two of the four. The engine's table
+decides what is *legal*; the UI tables decide what is *offered*. Collapsing them changes what each
+surface shows, so it needs a product decision rather than a refactor.
 
 If the change affects DSL keywords or operators, also update relevant UI syntax highlighting and autocomplete rules.
 

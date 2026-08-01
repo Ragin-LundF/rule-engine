@@ -1,5 +1,7 @@
 package ui.actions
 
+import ruleengine.core.domain.dto.ActionArgType
+
 /**
  * Editable representation of a single action in the visual action-schema editor.
  */
@@ -24,5 +26,6 @@ data class ActionEditorState(
     }
 }
 
-/** All known action argument type ids exposed in the editor. */
-val KnownActionArgTypes: List<String> = listOf("string", "integer", "decimal")
+/** All known action argument type ids exposed in the editor, lowercase, in declaration order. */
+val KnownActionArgTypes: List<String> =
+    ActionArgType.entries.map { argType -> argType.name.lowercase() }

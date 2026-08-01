@@ -1,5 +1,6 @@
 package ui.tester
 
+import ruleengine.evaluator.trace.dto.NodeType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -418,7 +419,7 @@ class JvmRuleSimulationServiceTest {
     }
 
     private fun conditionCount(node: TraceNode): Int {
-        if (node.type == TraceNodeType.CONDITION) {
+        if (node.type == NodeType.CONDITION) {
             return 1
         }
         return node.children.sumOf { child -> conditionCount(node = child) }
@@ -433,16 +434,16 @@ class JvmRuleSimulationServiceTest {
     fun `the trace tree keeps the rule, its and node and the conditions beneath it`() {
         val tree = treeOf(ruleText = RENT_RULE, ruleId = "rent-payment", inputJson = POSITIVE_INPUT)
 
-        assertEquals(expected = TraceNodeType.RULE, actual = tree.type)
+        assertEquals(expected = NodeType.RULE, actual = tree.type)
         assertEquals(expected = "rent-payment", actual = tree.label)
         assertTrue(actual = tree.result)
 
         val and = tree.children.single()
-        assertEquals(expected = TraceNodeType.AND, actual = and.type)
+        assertEquals(expected = NodeType.AND, actual = and.type)
         assertTrue(actual = and.result)
         assertEquals(expected = 2, actual = and.children.size)
         assertTrue(
-            actual = and.children.all { child -> child.type == TraceNodeType.CONDITION },
+            actual = and.children.all { child -> child.type == NodeType.CONDITION },
             message = "Expected two condition leaves, got: ${and.children.map { it.type }}",
         )
     }
@@ -459,7 +460,7 @@ class JvmRuleSimulationServiceTest {
         val tree = treeOf(ruleText = SHORT_CIRCUITED_RULE, ruleId = "large-rent-payment", inputJson = POSITIVE_INPUT)
 
         val and = tree.children.single()
-        assertEquals(expected = TraceNodeType.AND, actual = and.type)
+        assertEquals(expected = NodeType.AND, actual = and.type)
         assertEquals(expected = false, actual = and.result)
         assertEquals(
             expected = 1,
@@ -501,7 +502,7 @@ class JvmRuleSimulationServiceTest {
         val tree = treeOf(ruleText = AGGREGATE_RULE, ruleId = "big-basket", inputJson = BASKET_INPUT)
         val comparison = tree.children.single()
 
-        assertEquals(expected = TraceNodeType.CONDITION, actual = comparison.type)
+        assertEquals(expected = NodeType.CONDITION, actual = comparison.type)
         assertTrue(actual = comparison.result)
         assertEquals(expected = "105.0", actual = comparison.actual)
     }

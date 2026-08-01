@@ -9,7 +9,6 @@ import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
@@ -26,6 +25,7 @@ import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.ValueExpressionRenderer
 
 /**
  * Maps a parsed [RuleAst] to a [BuilderRule] suitable for the visual Builder editor.
@@ -203,7 +203,7 @@ object RuleAstToBuilderMapper {
         return BuilderConditionNode.Comparison(
             nodeId = nextId(prefix = "cmp"),
             left = left,
-            operator = comparisonSymbol(operator = comparison.operator),
+            operator = ValueExpressionRenderer.symbol(operator = comparison.operator),
             right = right,
             ignoreCase = comparison.ignoreCase,
             joinToPrevious = joinToPrevious,
@@ -273,7 +273,7 @@ object RuleAstToBuilderMapper {
             } else {
                 BuilderFilter(
                     field = field,
-                    operator = comparisonSymbol(operator = expr.operator),
+                    operator = ValueExpressionRenderer.symbol(operator = expr.operator),
                     value = value,
                 )
             }
@@ -305,7 +305,7 @@ object RuleAstToBuilderMapper {
         expr: ArithmeticValueAst,
         into: MutableList<BuilderTerm>,
     ): Boolean {
-        val symbol = arithmeticSymbol(operator = expr.operator)
+        val symbol = ValueExpressionRenderer.symbol(operator = expr.operator)
 
         // The parser is left-associative, so the left spine continues the same chain as long as the
         // child binds at the same precedence; otherwise it has to be parenthesized to stay faithful.
@@ -336,22 +336,6 @@ object RuleAstToBuilderMapper {
     private fun precedence(operator: ArithmeticOperatorAst): Int = when (operator) {
         ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
         ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
-    }
-
-    private fun arithmeticSymbol(operator: ArithmeticOperatorAst): String = when (operator) {
-        ArithmeticOperatorAst.ADD -> "+"
-        ArithmeticOperatorAst.SUBTRACT -> "-"
-        ArithmeticOperatorAst.MULTIPLY -> "*"
-        ArithmeticOperatorAst.DIVIDE -> "/"
-    }
-
-    private fun comparisonSymbol(operator: ComparisonOperatorAst): String = when (operator) {
-        ComparisonOperatorAst.EQ -> "=="
-        ComparisonOperatorAst.NEQ -> "!="
-        ComparisonOperatorAst.GT -> ">"
-        ComparisonOperatorAst.GTE -> ">="
-        ComparisonOperatorAst.LT -> "<"
-        ComparisonOperatorAst.LTE -> "<="
     }
 
     // ── actions ───────────────────────────────────────────────────────────────

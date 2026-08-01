@@ -1,7 +1,6 @@
 package ui.builder
 
 import ruleengine.compiler.operators.OperatorUtils
-import ruleengine.core.domain.OperatorNames
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,17 +64,7 @@ class OperatorOptionsTest {
     }
 
     @Test
-    fun `operator names match the engine`() {
-        // OperatorOptions has to restate the names because it lives in commonMain and the engine is
-        // JVM-only. This is what keeps the restatement from drifting.
-        assertEquals(
-            expected = OperatorNames.ALL.sorted(),
-            actual = OperatorOptions.ALL.sorted(),
-        )
-    }
-
-    @Test
-    fun `every mirrored operator name is one the engine knows`() {
+    fun `every offered operator name is canonical and known to the engine`() {
         OperatorOptions.ALL.forEach { operator ->
             assertTrue(
                 actual = OperatorUtils.isKnownOperator(op = operator),
@@ -90,10 +79,10 @@ class OperatorOptionsTest {
     }
 
     @Test
-    fun `aggregate function list matches the engine enum`() {
+    fun `aggregate function names are offered in the engine's declaration order`() {
         assertEquals(
-            expected = AggregateFunctionName.entries.map { it.name.lowercase() }.sorted(),
-            actual = OperatorOptions.AGGREGATE_FUNCTIONS.sorted(),
+            expected = AggregateFunctionName.entries.map { it.name.lowercase() },
+            actual = OperatorOptions.AGGREGATE_FUNCTIONS,
         )
     }
 
