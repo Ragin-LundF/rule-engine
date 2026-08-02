@@ -1,6 +1,7 @@
 package ruleengine.dsl.parser
 
 import ruleengine.dsl.ast.ActionAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.ExtractionAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableAssignmentAst
@@ -9,7 +10,7 @@ import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
 
 /**
- * The body of a `then` or an `else` block: actions, `extract` clauses and `set` clauses.
+ * The body of a `then` or an `else` block: actions, `extract` clauses, and `set` and `add` clauses.
  *
  * Both branches share one grammar, so [parse] serves both: the caller consumes the `then` or `else`
  * keyword and asks for the block behind it.
@@ -47,6 +48,11 @@ internal class ThenBlockParser(
                 "set" -> {
                     cursor.advance()
                     assignments += parseAssignment(setToken = token)
+                }
+
+                "add" -> {
+                    cursor.advance()
+                    assignments += parseAppend(addToken = token)
                 }
 
                 "stop" -> {
@@ -140,8 +146,53 @@ internal class ThenBlockParser(
         return VariableAssignmentAst(
             name = nameTok.text,
             expression = parseValueExpression(),
+            kind = AssignmentKindAst.SET,
             line = setToken.line,
             column = setToken.col,
+        )
+    }
+
+    /**
+     * Parses the body of an `add` clause, with the `add` keyword already consumed:
+     * ```
+     * add <valueExpression> to <name>
+     * ```
+     *
+     * The value comes first and the target last, which is the order the clause reads in. It is the
+     * same value-expression grammar a `set` takes, so a literal, a field, an aggregate or another
+     * variable all work; `parseValueExpression` stops at `to` because a bare identifier can only
+     * continue a value expression after a `.`.
+     */
+    private fun parseAppend(addToken: Token): VariableAssignmentAst {
+        val expression = parseValueExpression()
+
+        val toTok = cursor.current()
+        if (toTok.type != TokenType.IDENT || toTok.text != "to") {
+            throw ParseException(
+                line = toTok.line,
+                column = toTok.col,
+                messageText = "Expected 'to' after the value of an 'add' clause but found '${toTok.text}'"
+            )
+        }
+        cursor.advance()
+
+        val nameTok = cursor.current()
+        if (nameTok.type != TokenType.IDENT || nameTok.text.startsWith(prefix = "$")) {
+            throw ParseException(
+                line = nameTok.line,
+                column = nameTok.col,
+                messageText = "Expected variable name after 'to' but found '${nameTok.text}'; " +
+                        "write the name without the '\$' prefix"
+            )
+        }
+        cursor.advance()
+
+        return VariableAssignmentAst(
+            name = nameTok.text,
+            expression = expression,
+            kind = AssignmentKindAst.ADD,
+            line = addToken.line,
+            column = addToken.col,
         )
     }
 

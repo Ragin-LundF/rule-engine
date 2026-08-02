@@ -53,6 +53,7 @@ private class DslScan {
     private var precedingField: String? = null
     private var precedingOperator: String? = null
     private var afterAction: String? = null
+    private var expectsListName = false
 
     fun accept(tok: Token) {
         when (tok.type) {
@@ -70,6 +71,7 @@ private class DslScan {
         precedingField = precedingField,
         precedingOperator = precedingOperator,
         afterAction = afterAction,
+        expectsListName = expectsListName,
     )
 
     private fun openBrace() {
@@ -88,6 +90,7 @@ private class DslScan {
             precedingField = null
             precedingOperator = null
             afterAction = null
+            expectsListName = false
         }
     }
 
@@ -103,18 +106,46 @@ private class DslScan {
         if (braceDepth == 1 && word == "then") {
             section = DslSection.THEN
             afterAction = null
+            expectsListName = false
             return
         }
         if (braceDepth == 1 && word == "else") {
             section = DslSection.ELSE
             afterAction = null
+            expectsListName = false
             return
         }
         when (section) {
             DslSection.WHEN -> whenIdentifier(word = word)
             // Both branches take the same clauses, so the last word read is tracked the same way.
-            DslSection.THEN, DslSection.ELSE -> afterAction = word
+            DslSection.THEN, DslSection.ELSE -> branchIdentifier(word = word)
             else -> Unit
+        }
+    }
+
+    /**
+     * A word in a `then` or `else` block.
+     *
+     * `set`, `add` and `to` are clause structure, not action names — treating them as actions would
+     * offer the argument completions of an action called `add`. After the `to` of an `add` clause the
+     * next word is the accumulator's bare name, which is its own kind of completion.
+     */
+    private fun branchIdentifier(word: String) {
+        when (word) {
+            "set", "add" -> {
+                afterAction = null
+                expectsListName = false
+            }
+
+            "to" -> {
+                afterAction = null
+                expectsListName = true
+            }
+
+            else -> {
+                afterAction = word
+                expectsListName = false
+            }
         }
     }
 
@@ -146,7 +177,11 @@ private class DslScan {
                 precedingOperator = null
             }
 
-            DslSection.THEN -> afterAction = null
+            DslSection.THEN -> {
+                afterAction = null
+                expectsListName = false
+            }
+
             else -> Unit
         }
     }

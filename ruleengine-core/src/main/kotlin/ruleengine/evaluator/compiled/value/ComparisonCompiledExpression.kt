@@ -6,6 +6,7 @@ import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.compiled.value.result.ObjectExpressionValue
@@ -74,6 +75,9 @@ class ComparisonCompiledExpression(
         if (leftValue is MissingExpressionValue || rightValue is MissingExpressionValue) {
             return false
         }
+        if (operator == ComparisonOperatorAst.CONTAINS) {
+            return containsValue(leftValue = leftValue, rightValue = rightValue)
+        }
         return when (leftValue) {
             is NumberExpressionValue if rightValue is NumberExpressionValue -> {
                 val cmp = leftValue.value.compareTo(rightValue.value)
@@ -84,6 +88,8 @@ class ComparisonCompiledExpression(
                     ComparisonOperatorAst.GTE -> cmp >= 0
                     ComparisonOperatorAst.LT -> cmp < 0
                     ComparisonOperatorAst.LTE -> cmp <= 0
+                    // Unreachable: `contains` returns above, before the operand types are examined.
+                    ComparisonOperatorAst.CONTAINS -> false
                 }
             }
 
@@ -103,6 +109,29 @@ class ComparisonCompiledExpression(
                     else -> false
                 }
             }
+
+            else -> false
+        }
+    }
+
+    /**
+     * `contains`, dispatched on the left operand's runtime type: membership for a list, substring for
+     * text.
+     *
+     * One word, two meanings, chosen deliberately. `contains` already means substring everywhere else
+     * in the engine, so `purpose contains "rent"` and `$purposeCopy contains "rent"` agree — which is
+     * what a reader assumes. Membership is the natural reading of the same word over a list.
+     *
+     * A missing left operand is already `false` at the call site, which is what lets
+     * `not $topics contains "billing"` pass before anything has been added.
+     */
+    private fun containsValue(leftValue: ExpressionValue, rightValue: ExpressionValue): Boolean {
+        return when {
+            leftValue is ArrayExpressionValue ->
+                ExpressionValues.arrayContains(container = leftValue, element = rightValue)
+
+            leftValue is TextExpressionValue && rightValue is TextExpressionValue ->
+                leftValue.value.contains(other = rightValue.value)
 
             else -> false
         }

@@ -5,6 +5,7 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.VariableAssignmentAst
 
@@ -21,6 +22,14 @@ import ruleengine.dsl.ast.VariableAssignmentAst
  * catch typos and forward references, not to prove a variable is always populated. A `set` in an
  * `else` block counts the same way — only one branch of a rule ever runs, and which one is a runtime
  * question this check does not ask.
+ *
+ * An `add` clause is scoped one step wider: it publishes its name **before its own rule's condition
+ * is checked**, so the rule that first accumulates into a list may also guard on it. The asymmetry
+ * with `set` is deliberate, and rests on accumulators having an identity element. An unset list reads
+ * as missing, `missing contains x` is false, and `not` of that is true — so the guard on the very
+ * first rule passes, which is the right answer. `set total = $total + amount` has no such element:
+ * missing plus a number is missing, and the rule would silently publish nothing. That is why reading
+ * a `set` variable before it is assigned stays an error.
  */
 internal object VariableScopeValidator {
 
@@ -32,8 +41,11 @@ internal object VariableScopeValidator {
         val fieldNames = fieldNames(schema = schema)
         val defined = linkedSetOf<String>()
         val assignedBy = mutableMapOf<String, String>()
+        val writtenKinds = mutableMapOf<String, AssignmentKindAst>()
 
         for (rule in asts) {
+            declareAccumulators(rule = rule, defined = defined)
+
             checkReads(
                 names = VariableUsage.readsOfExpression(expr = rule.condition),
                 rule = rule,
@@ -50,6 +62,7 @@ internal object VariableScopeValidator {
                 fieldNames = fieldNames,
                 defined = defined,
                 assignedBy = assignedBy,
+                writtenKinds = writtenKinds,
                 diagnostics = diagnostics
             )
             checkBranch(
@@ -59,12 +72,28 @@ internal object VariableScopeValidator {
                 fieldNames = fieldNames,
                 defined = defined,
                 assignedBy = assignedBy,
+                writtenKinds = writtenKinds,
                 diagnostics = diagnostics
             )
         }
     }
 
-    /** The `set` clauses and actions of one branch, in the order the engine applies them. */
+    /**
+     * Publishes the names this rule's `add` clauses write, before its condition is read.
+     *
+     * This is the one place the "an earlier rule must assign it" rule is relaxed, and only for
+     * accumulators — see the class KDoc for why they can afford it and `set` cannot. Names written by
+     * a *later* rule are still not in scope, so a forward reference is still an error.
+     */
+    private fun declareAccumulators(rule: RuleAst, defined: MutableSet<String>) {
+        for (assignment in rule.assignments + rule.elseAssignments) {
+            if (assignment.kind == AssignmentKindAst.ADD) {
+                defined += assignment.name
+            }
+        }
+    }
+
+    /** The `set` and `add` clauses and actions of one branch, in the order the engine applies them. */
     @Suppress("LongParameterList")
     private fun checkBranch(
         assignments: List<VariableAssignmentAst>,
@@ -73,6 +102,7 @@ internal object VariableScopeValidator {
         fieldNames: Set<String>,
         defined: MutableSet<String>,
         assignedBy: MutableMap<String, String>,
+        writtenKinds: MutableMap<String, AssignmentKindAst>,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         for (assignment in assignments) {
@@ -87,6 +117,7 @@ internal object VariableScopeValidator {
                 rule = rule,
                 fieldNames = fieldNames,
                 assignedBy = assignedBy,
+                writtenKinds = writtenKinds,
                 diagnostics = diagnostics
             )
             defined += assignment.name
@@ -114,7 +145,7 @@ internal object VariableScopeValidator {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
                 message = "Rule '${rule.id}' reads unknown variable '\$$name'; " +
-                        "no earlier rule assigns it with a 'set' clause",
+                        "no earlier rule assigns it with a 'set' or 'add' clause",
                 suggestion = Suggestions.suggestClosest(input = name, candidates = defined.toList())
                     ?.let { closest -> "Did you mean '\$$closest'?" },
                 line = rule.line,
@@ -123,11 +154,13 @@ internal object VariableScopeValidator {
         }
     }
 
+    @Suppress("LongParameterList")
     private fun checkAssignment(
         assignment: VariableAssignmentAst,
         rule: RuleAst,
         fieldNames: Set<String>,
         assignedBy: MutableMap<String, String>,
+        writtenKinds: MutableMap<String, AssignmentKindAst>,
         diagnostics: MutableList<ValidationDiagnostic>
     ) {
         if (assignment.name in fieldNames) {
@@ -143,6 +176,13 @@ internal object VariableScopeValidator {
             return
         }
 
+        checkKind(assignment = assignment, rule = rule, writtenKinds = writtenKinds, diagnostics = diagnostics)
+
+        // Only for `set`. Several rules accumulating into one list is the point of `add`, not a
+        // mistake, and "the last rule that matches wins" would be the wrong thing to say about it.
+        if (assignment.kind != AssignmentKindAst.SET) {
+            return
+        }
         val previous = assignedBy.put(assignment.name, rule.id)
         if (previous != null && previous != rule.id) {
             diagnostics += ValidationDiagnostic(
@@ -153,6 +193,34 @@ internal object VariableScopeValidator {
                 column = assignment.column,
             )
         }
+    }
+
+    /**
+     * A name is either a plain value or an accumulator, never both.
+     *
+     * Checked statically because the runtime cannot tell the two apart: an accumulator is an ordinary
+     * list value, so a `set` that produced a list and an `add` that built one are indistinguishable
+     * once evaluation starts. Whichever rule matched first would decide what the name means.
+     */
+    private fun checkKind(
+        assignment: VariableAssignmentAst,
+        rule: RuleAst,
+        writtenKinds: MutableMap<String, AssignmentKindAst>,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        val previousKind = writtenKinds.putIfAbsent(assignment.name, assignment.kind) ?: return
+        if (previousKind == assignment.kind) {
+            return
+        }
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "Variable '${assignment.name}' is written by both a 'set' and an 'add' clause, " +
+                    "the latter in rule '${rule.id}'; a variable is either a plain value or a list, not both",
+            suggestion = "Use 'add' everywhere to accumulate a list, or 'set' everywhere to publish " +
+                    "a single value",
+            line = assignment.line,
+            column = assignment.column,
+        )
     }
 
     /** Every name a field can be written as, so a variable cannot shadow one. */

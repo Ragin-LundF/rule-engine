@@ -54,6 +54,10 @@ actions:
     argTypes: [<type>]      # one type, or [] for an action that takes no argument
 ```
 
+Some names are not available: `else`, `stop` and `add` are rule keywords, and the engine rejects an
+action schema that declares one rather than letting the rule file fail to parse. Rename it — `add`
+becomes `append`, for instance.
+
 Each action accepts **at most one argument** of a declared type. Use an empty list (`argTypes: []`) for
 an action that is just a signal.
 

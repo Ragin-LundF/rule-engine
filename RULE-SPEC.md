@@ -916,10 +916,88 @@ Writing rules:
 - `$1`, `$2`, … are **not** variables — an all-digit name is a regex capture group of an `extract`
   clause (see `docs/rules.md`).
 - A variable must not be named like a schema field.
-- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is only
-  valid with a symbolic comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
+- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is valid
+  with a symbolic comparison — `==`, `!=`, `>`, `>=`, `<`, `<=` — and with `contains`, which is the
+  one named operator it accepts (§5.6.1).
 - Variables make rule order semantically significant. Say so in the manifest with a comment when you
   generate one (§6).
+
+#### 5.6.1 List variables — the `add` clause
+
+A `set` publishes one value. To collect **several** values across rules, use `add`:
+
+```
+then
+  add <value expression> to <name>
+```
+
+Read it back with `contains`:
+
+```
+when
+  $<name> contains "something"
+```
+
+Use it for labelling: many rules producing the same outcome from different evidence, where each rule
+should skip its work once the outcome is already recorded.
+
+```
+rule "billing-from-refund" {
+  description "A refund request is a billing matter."
+
+  when
+    not $topics contains "billing"
+    and purpose contains "refund"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+rule "billing-from-invoice" {
+  description "So is an invoice question — but the topic is only claimed once."
+
+  when
+    not $topics contains "billing"
+    and purpose contains "invoice"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+rule "route-billing" {
+  description "Routing reads the finished list instead of the text again."
+
+  when
+    $topics contains "billing"
+
+  then
+    category "finance-team"
+}
+```
+
+The guard is what makes this scale. `and` stops at the first false condition, and the engine
+evaluates the cheapest condition of an `and` first — a list lookup is cheaper than a text search — so
+a rule whose topic is already recorded never runs its text matching, whichever order the two
+conditions are written in. An `or` is unaffected: it still evaluates its other branch.
+
+| Aspect | Behaviour |
+|---|---|
+| Duplicates | Ignored. Adding a value the list already holds changes nothing, so two rules reaching the same conclusion produce one entry. |
+| Order | Insertion order, kept. |
+| Visibility | The rules after the `add`, **and the condition of the rule that writes it** — which is what lets a rule guard on the list it fills in. |
+| Never added | Reading yields a missing value, so `contains` is **false** and `not … contains` is **true**. That is why the first rule of a guarded set fires. |
+| Several writers | Expected, and not a warning — unlike two rules `set`ting one name. |
+| Mixing | A name written by both `set` and `add` is an **error**: a variable is either a plain value or a list. |
+| Value | Any value expression, as with `set`. A missing value adds nothing but still creates the list. |
+| Result | Arrives as a list in `EvaluationResult.variables`. |
+
+`contains` reads a list as membership and a text value as a substring. On the expression path it does
+**not** apply the field's normalizers, so add values already in the form you will test for.
+
+> **`add` is a keyword.** An action may not be named `add`; the engine reports it as an error and the
+> action has to be renamed.
 
 ### 5.7 Rule ID conventions
 

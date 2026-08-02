@@ -30,6 +30,60 @@ class AutoCompleteTest {
         )
     }
 
+    // --- add clause ---
+
+    private fun thenCompletions(context: DslCursorContext): List<CompletionItem> =
+        buildContextualCompletions(context = context, schema = null, actionSchema = null)
+
+    @Test
+    fun `the then block offers the add keyword`() {
+        val labels = thenCompletions(context = DslCursorContext(section = DslSection.THEN)).map { it.label }
+
+        assertTrue(actual = labels.contains(element = "add"), message = "got: $labels")
+    }
+
+    /**
+     * `add` is a clause keyword, not an action name. Without that distinction the editor would offer
+     * the argument completions of an action called `add`.
+     */
+    @Test
+    fun `add is not treated as an action name`() {
+        val text = """
+            rule "r" {
+              when
+                amount > 0
+              then
+                add 
+        """.trimIndent()
+
+        val context = analyzeDslContext(text = text, cursorPos = text.length)
+
+        assertEquals(expected = null, actual = context.afterAction)
+    }
+
+    @Test
+    fun `the target of an add clause is offered as a bare variable name`() {
+        val text = """
+            rule "r" {
+              when
+                amount > 0
+              then
+                add "billing" to 
+        """.trimIndent()
+
+        val context = analyzeDslContext(text = text, cursorPos = text.length)
+        assertTrue(actual = context.expectsListName, message = "expected a list-name context")
+
+        val labels = buildContextualCompletions(
+            context = context,
+            schema = null,
+            actionSchema = null,
+            variableNames = listOf("topics"),
+        ).map { it.label }
+
+        assertEquals(expected = listOf("topics"), actual = labels)
+    }
+
     // --- aggregate functions in when block ---
 
     @Test

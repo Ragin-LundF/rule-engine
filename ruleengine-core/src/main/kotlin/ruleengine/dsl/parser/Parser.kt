@@ -167,8 +167,8 @@ class Parser(private val input: String) {
             throw ParseException(
                 line = tok.line,
                 column = tok.col,
-                messageText = "Empty 'else' block: declare at least one action, 'set' clause or 'stop', " +
-                        "or drop the 'else' keyword"
+                messageText = "Empty 'else' block: declare at least one action, 'set' or 'add' " +
+                        "clause, or 'stop', or drop the 'else' keyword"
             )
         }
 
@@ -362,19 +362,34 @@ class Parser(private val input: String) {
     /**
      * Returns true for operators that have no equivalent in the legacy named-operator DSL
      * and must always be routed through the modern [ComparisonExpressionAst] path.
+     *
+     * [ComparisonOperatorAst.CONTAINS] is deliberately **not** listed. It does have a legacy
+     * equivalent — `purpose contains "rent"` — and that spelling must keep taking the legacy path,
+     * which is the only one that enforces the field's declared `operators:` list and normalizes the
+     * literal. A `contains` reaches the modern path only when one of its operands is modern on its
+     * own account, i.e. a variable, an aggregate, arithmetic or a filtered path.
      */
     private fun isModernOnlyOperator(op: ComparisonOperatorAst): Boolean {
         return op == ComparisonOperatorAst.EQ || op == ComparisonOperatorAst.NEQ
     }
 
     private fun parseComparisonOperator(): ComparisonOperatorAst? {
-        return when (current().type) {
+        val token = current()
+        return when (token.type) {
             TokenType.EQEQ -> { advance(); ComparisonOperatorAst.EQ }
             TokenType.BANGEQ -> { advance(); ComparisonOperatorAst.NEQ }
             TokenType.GT -> { advance(); ComparisonOperatorAst.GT }
             TokenType.GTE -> { advance(); ComparisonOperatorAst.GTE }
             TokenType.LT -> { advance(); ComparisonOperatorAst.LT }
             TokenType.LTE -> { advance(); ComparisonOperatorAst.LTE }
+            // The one named operator the modern path understands, so a list variable can be tested
+            // for membership. Normalised rather than compared literally, so it is recognised in the
+            // same spellings the legacy path accepts.
+            TokenType.IDENT if OperatorUtils.normalizeOperator(op = token.text) == OperatorNames.CONTAINS -> {
+                advance()
+                ComparisonOperatorAst.CONTAINS
+            }
+
             else -> null
         }
     }

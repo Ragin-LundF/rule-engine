@@ -1,0 +1,28 @@
+# Cards. A ticket can be about billing *and* cards at once — the topics are independent, and each
+# accumulates into the same list.
+
+rule "card-declined" {
+  description "A card was refused at the checkout."
+  when
+    not $topics contains "cards"
+    and (subject contains "card declined"
+    or subject contains "card was declined"
+    or body contains "declined my card")
+
+  then
+    topic "cards"
+    add "cards" to topics
+}
+
+rule "card-lost-or-stolen" {
+  description "A card has to be blocked."
+  when
+    not $topics contains "cards"
+    and (subject contains "lost card"
+    or subject contains "stolen card")
+
+  then
+    topic "cards"
+    add "cards" to topics
+    priority "urgent"
+}

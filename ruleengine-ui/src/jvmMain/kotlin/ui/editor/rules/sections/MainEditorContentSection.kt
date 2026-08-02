@@ -90,12 +90,9 @@ fun ColumnScope.MainEditorContentSection(
     var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(value = null) }
 
     // ── Parsed rules for live diagram view ────────────────────────────────────
-    val showAllRules by state.showAllRules
-    val allRulesText by state.allRulesText
     val diagramView by state.diagramView
-    val diagramRules = remember(ruleValue.text, showAllRules, allRulesText) {
-        val text = if (showAllRules && isDiagram) allRulesText else ruleValue.text
-        runCatching { Parser(input = text).parseRules() }.getOrElse { emptyList() }
+    val diagramRules = remember(ruleValue.text) {
+        runCatching { Parser(input = ruleValue.text).parseRules() }.getOrElse { emptyList() }
     }
 
     // ── Syntax-highlighted display value ──────────────────────────────────────

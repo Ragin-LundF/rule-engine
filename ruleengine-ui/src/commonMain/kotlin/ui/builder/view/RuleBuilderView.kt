@@ -276,7 +276,7 @@ private fun LockedBuilderMessage(
  */
 internal fun defaultOperatorFor(field: CatalogFieldInfo?): String {
     val allowed = field?.let {
-        OperatorOptions.forField(fieldType = it.type, schemaOperators = it.operators)
+        OperatorOptions.forCatalogField(fieldId = it.id, fieldType = it.type, schemaOperators = it.operators)
     }
     return allowed?.firstOrNull() ?: OperatorOptions.EQUALS
 }

@@ -1,5 +1,6 @@
 package ui.workbench
 
+import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
@@ -62,6 +63,24 @@ class ApplySampleTest {
         ruleFiles = listOf("rules/big.rule" to RULE_TEXT),
     )
 
+    private val twoFileSample = LoadedSample(
+        descriptor = descriptor,
+        manifestYaml = """
+            name: demo
+            entries:
+              - id: demo-entry
+                schema: schema.yaml
+                actions: actions.yaml
+                rules:
+                  - rules/a.rule
+                  - rules/b.rule
+        """.trimIndent(),
+        schemaYaml = loaded.schemaYaml,
+        actionsYaml = loaded.actionsYaml,
+        rulesText = RULE_A + "\n\n" + RULE_B,
+        ruleFiles = listOf("rules/a.rule" to RULE_A, "rules/b.rule" to RULE_B),
+    )
+
     private fun state() = RuleEditorState(scope = CoroutineScope(EmptyCoroutineContext))
 
     @Test
@@ -108,6 +127,125 @@ class ApplySampleTest {
         assertEquals(expected = "", actual = state.diagnosticsText.value)
     }
 
+    // ── one buffer behind every view ──────────────────────────────────────────
+
+    /**
+     * The Builder, the code editor, the tester and the diagrams all read [RuleEditorState.ruleValue].
+     *
+     * There used to be a second copy, `allRulesText`, taken when the files were loaded and never
+     * updated. In All files — which is how a sample opens — the Builder wrote to one and the tester
+     * and diagrams read the other, so a change made in the Builder was simply not there.
+     */
+    @Test
+    fun `a builder edit is visible to every view that reads the buffer`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = twoFileSample)
+
+        val edited = state.ruleValue.value.text.replace(
+            oldValue = """label "a"""",
+            newValue = """label "a"
+    add "a" to topics""",
+        )
+        state.ruleValue.value = TextFieldValue(text = edited)
+
+        // Every view derives from this one value; re-loading All files must not undo it either.
+        assertTrue(actual = state.ruleValue.value.text.contains(other = "add \"a\" to topics"))
+        state.loadAllRuleFilesForCurrentEntry()
+        assertTrue(
+            actual = state.ruleValue.value.text.contains(other = "add \"a\" to topics"),
+            message = "reloading All files dropped the edit: ${state.ruleValue.value.text}",
+        )
+    }
+
+    /** All files puts the whole entry in the buffer, so the Builder sees every rule. */
+    @Test
+    fun `All files holds every rule of the entry in the buffer`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = twoFileSample)
+
+        assertTrue(actual = state.showAllRules.value)
+        assertTrue(actual = state.ruleValue.value.text.contains(other = """rule "a""""))
+        assertTrue(actual = state.ruleValue.value.text.contains(other = """rule "b""""))
+    }
+
+    // ── unsaved edits survive navigation ──────────────────────────────────────
+
+    /**
+     * A sample has no disk. [RuleEditorState.inMemoryRuleFiles] is its storage, and it was written
+     * once at load and never again — so switching to another file handed back the text the sample
+     * shipped with and dropped every Builder edit made since.
+     */
+    @Test
+    fun `an edit is stashed in memory before another file replaces the buffer`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = twoFileSample)
+        state.loadSingleManifestRuleFile(relativePath = "rules/a.rule")
+
+        state.ruleValue.value = TextFieldValue(text = state.ruleValue.value.text + "\n# edited")
+
+        state.loadSingleManifestRuleFile(relativePath = "rules/b.rule")
+        state.loadSingleManifestRuleFile(relativePath = "rules/a.rule")
+
+        assertTrue(
+            actual = state.ruleValue.value.text.contains(other = "# edited"),
+            message = "edit was lost: ${state.ruleValue.value.text}",
+        )
+    }
+
+    /** And the stash reaches the operand catalog, which reads the same files. */
+    @Test
+    fun `a variable added in one file is offered while editing another`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = twoFileSample)
+        state.loadSingleManifestRuleFile(relativePath = "rules/a.rule")
+
+        state.ruleValue.value = TextFieldValue(
+            text = state.ruleValue.value.text.replace(
+                oldValue = """label "a"""",
+                newValue = """label "a"
+    add "a" to topics""",
+            )
+        )
+        state.loadSingleManifestRuleFile(relativePath = "rules/b.rule")
+
+        assertEquals(expected = listOf("${'$'}topics"), actual = variableIdsOf(state = state))
+    }
+
+    // ── the operand catalog keeps up with the buffer ──────────────────────────
+
+    /**
+     * A sample opens with every file concatenated into the buffer and no single file selected, so
+     * the per-file view of the entry is the saved text and only the buffer has the edit. Reading the
+     * files instead of the buffer is what used to hide a just-added variable from the Builder's
+     * dropdowns — and for a sample, which is never written to disk, hide it forever.
+     */
+    @Test
+    fun `a variable typed into the buffer reaches the operand catalog`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = loaded)
+
+        assertTrue(
+            actual = variableIdsOf(state = state).isEmpty(),
+            message = "the sample declares no variable to start with",
+        )
+
+        state.ruleValue.value = TextFieldValue(
+            text = state.ruleValue.value.text.replace(
+                oldValue = """label "big"""",
+                newValue = """label "big"
+    add "big" to topics""",
+            )
+        )
+
+        assertEquals(expected = listOf("${'$'}topics"), actual = variableIdsOf(state = state))
+    }
+
+    private fun variableIdsOf(state: RuleEditorState): List<String> =
+        builderCatalogVariablesFrom(
+            files = state.parsedRuleFilesForCurrentEntryWithOpenBuffer(),
+            uptoRuleId = null,
+        ).map { info -> info.id }
+
     // ── manifest and file switching ───────────────────────────────────────────
 
     /** Without the manifest in state the manifest run diagram has no entry to draw for a sample. */
@@ -134,7 +272,7 @@ class ApplySampleTest {
         state.applySample(descriptor = descriptor, loaded = loaded)
 
         assertTrue(actual = state.showAllRules.value)
-        assertEquals(expected = RULE_TEXT, actual = state.allRulesText.value)
+        assertEquals(expected = RULE_TEXT, actual = state.ruleValue.value.text)
         assertEquals(
             expected = listOf("rules/big.rule"),
             actual = state.entryRuleSources.value.map { source -> source.relativePath },
@@ -169,7 +307,7 @@ class ApplySampleTest {
         state.loadAllRuleFilesForCurrentEntry()
 
         assertTrue(actual = state.showAllRules.value)
-        assertEquals(expected = RULE_TEXT, actual = state.allRulesText.value)
+        assertEquals(expected = RULE_TEXT, actual = state.ruleValue.value.text)
         assertEquals(expected = 1, actual = state.entryRuleSources.value.size)
     }
 
@@ -237,5 +375,7 @@ class ApplySampleTest {
 
     private companion object {
         const val RULE_TEXT: String = "rule \"big\" {\n  when\n    amount >= 500\n  then\n    label \"big\"\n}"
+        const val RULE_A: String = "rule \"a\" {\n  when\n    amount >= 1\n  then\n    label \"a\"\n}"
+        const val RULE_B: String = "rule \"b\" {\n  when\n    amount >= 2\n  then\n    label \"b\"\n}"
     }
 }

@@ -86,9 +86,16 @@ object ValueExpressionRenderer {
         }
     }
 
-    /** Renders a `set` clause, e.g. `set orderTotal = sum(orders[*].amount)`. */
+    /**
+     * Renders an assignment clause, e.g. `set orderTotal = sum(orders[*].amount)` or
+     * `add "billing" to topics`.
+     */
     fun renderAssignment(assignment: VariableAssignmentAst): String {
-        return "set ${assignment.name} = ${render(expr = assignment.expression)}"
+        val value = render(expr = assignment.expression)
+        return when (assignment.kind) {
+            AssignmentKindAst.SET -> "set ${assignment.name} = $value"
+            AssignmentKindAst.ADD -> "add $value to ${assignment.name}"
+        }
     }
 
     /** The DSL spelling of a comparison operator, e.g. [ComparisonOperatorAst.GTE] -> `>=`. */
@@ -100,6 +107,7 @@ object ValueExpressionRenderer {
             ComparisonOperatorAst.GTE -> ">="
             ComparisonOperatorAst.LT -> "<"
             ComparisonOperatorAst.LTE -> "<="
+            ComparisonOperatorAst.CONTAINS -> "contains"
         }
     }
 

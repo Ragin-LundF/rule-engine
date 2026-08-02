@@ -63,6 +63,18 @@ private fun buildVariableCompletions(variableNames: List<String>): List<Completi
     }
 }
 
+/** A bare name per known variable, for the target of an `add` clause. */
+private fun buildListNameCompletions(variableNames: List<String>): List<CompletionItem> {
+    return variableNames.map { name ->
+        CompletionItem(
+            label = name,
+            insertText = name,
+            kind = CompletionKind.FIELD,
+            hint = "list variable"
+        )
+    }
+}
+
 private fun buildTopLevelCompletions(): List<CompletionItem> {
     return listOf(
         CompletionItem(
@@ -127,6 +139,12 @@ private fun buildThenCompletions(
     variableNames: List<String>,
     offerElseKeyword: Boolean,
 ): List<CompletionItem> {
+    // The target of an `add` is written bare, without the `$`, so neither an action argument nor a
+    // `$name` reference is what belongs here.
+    if (context.expectsListName) {
+        return buildListNameCompletions(variableNames = variableNames)
+    }
+
     if (context.afterAction != null) {
         return buildActionArgCompletions(
             actionName = context.afterAction,
@@ -136,6 +154,7 @@ private fun buildThenCompletions(
 
     val keywords = buildList {
         add(SET_KEYWORD_COMPLETION)
+        add(ADD_KEYWORD_COMPLETION)
         add(STOP_KEYWORD_COMPLETION)
         if (offerElseKeyword) {
             add(ELSE_KEYWORD_COMPLETION)
@@ -149,6 +168,13 @@ private val SET_KEYWORD_COMPLETION = CompletionItem(
     insertText = "set name = ",
     kind = CompletionKind.KEYWORD,
     hint = "publish a variable for later rules"
+)
+
+private val ADD_KEYWORD_COMPLETION = CompletionItem(
+    label = "add",
+    insertText = "add \"\" to name",
+    kind = CompletionKind.KEYWORD,
+    hint = "append a value to a list variable"
 )
 
 private val ELSE_KEYWORD_COMPLETION = CompletionItem(

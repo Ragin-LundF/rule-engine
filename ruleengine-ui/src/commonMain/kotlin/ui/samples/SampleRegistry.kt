@@ -116,6 +116,24 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "support-triage",
+            name = "Support Triage",
+            description = "Label a support ticket with every topic it touches: each rule guards itself " +
+                "on a list variable, so the same topic is never claimed twice, and the routing rules read " +
+                "the finished list back.",
+            category = SampleCategory.SUPPORT,
+            manifestResPath = "files/samples/support-triage/manifest.yaml",
+            schemaResPath = "files/samples/support-triage/schema.yaml",
+            actionsResPath = "files/samples/support-triage/actions.yaml",
+            ruleResPaths = listOf(
+                // The topic files fill the list; routing.rule reads it, so it has to come last.
+                "files/samples/support-triage/rules/billing-topics.rule",
+                "files/samples/support-triage/rules/card-topics.rule",
+                "files/samples/support-triage/rules/shipping-topics.rule",
+                "files/samples/support-triage/rules/routing.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "access-control",
             name = "Access Control",
             description = "Enforce role-based permissions, IP allowlist/blocklist rules, " +

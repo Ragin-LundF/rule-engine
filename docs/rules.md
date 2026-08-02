@@ -740,13 +740,103 @@ letter or `_`.
 |---|---|
 | `$name` must be assigned by an earlier rule of the entry | ❌ error (with a "did you mean" suggestion) |
 | A variable must not be named like a schema field | ❌ error |
-| A `set` name must be written without the `$` prefix | ❌ parse error |
-| The `set` expression is checked like any other value expression (unknown fields, bad aggregates) | ❌ error |
-| Two rules assigning the same name | ⚠️ warning |
+| A `set` or `add` name must be written without the `$` prefix | ❌ parse error |
+| The value expression is checked like any other (unknown fields, bad aggregates) | ❌ error |
+| Two rules `set`ting the same name | ⚠️ warning |
+| Two rules `add`ing to the same name | ✅ nothing — that is the point of `add` |
+| One name written by both `set` and `add` | ❌ error |
 
 The "assigned by an earlier rule" check is deliberately generous: it only asks that *some* earlier rule
 assigns the name, not that the rule will actually match at runtime. Catching typos and forward
 references is the point; proving a variable is always populated is not possible before the data arrives.
+
+## Collecting Values — the `add` Clause
+
+A `set` publishes one value. To collect **several** values across rules, use `add`:
+
+```
+then
+  add <value expression> to <name>
+```
+
+and read the list back with `contains`:
+
+```
+when
+  $<name> contains "something"
+```
+
+### Why it exists
+
+Labelling. Many rules produce the same label from different evidence, and the expensive part of each
+rule is the text matching. Guarding on the list lets a rule skip that work once the label is recorded:
+
+```
+# topics.rule
+rule "billing-from-refund" {
+  description "A refund request is a billing matter."
+  when
+    not $topics contains "billing"
+    and purpose contains "refund"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+rule "billing-from-invoice" {
+  description "So is an invoice question — but the topic is only claimed once."
+  when
+    not $topics contains "billing"
+    and purpose contains "invoice"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+# routing.rule — listed after topics.rule, so it reads a finished list
+rule "route-billing" {
+  description "Routing reads the accumulated topics instead of the ticket text again."
+  when
+    $topics contains "billing"
+
+  then
+    category "finance-team"
+}
+```
+
+For a ticket mentioning both, only the first rule fires. The second stops at its guard — it never
+searches the text — and `label "billing"` is produced once rather than twice. `route-billing` then
+works from the finished list rather than going back to the input.
+
+The guard is cheap on purpose. `and` stops at its first false condition, and the engine evaluates the
+cheapest condition of an `and` first, so the list lookup runs before the text search whichever order
+you write them in. An `or` is unaffected: a false first operand still lets the second decide.
+
+### Behaviour
+
+| Question | Answer |
+|---|---|
+| What if the value is already in the list? | Nothing is added. The list behaves as a set, so two rules reaching the same conclusion produce one entry. |
+| What order do the values come out in? | The order they were added. |
+| Who can read `$name`? | The rules after the `add` — **and the condition of the rule that writes it**. That exception is what lets a rule guard on the list it fills in. |
+| Why is that safe for `add` but not `set`? | An unread list is missing, `contains` on a missing value is false, and `not` of that is true — so the guard correctly passes the first time. `set total = $total + amount` has no such starting point, so reading a `set` variable before it is assigned stays an error. |
+| Can two rules add to the same name? | Yes, and it is not a warning. That is the whole point. |
+| Can a name be both? | No. A name written by both a `set` and an `add` is an error. |
+| What can be added? | Any value expression, as with `set`. A missing value adds nothing, but the list is still created. |
+| How does it arrive in the result? | As a list in `EvaluationResult.variables`. |
+
+### `contains` on a variable
+
+`contains` is the one named operator a variable accepts. What it means depends on what the variable
+holds: membership for a list, a substring for a text value.
+
+It does **not** apply normalizers — a variable has no schema entry to take them from — so add values
+in the form you will test for. `add "Billing" to topics` is not found by `$topics contains "billing"`.
+
+> **`add` is a keyword.** An action may not be named `add`. If an action schema declares one, the
+> engine reports it as an error and the action has to be renamed.
 
 ## Extracting Values into Actions — the `extract` Clause
 

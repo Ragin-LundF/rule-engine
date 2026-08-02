@@ -1,8 +1,5 @@
 package ruleengine.dsl
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.dsl.ast.ArithmeticValueAst
@@ -17,7 +14,11 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.dsl.parser.Parser
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 
 class ParserExpressionTest {
 
@@ -191,5 +192,63 @@ class ParserExpressionTest {
         """.trimIndent()
         val ast = Parser(input = rule).parseRules().single()
         assertIs<NotAst>(value = ast.condition)
+    }
+
+    // ── `contains` routing ────────────────────────────────────────────────────
+    //
+    // `contains` is the one named operator the modern expression path understands. These tests pin
+    // which spelling goes down which path: only the legacy path enforces a field's declared
+    // `operators:` list and normalizes the literal, so a plain field comparison silently changing
+    // path would change the meaning of every text rule in every project.
+
+    private fun conditionOf(input: String) = Parser(
+        input = """
+            rule "test" {
+              when
+                $input
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+    ).parseRules().single().condition
+
+    @Test
+    fun `a plain field contains a literal stays on the legacy path`() {
+        assertIs<ConditionAst>(value = conditionOf(input = """purpose contains "rent""""))
+    }
+
+    @Test
+    fun `a plain field contains a literal keeps its ignoreCase modifier on the legacy path`() {
+        val condition = assertIs<ConditionAst>(
+            value = conditionOf(input = """purpose contains "rent" ignoreCase""")
+        )
+        assertEquals(expected = true, actual = condition.ignoreCase)
+    }
+
+    @Test
+    fun `containsAny stays on the legacy path`() {
+        val condition = assertIs<ConditionAst>(value = conditionOf(input = """tags containsAny ["a", "b"]"""))
+        assertEquals(expected = "containsAny", actual = condition.operator)
+    }
+
+    @Test
+    fun `a variable contains a literal takes the expression path`() {
+        val expr = assertIs<ComparisonExpressionAst>(value = conditionOf(input = """${'$'}topics contains "billing""""))
+        assertEquals(expected = ComparisonOperatorAst.CONTAINS, actual = expr.operator)
+        assertIs<VariableRefAst>(value = expr.left)
+    }
+
+    @Test
+    fun `a negated variable contains a literal takes the expression path`() {
+        val negated = assertIs<NotAst>(value = conditionOf(input = """not ${'$'}topics contains "billing""""))
+        val expr = assertIs<ComparisonExpressionAst>(value = negated.child)
+        assertEquals(expected = ComparisonOperatorAst.CONTAINS, actual = expr.operator)
+    }
+
+    @Test
+    fun `a field contains a variable takes the expression path`() {
+        val expr = assertIs<ComparisonExpressionAst>(value = conditionOf(input = "purpose contains ${'$'}needle"))
+        assertEquals(expected = ComparisonOperatorAst.CONTAINS, actual = expr.operator)
+        assertIs<VariableRefAst>(value = expr.right)
     }
 }

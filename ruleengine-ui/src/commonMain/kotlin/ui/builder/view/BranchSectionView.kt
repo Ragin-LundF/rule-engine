@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ruleengine.core.domain.dto.RuleBranch
+import ruleengine.dsl.ast.AssignmentKindAst
 import ui.AccentOrange
 import ui.TextSecondary
 import ui.builder.components.row.ActionRowEditor
@@ -155,6 +156,18 @@ private fun BranchAddButtons(
                 editorState.addVariable(
                     defaultName = nextVariableName(editorState = editorState),
                     branch = branch,
+                    kind = AssignmentKindAst.SET,
+                )
+                emitDslChange(editorState = editorState, onDslChange = onDslChange)
+            },
+        )
+        AddButton(
+            label = "+ Add to list",
+            onClick = {
+                editorState.addVariable(
+                    defaultName = nextVariableName(editorState = editorState),
+                    branch = branch,
+                    kind = AssignmentKindAst.ADD,
                 )
                 emitDslChange(editorState = editorState, onDslChange = onDslChange)
             },

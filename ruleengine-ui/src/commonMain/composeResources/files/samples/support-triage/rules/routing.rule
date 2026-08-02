@@ -1,0 +1,43 @@
+# Routing. Listed last, because every rule here reads the finished `topics` list rather than the
+# ticket text — the labelling above has already done that work once.
+#
+# Note what changes at this point: the rules above use `contains` to *avoid* repeating themselves,
+# these use the same operator to *decide* on the accumulated result.
+
+rule "route-cards" {
+  description "Anything touching cards goes to the card team first, whatever else it is about."
+  when
+    $topics contains "cards"
+
+  then
+    queue "cards-team"
+}
+
+rule "route-billing" {
+  description "A billing ticket with no card involvement goes to finance."
+  when
+    $topics contains "billing"
+    and not $topics contains "cards"
+
+  then
+    queue "finance-team"
+}
+
+rule "route-shipping" {
+  description "A delivery problem goes to logistics."
+  when
+    $topics contains "shipping"
+
+  then
+    queue "logistics-team"
+}
+
+rule "ask-for-evidence" {
+  description "A damaged-delivery claim without a photo cannot be settled as it stands."
+  when
+    $topics contains "shipping"
+    and $topics contains "needs-evidence"
+
+  then
+    priority "waiting-on-customer"
+}

@@ -69,6 +69,14 @@ object OperatorOptions {
     /** Text operands support equality only — the engine rejects ordering comparisons on text. */
     val COMPARISON_TEXT: List<String> = listOf(SYMBOL_EQUALS, SYMBOL_NOT_EQUALS)
 
+    /**
+     * The only operator valid against a list variable.
+     *
+     * Deliberately not folded into [COMPARISON_NUMERIC]: `contains` on an aggregate or a plain field
+     * comparison is either a validation error or a condition that can never match.
+     */
+    val LIST_VARIABLE: List<String> = listOf(CONTAINS)
+
     /** Aggregate functions understood by the engine, lowercase, in declaration order. */
     val AGGREGATE_FUNCTIONS: List<String> = AggregateFunctionName.lowercaseNames()
 
@@ -87,6 +95,15 @@ object OperatorOptions {
      */
     const val VARIABLE_TYPE: String = "variable"
 
+    /**
+     * Catalog type of a rule output variable built by `add` clauses, i.e. a list.
+     *
+     * Distinct from [VARIABLE_TYPE] because the two offer opposite operator sets: an untyped variable
+     * takes any symbolic comparison and no `contains`, a list takes `contains` and nothing else. Not a
+     * schema field type — no field can be declared with it.
+     */
+    const val LIST_VARIABLE_TYPE: String = "list_variable"
+
     /** Field types that can take part in numeric comparisons and arithmetic. */
     private val NUMERIC_TYPES: Set<String> = setOf("integer", "decimal")
 
@@ -102,6 +119,33 @@ object OperatorOptions {
 
     /** True when [fieldType] is an untyped rule output variable — see [VARIABLE_TYPE]. */
     fun isVariableType(fieldType: String): Boolean = fieldType.lowercase() == VARIABLE_TYPE
+
+    /** True when [fieldType] is a list-valued rule output variable — see [LIST_VARIABLE_TYPE]. */
+    fun isListVariableType(fieldType: String): Boolean = fieldType.lowercase() == LIST_VARIABLE_TYPE
+
+    /** True when a catalog id names a rule output variable rather than a schema field. */
+    fun isVariableId(fieldId: String): Boolean = fieldId.startsWith(prefix = "$")
+
+    /**
+     * Operators for a catalog entry, which may be a schema field or a rule output variable.
+     *
+     * A variable takes only the spellings the parser routes through the expression path. A named
+     * operator would be read as a plain field comparison, and `${'$'}name` is not a field — the rule would
+     * be rejected with "unknown field". Which spellings apply depends on what the variable *holds*,
+     * not on the value type guessed from its `set` expression: a `set tier = 2` is catalogued as
+     * `decimal` so a comparison row can offer ordering, and `decimal` would otherwise bring `equals`
+     * and `between` with it.
+     */
+    fun forCatalogField(
+        fieldId: String,
+        fieldType: String,
+        schemaOperators: List<String> = emptyList(),
+    ): List<String> {
+        if (isVariableId(fieldId = fieldId)) {
+            return if (isListVariableType(fieldType = fieldType)) LIST_VARIABLE else COMPARISON_NUMERIC
+        }
+        return forField(fieldType = fieldType, schemaOperators = schemaOperators)
+    }
 
     /**
      * Comparison operators for a comparison row, given whether the operands are numeric.
@@ -152,6 +196,9 @@ object OperatorOptions {
             "collection", "object" -> return emptyList()
             // An untyped variable takes any symbolic comparison; the engine checks neither side.
             VARIABLE_TYPE -> return COMPARISON_NUMERIC
+            // A list is only ever tested for membership. Ordering and equality against a whole list
+            // always evaluate to false, so offering them would only produce rules that never match.
+            LIST_VARIABLE_TYPE -> return LIST_VARIABLE
             else -> TEXT
         }
         return if (schemaOperators.isEmpty()) {

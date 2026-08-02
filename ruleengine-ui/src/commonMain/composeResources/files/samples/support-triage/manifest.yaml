@@ -1,0 +1,18 @@
+name: support-triage
+
+# Sample: Support Triage
+# Label an incoming support ticket with every topic it touches, then route it.
+#
+# The topic files come first and the routing file last, and that order is load-bearing: each topic
+# rule accumulates into the `topics` list with an `add` clause, and routing.rule reads the finished
+# list back. Moving routing.rule up would make it read a list nothing has filled in yet.
+
+entries:
+  - id: support-triage
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/billing-topics.rule
+      - rules/card-topics.rule
+      - rules/shipping-topics.rule
+      - rules/routing.rule

@@ -28,6 +28,7 @@ import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ComparisonOperatorAst
@@ -46,8 +47,10 @@ import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.evaluator.CompiledAction
+import ruleengine.evaluator.CompiledAddAssignment
 import ruleengine.evaluator.CompiledAssignment
 import ruleengine.evaluator.CompiledRule
+import ruleengine.evaluator.CompiledSetAssignment
 import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
@@ -132,15 +135,16 @@ object Compiler {
         val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
             compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
         }
-        return CompiledAssignment(
-            name = assignment.name,
-            expression = ValueExpressionCompiler.compile(
-                expr = assignment.expression,
-                schema = schema,
-                ruleId = ruleId,
-                filterCompiler = filterCompiler
-            )
+        val expression = ValueExpressionCompiler.compile(
+            expr = assignment.expression,
+            schema = schema,
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
         )
+        return when (assignment.kind) {
+            AssignmentKindAst.SET -> CompiledSetAssignment(name = assignment.name, expression = expression)
+            AssignmentKindAst.ADD -> CompiledAddAssignment(name = assignment.name, expression = expression)
+        }
     }
 
     private fun compileAction(action: ActionAst, schema: FieldSchema, ruleId: String?): CompiledAction {

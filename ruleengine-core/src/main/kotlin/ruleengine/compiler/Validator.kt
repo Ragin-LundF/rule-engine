@@ -43,6 +43,7 @@ object Validator {
     private val RESERVED_ACTION_NAMES = mapOf(
         "else" to "otherwise",
         "stop" to "halt",
+        "add" to "append",
     )
 
     fun validate(asts: List<RuleAst>, schema: FieldSchema, actions: ActionSchema? = null): ValidationResult {
@@ -72,12 +73,16 @@ object Validator {
     }
 
     /**
-     * An action may not be named `else` or `stop`, which the parser reads as branch structure.
+     * An action may not be named `else`, `stop` or `add`, which the parser reads as rule structure.
      *
      * Checked on the schema rather than on each use, so the report names the declaration that has to
-     * change instead of every rule that writes it. Only these two are listed: the other structural
-     * words have been unusable as action names since before they were introduced, so a rule set using
-     * one cannot exist to be broken.
+     * change instead of every rule that writes it.
+     *
+     * `else` and `stop` were free to reserve: the other structural words had been unusable as action
+     * names since before they were introduced, so no rule set using one could exist to be broken.
+     * `add` is not in that position — it became a keyword after actions could already be called
+     * anything, so a rule set with an `add` action does exist and this check is what tells its author
+     * to rename it rather than leaving `add "x"` to fail as a malformed accumulator clause.
      */
     private fun validateActionNamesAreNotKeywords(
         actionSchema: ActionSchema?,

@@ -9,6 +9,7 @@ import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
@@ -126,23 +127,30 @@ class SampleProjectBuilderTest {
     }
 
     /**
-     * Everything the rule produces, as one comparable value: both branches' actions and `set` names, and
+     * Everything the rule produces, as one comparable value: both branches' actions and assignments, and
      * whether either branch ends the run.
      *
      * Checked because the Builder replaces the whole rule text. A mapper that quietly dropped an `else`
      * block or a `stop` would delete it from the sample on the first edit, and the condition assertion
      * above would not notice — the condition is untouched either way.
+     *
+     * An assignment contributes its kind as well as its name. `set topics = "x"` and `add "x" to topics`
+     * publish the same name and would fingerprint identically without it, so a mapper that lost the kind
+     * would turn an accumulator into a scalar unnoticed.
      */
     private fun outputShape(rule: RuleAst): String {
         return listOf(
             "then=" + rule.actions.joinToString { action -> action.name },
-            "sets=" + rule.assignments.joinToString { assignment -> assignment.name },
+            "sets=" + rule.assignments.joinToString { assignment -> assignmentShape(assignment = assignment) },
             "else=" + rule.elseActions.joinToString { action -> action.name },
-            "elseSets=" + rule.elseAssignments.joinToString { assignment -> assignment.name },
+            "elseSets=" + rule.elseAssignments.joinToString { assignment -> assignmentShape(assignment = assignment) },
             "stopOnThen=${rule.stopOnThen}",
             "stopOnElse=${rule.stopOnElse}",
         ).joinToString(separator = " | ")
     }
+
+    private fun assignmentShape(assignment: VariableAssignmentAst): String =
+        "${assignment.kind}:${assignment.name}"
 
     @Test
     fun `sample schema declares nested collection members`() {

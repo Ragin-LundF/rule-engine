@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import ruleengine.core.domain.dto.RuleBranch
+import ruleengine.dsl.ast.AssignmentKindAst
 import ui.builder.OperatorOptions
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
@@ -72,7 +73,7 @@ class BuilderEditorState private constructor(
         return if (branch == RuleBranch.THEN) actions else elseActions
     }
 
-    /** The `set` rows of [branch]. */
+    /** The `set` and `add` rows of [branch]. */
     fun variablesOf(branch: RuleBranch): SnapshotStateList<MutableBuilderVariable> {
         return if (branch == RuleBranch.THEN) variables else elseVariables
     }
@@ -164,6 +165,7 @@ class BuilderEditorState private constructor(
                     id = variable.id,
                     name = variable.name,
                     expression = variable.expression,
+                    kind = variable.kind,
                 )
             }.toMutableStateList()
         }
@@ -292,9 +294,32 @@ class BuilderEditorState private constructor(
         return condition
     }
 
-    /** Removes the leaf or group with the given [id] from the top level. */
+    /**
+     * Removes the leaf or group with the given [id], wherever it sits in the tree.
+     *
+     * Recursive, like [replaceNode] — a row inside a group is still a row with an × on it, and
+     * removing only from the top level made that × silently do nothing.
+     */
     fun removeCondition(id: String) {
-        conditionNodes.removeAll { it.id == id }
+        removeIn(nodes = conditionNodes, id = id)
+    }
+
+    private fun removeIn(nodes: SnapshotStateList<MutableConditionNode>, id: String): Boolean {
+        if (nodes.removeAll { it.id == id }) {
+            return true
+        }
+        for (group in nodes.filterIsInstance<MutableConditionNode.Group>()) {
+            if (!removeIn(nodes = group.nodes, id = id)) {
+                continue
+            }
+            // A group that has lost its last child renders as `()`, which does not parse, so the
+            // empty parentheses go with it.
+            if (group.nodes.isEmpty()) {
+                nodes.remove(element = group)
+            }
+            return true
+        }
+        return false
     }
 
     /**
@@ -404,23 +429,28 @@ class BuilderEditorState private constructor(
     }
 
     /**
-     * Adds a new `set` row to [branch], after the existing ones.
+     * Adds a new assignment row to [branch], after the existing ones.
      *
-     * The default expression is a blank literal rather than a field reference: a `set` clause is
-     * usually written to hold something computed, and an empty value box is the one starting point
-     * that is wrong for no one.
+     * The default expression is a blank literal rather than a field reference: an assignment is
+     * usually written to hold something the author types, and an empty value box is the one starting
+     * point that is wrong for no one. [kind] decides whether the row reads as a `set` or an `add`.
      */
-    fun addVariable(defaultName: String = "", branch: RuleBranch = RuleBranch.THEN): MutableBuilderVariable {
+    fun addVariable(
+        defaultName: String = "",
+        branch: RuleBranch = RuleBranch.THEN,
+        kind: AssignmentKindAst = AssignmentKindAst.SET,
+    ): MutableBuilderVariable {
         val variable = MutableBuilderVariable(
             id = "var-${nextVariableId++}",
             name = defaultName,
             expression = BuilderOperand.Literal(text = "", numeric = false),
+            kind = kind,
         )
         variablesOf(branch = branch).add(variable)
         return variable
     }
 
-    /** Removes the `set` row with the given [id] from whichever branch holds it. */
+    /** Removes the assignment row with the given [id] from whichever branch holds it. */
     fun removeVariable(id: String) {
         variables.removeAll { it.id == id }
         elseVariables.removeAll { it.id == id }

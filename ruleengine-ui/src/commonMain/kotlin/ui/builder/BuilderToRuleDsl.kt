@@ -1,5 +1,6 @@
 package ui.builder
 
+import ruleengine.dsl.ast.AssignmentKindAst
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableBuilderAction
 import ui.builder.model.mutable.MutableBuilderComparison
@@ -182,8 +183,13 @@ object BuilderToRuleDsl {
 
     private fun ignoreCaseSuffix(ignoreCase: Boolean): String = if (ignoreCase) " ignoreCase" else ""
 
-    private fun renderVariable(variable: MutableBuilderVariable): String =
-        "set ${variable.name} = ${OperandText.toDsl(operand = variable.expression)}"
+    private fun renderVariable(variable: MutableBuilderVariable): String {
+        val value = OperandText.toDsl(operand = variable.expression)
+        return when (variable.kind) {
+            AssignmentKindAst.SET -> "set ${variable.name} = $value"
+            AssignmentKindAst.ADD -> "add $value to ${variable.name}"
+        }
+    }
 
     private fun renderAction(action: MutableBuilderAction): String {
         val args = action.arguments.joinToString(" ") { quoteIfNeeded(it) }

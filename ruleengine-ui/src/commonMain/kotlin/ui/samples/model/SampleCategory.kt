@@ -6,4 +6,5 @@ enum class SampleCategory(val label: String) {
     ECOMMERCE("E-Commerce"),
     SECURITY("Security"),
     LOGISTICS("Logistics"),
+    SUPPORT("Support"),
 }

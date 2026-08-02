@@ -82,11 +82,22 @@ object RuleAstToBuilderMapper {
         )
     }
 
-    /** Null when any assignment's right-hand side is an expression the Builder cannot render. */
+    /**
+     * Null when any assignment's value is an expression the Builder cannot render.
+     *
+     * [VariableAssignmentAst.kind] has to be carried through, not defaulted: an `add` mapped as a
+     * `set` would be written back as `set topics = "billing"`, turning an accumulator into a scalar
+     * and breaking every guard in the rule set — silent data loss rather than a missing feature.
+     */
     private fun mapVariables(assignments: List<VariableAssignmentAst>): List<BuilderVariable>? {
         return assignments.map { assignment ->
             val expression = mapValueExpression(expr = assignment.expression) ?: return null
-            BuilderVariable(id = nextId(prefix = "var"), name = assignment.name, expression = expression)
+            BuilderVariable(
+                id = nextId(prefix = "var"),
+                name = assignment.name,
+                expression = expression,
+                kind = assignment.kind,
+            )
         }
     }
 

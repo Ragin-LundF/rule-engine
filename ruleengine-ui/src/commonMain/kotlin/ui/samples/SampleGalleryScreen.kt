@@ -243,4 +243,7 @@ private fun SampleCategory.colors(): Pair<Color, Color> = when (this) {
     SampleCategory.ECOMMERCE -> AccentGreen to AccentGreenSoft
     SampleCategory.SECURITY -> AccentPurple to AccentPurpleSoft
     SampleCategory.LOGISTICS -> AccentCyan to AccentCyanSoft
+    // Shares the logging palette: both are streams of incoming messages being sorted, and the
+    // gallery has no accent left that is not already carrying a meaning.
+    SampleCategory.SUPPORT -> AccentOrange to AccentOrangeSoft
 }

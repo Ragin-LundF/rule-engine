@@ -582,7 +582,7 @@ for (match: RuleMatch in result.matches) {
   it did before for a rule set that uses no branches.
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
 - `variables: Map<String, Any?>` — the final value of every variable a matching rule published with a
-  `set` clause, keyed by name without the `$`. Empty for a rule set that uses none.
+  `set` or `add` clause, keyed by name without the `$`. Empty for a rule set that uses none.
 
 `RuleMatch`:
 - `ruleId: String` — the rule's ID
@@ -618,7 +618,20 @@ for (match in result.matches) {
 Values are plain Kotlin types: `BigDecimal` for numbers, `String` for text, `Boolean` for booleans and
 `List<Any?>` for a projected array. A variable no matching rule assigned is simply absent from the map.
 
-See [rules.md](rules.md#variables--the-set-clause) for the DSL side and the ordering rules.
+A variable built with `add` arrives as a `List<Any?>` in the order the values were added, with
+duplicates already removed by the engine:
+
+```kotlin
+@Suppress("UNCHECKED_CAST")
+val topics = result.variables["topics"] as? List<Any?> ?: emptyList()
+```
+
+Note the two ways a rule set can report the same labels. `result.matches` carries one `RuleAction` per
+rule that fired, so a label produced by two rules appears twice unless those rules guard each other;
+an accumulator carries each value once by construction.
+
+See [rules.md](rules.md#variables--the-set-clause) for the DSL side and the ordering rules, and
+[the `add` clause](rules.md#collecting-values--the-add-clause) for lists.
 
 ---
 

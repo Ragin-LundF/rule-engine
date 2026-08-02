@@ -1,0 +1,45 @@
+# Billing. Three different pieces of evidence, one topic.
+#
+# Each rule guards itself on `not $topics contains "billing"`, so whichever evidence appears first
+# claims the topic and the rest skip their text matching. That is what makes the pattern scale: with
+# a few hundred topics and a few thousand rules, most rules stop at their guard, and the guard is a
+# lookup in a short list rather than a scan of the ticket text.
+#
+# The guard also stops the same topic being emitted twice. Every rule below could match one ticket,
+# and the consumer would get `topic "billing"` three times without it.
+
+rule "billing-refund-request" {
+  description "The customer asks for money back."
+  when
+    not $topics contains "billing"
+    and subject contains "refund"
+
+  then
+    topic "billing"
+    add "billing" to topics
+}
+
+rule "billing-payment-problem" {
+  description "A payment did not go through."
+  when
+    not $topics contains "billing"
+    and (subject contains "payment failed"
+    or subject contains "could not charge"
+    or body contains "payment declined")
+
+  then
+    topic "billing"
+    add "billing" to topics
+}
+
+rule "billing-invoice-question" {
+  description "A question about an invoice or a charge on the statement."
+  when
+    not $topics contains "billing"
+    and (subject contains "invoice"
+    or subject contains "unexpected charge")
+
+  then
+    topic "billing"
+    add "billing" to topics
+}

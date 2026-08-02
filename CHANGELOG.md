@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **List variables — the `add` clause and `contains`.** A `set` publishes one value; `add` collects
+  several across rules, and `contains` reads the list back.
+
+  ```
+  rule "billing-from-refund" {
+    description "A refund request is a billing matter."
+    when
+      not $topics contains "billing"
+      and purpose contains "refund"
+    then
+      label "billing"
+      add "billing" to topics
+  }
+  ```
+
+  Written for labelling: many rules producing the same outcome from different evidence, where the
+  expensive part of each rule is the text matching. A rule guards itself on the list, so once the
+  outcome is recorded the rest stop before doing that work again — and the outcome is produced once
+  instead of once per rule that could have reached it.
+    - **The guard is cheap by construction.** `and` stops at its first false condition, and the engine
+      evaluates the cheapest condition of an `and` first, so the list lookup runs before the text
+      search whichever order they are written in. `or` is unaffected — a false first operand still
+      lets the second decide.
+    - **Set semantics.** Adding a value the list already holds changes nothing. Insertion order is
+      kept, and the value arrives as a `List<Any?>` in `EvaluationResult.variables`.
+    - **A rule may read the list it writes.** Unlike `set`, an `add` publishes its name in time for
+      its own rule's condition — which is what lets the first rule of a guarded set guard itself. An
+      unassigned list reads as missing, `contains` on missing is false, and `not` of that is true, so
+      the first rule correctly fires. `set total = $total + amount` has no such starting point, so
+      reading a `set` variable before it is assigned remains an error.
+    - `contains` reads a list as membership and a text value as a substring. It is the one named
+      operator a variable accepts; `field contains "literal"` is unchanged and still takes the
+      named-operator path, with the field's declared `operators:` list enforced and its normalizers
+      applied.
+    - Several rules adding to one name is expected and produces no warning, unlike two rules `set`ting
+      one name. A name written by both a `set` and an `add` is an error: a variable is either a plain
+      value or a list.
+    - Supported in the visual Builder — an assignment row switches between `set` and `add`, and a list
+      variable offers `contains` — and in the editor's autocomplete and syntax highlighting.
+    - New **Support Triage** sample demonstrating the pattern end to end.
+
 - **An optional `else` branch on a rule.** A rule's `then` block says what to produce when its condition
   holds; an `else` block after it says what to produce when the condition is false.
 
@@ -112,6 +153,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       at p1. The suppression rule moved to the severity file, first, and stops.
     - `financial-transactions` — a `payment-cadence` rule shows the plainest `else`: one boolean, two labels.
 
+### Changed
+
+- **`add` is now a reserved action name.** It is a `then`-block keyword, so an action schema declaring
+  an action called `add` is rejected at load time with a rename suggestion (`append`), the same way
+  `else` and `stop` already were. Unlike those two, an existing rule set *can* have been using this
+  name — rename the action and the rules that write it.
+
+- `EvaluationResult.matches` now means **every rule that produced output**, and `RuleMatch` carries a
+  `branch: RuleBranch` (`THEN` / `ELSE`) saying why. A rule without an `else` block can only ever report
+  `THEN`, which is the default, so nothing changes for a rule set that uses no branches. Code that reads
+  `matches` as "the rules whose condition held" should filter:
+
+  ```kotlin
+  val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
+  ```
+
+- `DecisionTree.matchedRules` keeps its existing meaning and lists **only** the rules whose condition
+  held. A rule whose `else` branch fired is not in it — the trace answers "did the condition hold", which
+  the `result` flag on that rule's own node already reports.
+- **The documentation no longer claims rules are independent.** They are checked independently and all
+  matches are returned, but evaluation order is a *guarantee* the engine makes and two constructs depend
+  on it: `set` publishes only to the rules after it, and `stop` ends the run at its own position. The
+  claim is corrected in `RULE-SPEC.md` §1 and §5.1, `docs/rules.md`, `docs/manifest.md` and
+  `docs/performance.md` — and in the exported rule overviews, which stated it to the business reader.
+- `EvaluateCli` emits `"branch": "then"|"else"` per match. Without it the JSON would read as if every
+  entry were a rule whose condition held.
+- Exported rule overviews (Markdown and Word) gain an *Otherwise* section per branching rule, list its
+  else outcomes in the at-a-glance row as an alternative rather than a peer, and include them in the
+  outcome summary. The explanatory note about branching rules is written only for a rule set that has one.
+- The test panel reports an else result as its own **else** status, with its own filter and count. It
+  previously had no way to express this: the roster derived "matched" from mere presence in
+  `EvaluationResult.matches`, so an else-fired rule would have been reported as having matched.
+
 ### Fixed
 
 - **The Builder corrupted a rule containing a quoted action argument.** `OperandText.quote` wrapped a value
@@ -151,34 +225,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   In exchange, `matches` is now **unconditionally** in declaration order, and `RuleEngine` lost the
   grouping path entirely.
-
-### Changed
-
-- `EvaluationResult.matches` now means **every rule that produced output**, and `RuleMatch` carries a
-  `branch: RuleBranch` (`THEN` / `ELSE`) saying why. A rule without an `else` block can only ever report
-  `THEN`, which is the default, so nothing changes for a rule set that uses no branches. Code that reads
-  `matches` as "the rules whose condition held" should filter:
-
-  ```kotlin
-  val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
-  ```
-
-- `DecisionTree.matchedRules` keeps its existing meaning and lists **only** the rules whose condition
-  held. A rule whose `else` branch fired is not in it — the trace answers "did the condition hold", which
-  the `result` flag on that rule's own node already reports.
-- **The documentation no longer claims rules are independent.** They are checked independently and all
-  matches are returned, but evaluation order is a *guarantee* the engine makes and two constructs depend
-  on it: `set` publishes only to the rules after it, and `stop` ends the run at its own position. The
-  claim is corrected in `RULE-SPEC.md` §1 and §5.1, `docs/rules.md`, `docs/manifest.md` and
-  `docs/performance.md` — and in the exported rule overviews, which stated it to the business reader.
-- `EvaluateCli` emits `"branch": "then"|"else"` per match. Without it the JSON would read as if every
-  entry were a rule whose condition held.
-- Exported rule overviews (Markdown and Word) gain an *Otherwise* section per branching rule, list its
-  else outcomes in the at-a-glance row as an alternative rather than a peer, and include them in the
-  outcome summary. The explanatory note about branching rules is written only for a rule set that has one.
-- The test panel reports an else result as its own **else** status, with its own filter and count. It
-  previously had no way to express this: the roster derived "matched" from mere presence in
-  `EvaluationResult.matches`, so an else-fired rule would have been reported as having matched.
 
 ## 1.5.1
 
