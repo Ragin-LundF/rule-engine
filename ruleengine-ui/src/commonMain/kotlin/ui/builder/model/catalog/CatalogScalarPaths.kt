@@ -29,6 +29,28 @@ fun List<CatalogFieldInfo>.scalarPaths(): List<CatalogFieldInfo> {
     }
 }
 
+/**
+ * The first collection reachable in this catalog, by its dotted path, or `null` when there is none.
+ *
+ * Descends through objects the same way [collectScalarPaths] does, so a collection declared under an
+ * object is found too. Its purpose is to answer "did [scalarPaths] have to leave fields out, and
+ * which one can I name in the explanation" in one pass: a condition dropdown that silently omits
+ * half a schema reads as a defect, and an example built from the author's own field reads as an
+ * answer where a made-up one reads as boilerplate.
+ */
+fun List<CatalogFieldInfo>.firstCollectionPath(prefix: String = ""): String? {
+    for (field in this) {
+        val path = "$prefix${field.id}"
+        val found = when {
+            field.type.lowercase() == OBJECT_TYPE -> field.nestedFields.firstCollectionPath(prefix = "$path.")
+            OperatorOptions.isStructureType(fieldType = field.type) -> path
+            else -> null
+        }
+        if (found != null) return found
+    }
+    return null
+}
+
 private fun collectScalarPaths(
     prefix: String,
     fields: List<CatalogFieldInfo>,

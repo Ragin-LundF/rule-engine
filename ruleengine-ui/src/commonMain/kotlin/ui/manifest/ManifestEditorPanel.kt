@@ -46,6 +46,7 @@ import ui.workbench.model.mode.ManifestMode
  * the session on the next save.
  */
 @Composable
+@Suppress("LongParameterList")
 fun ManifestEditorPanel(
     state: ManifestEditorState,
     onStateChange: (ManifestEditorState) -> Unit,
@@ -55,6 +56,7 @@ fun ManifestEditorPanel(
     onRemoveEntry: (String) -> Unit,
     fromYaml: (String) -> ManifestEditorState,
     toYaml: (ManifestEditorState) -> String,
+    fieldTypes: Map<String, String>? = null,
     initialMode: ManifestMode = ManifestMode.BUILDER,
     modifier: Modifier = Modifier,
 ) {
@@ -101,6 +103,7 @@ fun ManifestEditorPanel(
                 onSelectEntry = onSelectEntry,
                 onAddEntry = onAddEntry,
                 onRemoveEntry = onRemoveEntry,
+                fieldTypes = fieldTypes,
             )
 
             ManifestMode.YAML -> YamlManifestEditor(
@@ -112,7 +115,11 @@ fun ManifestEditorPanel(
                 },
             )
 
-            ManifestMode.CHECKS -> ManifestChecksPanel(state = state)
+            ManifestMode.CHECKS -> ManifestChecksPanel(
+                state = state,
+                activeEntryId = activeEntryId,
+                fieldTypes = fieldTypes,
+            )
         }
     }
 }
@@ -120,6 +127,7 @@ fun ManifestEditorPanel(
 private const val YAML_PARSE_DELAY_MS = 500L
 
 @Composable
+@Suppress("LongParameterList")
 private fun VisualManifestEditor(
     state: ManifestEditorState,
     onStateChange: (ManifestEditorState) -> Unit,
@@ -127,6 +135,7 @@ private fun VisualManifestEditor(
     onSelectEntry: (String) -> Unit,
     onAddEntry: () -> Unit,
     onRemoveEntry: (String) -> Unit,
+    fieldTypes: Map<String, String>?,
 ) {
     Column(
         modifier = Modifier
@@ -150,6 +159,9 @@ private fun VisualManifestEditor(
                 index = index,
                 isActive = entry.id == activeEntryId,
                 hasSiblings = state.entries.size > 1,
+                // Only the entry being edited: the loaded schema is that entry's, and a sibling may
+                // well name a different schema file whose fields we have not parsed.
+                fieldTypes = fieldTypes.takeIf { entry.id == activeEntryId },
                 onSelect = { onSelectEntry(entry.id) },
                 onRemove = { onRemoveEntry(entry.id) },
                 onEntryChange = { updated ->
@@ -167,11 +179,13 @@ private fun VisualManifestEditor(
 }
 
 @Composable
+@Suppress("LongParameterList")
 private fun ManifestEntryCard(
     entry: EditableManifestEntry,
     index: Int,
     isActive: Boolean,
     hasSiblings: Boolean,
+    fieldTypes: Map<String, String>?,
     onSelect: () -> Unit,
     onRemove: () -> Unit,
     onEntryChange: (EditableManifestEntry) -> Unit,
@@ -218,7 +232,7 @@ private fun ManifestEntryCard(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        ManifestEntryFields(entry = entry, onEntryChange = onEntryChange)
+        ManifestEntryFields(entry = entry, fieldTypes = fieldTypes, onEntryChange = onEntryChange)
         SectionTitle(text = "RULE FILES")
         PathListEditor(
             paths = entry.rulePaths,
@@ -232,6 +246,7 @@ private fun ManifestEntryCard(
 @Composable
 private fun ManifestEntryFields(
     entry: EditableManifestEntry,
+    fieldTypes: Map<String, String>?,
     onEntryChange: (EditableManifestEntry) -> Unit,
 ) {
     OutlinedTextField(
@@ -250,13 +265,38 @@ private fun ManifestEntryFields(
     )
     // Left blank the rules run once for the whole document, which is the default and what every
     // manifest written before this setting existed means.
+    val issue = scopeIssue(scope = entry.scope, fieldTypes = fieldTypes)
     OutlinedTextField(
         value = entry.scope,
         onValueChange = { onEntryChange(entry.copy(scope = it)) },
         label = { Text("Scope — run once per collection member (optional)") },
         placeholder = { Text("collection field, e.g. accounts") },
+        isError = issue != null,
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
+    )
+    ScopeFieldNote(issue = issue, fieldTypes = fieldTypes)
+}
+
+/**
+ * What the schema has to say about the scope just typed.
+ *
+ * The engine's own complaint when the scope cannot work, and otherwise the names that would — the
+ * field is free text, and without the list a wrong guess is invisible until the project is loaded
+ * somewhere else.
+ */
+@Composable
+private fun ScopeFieldNote(issue: String?, fieldTypes: Map<String, String>?) {
+    val collections = collectionNames(fieldTypes = fieldTypes)
+    val text = when {
+        issue != null -> issue
+        collections.isEmpty() -> return
+        else -> "Collections in this schema: ${collections.joinToString(separator = ", ")}"
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption,
+        color = if (issue != null) MaterialTheme.colors.error else TextSecondary,
     )
 }
 
@@ -299,7 +339,11 @@ private fun YamlManifestEditor(
 }
 
 @Composable
-private fun ManifestChecksPanel(state: ManifestEditorState) {
+private fun ManifestChecksPanel(
+    state: ManifestEditorState,
+    activeEntryId: String?,
+    fieldTypes: Map<String, String>?,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -307,7 +351,7 @@ private fun ManifestChecksPanel(state: ManifestEditorState) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SectionTitle(text = "CHECKS")
-        val issues = manifestIssues(state = state)
+        val issues = manifestIssues(state = state, activeEntryId = activeEntryId, fieldTypes = fieldTypes)
         if (issues.isEmpty()) {
             Text(
                 text = "✓ Manifest structure looks valid",
@@ -331,8 +375,15 @@ private fun ManifestChecksPanel(state: ManifestEditorState) {
  *
  * Duplicate entry ids are the one that matters most: the engine rejects the manifest outright, and
  * the id is otherwise invisible enough that two entries can end up sharing one by accident.
+ *
+ * The scope check needs a schema, so it only runs for [activeEntryId] — [fieldTypes] describes the
+ * schema that entry loaded, and a sibling may name another one entirely.
  */
-private fun manifestIssues(state: ManifestEditorState): List<String> {
+private fun manifestIssues(
+    state: ManifestEditorState,
+    activeEntryId: String?,
+    fieldTypes: Map<String, String>?,
+): List<String> {
     return buildList {
         if (state.name.isBlank()) add("Manifest name is empty")
         if (state.entries.isEmpty()) {
@@ -351,6 +402,9 @@ private fun manifestIssues(state: ManifestEditorState): List<String> {
             if (entry.schemaPath.isBlank()) add("$label: field schema file not set")
             if (entry.actionsPath.isBlank()) add("$label: action schema file not set")
             if (entry.rulePaths.isEmpty()) add("$label: no rule files configured")
+            if (entry.id == activeEntryId) {
+                scopeIssue(scope = entry.scope, fieldTypes = fieldTypes)?.let { add("$label: $it") }
+            }
         }
     }
 }

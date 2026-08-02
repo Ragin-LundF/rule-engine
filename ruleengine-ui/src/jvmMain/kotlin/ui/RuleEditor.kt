@@ -60,7 +60,7 @@ import ui.workbench.uiDiagnosticsFrom
 // `CyclomaticComplexMethod` was suppressed here too and is no longer needed.
 @Suppress("LongMethod")
 @Composable
-actual fun RuleEditor(closeController: AppCloseController) {
+actual fun RuleEditor(closeController: AppCloseController, saveController: AppSaveController) {
     val scope = rememberCoroutineScope()
 
     // Root workbench state (navigation, selection, panel tabs).
@@ -78,6 +78,14 @@ actual fun RuleEditor(closeController: AppCloseController) {
     DisposableEffect(key1 = closeController, key2 = workspace) {
         closeController.onCloseRequested = workspace::requestClose
         onDispose { closeController.onCloseRequested = null }
+    }
+
+    // Guarded on `isDirty` so the shortcut does exactly what the toolbar button does — the button is
+    // disabled when clean, and an unguarded save on a pristine project would open the native Save
+    // dialog through `createScratchSession()`.
+    DisposableEffect(key1 = saveController, key2 = workspace) {
+        saveController.onSaveRequested = { if (workspace.isDirty) workspace.saveProject() }
+        onDispose { saveController.onSaveRequested = null }
     }
 
     val closeApproved by workspace.closeRequested
