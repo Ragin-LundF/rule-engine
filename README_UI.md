@@ -41,9 +41,12 @@ rule's WHEN conditions on the right.
 
 ![Rule builder](docs/assets/ui/rule-builder.png)
 
-The same rules in the code view — plain `.rule` text, syntax highlighted:
+The same rules in the code view — plain `.rule` text, syntax highlighted. The whole editor comes in a
+dark and a light palette, switched with the ☀ / ☾ button in the top bar:
 
-![Code view](docs/assets/ui/code-view.png)
+![Code view, dark mode](docs/assets/ui/code-view.png)
+
+![Code view, light mode](docs/assets/ui/code-view-light.png)
 
 The **rule trees** diagram, one condition tree per rule:
 
