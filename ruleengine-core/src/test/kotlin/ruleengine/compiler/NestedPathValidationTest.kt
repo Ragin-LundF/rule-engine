@@ -128,6 +128,102 @@ class NestedPathValidationTest {
         )
     }
 
+    // --- legacy filter predicates ---
+    //
+    // Everything but `==`, `!=` and a field-against-field comparison parses as a ConditionAst inside
+    // `[...]`, which went entirely unchecked. The modern form of the same mistake was always an error.
+
+    @Test
+    fun `unknown field in a legacy filter predicate produces error`() {
+        val result = validate(condition = "count(orders[bogus > 1]) > 0")
+        assertFalse(
+            actual = result.isValid,
+            message = "A legacy filter predicate naming an undeclared member must be reported"
+        )
+        val error = result.diagnostics.first { it.severity == Severity.ERROR }
+        assertTrue(
+            actual = error.message.contains("bogus"),
+            message = "Expected an error naming 'bogus', got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun `both halves of an and predicate inside a filter are checked`() {
+        val result = validate(condition = """count(orders[legacyBogus > 1 and modernBogus == "x"]) > 0""")
+        val messages = result.diagnostics.filter { it.severity == Severity.ERROR }.map { it.message }
+        assertTrue(
+            actual = messages.any { it.contains("legacyBogus") },
+            message = "Expected the legacy half to be checked, got: $messages"
+        )
+        assertTrue(
+            actual = messages.any { it.contains("modernBogus") },
+            message = "Expected the modern half to be checked, got: $messages"
+        )
+    }
+
+    /** A member reached through a nested object is a path, not a member whose name contains a dot. */
+    @Test
+    fun `dotted field in a legacy filter predicate validates`() {
+        assertNoErrors(
+            result = validate(condition = """count(orders[customer.country contains "D"]) > 0"""),
+            label = "legacy predicate naming a nested member"
+        )
+    }
+
+    @Test
+    fun `unknown nested member in a legacy filter predicate produces error`() {
+        val result = validate(condition = "count(orders[customer.bogus > 1]) > 0")
+        assertFalse(actual = result.isValid)
+        val error = result.diagnostics.first { it.severity == Severity.ERROR }
+        assertTrue(
+            actual = error.message.contains("customer.bogus"),
+            message = "Expected the message to name the dotted field, got: ${error.message}"
+        )
+    }
+
+    /** A predicate that reads into a collection projects many values where one is compared. */
+    @Test
+    fun `legacy filter predicate crossing a collection produces error`() {
+        val result = validate(condition = "count(orders[items.price > 1]) > 0")
+        assertFalse(actual = result.isValid)
+        val error = result.diagnostics.first { it.severity == Severity.ERROR }
+        assertTrue(
+            actual = error.message.contains("items"),
+            message = "Expected the message to name the collection, got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun `operator without a filter equivalent is reported instead of thrown`() {
+        val result = validate(condition = """count(orders[status startsWith "pa"]) > 0""")
+        assertFalse(actual = result.isValid)
+        assertTrue(
+            actual = result.diagnostics.any {
+                it.severity == Severity.ERROR && it.message.contains("not supported in filter segments")
+            },
+            message = "Expected the unsupported-operator message, got: ${result.diagnostics.map { it.message }}"
+        )
+    }
+
+    @Test
+    fun `ignoreCase inside a filter is reported instead of thrown`() {
+        val result = validate(condition = """count(orders[status in ["paid"] ignoreCase]) > 0""")
+        assertFalse(actual = result.isValid)
+        val error = result.diagnostics.first { it.severity == Severity.ERROR }
+        assertTrue(
+            actual = error.message.contains("'ignoreCase' modifier is not supported in filter segments"),
+            message = "Expected the ignoreCase message, got: ${error.message}"
+        )
+    }
+
+    @Test
+    fun `declared member in a legacy filter predicate still validates`() {
+        assertNoErrors(
+            result = validate(condition = "count(orders[items > 0]) > 0"),
+            label = "legacy predicate naming a declared member"
+        )
+    }
+
     // --- leaf typing ---
 
     @Test

@@ -1,0 +1,39 @@
+{
+  "reviewDate": "2024-06-01",
+  "priorityCustomerIds": ["acme", "globex"],
+  "accounts": [
+    {
+      "id": "acc-established",
+      "registeredAt": "2024-01-01",
+      "invoices": [
+        { "customerId": " ACME ", "amount": 8000 },
+        { "customerId": "acme", "amount": 4000 },
+        { "customerId": "initech", "amount": 500 }
+      ],
+      "payments": [ { "amount": 12000 } ],
+      "loginEvents": [
+        { "successful": false }, { "successful": true }, { "successful": true },
+        { "successful": true }, { "successful": true }, { "successful": true },
+        { "successful": true }, { "successful": true }, { "successful": true },
+        { "successful": true }, { "successful": true }
+      ],
+      "lineItems": [ { "quantity": 1 }, { "quantity": 3 } ],
+      "alerts": [ { "severity": "low" } ],
+      "salesByMonth": [ { "month": "2024-01", "amount": 500 }, { "month": "2024-02", "amount": 300 } ],
+      "refundsByMonth": [ { "month": "2024-01", "amount": -200 }, { "month": "2024-02", "amount": -100 } ]
+    },
+    {
+      "id": "acc-new",
+      "registeredAt": "2024-05-20",
+      "invoices": [ { "customerId": "globex", "amount": 2000 } ],
+      "payments": [ { "amount": 100 } ],
+      "loginEvents": [
+        { "successful": false }, { "successful": false }, { "successful": false }
+      ],
+      "lineItems": [ { "quantity": 0 } ],
+      "alerts": [ { "severity": "high" } ],
+      "salesByMonth": [ { "month": "2024-03", "amount": 100 } ],
+      "refundsByMonth": [ { "month": "2024-03", "amount": -400 } ]
+    }
+  ]
+}

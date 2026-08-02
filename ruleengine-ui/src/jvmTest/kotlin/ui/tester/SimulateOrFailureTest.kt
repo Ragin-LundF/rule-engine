@@ -84,6 +84,7 @@ private class ThrowingSimulationService(private val failure: Throwable) : RuleSi
         ruleText: String,
         ruleId: String,
         inputJson: String,
+        scope: String,
     ): SimulationResult {
         throw failure
     }
@@ -96,6 +97,7 @@ private class FixedSimulationService(private val result: SimulationResult) : Rul
         ruleText: String,
         ruleId: String,
         inputJson: String,
+        scope: String,
     ): SimulationResult {
         return result
     }

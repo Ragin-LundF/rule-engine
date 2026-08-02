@@ -1,5 +1,4 @@
 name: full-sample
-
 entries:
   - id: full
     schema: full-schema.yaml
@@ -8,5 +7,3 @@ entries:
       - rules/rent.rule
       - rules/vip.rule
       - rules/fraud.rule
-
-

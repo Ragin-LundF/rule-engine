@@ -16,6 +16,7 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.SliceSegmentAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.dsl.ast.VariableRefLiteral
@@ -119,7 +120,8 @@ object VariableUsage {
             is FieldAccessAst -> expr.path.forEach { segment ->
                 when (segment) {
                     is FilterSegmentAst -> collectFromExpression(expr = segment.expression, into = into)
-                    is FieldSegmentAst -> Unit
+                    // A slice holds a literal count, so it can read no variable.
+                    is FieldSegmentAst, is SliceSegmentAst -> Unit
                 }
             }
         }

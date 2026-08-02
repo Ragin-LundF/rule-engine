@@ -63,7 +63,7 @@ fun SchemaAreaContent(
                 DiagramSurface {
                     FieldFlowDiagram(
                         rules = expandedDiagramRules,
-                        schema = state.parsedSchema.value,
+                        schema = state.ruleSchema,
                         entryWide = state.showAllRules.value,
                     )
                 }

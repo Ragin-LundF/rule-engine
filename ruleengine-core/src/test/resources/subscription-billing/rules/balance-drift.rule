@@ -1,0 +1,7 @@
+rule "balance-drift" {
+  description "Invoices and payments are more than 1000 apart, in either direction."
+  when
+    abs(sum(invoices.amount) - sum(payments.amount)) > 1000
+  then
+    review "balance-drift"
+}

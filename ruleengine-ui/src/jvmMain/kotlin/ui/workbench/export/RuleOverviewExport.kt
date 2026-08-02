@@ -60,7 +60,7 @@ object RuleOverviewExport {
             files = files.map { source ->
                 ParsedRuleFile(relativePath = source.relativePath, rules = source.rules)
             },
-            schema = state.parsedSchema.value,
+            schema = state.ruleSchema,
             schemaPath = entry.schema,
         )
 

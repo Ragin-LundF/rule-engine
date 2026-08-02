@@ -12,6 +12,7 @@ import ruleengine.compiler.value.ValueExpressionCompiler
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
@@ -38,11 +39,13 @@ import ruleengine.dsl.ast.ExtractionAst
 import ruleengine.dsl.ast.ExtractionRefLiteral
 import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.LiteralAst
+import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.ast.VariableRefLiteral
@@ -66,6 +69,8 @@ import ruleengine.evaluator.compiled.value.CompiledValueExpression
 import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
 import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
+import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.compiled.value.result.TextExpressionValue
 import java.math.BigDecimal
@@ -76,7 +81,6 @@ import java.math.BigDecimal
  * Every function that can fail takes the id of the rule being compiled and hands it to
  * [CompilationException], so a failure names the offending rule instead of `<unknown>`.
  */
-@Suppress("TooManyFunctions")
 object Compiler {
     fun compileRules(
         asts: List<RuleAst>,
@@ -271,6 +275,14 @@ object Compiler {
         }
     }
 
+    /**
+     * Compiles a filter predicate.
+     *
+     * Boolean combinations are compiled like any other expression tree, so `orders[a > 1 and b == 2]`
+     * means what it reads as. They used to throw here while validation accepted them, which made a
+     * rule that had passed every check fail at compile time — and the documented workaround, chaining
+     * `[a > 1][b == 2]`, only ever expressed `and`.
+     */
     private fun compileFilterExpression(
         expr: ExpressionAst,
         schema: FieldSchema,
@@ -278,15 +290,31 @@ object Compiler {
     ): CompiledExpression {
         return when (expr) {
             is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema, ruleId = ruleId)
-            is ConditionAst -> compileFilterCondition(cond = expr, ruleId = ruleId)
-            else -> throw CompilationException(
-                ruleId = ruleId,
-                details = "Only comparison expressions are supported in filter segments"
+            is ConditionAst -> compileFilterCondition(cond = expr, schema = schema, ruleId = ruleId)
+
+            is AndAst -> AndExpression(
+                children = expr.children.map { child ->
+                    compileFilterExpression(expr = child, schema = schema, ruleId = ruleId)
+                }
+            )
+
+            is OrAst -> OrExpression(
+                children = expr.children.map { child ->
+                    compileFilterExpression(expr = child, schema = schema, ruleId = ruleId)
+                }
+            )
+
+            is NotAst -> NotExpression(
+                child = compileFilterExpression(expr = expr.child, schema = schema, ruleId = ruleId)
             )
         }
     }
 
-    private fun compileFilterCondition(cond: ConditionAst, ruleId: String?): CompiledExpression {
+    private fun compileFilterCondition(
+        cond: ConditionAst,
+        schema: FieldSchema,
+        ruleId: String?
+    ): CompiledExpression {
         // ComparisonCompiledExpression has no case-insensitive mode, so honouring the modifier is impossible
         // here. Rejecting it is the only safe option: ignoring it would silently compare case-sensitively.
         if (cond.ignoreCase) {
@@ -306,15 +334,23 @@ object Compiler {
             OperatorNames.GTE -> ComparisonOperatorAst.GTE
             OperatorNames.LT -> ComparisonOperatorAst.LT
             OperatorNames.LTE -> ComparisonOperatorAst.LTE
+            OperatorNames.IN -> ComparisonOperatorAst.IN
+            OperatorNames.CONTAINS -> ComparisonOperatorAst.CONTAINS
             else -> throw CompilationException(
                 ruleId = ruleId,
                 details = "Operator '$op' is not supported in filter segments"
             )
         }
+        val member = resolveFilterMember(field = cond.field, schema = schema)
+        // Both sides carry the member's declared normalizers, so a filter matches the same values the
+        // same field would match at the top level, where `PreparedRuleContext` normalises the input
+        // and the operator compilers normalise the literal.
+        val normalizers = member.definition?.normalizers.orEmpty()
         val left = FieldAccessCompiledValueExpression(
-            segments = listOf(CompiledFieldSegment(name = cond.field))
+            segments = member.segments,
+            normalizers = normalizers
         )
-        val right = compileLiteralValue(literal = cond.value, ruleId = ruleId)
+        val right = compileLiteralValue(literal = cond.value, normalizers = normalizers, ruleId = ruleId)
         return ComparisonCompiledExpression(
             left = left,
             operator = comparisonOperator,
@@ -323,13 +359,72 @@ object Compiler {
         )
     }
 
-    private fun compileLiteralValue(literal: LiteralAst, ruleId: String?): CompiledValueExpression {
+    /** The compiled path a filter predicate's field name reads, together with the field it lands on. */
+    private data class FilterMember(
+        val segments: List<CompiledFieldSegment>,
+        val definition: FieldDefinition?
+    )
+
+    /**
+     * Resolves a filter predicate's field name to a path, so `parcels[origin.hub == "HAM"]` reads
+     * `hub` inside `origin` rather than a member whose name happens to contain a dot.
+     *
+     * A flat declaration wins first, matching [FieldPathResolver.resolve]: a schema that declares
+     * `origin.hub` as one member keeps naming it that way. Otherwise the name is walked one segment at
+     * a time exactly as `ValueExpressionCompiler.compileFieldAccess` walks a modern path — including
+     * ending the walk at an undeclared member, so a document field of the same name cannot lend its
+     * normalizers to a member that declares none.
+     *
+     * Only the first segment resolves aliases, again matching the modern path: an alias names a
+     * top-level field, not a member halfway down.
+     */
+    private fun resolveFilterMember(field: String, schema: FieldSchema): FilterMember {
+        val flat = FieldPathResolver.resolveName(identifier = field, fields = schema.fields)
+        val flatDefinition = schema.fields[FieldId(value = flat)]
+        if (flatDefinition != null) {
+            return FilterMember(segments = listOf(CompiledFieldSegment(name = flat)), definition = flatDefinition)
+        }
+
+        val segments = mutableListOf<CompiledFieldSegment>()
+        var definition: FieldDefinition? = null
+        var fields = schema.fields
+        for (name in field.split('.')) {
+            segments += CompiledFieldSegment(name = name)
+            definition = fields[FieldId(value = name)]
+            fields = definition?.fields.orEmpty()
+        }
+        return FilterMember(segments = segments, definition = definition)
+    }
+
+    private fun compileLiteralValue(
+        literal: LiteralAst,
+        normalizers: List<NormalizerId>,
+        ruleId: String?
+    ): CompiledValueExpression {
+        return LiteralCompiledValueExpression(
+            value = literalValue(literal = literal, normalizers = normalizers, ruleId = ruleId)
+        )
+    }
+
+    private fun literalValue(
+        literal: LiteralAst,
+        normalizers: List<NormalizerId>,
+        ruleId: String?
+    ): ExpressionValue {
         return when (literal) {
-            is NumberLiteral -> LiteralCompiledValueExpression(
-                value = NumberExpressionValue(value = BigDecimal(literal.value))
+            is NumberLiteral -> NumberExpressionValue(value = BigDecimal(literal.value))
+            is StringLiteral -> TextExpressionValue(
+                value = NormalizerRegistry.default.applyAll(value = literal.value, normalizers = normalizers)
             )
 
-            is StringLiteral -> LiteralCompiledValueExpression(value = TextExpressionValue(value = literal.value))
+            // `parcels[category in ["fragile", "liquid"]]` — a membership source written out. Each
+            // item is normalized like a single literal, so the list matches what the field matches.
+            is ListLiteral -> ArrayExpressionValue(
+                values = literal.items.map { item ->
+                    literalValue(literal = item, normalizers = normalizers, ruleId = ruleId)
+                }
+            )
+
             else -> throw CompilationException(
                 ruleId = ruleId,
                 details = "Unsupported literal type in filter: ${literal::class.simpleName}"
@@ -345,18 +440,27 @@ object Compiler {
         val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
             compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
         }
-        val left = ValueExpressionCompiler.compile(
+        val compiledLeft = ValueExpressionCompiler.compile(
             expr = expr.left,
             schema = schema,
             ruleId = ruleId,
             filterCompiler = filterCompiler
         )
-        val right = ValueExpressionCompiler.compile(
+        val compiledRight = ValueExpressionCompiler.compile(
             expr = expr.right,
             schema = schema,
             ruleId = ruleId,
             filterCompiler = filterCompiler
         )
+
+        // A text literal is matched under the normalizers declared by the field it is compared
+        // against. Without it the two spellings of one comparison disagreed: on a field declaring
+        // `lowercase`, `status equals "PAID"` matched — the named-operator path has always normalized
+        // its literal — while `status == "PAID"` did not.
+        val normalizers = normalizersOf(compiled = compiledLeft).ifEmpty { normalizersOf(compiled = compiledRight) }
+        val left = normalizedLiteral(expr = expr.left, normalizers = normalizers, ruleId = ruleId) ?: compiledLeft
+        val right = normalizedLiteral(expr = expr.right, normalizers = normalizers, ruleId = ruleId) ?: compiledRight
+
         val cost = maxOf(left.cost, right.cost)
         return ComparisonCompiledExpression(
             left = left,
@@ -367,6 +471,33 @@ object Compiler {
             // reconstructed: the compiled operands have already rewritten path roots alias → canonical.
             label = ValueExpressionRenderer.render(expr = expr.left)
         )
+    }
+
+    /** The normalizers a compiled operand declares, or none when it does not read a field. */
+    private fun normalizersOf(compiled: CompiledValueExpression): List<NormalizerId> =
+        (compiled as? FieldAccessCompiledValueExpression)?.normalizers.orEmpty()
+
+    /**
+     * Recompiles a **text** literal under [normalizers], or null when this operand is not one.
+     *
+     * Only text is rerouted, because normalizers only act on text: a number, a boolean, a date or a
+     * variable read keeps the ordinary value-expression path, which is the one that knows how to
+     * compile them. A written-out list is included — each item is normalized like a single literal, so
+     * `status in ["PAID", "SENT"]` matches what the field matches.
+     */
+    private fun normalizedLiteral(
+        expr: ValueExpressionAst,
+        normalizers: List<NormalizerId>,
+        ruleId: String?
+    ): CompiledValueExpression? {
+        if (normalizers.isEmpty()) {
+            return null
+        }
+        val literal = (expr as? LiteralValueAst)?.literal
+        if (literal !is StringLiteral && literal !is ListLiteral) {
+            return null
+        }
+        return compileLiteralValue(literal = literal, normalizers = normalizers, ruleId = ruleId)
     }
 
     private fun compileCondition(

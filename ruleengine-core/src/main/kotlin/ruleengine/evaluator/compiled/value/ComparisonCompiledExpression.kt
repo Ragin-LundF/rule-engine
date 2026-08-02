@@ -5,6 +5,7 @@ import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
+import ruleengine.evaluator.compiled.value.result.DateExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
@@ -62,7 +63,8 @@ class ComparisonCompiledExpression(
             is TextExpressionValue -> value.value
             is BooleanExpressionValue -> value.value
             is ArrayExpressionValue -> value.values.map { element -> plainValue(value = element) }
-            MissingExpressionValue, ObjectExpressionValue -> null
+            is DateExpressionValue -> value.value.toString()
+            is ObjectExpressionValue, MissingExpressionValue -> null
         }
     }
 
@@ -78,6 +80,17 @@ class ComparisonCompiledExpression(
         if (operator == ComparisonOperatorAst.CONTAINS) {
             return containsValue(leftValue = leftValue, rightValue = rightValue)
         }
+        // Membership is `contains` with the operands the other way round, so it reuses the same
+        // value equality — which is what makes `1` find `1.0` here as it does everywhere else.
+        if (operator == ComparisonOperatorAst.IN) {
+            return memberOf(element = leftValue, source = rightValue)
+        }
+        // Checked before the type dispatch below, so a date compares as a date whichever side it is
+        // on. The other operand may be text: a member of a collection carries no declared type, so
+        // `orders[].shippedAt > registeredAt` has a date on one side and an ISO string on the other.
+        if (leftValue is DateExpressionValue || rightValue is DateExpressionValue) {
+            return compareDates(leftValue = leftValue, operator = operator, rightValue = rightValue)
+        }
         return when (leftValue) {
             is NumberExpressionValue if rightValue is NumberExpressionValue -> {
                 val cmp = leftValue.value.compareTo(rightValue.value)
@@ -88,8 +101,9 @@ class ComparisonCompiledExpression(
                     ComparisonOperatorAst.GTE -> cmp >= 0
                     ComparisonOperatorAst.LT -> cmp < 0
                     ComparisonOperatorAst.LTE -> cmp <= 0
-                    // Unreachable: `contains` returns above, before the operand types are examined.
-                    ComparisonOperatorAst.CONTAINS -> false
+                    // Unreachable: `contains` and `in` both return above, before the operand types
+                    // are examined.
+                    ComparisonOperatorAst.CONTAINS, ComparisonOperatorAst.IN -> false
                 }
             }
 
@@ -111,6 +125,49 @@ class ComparisonCompiledExpression(
             }
 
             else -> false
+        }
+    }
+
+    /**
+     * Whether [element] is one of the values [source] holds.
+     *
+     * A single value counts as a source of one. A path that selects exactly one element collapses to
+     * a scalar, so without this `invoices[customerId in priorityCustomerIds]` would stop matching as
+     * soon as the document happened to carry a single priority customer.
+     *
+     * A missing source is already false at the call site, which is what makes an empty membership
+     * source select nothing.
+     */
+    private fun memberOf(element: ExpressionValue, source: ExpressionValue): Boolean {
+        return when (source) {
+            is ArrayExpressionValue -> ExpressionValues.arrayContains(container = source, element = element)
+            else -> ExpressionValues.equalsByValue(left = source, right = element)
+        }
+    }
+
+    /**
+     * Two calendar dates, with either side allowed to arrive as ISO-8601 text.
+     *
+     * A value that is neither is not comparable to a date, so the comparison is false rather than an
+     * error — the same answer a missing operand gives.
+     */
+    private fun compareDates(
+        leftValue: ExpressionValue,
+        operator: ComparisonOperatorAst,
+        rightValue: ExpressionValue
+    ): Boolean {
+        val left = ExpressionValues.asDate(value = leftValue) ?: return false
+        val right = ExpressionValues.asDate(value = rightValue) ?: return false
+        val cmp = left.compareTo(right)
+        return when (operator) {
+            ComparisonOperatorAst.EQ -> cmp == 0
+            ComparisonOperatorAst.NEQ -> cmp != 0
+            ComparisonOperatorAst.GT -> cmp > 0
+            ComparisonOperatorAst.GTE -> cmp >= 0
+            ComparisonOperatorAst.LT -> cmp < 0
+            ComparisonOperatorAst.LTE -> cmp <= 0
+            // Unreachable: `contains` and `in` both return before the operand types are examined.
+            ComparisonOperatorAst.CONTAINS, ComparisonOperatorAst.IN -> false
         }
     }
 

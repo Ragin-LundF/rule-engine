@@ -1,0 +1,7 @@
+rule "established-account" {
+  description "Registered at least 90 days before the review date."
+  when
+    daysBetween(registeredAt, reviewDate) >= 90
+  then
+    flag "established"
+}

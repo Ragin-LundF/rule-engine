@@ -19,5 +19,13 @@ data class RuleMatch(
      * A rule without an `else` block can only ever report [RuleBranch.THEN], which is why that is the
      * default.
      */
-    val branch: RuleBranch = RuleBranch.THEN
+    val branch: RuleBranch = RuleBranch.THEN,
+    /**
+     * Which member of the scoped collection produced this match, or null for a whole-document run.
+     *
+     * `ruleId` is no longer unique once an entry declares a `scope` — the same rule runs once per
+     * member — so this is what tells two matches of the same rule apart. It matches
+     * [MemberEvaluation.key].
+     */
+    val scopeMember: String? = null
 )

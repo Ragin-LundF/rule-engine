@@ -156,11 +156,11 @@ actual fun RuleEditor(closeController: AppCloseController) {
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     // The remember keys stay here on purpose: they are what decides when each list goes stale, and
     // catalogRules deliberately does not key on the diagnostics it reads.
-    val catalogFields = remember(key1 = state.parsedSchema.value) {
-        catalogFieldsFrom(schema = state.parsedSchema.value)
+    val catalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
+        catalogFieldsFrom(schema = state.ruleSchema)
     }
-    val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
-        builderCatalogFieldsFrom(schema = state.parsedSchema.value)
+    val builderCatalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
+        builderCatalogFieldsFrom(schema = state.ruleSchema)
     }
     // Variables in scope depend on which rule is open, so this keys on the selected rule as well as
     // on the entry's text. Appended to the schema fields so every operand picker offers them without

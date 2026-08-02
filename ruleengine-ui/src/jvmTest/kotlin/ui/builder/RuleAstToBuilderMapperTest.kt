@@ -10,7 +10,11 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderRule
+import ui.builder.model.fieldOperand
+import ui.builder.model.filters
+import ui.builder.model.names
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -171,16 +175,28 @@ class RuleAstToBuilderMapperTest {
     }
 
     /**
-     * A filter may name a dotted path into the element, but not one that filters again on the way:
-     * `BuilderFilter` is a flat `field op value` row, so an inner `[...]` has nowhere to go and would
-     * be dropped silently on the way back to DSL. Locking the rule is the honest answer.
+     * A filter holds two operands, so one may name a path that filters again on the way — the inner
+     * `[...]` lands in that operand's own path steps rather than having nowhere to go.
+     *
+     * This used to lock the rule, back when `BuilderFilter` was a flat `field op value` row and the
+     * inner brackets would have been dropped silently on the way back to DSL.
      */
     @Test
-    fun `filter containing a nested filter stays unsupported`() {
+    fun `filter containing a nested filter maps`() {
         val ast = parseRule(condition = """count(orders[items[price > 0].sku == "x"]) > 0""")
         val result = RuleAstToBuilderMapper.map(ast)
 
-        assertIs<BuilderRule.Unsupported>(result)
+        assertIs<BuilderRule.Supported>(result)
+        val comparison = result.conditionNodes.single() as BuilderConditionNode.Comparison
+        val outerFilter = (comparison.left as BuilderOperand.Aggregate).path.single().filters.single()
+        val innerPath = (outerFilter.left as BuilderOperand.FieldRef).path
+
+        assertEquals(expected = listOf("items", "sku"), actual = innerPath.names)
+        assertEquals(
+            expected = fieldOperand(name = "price"),
+            actual = innerPath.first().filters.single().left,
+            message = "The inner filter belongs to the segment it filters",
+        )
     }
 
     private fun parseRule(condition: String): RuleAst = Parser(

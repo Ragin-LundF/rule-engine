@@ -1,0 +1,3 @@
+actions:
+  flag:
+    argTypes: [string]

@@ -5,6 +5,193 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Filter predicates take full expressions on both sides.** A `[...]` predicate used to be a flat
+  `member op literal` row. Both sides are now value expressions, so a filter may hold whatever a
+  comparison may:
+
+  ```
+  count(orders[count(items) > 2]) > 0            # an aggregate over the element's own collection
+  count(orders[total * 2 > 100]) > 0             # arithmetic
+  count(orders[items[price > 0].sku == "x"]) > 0 # a path that filters again
+  count(orders[total > sum(items.price)]) > 0    # a computed right-hand side
+  ```
+
+  All four already evaluated correctly; what changes is that the visual Builder can now represent
+  them, so such a rule is editable instead of read-only. `BuilderFilter` carries two
+  `BuilderOperand`s in place of `field`/`value`/`listItems`/`valueIsPath`, and the new
+  `BuilderOperand.ListLiteral` is what lets `[status in ["paid", "sent"]]` survive as a list rather
+  than collapsing to one literal.
+
+- **`and`, `or` and `not` inside a filter predicate.** These parsed and validated but then failed to
+  compile, so a rule that had passed every check broke at load time.
+
+  ```
+  count(parcels[origin.hub == "HAM" and origin.scans > 2]) > 0
+  count(parcels[origin.hub == "HAM" or origin.scans > 2]) > 0
+  ```
+
+  Chaining filters — `[a][b]` — still works and still means `and`. It was the documented workaround,
+  and it never had an `or` equivalent.
+
+- **`contains` inside a filter predicate.** It has a comparison operator to compile to, so rejecting
+  it was arbitrary. `count(parcels[origin.hub contains "AM"]) > 0` now works.
+
+- **Regex extractions are editable in the Builder.** `extract iban regex("DE(\\d+)", 1) tag $1` used
+  to lock the whole rule out of Builder mode, because `BuilderAction` had nowhere to keep a pattern
+  and regenerating the DSL without it would have deleted it from the file. Actions now carry a
+  `BuilderExtraction`, and the action row grows an `extract … regex(…)` line with a source-field
+  picker, a pattern box and a capture-group box.
+
+- **Membership filters — `in` against a named source.** A collection filter can test an element's
+  member against a `string_set`, a projection across another collection, or a list variable.
+
+  ```
+  sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+  ```
+
+  Both sides are matched under the declared normalizers, and an empty or missing source selects
+  nothing. A literal list — `country in ["de", "at"]` — is unchanged: it stays a plain field
+  comparison and keeps enforcing the field's declared `operators:` list.
+
+  Filters can now also name **document-level fields**. `customerId` belongs to the invoice and
+  `priorityCustomerIds` to the document, and both have to resolve inside one predicate, so a filter
+  reads through to the context the collection was read from. The element still wins.
+
+- **Slicing — `take(path, n)` and `takeLast(path, n)`.** A bounded prefix or suffix of a collection
+  in source order, composing with projection, filtering and aggregation.
+
+  ```
+  sum(take(orders, 3).total) > 5000
+  count(takeLast(loginEvents, 10)[successful == false]) >= 3
+  ```
+
+  Order matters and is preserved: the second example counts failures among the last ten events, not
+  the last ten failures.
+
+- **Collection predicates — `every` and `any`.** True when every / at least one element satisfies a
+  condition, short-circuiting as soon as the answer is decided. Over an empty or missing collection
+  `every` is true and `any` is false.
+
+  ```
+  every(lineItems[quantity >= 1]) and not any(alerts[severity == "high"])
+  ```
+
+- **Keyed joins — `sumByKey`.** Aligns two or more collections on a shared member and returns one
+  total per key: an outer join, missing values counted as zero, duplicates within a source summed,
+  keys in first-seen order.
+
+  ```
+  min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
+  ```
+
+- **Date arithmetic — `daysBetween(from, to)`.** Signed whole calendar days, reading `date` and
+  `date_time` fields and ISO-8601 literals. A missing or unreadable operand yields a missing result
+  rather than an exception.
+
+- **Absolute value — `abs(value)`.** Over a field, an aggregate, an arithmetic expression or a
+  variable, preserving integer and decimal precision.
+
+- **Per-member evaluation — `scope` in a manifest entry.** An entry may declare
+  `scope: <collection>` to run its rules once per member instead of once per document. Rules are
+  written from the member's point of view and fall back to the document for anything the member does
+  not carry.
+
+  `EvaluationResult` gains `members: List<MemberEvaluation>` and `RuleMatch` gains
+  `scopeMember: String?`, both defaulted — an unscoped evaluation is unchanged, and so is its CLI
+  output. Rejected at load time when the scope names no field or names a non-collection.
+
+- **Field-to-field comparisons.** `amount > limit` and `orders[quantity >= threshold]` now parse. A
+  legacy condition's right-hand side is a literal, so a path there previously failed with
+  "Expected literal" pointing at the second field name.
+
+- **The visual Builder edits every new form.** A `Function` operand kind covers `abs`,
+  `daysBetween`, `every`, `any` and `sumByKey`, with one row per argument and each argument an
+  operand in its own right — so `abs(sum(a) - sum(b))` is editable at every level. A path segment's
+  drawer gained a *first / last n* control for `take` / `takeLast`, and its `where` rows accept `in`
+  against a written-out list or the name of another field. Path decorations are held in order,
+  because `take(orders, 3)[paid == true]` and `take(orders[paid == true], 3)` select different
+  orders.
+
+- **New sample: `subscription-billing`.** One rule set evaluated once per account, with a rule for
+  each of the features above. It ships in the gallery and is executed by
+  `SubscriptionBillingIntegrationTest` rather than only displayed.
+
+### Fixed
+
+- **Two spellings of one comparison disagreed, because only one normalized its literal.** On a field
+  declaring `lowercase`, with the stored value `"paid"`:
+
+  | Predicate | Matched before | Matches now |
+  |---|---|---|
+  | `orders[status equals "PAID"]` | yes | yes |
+  | `orders[status == "PAID"]` | **no** | yes |
+
+  `Compiler.compileFilterCondition` ran the literal through the field's declared normalizers;
+  `ValueExpressionCompiler.compileLiteral` emitted it raw. So the symbolic spelling compared a
+  normalized field value against an unnormalized literal and quietly failed to match — the same
+  divergence at the top level, since it is the same literal compiler.
+
+  A comparison now matches a text literal under the normalizers declared by the field on the other
+  side, which is what the named-operator path has always done. A written-out list normalizes each item.
+  Only text is affected: numbers, booleans, dates and variable reads are unchanged, and a comparison
+  with no field operand has no normalizers to apply.
+
+  **This changes which rules match.** A rule written `== "ACME"` against a `lowercase` field matched
+  nothing before and matches now. If any rule depended on that non-match, it will start firing.
+  `RULE-SPEC.md` and `docs/field-schema.md` documented the old behaviour as a reason to prefer the
+  named operator; that advice now rests only on the declared `operators:` list, which `==` still skips.
+
+- **A filter predicate naming a nested member silently matched nothing.** `parcels[origin.scans > 2]`
+  compiled the dotted name into a *single* path segment, so the engine looked for a member literally
+  called `origin.scans`, found none, and answered false for every element — after parsing, validating
+  and compiling without complaint. The name is now walked one segment at a time, exactly as the same
+  path is on a modern comparison. A schema that declares `origin.scans` as one flat member keeps
+  resolving that way.
+
+  This only affected the predicate spellings the parser routes through its legacy path, i.e. every
+  operator except `==` and `!=`.
+
+- **Filter predicates were barely validated.** `ValueExpressionValidator` inspected only the outermost
+  node of a predicate and returned for anything else, so an unknown member went unreported for every
+  operator but `==`/`!=`, and an `and`/`or`/`not` predicate was skipped entirely — including its
+  modern half, which is checked everywhere else. The predicate is now walked like any other expression
+  tree.
+
+  **This can newly fail rules that previously loaded.** A misspelled member inside a filter is now an
+  error rather than a predicate that quietly matched nothing. `ignoreCase` and operators with no
+  comparison form (`between`, `startsWith`, `endsWith`, `regex`, `containsAny`, `containsAll`) are
+  reported as diagnostics instead of only throwing at compile time.
+
+- **Documentation claimed working filter spellings were rejected.** `RULE-SPEC.md`,
+  `docs/expressions.md` and `docs/rules.md` all listed `equals` and `contains` as invalid inside
+  `[...]`, and told authors to write `==` instead. `equals` has always worked there. The filter
+  operator tables now match what the engine accepts.
+
+- **An aggregate inside a filter was computed once for the whole collection.** The evaluation cache
+  is keyed by the compiled node alone and was shared with the per-element contexts, so
+  `orders[count(items) > 2]` answered every order with the first order's item count. Each element
+  context now owns its cache.
+
+- **A reused context served stale values.** `RuleEngine.evaluate` reset the variables but not the
+  cache, so evaluating the same context twice — which the documented lifecycle allows — could return
+  the first run's memoized aggregates.
+
+- **Normalizers were not applied to nested or collection members.** Only a top-level field read its
+  declared `normalizers:`; a member reached through a path compared raw text, so
+  `invoices[customerId == "acme"]` did not match `"  ACME  "` even with `trim` and `lowercase`
+  declared. Declared normalizers now travel with the compiled path and are applied on both sides of
+  a filter comparison. **This changes evaluation** for rules whose nested or collection members
+  declare normalizers — those rules now match what the same field would match at the top level.
+
+- **Dates were unreachable from value expressions.** A `date` or `date_time` reaching a value
+  expression became a missing value, so no comparison against one could hold. Dates now flow through
+  as values, are compared at calendar-day precision, and serialize as ISO-8601 strings, which keeps
+  result output unchanged.
+
 ## 1.6.0
 
 ### Added

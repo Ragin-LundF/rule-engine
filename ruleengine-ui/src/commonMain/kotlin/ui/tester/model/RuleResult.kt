@@ -33,6 +33,13 @@ data class RuleResult(
     val branch: RuleBranch? = null,
     /** True when an earlier rule's `stop` ended the run before this rule was reached. */
     val notEvaluated: Boolean = false,
+    /**
+     * Which member of the scoped collection this row belongs to, or null for a whole-document run.
+     *
+     * [ruleId] stops being unique once an entry declares a `scope`: the same rule runs once per
+     * member, and this is what tells the rows apart.
+     */
+    val scopeMember: String? = null,
 ) {
     /**
      * Derived here rather than in the view so the dot, the badge colour, the badge label and the
@@ -62,3 +69,23 @@ data class RuleResult(
             else -> RuleMatchStatus.NO_MATCH
         }
 }
+
+/**
+ * How a result names itself wherever it is listed — the rule id, prefixed by its member when the
+ * entry is scoped.
+ *
+ * Shared by the rule rows and by the "variables set" / "actions emitted" summaries above them. A
+ * scoped run fires the same rule once per member, so a bare rule id would head two different groups
+ * with nothing to tell them apart.
+ */
+val RuleResult.displayLabel: String
+    get() = scopeMember?.let { member -> "$member · $ruleId" } ?: ruleId
+
+/**
+ * What identifies one row for expansion.
+ *
+ * Separate from [displayLabel] because it is a key, not prose: expanding one member's copy of a rule
+ * must not expand every other member's.
+ */
+val RuleResult.rowKey: String
+    get() = scopeMember?.let { member -> "$member/$ruleId" } ?: ruleId

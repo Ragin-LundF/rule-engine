@@ -16,6 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** Round-trip of the optional `else` block through the visual Builder. */
@@ -191,26 +192,36 @@ class BuilderElseBranchRoundTripTest {
         assertEquals(expected = 1, actual = state.elseActions.size)
     }
 
+    /** An extraction is carried per action, so it round-trips in either branch. */
     @Test
-    fun `an extraction in the else block locks the rule out of the builder`() {
-        val rule = Parser(
-            input = """
-                rule "tier" {
-                  description "d"
-                  when
-                    amount >= 1000
-                  then
-                    label "high"
-                  else
-                    extract reference regex("ref-([0-9]+)", 1) label ${'$'}1
-                }
-            """.trimIndent()
-        ).parseRules().single()
+    fun `an extraction in the else block survives the builder round-trip`() {
+        val original = """
+            rule "tier" {
+              description "d"
+              when
+                amount >= 1000
+              then
+                label "high"
+              else
+                extract reference regex("ref-([0-9]+)", 1) label ${'$'}1
+            }
+        """.trimIndent()
+        val rule = Parser(input = original).parseRules().single()
 
-        val mapped = assertIs<BuilderRule.Unsupported>(value = RuleAstToBuilderMapper.map(rule))
+        val mapped = assertIs<BuilderRule.Supported>(value = RuleAstToBuilderMapper.map(rule))
+        val generated = assertNotNull(
+            actual = BuilderToRuleDsl.generate(state = BuilderEditorState.fromBuilderRule(rule = mapped))
+        )
+        val reparsed = Parser(input = generated).parseRules().single()
+
+        assertEquals(
+            expected = rule.elseActions,
+            actual = reparsed.elseActions,
+            message = "the else branch's extraction must survive.\nGenerated:\n$generated"
+        )
         assertTrue(
-            actual = mapped.reason.contains(other = "'else' block"),
-            message = "unexpected reason: ${mapped.reason}"
+            actual = reparsed.actions.single().extraction == null,
+            message = "the then branch must not pick up the else branch's extraction"
         )
     }
 

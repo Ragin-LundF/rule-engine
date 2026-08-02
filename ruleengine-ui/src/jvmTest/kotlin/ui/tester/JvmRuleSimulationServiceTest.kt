@@ -653,4 +653,81 @@ class JvmRuleSimulationServiceTest {
         assertTrue(actual = comparison.result)
         assertEquals(expected = "105.0", actual = comparison.actual)
     }
+
+    // ── scoped evaluation ─────────────────────────────────────────────────────
+
+    /**
+     * A scoped entry's rules name the member's fields. Without the scope the tester would check them
+     * against the document and report every one of those fields as unknown.
+     */
+    @Test
+    fun `a scoped run reports one result per member`() {
+        val result = service.simulate(
+            schemaText = SCOPED_SCHEMA,
+            actionsText = ACTIONS_TEXT,
+            ruleText = SCOPED_RULE,
+            ruleId = "",
+            inputJson = SCOPED_INPUT,
+            scope = "accounts",
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        assertEquals(expected = 2, actual = outcome.ruleResults.size)
+        assertEquals(
+            expected = listOf("acc-1", "acc-2"),
+            actual = outcome.ruleResults.map { ruleResult -> ruleResult.scopeMember },
+        )
+        assertEquals(
+            expected = listOf(true, false),
+            actual = outcome.ruleResults.map { ruleResult -> ruleResult.matched },
+            message = "only the first account clears the threshold",
+        )
+    }
+
+    @Test
+    fun `an unscoped run leaves the member unset`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = RENT_RULE,
+            ruleId = "rent-payment",
+            inputJson = POSITIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        assertEquals(expected = null, actual = outcome.ruleResults.single().scopeMember)
+    }
 }
+
+private val SCOPED_SCHEMA = """
+    name: accounts
+    fields:
+      accounts:
+        type: collection
+        fields:
+          id:
+            type: text
+          balance:
+            type: decimal
+      threshold:
+        type: decimal
+""".trimIndent()
+
+private val SCOPED_RULE = """
+    rule "rich-account" {
+      when
+        balance > threshold
+      then
+        label "rich"
+    }
+""".trimIndent()
+
+private val SCOPED_INPUT = """
+    {
+      "threshold": 1000,
+      "accounts": [
+        { "id": "acc-1", "balance": 5000 },
+        { "id": "acc-2", "balance": 10 }
+      ]
+    }
+""".trimIndent()

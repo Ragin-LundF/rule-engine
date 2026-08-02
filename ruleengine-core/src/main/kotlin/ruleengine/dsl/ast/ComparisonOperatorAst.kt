@@ -27,4 +27,17 @@ enum class ComparisonOperatorAst {
      * normalizes the literal.
      */
     CONTAINS,
+
+    /**
+     * Membership of the left operand in the collection, string set or list variable on the right.
+     *
+     * The mirror image of [CONTAINS], and it exists separately because the source is named rather
+     * than written out: `customerId in priorityCustomerIds` asks a question about a set the document
+     * carries, which `contains` cannot express with the operands in that order.
+     *
+     * A literal list — `country in ["de", "at"]` — does **not** produce this. That spelling stays on
+     * the legacy [ConditionAst] path, the only one that enforces the field's declared `operators:`
+     * list and normalizes each item of the list.
+     */
+    IN,
 }

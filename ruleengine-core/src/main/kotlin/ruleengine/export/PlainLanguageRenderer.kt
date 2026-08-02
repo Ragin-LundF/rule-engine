@@ -28,11 +28,13 @@ import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
+import ruleengine.dsl.ast.SliceSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.dsl.ast.VariableRefLiteral
 import ruleengine.evaluator.compiled.AggregateFunctionName
+import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.export.dto.PlainAll
 import ruleengine.export.dto.PlainAny
 import ruleengine.export.dto.PlainCondition
@@ -50,6 +52,11 @@ import ruleengine.export.dto.PlainNot
  * … multiplied by 0.25", not "more than a quarter of …" — because a description that quietly
  * rephrases what a rule does is worse than one that reads a little mechanically. Saying what the
  * rule is *for* is the author's job, in the `description` clause.
+ *
+ * One object rather than several despite its size: every function here is a phrase-maker for some
+ * part of one sentence, and they call each other freely — an operand may hold an aggregate whose
+ * filter holds a whole condition. Splitting by construct would trade a long file for a cycle between
+ * short ones.
  */
 object PlainLanguageRenderer {
 
@@ -166,11 +173,25 @@ object PlainLanguageRenderer {
     // ── expression comparisons (aggregates and arithmetic) ────────────────────
 
     private fun renderComparison(comparison: ComparisonExpressionAst, schema: FieldSchema?): String {
+        // `every(...)` and `any(...)` are written bare and desugared to `== true` by the parser.
+        // Spelling that out as "... is true" says nothing a reader did not already have.
+        if (isPredicateAgainstTrue(comparison = comparison)) {
+            return operand(expr = comparison.left, schema = schema)
+        }
         val left = operand(expr = comparison.left, schema = schema)
         val right = operand(expr = comparison.right, schema = schema)
         val suffix = if (comparison.ignoreCase) ", ignoring capitalisation" else ""
 
         return "$left ${comparisonPhrase(operator = comparison.operator)} $right$suffix"
+    }
+
+    private fun isPredicateAgainstTrue(comparison: ComparisonExpressionAst): Boolean {
+        if (comparison.operator != ComparisonOperatorAst.EQ) {
+            return false
+        }
+        val call = comparison.left as? FunctionCallValueAst ?: return false
+        val right = (comparison.right as? LiteralValueAst)?.literal as? BooleanLiteral ?: return false
+        return right.value && CollectionFunctionName.fromName(name = call.name) != null
     }
 
     private fun comparisonPhrase(operator: ComparisonOperatorAst): String {
@@ -182,6 +203,7 @@ object PlainLanguageRenderer {
             ComparisonOperatorAst.LT -> "is less than"
             ComparisonOperatorAst.LTE -> "is at most"
             ComparisonOperatorAst.CONTAINS -> "includes"
+            ComparisonOperatorAst.IN -> "is one of"
         }
     }
 
@@ -222,6 +244,9 @@ object PlainLanguageRenderer {
      * of the sentence. `count(parcels[...])` measures nothing, so it reads "the number of parcels …".
      */
     private fun aggregate(call: FunctionCallValueAst, schema: FieldSchema?): String {
+        CollectionFunctionName.fromName(name = call.name)?.let { collectionFunction ->
+            return collectionPhrase(function = collectionFunction, call = call, schema = schema)
+        }
         val argument = call.arguments.singleOrNull()
         val function = AggregateFunctionName.fromName(name = call.name)
 
@@ -234,9 +259,43 @@ object PlainLanguageRenderer {
 
         val split = splitAggregatePath(path = argument.path)
         val measure = split.measure?.let { segments -> FieldLabels.forSegments(segments = segments) }
-        val container = describeContainer(segments = split.containerSegments, filters = split.filters)
+        val container = describeContainer(
+            segments = split.containerSegments,
+            filters = split.filters,
+            slice = split.slice,
+        )
 
         return "${aggregatePhrase(function = function, name = call.name, measure = measure)} of $container"
+    }
+
+    /**
+     * The functions that read the shape of a collection rather than reduce its values.
+     *
+     * Phrased as sentences rather than as "the every of …": these answer a question about the
+     * elements, and the prose is what a reader who never sees the DSL is given.
+     */
+    private fun collectionPhrase(
+        function: CollectionFunctionName,
+        call: FunctionCallValueAst,
+        schema: FieldSchema?
+    ): String {
+        if (function == CollectionFunctionName.SUM_BY_KEY) {
+            val key = ((call.arguments.firstOrNull() as? LiteralValueAst)?.literal as? StringLiteral)?.value
+            val sources = call.arguments.drop(n = 1)
+                .joinToString(separator = " and ") { source -> operand(expr = source, schema = schema) }
+            return "the per-$key totals of $sources"
+        }
+        val argument = call.arguments.singleOrNull() as? FieldAccessAst
+            ?: return "${call.name.lowercase()} of " +
+                call.arguments.joinToString(separator = ", ") { arg -> operand(expr = arg, schema = schema) }
+        val split = splitAggregatePath(path = argument.path)
+        val container = describeContainer(
+            segments = split.containerSegments,
+            filters = split.filters,
+            slice = split.slice,
+        )
+        val lead = if (function == CollectionFunctionName.EVERY) "every one of" else "at least one of"
+        return "$lead $container"
     }
 
     /**
@@ -253,6 +312,8 @@ object PlainLanguageRenderer {
             AggregateFunctionName.MAX -> "the highest"
             AggregateFunctionName.MIN -> "the lowest"
             AggregateFunctionName.SUBTRACT -> "the difference of"
+            AggregateFunctionName.ABS -> "the magnitude of"
+            AggregateFunctionName.DAYS_BETWEEN -> "the days between"
             null -> "the ${name.lowercase()}"
         }
 
@@ -279,6 +340,8 @@ object PlainLanguageRenderer {
         val containerSegments: List<String>,
         val measure: List<String>?,
         val filters: List<ExpressionAst>,
+        /** The bound the path applies, or null when it keeps every element. */
+        val slice: SliceSegmentAst? = null,
     )
 
     /**
@@ -290,6 +353,9 @@ object PlainLanguageRenderer {
      */
     private fun splitAggregatePath(path: List<PathSegmentAst>): AggregatePath {
         val filters = path.filterIsInstance<FilterSegmentAst>().map { segment -> segment.expression }
+        // Dropping this would make the prose claim more than the rule does: "the number of login
+        // events that failed" instead of "…of the last 10 login events".
+        val slice = path.filterIsInstance<SliceSegmentAst>().firstOrNull()
         val lastFilterIndex = path.indexOfLast { segment -> segment is FilterSegmentAst }
 
         if (lastFilterIndex >= 0) {
@@ -299,18 +365,20 @@ object PlainLanguageRenderer {
                 containerSegments = container,
                 measure = measure.ifEmpty { null },
                 filters = filters,
+                slice = slice,
             )
         }
 
         val names = path.fieldNames()
         if (names.size < 2) {
-            return AggregatePath(containerSegments = names, measure = null, filters = filters)
+            return AggregatePath(containerSegments = names, measure = null, filters = filters, slice = slice)
         }
 
         return AggregatePath(
             containerSegments = names.dropLast(n = 1),
             measure = listOf(names.last()),
             filters = filters,
+            slice = slice,
         )
     }
 
@@ -319,10 +387,19 @@ object PlainLanguageRenderer {
      * (`origin.hub` inside `parcels[...]` means a parcel's hub), so resolving it against the
      * top-level schema would look up the wrong field.
      */
-    private fun describeContainer(segments: List<String>, filters: List<ExpressionAst>): String {
+    private fun describeContainer(
+        segments: List<String>,
+        filters: List<ExpressionAst>,
+        slice: SliceSegmentAst? = null
+    ): String {
         // Left as written rather than title-cased: the container reads as a noun mid-sentence
         // ("of parcels where …"), where "of Parcels" would look like a proper name.
-        val name = segments.joinToString(separator = ".").ifEmpty { "the collection" }
+        val plain = segments.joinToString(separator = ".").ifEmpty { "the collection" }
+        val name = when {
+            slice == null -> plain
+            slice.fromEnd -> "the last ${slice.count} $plain"
+            else -> "the first ${slice.count} $plain"
+        }
         if (filters.isEmpty()) {
             return name
         }

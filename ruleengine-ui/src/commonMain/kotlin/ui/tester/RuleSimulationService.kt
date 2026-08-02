@@ -18,6 +18,9 @@ interface RuleSimulationService {
      * @param ruleText       Full DSL text containing one or more rules.
      * @param ruleId         Id of the rule to evaluate; blank runs all rules in [ruleText].
      * @param inputJson      JSON object string representing the fact context.
+     * @param scope          Collection to evaluate once per member, or blank for the whole document.
+     *   Mirrors the manifest entry's `scope`: without it the rules of a scoped entry are checked
+     *   against the document and every member field reads as unknown.
      * @return               A [SimulationResult] that is always non-null and never throws.
      */
     fun simulate(
@@ -26,5 +29,6 @@ interface RuleSimulationService {
         ruleText: String,
         ruleId: String,
         inputJson: String,
+        scope: String = "",
     ): SimulationResult
 }

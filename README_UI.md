@@ -80,15 +80,30 @@ for:
 ### Advanced conditions in the builder
 
 A condition row is `operand · operator · operand`. Each operand is a chip that can be a field, a
-literal value, an aggregate, or a calculation:
+literal value, an aggregate, a calculation, or a function call:
 
-- **Aggregate** — pick a function (`count`, `sum`, `avg`, `median`, `max`, `min`, `subtract`) and build
+- **Aggregate** — pick a reduction (`count`, `sum`, `avg`, `median`, `max`, `min`, `subtract`) and build
   the path one segment at a time, attaching `where` filters to any segment.
 - **Calculation** — a flat list of terms joined by `+`, `-`, `*`, `/`, with optional parentheses.
+- **Function** — any other call the engine knows (`abs`, `daysBetween`, `every`, `any`, `sumByKey`),
+  with one row per argument. An argument is an operand in its own right, so
+  `abs(sum(invoices.amount) - sum(payments.amount))` is a function around a calculation around two
+  aggregates, each editable in place.
 
-Aggregates and calculations are numeric, so those two operand kinds are offered only when the
-comparison can be numeric — a text field will not let you build a sum against it. Rows carrying a
-computed operand are marked with an accent stripe and show the DSL they generate underneath.
+Computed operands are numeric, so those kinds are offered only when the comparison can be numeric —
+a text field will not let you build a sum against it. Rows carrying a computed operand are marked
+with an accent stripe and show the DSL they generate underneath.
+
+**Path segments** carry two things beyond their name, both edited in the segment's drawer and both
+badged on the pill so they are visible while it is closed:
+
+- a **where** filter, `and`-joined when there is more than one. `in` takes either a written-out list
+  (`paid, sent`) or the name of another field or list variable (`priorityCustomerIds`) — a bare name
+  is emitted unquoted, so it stays a membership test rather than becoming a text comparison.
+- a **first / last n** bound, which is what `take` and `takeLast` generate. It applies where it sits
+  relative to the filters above it, because the order is the meaning: `take(orders, 3)[paid == true]`
+  selects paid orders among the first three, while `take(orders[paid == true], 3)` selects the first
+  three paid orders.
 
 ### Variables in the builder
 

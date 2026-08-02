@@ -597,6 +597,43 @@ for (match: RuleMatch in result.matches) {
 - `name: String` — the action name (e.g. `"label"`)
 - `arguments: List<Any?>` — the argument values (e.g. `["rent"]` or `[10]`)
 
+#### Scoped Entries — Reading Per-Member Results
+
+When a manifest entry declares `scope: <collection>` (see [manifest.md](manifest.md)), the rules run
+once per member of that collection. Two fields carry the extra dimension, both defaulted so existing
+code compiles and keeps its meaning:
+
+- `EvaluationResult.members: List<MemberEvaluation>` — one entry per member, **empty** for a
+  whole-document evaluation.
+- `RuleMatch.scopeMember: String?` — which member produced the match, **null** for a whole-document
+  evaluation. `ruleId` is no longer unique on its own once an entry is scoped.
+
+`MemberEvaluation`:
+- `index: Int` — the member's position in the collection
+- `key: String` — the member's declared `id` when it has one, otherwise `<collection>[index]`; the
+  same string appears on every `RuleMatch` that member produced
+- `result: EvaluationResult` — that member's own outcome, including the `variables` it published and
+  the rule whose `stop` ended **its** run
+
+`EvaluationResult.matches` stays flat, in member order, so a consumer that does not care about the
+split needs no change. `variables` and `stoppedBy` at the top level are empty and null for a scoped
+result: they mean nothing across members.
+
+```kotlin
+val result = engine.evaluate(input = input)
+
+for (member in result.members) {
+    println("${member.key}:")
+    for (match in member.result.matches) {
+        println("  ${match.ruleId} -> ${match.actions}")
+    }
+    member.result.stoppedBy?.let { println("  halted by $it") }
+}
+
+// or ignore the split entirely
+result.matches.forEach { match -> println("${match.scopeMember}: ${match.ruleId}") }
+```
+
 #### Reading Variables
 
 Use `result.variables` for the state at the end of the run, and `RuleMatch.assignments` when you need

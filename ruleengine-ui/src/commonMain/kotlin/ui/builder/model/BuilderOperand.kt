@@ -26,6 +26,16 @@ sealed interface BuilderOperand {
     data class Literal(val text: String, val numeric: Boolean = false) : BuilderOperand
 
     /**
+     * A written-out list, e.g. `["fragile", "liquid"]`.
+     *
+     * Only ever the right side of a membership test — `in`, `containsAny`, `containsAll` — since
+     * every ordering or equality against a whole list evaluates to false. Each item keeps its text
+     * and is quoted on the way out unless it reads as a number, the same rule a single [Literal]
+     * follows.
+     */
+    data class ListLiteral(val items: List<String>) : BuilderOperand
+
+    /**
      * An aggregate function over a path, e.g. `sum(orders[status == "paid"].items.price)`.
      *
      * [path] holds one entry per path segment, so depth is unbounded — a two-segment and a
@@ -46,6 +56,23 @@ sealed interface BuilderOperand {
     data class Calc(
         val terms: List<BuilderTerm>,
         val parenthesized: Boolean = false,
+    ) : BuilderOperand
+
+    /**
+     * Any other function call, e.g. `daysBetween(registeredAt, reviewDate)` or
+     * `sumByKey("month", sales.amount, refunds.amount)`.
+     *
+     * Separate from [Aggregate] rather than replacing it: an aggregate is one function over one
+     * path, which is what the aggregate picker and its breadcrumb are built around, and keeping it
+     * means every rule written before this form renders byte-identically.
+     *
+     * [args] are operands in their own right, so an argument may itself be a path, a literal, an
+     * aggregate, a calculation or another call — `abs(sum(a) - sum(b))` is a call around a
+     * calculation around two aggregates.
+     */
+    data class Call(
+        val function: String,
+        val args: List<BuilderOperand>,
     ) : BuilderOperand
 }
 

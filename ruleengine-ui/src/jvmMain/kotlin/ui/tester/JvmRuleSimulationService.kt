@@ -12,6 +12,7 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.RuleEngine
+import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.evaluator.context.MapRuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.trace.dto.DecisionNode
@@ -42,6 +43,7 @@ class JvmRuleSimulationService : RuleSimulationService {
         ruleText: String,
         ruleId: String,
         inputJson: String,
+        scope: String,
     ): SimulationResult = try {
         SimulationResult(
             outcome = runPipeline(
@@ -50,6 +52,7 @@ class JvmRuleSimulationService : RuleSimulationService {
                 ruleText = ruleText,
                 ruleId = ruleId,
                 inputJson = inputJson,
+                scope = scope,
             ),
         )
     } catch (stopped: PipelineStopped) {
@@ -63,20 +66,34 @@ class JvmRuleSimulationService : RuleSimulationService {
      * the straight line it is. The order is load-bearing: the rule text is only parsed once a schema
      * exists to validate it against.
      */
+    @Suppress("LongParameterList")
     private fun runPipeline(
         schemaText: String,
         actionsText: String,
         ruleText: String,
         ruleId: String,
         inputJson: String,
+        scope: String,
     ): SimulationOutcome {
         val factMap = parseFacts(inputJson = inputJson)
-        val schema = loadSchema(schemaText = schemaText)
+        val documentSchema = loadSchema(schemaText = schemaText)
+        // A scoped entry's rules name the member's fields, so everything from validation onwards has
+        // to see the member's schema — otherwise every member field reads as an unknown field.
+        val memberSchema = scope.takeIf { it.isNotBlank() }
+            ?.let { path -> ScopedEvaluation.memberSchema(schema = documentSchema, scope = path) }
+        val schema = memberSchema ?: documentSchema
         val actionSchema = loadActionSchema(actionsText = actionsText)
         val asts = parseAndValidate(ruleText = ruleText, schema = schema, actionSchema = actionSchema)
         val targetAsts = selectTarget(asts = asts, ruleId = ruleId)
         val compiledRules = compile(targetAsts = targetAsts, schema = schema)
-        return evaluate(compiledRules = compiledRules, schema = schema, factMap = factMap, targetAsts = targetAsts)
+        return evaluate(
+            compiledRules = compiledRules,
+            documentSchema = documentSchema,
+            memberSchema = memberSchema,
+            scope = scope,
+            factMap = factMap,
+            targetAsts = targetAsts,
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -144,35 +161,66 @@ class JvmRuleSimulationService : RuleSimulationService {
         stop(SimulationOutcome.ValidationFailed(reason = "Compile error: ${e.message}"))
     }
 
+    @Suppress("LongParameterList")
     private fun evaluate(
         compiledRules: List<CompiledRule>,
-        schema: FieldSchema,
+        documentSchema: FieldSchema,
+        memberSchema: FieldSchema?,
+        scope: String,
         factMap: Map<String, Any?>,
         targetAsts: List<RuleAst>,
     ): SimulationOutcome {
         val ctx = MapRuleContext(map = factMap)
-        val prepared = PreparedRuleContext.prepare(ctx = ctx, schema = schema)
         val engine = RuleEngine(compiledRules = compiledRules)
 
         val evalResult = runCatching {
-            engine.evaluate(prepared = prepared, includeTrace = true)
+            if (memberSchema != null) {
+                ScopedEvaluation.evaluate(
+                    engine = engine,
+                    document = ctx,
+                    schema = documentSchema,
+                    memberSchema = memberSchema,
+                    scope = scope,
+                    includeTrace = true,
+                )
+            } else {
+                engine.evaluate(
+                    prepared = PreparedRuleContext.prepare(ctx = ctx, schema = documentSchema),
+                    includeTrace = true,
+                )
+            }
         }.getOrElse { e ->
             stop(SimulationOutcome.ValidationFailed(reason = "Evaluation error: ${e.message}"))
         }
 
+        val ruleIds = targetAsts.map { ast -> ast.id }
+        if (evalResult.members.isNotEmpty()) {
+            return SimulationOutcome.Completed(
+                ruleResults = evalResult.members.flatMap { member ->
+                    resultsFor(ruleIds = ruleIds, result = member.result, member = member.key)
+                },
+            )
+        }
+        return SimulationOutcome.Completed(
+            ruleResults = resultsFor(ruleIds = ruleIds, result = evalResult, member = null),
+        )
+    }
+
+    /** One row per rule, for a whole-document run or for a single member of a scoped one. */
+    private fun resultsFor(
+        ruleIds: List<String>,
+        result: ruleengine.core.domain.dto.EvaluationResult,
+        member: String?,
+    ): List<RuleResult> {
         // Report what every evaluated rule decided. A trace we cannot read must not cost the
         // caller its result.
-        val tracesByRule = runCatching { traceTreesByRule(trace = evalResult.trace) }
-            .getOrElse { emptyMap() }
-
-        return SimulationOutcome.Completed(
-            ruleResults = buildRuleResults(
-                ruleIds = targetAsts.map { ast -> ast.id },
-                matches = evalResult.matches,
-                tracesByRule = tracesByRule,
-                stoppedBy = evalResult.stoppedBy,
-            ),
-        )
+        val tracesByRule = runCatching { traceTreesByRule(trace = result.trace) }.getOrElse { emptyMap() }
+        return buildRuleResults(
+            ruleIds = ruleIds,
+            matches = result.matches,
+            tracesByRule = tracesByRule,
+            stoppedBy = result.stoppedBy,
+        ).map { ruleResult -> ruleResult.copy(scopeMember = member) }
     }
 
     /**

@@ -21,6 +21,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.SliceSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
@@ -28,6 +29,8 @@ import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
+import ruleengine.evaluator.compiled.DslFunctions
+import ruleengine.evaluator.compiled.FunctionResultKind
 
 /**
  * The rule DSL parser: rule blocks, the `when` grammar and value expressions.
@@ -36,7 +39,6 @@ import ruleengine.dsl.lexer.TokenType
  * through the same [TokenCursor], so a production can be moved between them without changing how
  * the source is consumed.
  */
-@Suppress("TooManyFunctions")
 class Parser(private val input: String) {
     private val cursor = TokenCursor(tokens = Lexer(input = input).tokenize())
     private val literals = LiteralParser(cursor = cursor)
@@ -62,6 +64,13 @@ class Parser(private val input: String) {
          * field, instead of as the block ordering mistake it is.
          */
         val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "else", "and", "or", "ignoreCase")
+
+        /**
+         * The slice functions, recognised here rather than through the function registry: they never
+         * reach a compiled function call, because the parser turns them into a path segment.
+         */
+        const val TAKE = "take"
+        const val TAKE_LAST = "takeLast"
     }
 
     private fun current(): Token = cursor.current()
@@ -324,7 +333,7 @@ class Parser(private val input: String) {
             val op = parseComparisonOperator()
             if (op != null) {
                 val right = parseValueExpression()
-                if (isModernExpression(left) || isModernExpression(right) || isModernOnlyOperator(op)) {
+                if (isModernExpression(left) || isModernExpression(right) || requiresModernPath(op, right)) {
                     ComparisonExpressionAst(left = left, operator = op, right = right)
                 } else {
                     // Both sides are plain field/literal with a legacy-compatible operator
@@ -332,6 +341,16 @@ class Parser(private val input: String) {
                     pos = savedPos
                     parseCondition()
                 }
+            } else if (isBooleanCall(expr = left)) {
+                // `every(orders[paid == true])` on its own is already a condition. Desugaring it to
+                // `== true` keeps it on the ordinary comparison path instead of adding an
+                // ExpressionAst member that the validator, the compiler, both renderers and every
+                // walker in the UI would each need a new arm for.
+                ComparisonExpressionAst(
+                    left = left,
+                    operator = ComparisonOperatorAst.EQ,
+                    right = LiteralValueAst(literal = BooleanLiteral(value = true))
+                )
             } else {
                 // No symbolic operator found — restore and fall back to legacy
                 pos = savedPos
@@ -341,6 +360,20 @@ class Parser(private val input: String) {
             pos = savedPos
             parseCondition()
         }
+    }
+
+    /**
+     * A call that already answers true or false, so it may stand where a condition is expected.
+     *
+     * Restricted to functions declared to return a boolean. Accepting any call would turn a
+     * misplaced `count(orders)` into `count(orders) == true`, reported as a type mismatch rather
+     * than as the missing comparison it is.
+     */
+    private fun isBooleanCall(expr: ValueExpressionAst): Boolean {
+        if (expr !is FunctionCallValueAst) {
+            return false
+        }
+        return DslFunctions.resultKindOf(name = expr.name) == FunctionResultKind.BOOLEAN
     }
 
     /**
@@ -354,7 +387,8 @@ class Parser(private val input: String) {
             // A legacy ConditionAst names its left side by a plain field string and cannot hold a
             // variable, so any comparison touching one must take the modern path.
             is VariableRefAst -> true
-            is FieldAccessAst -> expr.path.any { it is FilterSegmentAst }
+            // A filter or a slice makes the path multi-valued, which only the value path can read.
+            is FieldAccessAst -> expr.path.any { it is FilterSegmentAst || it is SliceSegmentAst }
             is LiteralValueAst -> false
         }
     }
@@ -369,8 +403,21 @@ class Parser(private val input: String) {
      * literal. A `contains` reaches the modern path only when one of its operands is modern on its
      * own account, i.e. a variable, an aggregate, arithmetic or a filtered path.
      */
-    private fun isModernOnlyOperator(op: ComparisonOperatorAst): Boolean {
-        return op == ComparisonOperatorAst.EQ || op == ComparisonOperatorAst.NEQ
+    private fun requiresModernPath(op: ComparisonOperatorAst, right: ValueExpressionAst): Boolean {
+        if (op == ComparisonOperatorAst.EQ || op == ComparisonOperatorAst.NEQ) {
+            return true
+        }
+        // A legacy condition's right-hand side is a literal, so comparing one field against another
+        // has no legacy form at all — before this it did not parse, and the error pointed at the
+        // second field name as a missing literal.
+        if (right is FieldAccessAst) {
+            return true
+        }
+        // `in` splits by what it is tested against. A named source — a string set, a collection
+        // projection or a list variable — has no legacy equivalent and must take the modern path.
+        // A literal list is the legacy spelling and keeps its path, which is the only one that
+        // enforces the field's declared `operators:` list and normalizes each item.
+        return op == ComparisonOperatorAst.IN && right is VariableRefAst
     }
 
     private fun parseComparisonOperator(): ComparisonOperatorAst? {
@@ -388,6 +435,13 @@ class Parser(private val input: String) {
             TokenType.IDENT if OperatorUtils.normalizeOperator(op = token.text) == OperatorNames.CONTAINS -> {
                 advance()
                 ComparisonOperatorAst.CONTAINS
+            }
+
+            // Recognised here, but routed by `isModernOnlyOperator`: only a named membership source
+            // belongs on this path, and a literal list stays with the legacy operator.
+            TokenType.IDENT if OperatorUtils.normalizeOperator(op = token.text) == OperatorNames.IN -> {
+                advance()
+                ComparisonOperatorAst.IN
             }
 
             else -> null
@@ -466,18 +520,62 @@ class Parser(private val input: String) {
 
     private fun parseFunctionCallOrFieldAccess(): ValueExpressionAst {
         val nameTok = expect(type = TokenType.IDENT)
-        return if (current().type == TokenType.LPAREN) {
-            advance()
-            val args = mutableListOf<ValueExpressionAst>()
-            while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
-                args += parseValueExpression()
-                if (current().type == TokenType.COMMA) advance()
-            }
-            expect(type = TokenType.RPAREN)
-            FunctionCallValueAst(name = nameTok.text, arguments = args)
-        } else {
-            parseFieldPath(firstIdentifier = nameTok.text)
+        if (current().type != TokenType.LPAREN) {
+            return parseFieldPath(firstIdentifier = nameTok.text)
         }
+        if (isSliceFunction(name = nameTok.text)) {
+            return parseSlice(nameTok = nameTok)
+        }
+        advance()
+        val args = mutableListOf<ValueExpressionAst>()
+        while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
+            args += parseValueExpression()
+            if (current().type == TokenType.COMMA) advance()
+        }
+        expect(type = TokenType.RPAREN)
+        return FunctionCallValueAst(name = nameTok.text, arguments = args)
+    }
+
+    private fun isSliceFunction(name: String): Boolean {
+        return name.equals(other = TAKE, ignoreCase = true) || name.equals(other = TAKE_LAST, ignoreCase = true)
+    }
+
+    /**
+     * Reads `take(path, n)` / `takeLast(path, n)` and appends the slice to the path it narrows.
+     *
+     * Written as a call because that reads better than a bracket syntax, but it is not one: the
+     * result is the same [FieldAccessAst] the path would have produced, with one more segment. That
+     * is what lets `take(orders, 3).total` continue into `.total` — the path loop simply carries on
+     * from here — and what keeps every later stage free of a second kind of collection expression.
+     */
+    private fun parseSlice(nameTok: Token): ValueExpressionAst {
+        val start = current()
+        advance()
+        val target = parseValueExpression()
+        if (target !is FieldAccessAst) {
+            throw ParseException(
+                line = start.line,
+                column = start.col,
+                messageText = "${nameTok.text}() expects a collection path as its first argument"
+            )
+        }
+        expect(type = TokenType.COMMA)
+        val countTok = current()
+        if (countTok.type != TokenType.NUMBER) {
+            throw ParseException(
+                line = countTok.line,
+                column = countTok.col,
+                messageText = "${nameTok.text}() expects a number of elements, but found '${countTok.text}'"
+            )
+        }
+        advance()
+        expect(type = TokenType.RPAREN)
+        val segments = target.path.toMutableList()
+        segments += SliceSegmentAst(
+            fromEnd = nameTok.text.equals(other = TAKE_LAST, ignoreCase = true),
+            count = countTok.text
+        )
+        return parsePathContinuation(segments = segments)
     }
 
     /**
@@ -489,7 +587,10 @@ class Parser(private val input: String) {
      * otherwise silently read the list as a filter on `amount`.
      */
     private fun parseFieldPath(firstIdentifier: String): FieldAccessAst {
-        val segments = mutableListOf<PathSegmentAst>(FieldSegmentAst(name = firstIdentifier))
+        return parsePathContinuation(segments = mutableListOf(FieldSegmentAst(name = firstIdentifier)))
+    }
+
+    private fun parsePathContinuation(segments: MutableList<PathSegmentAst>): FieldAccessAst {
         while (
             (current().type == TokenType.LBRACKET || current().type == TokenType.DOT) &&
             current().line == previousLine()

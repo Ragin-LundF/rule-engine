@@ -50,6 +50,31 @@ This means you can move the entire project folder without changing any paths.
 | `schema` | optional | Relative path to the field schema YAML file |
 | `actions` | optional | Relative path to the action schema YAML file |
 | `rules` | ✅ | List of relative paths to `.rule` files. **The list order defines execution order** — rules are evaluated file by file in this order, then in declaration order within each file, and matches are returned in that order. |
+| `scope` | optional | Name of a declared `collection`. The entry's rules run **once per member** of it instead of once for the whole document. |
+
+#### Evaluating once per collection member
+
+Without `scope`, a rule set is evaluated once against the whole document — the default, and what
+every manifest written before this key means.
+
+```yaml
+entries:
+  - id: account-review
+    scope: accounts
+    schema: schema.yaml
+    rules:
+      - rules/exposure.rule
+```
+
+A scoped entry's rules are written from **one member's point of view** and name the member's own
+fields directly (`balance`, not `accounts.balance`). A name the member does not carry resolves
+against the document, so a rule can still read a shared threshold or watch list.
+
+The result keeps `matches` as one flat list in member order, each tagged with the member it came
+from, and adds one `members` entry per member carrying that member's own `variables` and
+`stoppedBy` — a `stop` ends one member's run, not the fan-out.
+
+Rejected at load time when `scope` names no field, or names a field that is not a collection.
 
 ---
 

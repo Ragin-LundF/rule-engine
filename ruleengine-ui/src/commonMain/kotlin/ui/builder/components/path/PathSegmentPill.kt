@@ -54,6 +54,7 @@ fun PathSegmentPill(
     name: String,
     options: List<String>,
     filterCount: Int,
+    sliced: Boolean,
     selected: Boolean,
     onNameSelected: (String) -> Unit,
     onSelected: () -> Unit,
@@ -95,6 +96,20 @@ fun PathSegmentPill(
                 style = MaterialTheme.typography.body2,
                 color = if (declared) TextPrimary else AccentOrange,
             )
+
+            // Keeps a slice visible while its drawer is closed. Silent truncation is exactly the
+            // kind of thing a reader must not have to open a drawer to discover.
+            if (sliced) {
+                Text(
+                    text = "⋯",
+                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
+                    color = PrimaryBlueLight,
+                    modifier = Modifier
+                        .clip(shape = PillShape)
+                        .background(color = PrimaryBlue.copy(alpha = 0.16f))
+                        .padding(horizontal = 7.dp),
+                )
+            }
 
             // Keeps a restriction visible while its drawer is closed.
             if (filterCount > 0) {

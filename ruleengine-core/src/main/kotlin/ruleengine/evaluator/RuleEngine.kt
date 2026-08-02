@@ -31,9 +31,11 @@ class RuleEngine(
     /**
      * Evaluates every rule against [prepared].
      *
-     * Variables left behind by a previous evaluation are discarded first. A [PreparedRuleContext]
-     * holds one record, so re-evaluating it means running the same record again — and it must start
-     * from the same clean slate as the first run rather than seeing the variables that run published.
+     * Variables and memoized values left behind by a previous evaluation are discarded first. A
+     * [PreparedRuleContext] holds one record, so re-evaluating it means running the same record
+     * again — and it must start from the same clean slate as the first run rather than seeing what
+     * that run published. The cache matters as much as the variables: an aggregate over a list
+     * variable is memoized against the value the previous run built up.
      *
      * [prepared] is written to during evaluation and must not be shared between threads. Evaluating
      * one engine concurrently is safe as long as each thread brings its own context, which is what
@@ -41,6 +43,7 @@ class RuleEngine(
      */
     fun evaluate(prepared: PreparedRuleContext, includeTrace: Boolean = false): EvaluationResult {
         prepared.clearVariables()
+        prepared.cache.clear()
         return evaluateAll(prepared = prepared, includeTrace = includeTrace)
     }
 

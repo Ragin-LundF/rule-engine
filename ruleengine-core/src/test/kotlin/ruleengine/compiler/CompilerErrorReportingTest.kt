@@ -245,6 +245,14 @@ class CompilerErrorReportingTest {
         }
     }
 
+    /**
+     * `startsWith` has no [ruleengine.dsl.ast.ComparisonOperatorAst] to compile to, so a filter cannot
+     * carry it. `contains` deliberately is not the example any more: it has one, and a filter using it
+     * compiles and matches — see `LegacyFilterPredicateTest`.
+     *
+     * `Validator` reports this as a diagnostic too, which is how an author normally meets it; the throw
+     * is the backstop for compiling without validating first.
+     */
     @Test
     fun `unsupported operator in a filter segment names the rule`() {
         val failure = assertFailsWith<CompilationException> {
@@ -252,7 +260,7 @@ class CompilerErrorReportingTest {
                 rule = """
                     rule "filter-bad-operator" {
                       when
-                        count(parcels[status contains "pai"]) > 0
+                        count(parcels[status startsWith "pai"]) > 0
                       then
                         label "x"
                     }

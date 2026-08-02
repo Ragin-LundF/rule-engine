@@ -192,9 +192,33 @@ object BuilderToRuleDsl {
     }
 
     private fun renderAction(action: MutableBuilderAction): String {
-        val args = action.arguments.joinToString(" ") { quoteIfNeeded(it) }
-        return if (args.isBlank()) action.name else "${action.name} $args"
+        val extraction = action.extraction
+        val args = action.arguments.joinToString(" ") { argument ->
+            if (extraction != null && EXTRACTION_REF.matches(input = argument.trim())) {
+                argument.trim()
+            } else {
+                quoteIfNeeded(argument)
+            }
+        }
+        val call = if (args.isBlank()) action.name else "${action.name} $args"
+        if (extraction == null) {
+            return call
+        }
+        // The pattern goes through the same escaping a description does: the lexer treats a backslash
+        // as a generic escape, so a `\d` written raw would be read as a plain `d` on the next parse.
+        return "extract ${extraction.sourceField} " +
+                "regex(\"${escapeStringLiteral(text = extraction.pattern)}\", ${extraction.groupIndex}) " +
+                call
     }
+
+    /**
+     * An extraction reference, i.e. `$` followed by digits only.
+     *
+     * Emitted bare while [OperandText.quoteUnlessNumeric] keeps it quoted, and both are right: outside
+     * an `extract` clause `$1` is a value the author means literally — a `$100` price — and inside one
+     * it is the capture group, which the parser reads as a reference only when unquoted.
+     */
+    private val EXTRACTION_REF = Regex(pattern = """\$\d+""")
 
     /**
      * Wraps [value] in double quotes if it is not already quoted and is not a

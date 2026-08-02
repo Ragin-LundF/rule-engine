@@ -194,11 +194,15 @@ private fun ComparisonControls(
 }
 
 /**
- * One side of the comparison: the chip, plus an inline value box when the operand is a literal so a
+ * One side of a comparison: the chip, plus an inline value box when the operand is a literal so a
  * simple number does not need an expand click.
+ *
+ * Shared with [FilterConditionRow], which is the same row one level down — a restriction inside
+ * `[...]` compares two operands exactly as this one does.
  */
+@Suppress("LongParameterList")
 @Composable
-private fun OperandSide(
+internal fun OperandSide(
     operand: BuilderOperand,
     other: BuilderOperand,
     fields: List<CatalogFieldInfo>,

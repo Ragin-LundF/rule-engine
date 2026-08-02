@@ -72,7 +72,7 @@ private fun DebouncedValidation(state: RuleEditorState) {
         delay(timeMillis = VALIDATION_DEBOUNCE_MS)
         // The guard stays a return from the effect, not from a lambda: with no schema there is
         // nothing to validate against and the previous diagnostics must be left as they are.
-        val schema = state.parsedSchema.value ?: return@LaunchedEffect
+        val schema = state.ruleSchema ?: return@LaunchedEffect
 
         when (
             val outcome = RuleValidationRunner.run(

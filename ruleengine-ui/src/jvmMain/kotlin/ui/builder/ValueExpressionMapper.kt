@@ -2,30 +2,20 @@ package ui.builder
 
 import ruleengine.dsl.ast.ArithmeticOperatorAst
 import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FieldSegmentAst
 import ruleengine.dsl.ast.FilterSegmentAst
 import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
 import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.SliceSegmentAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.VariableRefAst
-import ruleengine.dsl.ast.VariableRefLiteral
-import ui.builder.model.BuilderFilter
 import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathDecoration
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.BuilderTerm
-import ui.builder.model.LiteralValue
 
 // Value expressions — field paths, filters, arithmetic and literals — mapped to Builder operands.
 // Split out of RuleAstToBuilderMapper, which owns the condition *tree*. These are pure: unlike the
@@ -34,22 +24,11 @@ import ui.builder.model.LiteralValue
 
 /** Maps one side of a comparison. Returns null for shapes the Builder cannot represent. */
 internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = when (expr) {
-    is LiteralValueAst -> when (val literal = expr.literal) {
-        is StringLiteral -> BuilderOperand.Literal(text = literal.value, numeric = false)
-        is NumberLiteral -> BuilderOperand.Literal(text = literal.value, numeric = true)
-        // Rendered unquoted by `OperandText.literalToDsl`, so `isActive == true` stays a boolean
-        // comparison instead of turning into one against the text "true".
-        is BooleanLiteral -> BuilderOperand.Literal(text = literal.value.toString(), numeric = false)
-        else -> null
-    }
+    is LiteralValueAst -> literalToOperand(lit = expr.literal)
 
     is FieldAccessAst -> mapFieldAccess(expr = expr)
 
-    is FunctionCallValueAst -> {
-        val argument = expr.arguments.singleOrNull() as? FieldAccessAst
-        val path = argument?.let { mapPath(segments = it.path) }
-        if (path == null) null else BuilderOperand.Aggregate(function = expr.name.lowercase(), path = path)
-    }
+    is FunctionCallValueAst -> mapFunctionCall(expr = expr)
 
     is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
 
@@ -58,13 +37,38 @@ internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = whe
     is VariableRefAst -> BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "\$${expr.name}")))
 }
 
+/**
+ * A call becomes an [BuilderOperand.Aggregate] when it is one of the reductions over a single path,
+ * and a general [BuilderOperand.Call] otherwise.
+ *
+ * The split is what keeps every rule written before the wider call forms rendering byte-identically:
+ * the aggregate panel with its path breadcrumb is the right editor for `sum(orders.total)`, and the
+ * wrong one for `daysBetween(a, b)`, which has no single collection to walk.
+ */
+internal fun mapFunctionCall(expr: FunctionCallValueAst): BuilderOperand? {
+    val function = expr.name.lowercase()
+    if (function in OperatorOptions.AGGREGATE_FUNCTIONS) {
+        val argument = expr.arguments.singleOrNull() as? FieldAccessAst
+        val path = argument?.let { mapPath(segments = it.path) }
+        if (path != null) {
+            return BuilderOperand.Aggregate(function = function, path = path)
+        }
+    }
+    val args = expr.arguments.map { argument -> mapValueExpression(expr = argument) ?: return null }
+    return BuilderOperand.Call(function = expr.name, args = args)
+}
+
 /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
 internal fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? =
     mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
 
 /**
- * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step and
- * each following [FilterSegmentAst] attaches to the step it filters.
+ * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step, and each
+ * filter or slice after it is appended to that step's decorations in the order it was written.
+ *
+ * The order is kept rather than normalised because it is the meaning:
+ * `take(orders, 3)[paid == true]` selects paid orders among the first three, while
+ * `take(orders[paid == true], 3)` selects the first three paid orders.
  */
 internal fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
     val steps = mutableListOf<BuilderPathStep>()
@@ -74,48 +78,25 @@ internal fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
             is FilterSegmentAst -> {
                 val target = steps.lastOrNull() ?: return null
                 val filter = mapFilter(expr = segment.expression) ?: return null
-                steps[steps.lastIndex] = target.copy(filters = target.filters + filter)
+                steps[steps.lastIndex] = target.copy(
+                    decorations = target.decorations + BuilderPathDecoration.Filter(filter = filter)
+                )
+            }
+
+            is SliceSegmentAst -> {
+                val target = steps.lastOrNull() ?: return null
+                steps[steps.lastIndex] = target.copy(
+                    decorations = target.decorations + BuilderPathDecoration.Slice(
+                        fromEnd = segment.fromEnd,
+                        count = segment.count,
+                    )
+                )
             }
         }
     }
     return steps.ifEmpty { null }
 }
 
-/**
- * Maps a filter expression. Only single comparisons against a literal are representable.
- *
- * The compared field may be a dotted path into the element — `parcels[origin.hub == "HAM"]`
- * reads `origin.hub` relative to a parcel, which the engine resolves through the element context.
- * A filter nested inside the filtered path is not representable: [BuilderFilter] is a flat
- * `field op value` row, so `OperandText` would drop the inner brackets.
- */
-internal fun mapFilter(expr: ExpressionAst): BuilderFilter? = when (expr) {
-    is ComparisonExpressionAst -> {
-        val field = (expr.left as? FieldAccessAst)?.path
-            ?.takeIf { segments -> segments.all { it is FieldSegmentAst } }
-            ?.joinToString(separator = ".") { (it as FieldSegmentAst).name }
-        val value = (expr.right as? LiteralValueAst)?.literal?.let { literalText(lit = it) }
-        if (field == null || value == null) {
-            null
-        } else {
-            BuilderFilter(
-                field = field,
-                operator = ValueExpressionRenderer.symbol(operator = expr.operator),
-                value = value,
-            )
-        }
-    }
-
-    is ConditionAst -> literalText(lit = expr.value)?.let { value ->
-        BuilderFilter(
-            field = expr.field,
-            operator = RuleAstToBuilderMapper.normalizeOperator(operator = expr.operator),
-            value = value,
-        )
-    }
-
-    else -> null
-}
 
 /**
  * Flattens an arithmetic tree into a term list. A sub-expression that binds differently from its
@@ -163,33 +144,4 @@ internal fun samePrecedence(a: ArithmeticOperatorAst, b: ArithmeticOperatorAst):
 internal fun precedence(operator: ArithmeticOperatorAst): Int = when (operator) {
     ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
     ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
-}
-
-// ── actions ───────────────────────────────────────────────────────────────
-
-internal fun literalToValue(lit: LiteralAst): LiteralValue? = when (lit) {
-    is StringLiteral -> LiteralValue(value = lit.value)
-    is NumberLiteral -> LiteralValue(value = lit.value)
-    is BooleanLiteral -> LiteralValue(value = lit.value.toString())
-    is ListLiteral -> {
-        val items = lit.items.map { item ->
-            when (item) {
-                is StringLiteral -> item.value
-                is NumberLiteral -> item.value
-                else -> return null
-            }
-        }
-        LiteralValue(value = "", listItems = items)
-    }
-    is BetweenLiteral -> LiteralValue(value = lit.low, valueTo = lit.high)
-    is VariableRefLiteral -> LiteralValue(value = "\$${lit.name}")
-    else -> null
-}
-
-internal fun literalText(lit: LiteralAst): String? = when (lit) {
-    is StringLiteral -> lit.value
-    is NumberLiteral -> lit.value
-    is BooleanLiteral -> lit.value.toString()
-    is VariableRefLiteral -> "\$${lit.name}"
-    else -> null
 }

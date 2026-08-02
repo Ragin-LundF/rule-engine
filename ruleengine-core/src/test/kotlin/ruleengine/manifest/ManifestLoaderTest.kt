@@ -37,5 +37,20 @@ class ManifestLoaderTest {
             assertTrue(actual = Files.exists(p), message = "rule file $p should exist")
         }
     }
+
+    /** No `scope` means whole-document evaluation, which is what every existing manifest asks for. */
+    @Test
+    fun `an entry without a scope carries none`() {
+        val manifest = ManifestLoader.load(Path.of("src/test/resources/manifest.yaml"))
+
+        assertEquals(expected = null, actual = manifest.entries.single().scope)
+    }
+
+    @Test
+    fun `a declared scope is read from the entry`() {
+        val manifest = ManifestLoader.load(Path.of("src/test/resources/scoped-accounts/manifest.yaml"))
+
+        assertEquals(expected = "accounts", actual = manifest.entries.single().scope)
+    }
 }
 

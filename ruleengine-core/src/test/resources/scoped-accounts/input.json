@@ -1,0 +1,24 @@
+{
+  "reviewDate": "2024-06-01",
+  "priorityCustomerIds": ["acme", "globex"],
+  "accounts": [
+    {
+      "id": "acc-1",
+      "registeredAt": "2024-01-01",
+      "balance": 2500.00,
+      "invoices": [
+        { "customerId": " ACME ", "amount": 8000 },
+        { "customerId": "acme", "amount": 4000 },
+        { "customerId": "initech", "amount": 9000 }
+      ]
+    },
+    {
+      "id": "acc-2",
+      "registeredAt": "2024-05-20",
+      "balance": 100.00,
+      "invoices": [
+        { "customerId": "globex", "amount": 500 }
+      ]
+    }
+  ]
+}

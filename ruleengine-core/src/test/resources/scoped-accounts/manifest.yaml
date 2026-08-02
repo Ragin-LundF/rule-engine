@@ -1,0 +1,9 @@
+name: scoped-accounts
+entries:
+  - id: account-review
+    scope: accounts
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/priority-exposure.rule
+      - rules/tenure.rule

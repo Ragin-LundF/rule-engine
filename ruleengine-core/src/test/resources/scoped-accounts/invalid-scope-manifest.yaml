@@ -1,0 +1,8 @@
+name: scoped-accounts
+entries:
+  - id: bad-scope
+    scope: reviewDate
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/tenure.rule

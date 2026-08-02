@@ -1,0 +1,10 @@
+rule "line-item-sanity" {
+  description "Every line item has a real quantity and no alert is critical."
+  when
+    every(lineItems[quantity >= 1])
+    and not any(alerts[severity == "high"])
+  then
+    flag "clean"
+  else
+    review "line-items"
+}

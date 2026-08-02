@@ -1,0 +1,7 @@
+rule "recent-login-failures" {
+  description "At least three of the last ten logins failed."
+  when
+    count(takeLast(loginEvents, 10)[successful == false]) >= 3
+  then
+    flag "login-failures"
+}

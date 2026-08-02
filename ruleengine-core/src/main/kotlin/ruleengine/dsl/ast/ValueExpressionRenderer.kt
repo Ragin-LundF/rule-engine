@@ -64,6 +64,14 @@ object ValueExpressionRenderer {
                     builder.append(renderExpression(expr = segment.expression))
                     builder.append(']')
                 }
+                // A slice wraps everything read so far rather than appending to it, which is what
+                // the `take(orders, 3)` spelling says and what makes `.total` after it read right.
+                is SliceSegmentAst -> {
+                    val call = if (segment.fromEnd) "takeLast" else "take"
+                    val inner = builder.toString()
+                    builder.setLength(0)
+                    builder.append(call).append('(').append(inner).append(", ").append(segment.count).append(')')
+                }
             }
         }
         return builder.toString()
@@ -108,6 +116,7 @@ object ValueExpressionRenderer {
             ComparisonOperatorAst.LT -> "<"
             ComparisonOperatorAst.LTE -> "<="
             ComparisonOperatorAst.CONTAINS -> "contains"
+            ComparisonOperatorAst.IN -> "in"
         }
     }
 

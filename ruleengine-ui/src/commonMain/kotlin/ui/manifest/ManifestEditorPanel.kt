@@ -149,7 +149,7 @@ private fun VisualManifestEditor(
                 entry = entry,
                 index = index,
                 isActive = entry.id == activeEntryId,
-                canRemove = state.entries.size > 1,
+                hasSiblings = state.entries.size > 1,
                 onSelect = { onSelectEntry(entry.id) },
                 onRemove = { onRemoveEntry(entry.id) },
                 onEntryChange = { updated ->
@@ -171,7 +171,7 @@ private fun ManifestEntryCard(
     entry: EditableManifestEntry,
     index: Int,
     isActive: Boolean,
-    canRemove: Boolean,
+    hasSiblings: Boolean,
     onSelect: () -> Unit,
     onRemove: () -> Unit,
     onEntryChange: (EditableManifestEntry) -> Unit,
@@ -200,8 +200,11 @@ private fun ManifestEntryCard(
         ) {
             if (isActive) StatusBadge(label = "EDITING", color = PrimaryBlue)
             Spacer(modifier = Modifier.weight(weight = 1f))
-            if (!isActive) ToolbarButton(label = "Edit this entry", onClick = onSelect)
-            if (canRemove) ToolbarButton(label = "Remove…", onClick = onRemove)
+            // Both controls need a sibling to make sense: with a single entry there is nothing to
+            // switch to and nothing that may be removed. `!isActive` alone would not do — with no
+            // project open there is no active entry, so the sole card would still offer the switch.
+            if (hasSiblings && !isActive) ToolbarButton(label = "Switch to this entry", onClick = onSelect)
+            if (hasSiblings) ToolbarButton(label = "Remove…", onClick = onRemove)
         }
 
         OutlinedTextField(
@@ -215,20 +218,7 @@ private fun ManifestEntryCard(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
-        OutlinedTextField(
-            value = entry.schemaPath,
-            onValueChange = { onEntryChange(entry.copy(schemaPath = it)) },
-            label = { Text("Field schema file") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        OutlinedTextField(
-            value = entry.actionsPath,
-            onValueChange = { onEntryChange(entry.copy(actionsPath = it)) },
-            label = { Text("Action schema file") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
+        ManifestEntryFields(entry = entry, onEntryChange = onEntryChange)
         SectionTitle(text = "RULE FILES")
         PathListEditor(
             paths = entry.rulePaths,
@@ -236,6 +226,38 @@ private fun ManifestEntryCard(
             label = "Rule file",
         )
     }
+}
+
+/** The entry's settings other than its id and its rule files. */
+@Composable
+private fun ManifestEntryFields(
+    entry: EditableManifestEntry,
+    onEntryChange: (EditableManifestEntry) -> Unit,
+) {
+    OutlinedTextField(
+        value = entry.schemaPath,
+        onValueChange = { onEntryChange(entry.copy(schemaPath = it)) },
+        label = { Text("Field schema file") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+    )
+    OutlinedTextField(
+        value = entry.actionsPath,
+        onValueChange = { onEntryChange(entry.copy(actionsPath = it)) },
+        label = { Text("Action schema file") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+    )
+    // Left blank the rules run once for the whole document, which is the default and what every
+    // manifest written before this setting existed means.
+    OutlinedTextField(
+        value = entry.scope,
+        onValueChange = { onEntryChange(entry.copy(scope = it)) },
+        label = { Text("Scope — run once per collection member (optional)") },
+        placeholder = { Text("collection field, e.g. accounts") },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+    )
 }
 
 @Composable

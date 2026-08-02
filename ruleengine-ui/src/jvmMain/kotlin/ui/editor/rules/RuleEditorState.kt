@@ -10,6 +10,7 @@ import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
+import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
@@ -58,6 +59,34 @@ class RuleEditorState(
     val manifestBaseDir: MutableState<String?> = mutableStateOf(value = null)
     val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(value = null)
     val selectedManifestEntry: MutableState<String?> = mutableStateOf(value = null)
+
+    /**
+     * The `scope` of the manifest entry being edited, or null when it declares none.
+     *
+     * Read from the parsed manifest rather than stored again, so the editor can never disagree with
+     * the file about which entry is scoped. With no entry selected the first one is used, matching
+     * how the CLI resolves a manifest without `--entry`.
+     */
+    val activeScope: String?
+        get() {
+            val entries = parsedManifest.value?.entries.orEmpty()
+            val selected = selectedManifestEntry.value
+            return (entries.firstOrNull { it.id == selected } ?: entries.firstOrNull())?.scope
+        }
+
+    /**
+     * The schema a rule's paths resolve against — the member schema when the entry is scoped.
+     *
+     * Distinct from [parsedSchema], which stays the schema file as written and is what the Schema
+     * panel shows. A scoped entry's rules name the member's fields, so validating, completing or
+     * offering pickers against the document schema would report every one of them as unknown.
+     */
+    val ruleSchema: FieldSchema?
+        get() {
+            val schema = parsedSchema.value ?: return null
+            val scope = activeScope ?: return schema
+            return ScopedEvaluation.memberSchema(schema = schema, scope = scope) ?: schema
+        }
     val selectedManifestRuleFile: MutableState<String?> = mutableStateOf(value = null)
     /**
      * True while the buffer holds the whole entry rather than one of its files.

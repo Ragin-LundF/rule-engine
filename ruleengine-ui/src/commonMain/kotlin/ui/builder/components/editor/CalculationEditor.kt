@@ -215,6 +215,13 @@ fun NestedOperandEditor(
             modifier = modifier,
         )
 
+        is BuilderOperand.Call -> FunctionCallEditor(
+            call = operand,
+            fields = fields,
+            onChanged = onChanged,
+            modifier = modifier,
+        )
+
         is BuilderOperand.FieldRef -> FieldPathEditor(
             fieldRef = operand,
             fields = fields,
@@ -222,7 +229,8 @@ fun NestedOperandEditor(
             modifier = modifier,
         )
 
-        is BuilderOperand.Literal -> Unit
+        // Both are edited inline on the row that owns them, so there is no panel to open.
+        is BuilderOperand.Literal, is BuilderOperand.ListLiteral -> Unit
     }
 }
 

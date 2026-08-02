@@ -1,6 +1,7 @@
 package ui.builder
 
 import ruleengine.compiler.Validator
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
@@ -11,6 +12,7 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.parser.Parser
+import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
@@ -51,6 +53,21 @@ class SampleProjectBuilderTest {
     }
 
     /**
+     * The schema a sample's rules are written against.
+     *
+     * A scoped entry's rules name the member's fields — `balance`, not `accounts.balance` — so
+     * validating them against the document schema would report every one of those as unknown. The
+     * engine derives the same member schema when it builds the entry.
+     */
+    private fun ruleSchema(sample: Path): FieldSchema {
+        val schema = FieldSchemaLoader.load(path = sample.resolve("schema.yaml"))
+        val scope = ManifestLoader.load(path = sample.resolve("manifest.yaml"))
+            .entries.firstNotNullOfOrNull { entry -> entry.scope }
+            ?: return schema
+        return ScopedEvaluation.memberSchema(schema = schema, scope = scope) ?: schema
+    }
+
+    /**
      * Rewrites word-form operators to the symbols the Builder's dropdowns offer, so `hour lt 8` and
      * `hour < 8` compare equal. That normalisation is deliberate — see
      * [RuleAstToBuilderMapper.normalizeOperator] — and is the one difference a faithful round-trip is
@@ -75,7 +92,7 @@ class SampleProjectBuilderTest {
             stream.filter { Files.isDirectory(it) }.sorted().toList()
         }.forEach { sample ->
             val name = sample.fileName
-            val schema = FieldSchemaLoader.load(path = sample.resolve("schema.yaml"))
+            val schema = ruleSchema(sample = sample)
             val actions = ActionSchemaLoader.load(path = sample.resolve("actions.yaml"))
 
             val dsl = ruleFiles(sample = sample).joinToString(separator = "\n\n") { Files.readString(it) }
