@@ -5,6 +5,7 @@ import ruleengine.builder.RuleEngineBuilder
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.EvaluationResult
+import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.core.io.FileInputSupport
@@ -30,7 +31,6 @@ import kotlin.system.exitProcess
  *     --schema <schema.yaml> --rules <rules-dir> --input-file <input.json> [--trace]
  *       [--format json|pretty-json]
  */
-@Suppress("TooManyFunctions")
 object EvaluateCli {
     @JvmStatic
     fun main(args: Array<String>) {
@@ -174,20 +174,20 @@ object EvaluateCli {
         return JacksonUtil.jsonMapper.readValue(inputJson, Map::class.java) as Map<String, Any?>
     }
 
-    private fun writeEvaluationResult(
-        evaluationResult: EvaluationResult,
-        includeTrace: Boolean,
-        format: String?,
-        out: Appendable,
-    ) {
-        val outputMap = mutableMapOf<String, Any?>()
-        outputMap["matches"] = evaluationResult.matches.map { match ->
-            mapOf(
-                "ruleId" to match.ruleId,
-                // Without this a reader cannot tell a rule whose condition held from one whose `else`
-                // branch fired, and would take every entry for a match.
-                "branch" to match.branch.name.lowercase(),
-                "actions" to match.actions.map { action ->
+    /**
+     * One match as JSON. `scopeMember` appears only for a scoped run, where `ruleId` alone no longer
+     * identifies a match — the same rule runs once per member.
+     */
+    private fun matchOutput(match: RuleMatch): Map<String, Any?> {
+        return buildMap {
+            put("ruleId", match.ruleId)
+            match.scopeMember?.let { member -> put("scopeMember", member) }
+            // Without this a reader cannot tell a rule whose condition held from one whose `else`
+            // branch fired, and would take every entry for a match.
+            put("branch", match.branch.name.lowercase())
+            put(
+                "actions",
+                match.actions.map { action ->
                     mapOf(
                         "name" to action.name,
                         "arguments" to action.arguments,
@@ -195,12 +195,34 @@ object EvaluateCli {
                 },
             )
         }
+    }
+
+    private fun writeEvaluationResult(
+        evaluationResult: EvaluationResult,
+        includeTrace: Boolean,
+        format: String?,
+        out: Appendable,
+    ) {
+        val outputMap = mutableMapOf<String, Any?>()
+        outputMap["matches"] = evaluationResult.matches.map { match -> matchOutput(match = match) }
         // Only written when a rule actually halted the run, so an ordinary result keeps its shape.
         // Without it the absence of later rules reads as "they did not match" rather than "never ran".
         evaluationResult.stoppedBy?.let { ruleId -> outputMap["stoppedBy"] = ruleId }
         if (includeTrace && evaluationResult.trace != null) {
             // result.trace is DecisionTree
             outputMap["decisionTree"] = evaluationResult.trace
+        }
+        // Written only for a scoped entry, so an unscoped result is byte-identical to before. The
+        // per-member `variables` and `stoppedBy` live here because they mean nothing across members.
+        if (evaluationResult.members.isNotEmpty()) {
+            outputMap["members"] = evaluationResult.members.map { member ->
+                buildMap {
+                    put("index", member.index)
+                    put("key", member.key)
+                    put("matches", member.result.matches.map { match -> matchOutput(match = match) })
+                    member.result.stoppedBy?.let { ruleId -> put("stoppedBy", ruleId) }
+                }
+            }
         }
 
         if (format == "pretty-json") {

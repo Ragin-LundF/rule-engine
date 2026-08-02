@@ -23,7 +23,7 @@ fun diagramDataFor(state: RuleEditorState, rules: List<RuleAst>): DiagramData {
         entryId = state.selectedManifestEntry.value,
         schemaPath = entry?.schema,
         actionsPath = entry?.actions,
-        schema = state.parsedSchema.value,
+        schema = state.ruleSchema,
         entryWide = state.showAllRules.value,
     )
 }

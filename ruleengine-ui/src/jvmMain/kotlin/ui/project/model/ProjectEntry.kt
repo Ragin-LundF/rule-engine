@@ -11,4 +11,6 @@ data class ProjectEntry(
     val schemaLink: String? = null,
     val actionsLink: String? = null,
     val ruleFiles: List<String> = emptyList(),
+    /** Collection this entry evaluates once per member, or null for whole-document evaluation. */
+    val scope: String? = null,
 )

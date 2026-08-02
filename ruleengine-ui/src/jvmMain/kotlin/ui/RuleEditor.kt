@@ -60,7 +60,7 @@ import ui.workbench.uiDiagnosticsFrom
 // `CyclomaticComplexMethod` was suppressed here too and is no longer needed.
 @Suppress("LongMethod")
 @Composable
-actual fun RuleEditor(closeController: AppCloseController) {
+actual fun RuleEditor(closeController: AppCloseController, saveController: AppSaveController) {
     val scope = rememberCoroutineScope()
 
     // Root workbench state (navigation, selection, panel tabs).
@@ -78,6 +78,14 @@ actual fun RuleEditor(closeController: AppCloseController) {
     DisposableEffect(key1 = closeController, key2 = workspace) {
         closeController.onCloseRequested = workspace::requestClose
         onDispose { closeController.onCloseRequested = null }
+    }
+
+    // Guarded on `isDirty` so the shortcut does exactly what the toolbar button does — the button is
+    // disabled when clean, and an unguarded save on a pristine project would open the native Save
+    // dialog through `createScratchSession()`.
+    DisposableEffect(key1 = saveController, key2 = workspace) {
+        saveController.onSaveRequested = { if (workspace.isDirty) workspace.saveProject() }
+        onDispose { saveController.onSaveRequested = null }
     }
 
     val closeApproved by workspace.closeRequested
@@ -156,11 +164,11 @@ actual fun RuleEditor(closeController: AppCloseController) {
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     // The remember keys stay here on purpose: they are what decides when each list goes stale, and
     // catalogRules deliberately does not key on the diagnostics it reads.
-    val catalogFields = remember(key1 = state.parsedSchema.value) {
-        catalogFieldsFrom(schema = state.parsedSchema.value)
+    val catalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
+        catalogFieldsFrom(schema = state.ruleSchema)
     }
-    val builderCatalogFields = remember(key1 = state.parsedSchema.value) {
-        builderCatalogFieldsFrom(schema = state.parsedSchema.value)
+    val builderCatalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
+        builderCatalogFieldsFrom(schema = state.ruleSchema)
     }
     // Variables in scope depend on which rule is open, so this keys on the selected rule as well as
     // on the entry's text. Appended to the schema fields so every operand picker offers them without

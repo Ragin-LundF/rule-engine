@@ -35,6 +35,11 @@ fun ManifestAreaContent(
         toYaml = { editorState ->
             ManifestYamlBridge.toYaml(state = editorState)
         },
+        // The document schema, not `ruleSchema`: a scope names a field of the file as written, and
+        // the member schema it produces is exactly what we would be validating it against.
+        fieldTypes = state.parsedSchema.value?.fields
+            ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
+            ?.toMap(),
         modifier = modifier,
     )
 }

@@ -6,52 +6,43 @@ import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
 import ui.builder.OperatorOptions
 
+/**
+ * A worked example per function, and the word shown beside it.
+ *
+ * Hand-written rather than generated: the point of a completion is the realistic call it inserts,
+ * and no registry knows that `daysBetween` wants two dates while `sum` wants a projected collection.
+ * `AutoCompleteTest` checks that this table covers every function the engine knows, so a function
+ * added to the registry cannot stay invisible here.
+ */
+private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
+    Triple("count", "count(transactions)", "aggregate"),
+    Triple("sum", "sum(transactions.amount)", "aggregate"),
+    Triple("subtract", "subtract(transactions.amount)", "aggregate"),
+    Triple("avg", "avg(transactions.amount)", "aggregate"),
+    Triple("median", "median(transactions.amount)", "aggregate"),
+    Triple("max", "max(transactions.amount)", "aggregate"),
+    Triple("min", "min(transactions.amount)", "aggregate"),
+    // Not aggregates: they take values rather than reducing a collection, so they are hinted
+    // differently and are absent from the Builder's aggregate picker.
+    Triple("abs", "abs(sum(transactions.amount))", "function"),
+    Triple("daysBetween", "daysBetween(registeredAt, submittedAt)", "function"),
+    Triple("take", "take(orders, 3)", "slice"),
+    Triple("takeLast", "takeLast(orders, 3)", "slice"),
+    Triple("every", "every(orders[total > 0])", "predicate"),
+    Triple("any", "any(orders[total > 1000])", "predicate"),
+    Triple("sumByKey", "sumByKey(\"month\", sales.amount, refunds.amount)", "join"),
+)
+
 /** Completions offered inside a rule's `when` block. */
 internal fun buildAggregateFunctionCompletions(): List<CompletionItem> {
-    return listOf(
+    return FUNCTION_COMPLETIONS.map { (name, insertText, hint) ->
         CompletionItem(
-            label = "count(...)",
-            insertText = "count(transactions)",
+            label = "$name(...)",
+            insertText = insertText,
             kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "sum(...)",
-            insertText = "sum(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "subtract(...)",
-            insertText = "subtract(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "avg(...)",
-            insertText = "avg(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "median(...)",
-            insertText = "median(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "max(...)",
-            insertText = "max(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-        CompletionItem(
-            label = "min(...)",
-            insertText = "min(transactions.amount)",
-            kind = CompletionKind.OPERATOR,
-            hint = "aggregate",
-        ),
-    )
+            hint = hint,
+        )
+    }
 }
 
 internal fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionItem> {

@@ -44,7 +44,9 @@ private val DSL_NAMED_OPS = setOf(
 )
 
 /** Aggregate function names recognized in value expressions. */
-private val DSL_FUNCTIONS = OperatorOptions.AGGREGATE_FUNCTIONS.toSet()
+// Every function the parser accepts, not just the reductions: the editor must colour what it can
+// read, and the aggregate picker's shorter list is a presentation choice that does not apply here.
+private val DSL_FUNCTIONS = OperatorOptions.ALL_FUNCTIONS.toSet()
 
 /** The names a token can be recognised as, which depend on the loaded schema rather than the DSL. */
 private class KnownNames(val fields: Set<String?>, val actions: Set<String>)

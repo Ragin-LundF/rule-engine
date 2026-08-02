@@ -13,6 +13,7 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.SliceSegmentAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
 
@@ -99,6 +100,9 @@ object FieldUsage {
                 is FieldSegmentAst -> current = join(prefix = current, segment = segment.name)
                 is FilterSegmentAst ->
                     collectFromExpression(expr = segment.expression, prefix = current, into = into)
+                // A slice narrows the collection without naming a field, so the dependency is
+                // unchanged: `take(orders, 3).total` still reads `orders.total`.
+                is SliceSegmentAst -> Unit
             }
         }
         if (current.isNotEmpty()) {

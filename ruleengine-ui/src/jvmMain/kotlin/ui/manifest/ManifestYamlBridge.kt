@@ -32,6 +32,7 @@ object ManifestYamlBridge {
                     schemaPath = entry.schema ?: "",
                     actionsPath = entry.actions ?: "",
                     rulePaths = entry.rules,
+                    scope = entry.scope ?: "",
                 )
             },
         )
@@ -44,11 +45,14 @@ object ManifestYamlBridge {
         val manifest = ProjectManifest(
             name = state.name.takeIf { it.isNotBlank() },
             entries = nonEmptyEntries.map {
+                // Trimmed on the way out: surrounding whitespace survives quoting intact, so an
+                // accidental " accounts " would be written as a scope no field of that name matches.
                 ruleengine.manifest.ManifestEntry(
-                    id = it.id,
-                    schema = it.schemaPath.takeIf { path -> path.isNotBlank() },
-                    actions = it.actionsPath.takeIf { path -> path.isNotBlank() },
-                    rules = it.rulePaths.filter { path -> path.isNotBlank() },
+                    id = it.id.trim(),
+                    schema = it.schemaPath.trim().takeIf { path -> path.isNotBlank() },
+                    actions = it.actionsPath.trim().takeIf { path -> path.isNotBlank() },
+                    rules = it.rulePaths.map { path -> path.trim() }.filter { path -> path.isNotBlank() },
+                    scope = it.scope.trim().takeIf { scope -> scope.isNotBlank() },
                 )
             },
         )
@@ -66,6 +70,7 @@ object ManifestYamlBridge {
                 entry.actions?.let { actions ->
                     appendLine("    actions: ${YamlScalars.quoteIfNeeded(value = actions)}")
                 }
+                entry.scope?.let { scope -> appendLine("    scope: ${YamlScalars.quoteIfNeeded(value = scope)}") }
                 if (entry.rules.isNotEmpty()) {
                     appendLine("    rules:")
                     entry.rules.forEach { rule -> appendLine("      - ${YamlScalars.quoteIfNeeded(value = rule)}") }

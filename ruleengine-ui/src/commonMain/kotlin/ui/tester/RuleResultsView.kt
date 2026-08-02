@@ -39,6 +39,8 @@ import ui.components.InfoChip
 import ui.components.StatusBadge
 import ui.tester.model.RuleMatchStatus
 import ui.tester.model.RuleResult
+import ui.tester.model.displayLabel
+import ui.tester.model.rowKey
 
 private const val FILTER_ALL = "All"
 private const val FILTER_MATCHED = "Matched"
@@ -100,8 +102,8 @@ fun RuleResultsView(
             .forEach { result ->
                 RuleResultRow(
                     result = result,
-                    expanded = result.ruleId in expandedRuleIds,
-                    onToggle = { expandedRuleIds = toggle(ids = expandedRuleIds, id = result.ruleId) },
+                    expanded = result.rowKey in expandedRuleIds,
+                    onToggle = { expandedRuleIds = toggle(ids = expandedRuleIds, id = result.rowKey) },
                 )
             }
     }
@@ -203,7 +205,7 @@ private fun VariablesSetBlock(results: List<RuleResult>) {
         )
         assigning.forEach { result ->
             Text(
-                text = result.ruleId,
+                text = result.displayLabel,
                 style = MaterialTheme.typography.caption,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp),
@@ -244,7 +246,7 @@ private fun ActionsEmittedBlock(results: List<RuleResult>) {
         )
         emitting.forEach { result ->
             Text(
-                text = result.ruleId,
+                text = result.displayLabel,
                 style = MaterialTheme.typography.caption,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 4.dp),
@@ -316,8 +318,10 @@ private fun RuleResultRow(
                     .clip(shape = CircleShape)
                     .background(color = accent),
             )
+            // The member is shown with the rule, not as a grouping header: a scoped run repeats
+            // every rule per member, and the filter chips above reorder the rows freely.
             Text(
-                text = result.ruleId,
+                text = result.displayLabel,
                 style = MonoText,
                 modifier = Modifier.weight(weight = 1f),
             )

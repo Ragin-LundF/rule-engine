@@ -2,8 +2,10 @@ package ui.builder
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.evaluator.compiled.AggregateFunctionName
+import ruleengine.evaluator.compiled.DslFunctions
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class OperatorOptionsTest {
@@ -81,8 +83,40 @@ class OperatorOptionsTest {
     @Test
     fun `aggregate function names are offered in the engine's declaration order`() {
         assertEquals(
-            expected = AggregateFunctionName.entries.map { it.name.lowercase() },
+            expected = AggregateFunctionName.entries.filter { it.isAggregate }.map { it.dslName },
             actual = OperatorOptions.AGGREGATE_FUNCTIONS,
+        )
+    }
+
+    /**
+     * The picker is a subset on purpose. Highlighting and completion must still recognise every
+     * function the parser accepts, so the wider list has to stay reachable and stay a superset.
+     */
+    @Test
+    fun `all function names cover the aggregates and every other engine function`() {
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.containsAll(AggregateFunctionName.entries.map { it.dslName }),
+            message = "every registered function must be recognised by the editor",
+        )
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.containsAll(DslFunctions.SLICE_NAMES),
+            message = "the slice functions are parser sugar, so only this list can carry them",
+        )
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.containsAll(OperatorOptions.AGGREGATE_FUNCTIONS),
+            message = "the aggregate picker must offer nothing the editor cannot recognise",
+        )
+    }
+
+    @Test
+    fun `a non-aggregate function is not offered in the aggregate picker`() {
+        assertFalse(
+            actual = OperatorOptions.AGGREGATE_FUNCTIONS.contains(AggregateFunctionName.DAYS_BETWEEN.dslName),
+            message = "daysBetween takes two dates, not a collection path",
+        )
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.contains(AggregateFunctionName.DAYS_BETWEEN.dslName),
+            message = "daysBetween is still a function the editor must recognise",
         )
     }
 

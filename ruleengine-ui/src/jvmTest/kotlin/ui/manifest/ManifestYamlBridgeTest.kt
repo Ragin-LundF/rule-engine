@@ -77,6 +77,68 @@ class ManifestYamlBridgeTest {
         assertEquals(expected = listOf("brand-new"), actual = parsed.entries.map { it.id })
     }
 
+    /**
+     * `toYaml` writes the manifest key by key, so a setting it does not know about is silently
+     * dropped the first time the project is saved — the file loses it without the user touching it.
+     */
+    @Test
+    fun `a scoped entry survives the round trip`() {
+        val state = ManifestEditorState(
+            name = "billing",
+            entries = listOf(
+                EditableManifestEntry(
+                    id = "account-review",
+                    schemaPath = "schema.yaml",
+                    rulePaths = listOf("rules/a.rule"),
+                    scope = "accounts",
+                ),
+            ),
+        )
+
+        val yaml = ManifestYamlBridge.toYaml(state = state)
+
+        assertTrue(actual = yaml.contains(other = "scope: accounts"), message = yaml)
+        assertEquals(expected = state, actual = ManifestYamlBridge.fromYaml(yaml = yaml))
+    }
+
+    @Test
+    fun `an unscoped entry writes no scope key`() {
+        val state = ManifestEditorState(
+            name = "billing",
+            entries = listOf(EditableManifestEntry(id = "plain", schemaPath = "schema.yaml")),
+        )
+
+        val yaml = ManifestYamlBridge.toYaml(state = state)
+
+        assertTrue(actual = !yaml.contains(other = "scope:"), message = yaml)
+        assertEquals(expected = "", actual = ManifestYamlBridge.fromYaml(yaml = yaml).entries.single().scope)
+    }
+
+    /**
+     * Surrounding whitespace survives YAML quoting intact, so an untrimmed scope would be written as
+     * `scope: " accounts "` and looked up as a field of that name — which no schema declares.
+     */
+    @Test
+    fun `a padded scope is written trimmed`() {
+        val state = ManifestEditorState(
+            name = "billing",
+            entries = listOf(
+                EditableManifestEntry(
+                    id = "account-review",
+                    schemaPath = "  schema.yaml  ",
+                    rulePaths = listOf("  rules/a.rule  "),
+                    scope = "  accounts  ",
+                ),
+            ),
+        )
+
+        val yaml = ManifestYamlBridge.toYaml(state = state)
+
+        assertTrue(actual = yaml.contains(other = "scope: accounts\n"), message = yaml)
+        assertTrue(actual = yaml.contains(other = "schema: schema.yaml\n"), message = yaml)
+        assertTrue(actual = yaml.contains(other = "- rules/a.rule\n"), message = yaml)
+    }
+
     @Test
     fun `invalid YAML is marked read-only`() {
         val parsed = ManifestYamlBridge.fromYaml(yaml = "this is not: valid: [")

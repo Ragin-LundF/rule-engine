@@ -406,7 +406,7 @@ private fun CodeModeActions(
  * pressed Validate is asking, so silence would read as "it is fine".
  */
 private fun RuleEditorState.validateNow(ruleText: String) {
-    val schema = parsedSchema.value
+    val schema = ruleSchema
     if (schema == null) {
         setStatus(msg = "No schema loaded", kind = StatusKind.ERROR)
         return

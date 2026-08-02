@@ -42,7 +42,13 @@ class PreparedRuleContext(
     val rawContext: RuleContext,
     val cache: EvaluationCache = EvaluationCache(),
     /** Variables published by `set` clauses so far, keyed by name without the `$` prefix. */
-    val variables: MutableMap<String, ExpressionValue> = mutableMapOf()
+    val variables: MutableMap<String, ExpressionValue> = mutableMapOf(),
+    /**
+     * The normalizers that produced [values], kept so the value-expression path can normalise the
+     * text it reads through [rawContext] the same way. Without it a member of a collection would
+     * compare raw while the same field compares normalised when declared at the top level.
+     */
+    val normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
 ) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
@@ -54,15 +60,27 @@ class PreparedRuleContext(
     }
 
     /**
-     * A context scoped to one element of a filtered collection. It shares [cache] and [variables]
-     * with its parent so a filter predicate reads the same variables the surrounding rule does.
+     * A context scoped to one element of a filtered collection. It shares [variables] with its
+     * parent so a filter predicate reads the same variables the surrounding rule does.
+     *
+     * It does **not** share [cache]. The cache is keyed by the compiled node alone, so one cache
+     * across elements would answer `orders[count(items) > 2]` for every order with the first
+     * order's item count.
+     *
+     * The element reads through to this context for names it does not carry, so a predicate can
+     * compare a member against a document-level field.
+     *
+     * ponytail: the child has no prepared values of its own, so a document field read from inside a
+     * predicate comes back raw rather than typed. Text is unaffected — the compiled path carries the
+     * declared normalizers — but a date with a non-ISO `format` would not be parsed. Give the child a
+     * prepared-value fallback if that case ever comes up.
      */
     fun child(element: Map<*, *>): PreparedRuleContext {
         return PreparedRuleContext(
             values = emptyMap(),
-            rawContext = ElementRuleContext(element = element),
-            cache = cache,
-            variables = variables
+            rawContext = ElementRuleContext(element = element, fallback = rawContext),
+            variables = variables,
+            normalizerRegistry = normalizerRegistry
         )
     }
 
@@ -88,7 +106,11 @@ class PreparedRuleContext(
                 }
             }
 
-            return PreparedRuleContext(values = map, rawContext = ctx)
+            return PreparedRuleContext(
+                values = map,
+                rawContext = ctx,
+                normalizerRegistry = normalizerRegistry
+            )
         }
 
         private fun prepareValue(

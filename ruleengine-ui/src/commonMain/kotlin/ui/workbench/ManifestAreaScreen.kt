@@ -11,6 +11,7 @@ import ui.workbench.model.mode.ManifestMode
  * Manifest builder area.
  */
 @Composable
+@Suppress("LongParameterList")
 fun ManifestAreaScreen(
     state: ManifestEditorState,
     onStateChange: (ManifestEditorState) -> Unit,
@@ -20,6 +21,7 @@ fun ManifestAreaScreen(
     onRemoveEntry: (String) -> Unit,
     fromYaml: (String) -> ManifestEditorState,
     toYaml: (ManifestEditorState) -> String,
+    fieldTypes: Map<String, String>? = null,
     modifier: Modifier = Modifier,
 ) {
     ManifestEditorPanel(
@@ -31,6 +33,7 @@ fun ManifestAreaScreen(
         onRemoveEntry = onRemoveEntry,
         fromYaml = fromYaml,
         toYaml = toYaml,
+        fieldTypes = fieldTypes,
         initialMode = ManifestMode.BUILDER,
         modifier = modifier.fillMaxSize(),
     )

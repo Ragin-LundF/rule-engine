@@ -4,15 +4,17 @@ import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 import java.math.BigDecimal
 import java.math.MathContext
+import java.time.temporal.ChronoUnit
 
 class FunctionCallCompiledValueExpression(
     private val function: AggregateFunctionName,
-    private val argument: CompiledValueExpression
+    private val arguments: List<CompiledValueExpression>
 ) : CompiledValueExpression {
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
 
@@ -20,17 +22,52 @@ class FunctionCallCompiledValueExpression(
         return context.cache.getOrPut(key = this) { computeValue(context = context) }
     }
 
+    /**
+     * Each arm evaluates the arguments it needs rather than evaluating them up front: the `when`
+     * stays exhaustive over the registry, so a new function is a compile error here, and a function
+     * that never reads its second argument never pays for it.
+     */
     private fun computeValue(context: PreparedRuleContext): ExpressionValue {
-        val argValue = argument.evaluate(context = context)
         return when (function) {
-            AggregateFunctionName.COUNT -> evaluateCount(argValue = argValue)
-            AggregateFunctionName.SUM -> evaluateSum(argValue = argValue)
-            AggregateFunctionName.SUBTRACT -> evaluateSubtract(argValue = argValue)
-            AggregateFunctionName.AVG -> evaluateAvg(argValue = argValue)
-            AggregateFunctionName.MEDIAN -> evaluateMedian(argValue = argValue)
-            AggregateFunctionName.MAX -> evaluateMax(argValue = argValue)
-            AggregateFunctionName.MIN -> evaluateMin(argValue = argValue)
+            AggregateFunctionName.COUNT -> evaluateCount(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.SUM -> evaluateSum(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.SUBTRACT -> evaluateSubtract(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.AVG -> evaluateAvg(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.MEDIAN -> evaluateMedian(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.MAX -> evaluateMax(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.MIN -> evaluateMin(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.ABS -> evaluateAbs(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.DAYS_BETWEEN -> evaluateDaysBetween(
+                first = argumentAt(index = 0, context = context),
+                second = argumentAt(index = 1, context = context)
+            )
         }
+    }
+
+    private fun argumentAt(index: Int, context: PreparedRuleContext): ExpressionValue {
+        return arguments.getOrNull(index = index)?.evaluate(context = context) ?: MissingExpressionValue
+    }
+
+    /**
+     * Magnitude of a number. A missing input stays missing rather than becoming zero — the two mean
+     * different things, and every other function here draws the same distinction.
+     */
+    private fun evaluateAbs(argValue: ExpressionValue): ExpressionValue {
+        return when (argValue) {
+            is NumberExpressionValue -> NumberExpressionValue(value = argValue.value.abs())
+            else -> MissingExpressionValue
+        }
+    }
+
+    /**
+     * Calendar days from [first] to [second], signed, so a second operand that comes later is
+     * positive. Either operand missing or unreadable as a date yields a missing result, which lets a
+     * rule guard on the value instead of failing the evaluation.
+     */
+    private fun evaluateDaysBetween(first: ExpressionValue, second: ExpressionValue): ExpressionValue {
+        val from = ExpressionValues.asDate(value = first) ?: return MissingExpressionValue
+        val to = ExpressionValues.asDate(value = second) ?: return MissingExpressionValue
+        return NumberExpressionValue(value = BigDecimal.valueOf(ChronoUnit.DAYS.between(from, to)))
     }
 
     private fun evaluateCount(argValue: ExpressionValue): ExpressionValue {

@@ -287,14 +287,16 @@ Both spellings exist, and they do **not** take the same path through the engine:
 
 | Comparison | Write | Why |
 |---|---|---|
-| A field against a literal | **Named**: `equals`, `gt`, `gte`, `lt`, `lte`, `between`, `contains`, … | Fully validated: the field's declared `operators:` list is enforced, the literal type is checked, and text normalizers are applied to the literal as well as the field |
+| A field against a literal | **Named**: `equals`, `gt`, `gte`, `lt`, `lte`, `between`, `contains`, … | Fully validated: the field's declared `operators:` list is enforced and the literal type is checked |
 | A value expression (aggregate or arithmetic) | **Symbolic**: `==`, `!=`, `>`, `>=`, `<`, `<=` | Required — the engine only routes a condition through the expression engine for symbolic operators |
 
-> **Rule:** For a plain field-vs-literal comparison, prefer the **named** operator.
-> `==` and `!=` always route to the expression engine, which does **not** enforce the field's declared
-> `operators:` list and does **not** normalize the literal. On a field with a `lowercase` normalizer,
-> `counterparty equals "ACME"` matches the value `"acme"`, while `counterparty == "ACME"` does **not**.
-> `>`, `>=`, `<`, `<=` on a plain field are equivalent to their named forms.
+> **Rule:** For a plain field-vs-literal comparison, prefer the **named** operator. `==` and `!=`
+> always route to the expression engine, which does **not** enforce the field's declared `operators:`
+> list. `>`, `>=`, `<`, `<=` on a plain field are equivalent to their named forms.
+>
+> Both spellings normalize the literal. On a field with a `lowercase` normalizer,
+> `counterparty equals "ACME"` and `counterparty == "ACME"` both match the value `"acme"` — the
+> symbolic form used to not, which made two spellings of one comparison answer differently.
 
 ### 3.4 Field Schema Example
 
@@ -1084,7 +1086,7 @@ Both sides of the comparison can be aggregate function calls, arithmetic express
 
 #### Aggregate functions
 
-All functions take exactly **one argument** — a field path that resolves to a collection.
+Each takes exactly **one argument** — a field path that resolves to a collection.
 
 | Function | Description |
 |---|---|
@@ -1095,6 +1097,100 @@ All functions take exactly **one argument** — a field path that resolves to a 
 | `median(path)` | Median value |
 | `max(path)` | Maximum value |
 | `min(path)` | Minimum value |
+
+#### Value functions
+
+These do not reduce a collection; they transform values.
+
+| Function | Description |
+|---|---|
+| `abs(value)` | Magnitude of a number. Zero and positives are unchanged, negatives become positive. |
+| `daysBetween(from, to)` | Whole calendar days from `from` to `to`, **signed** — a `to` that comes first is negative. |
+
+`abs` accepts a field, an aggregate, an arithmetic expression or a variable:
+
+```
+abs(sum(transactions.amount)) > 1000
+```
+
+`daysBetween` accepts `date` and `date_time` fields, and an ISO-8601 date literal. A `date_time` is
+compared at calendar-day precision, so the time of day never adds a day. Either operand missing or
+unreadable as a date yields a **missing** result, and a comparison against missing is false — the
+rule does not match, and nothing is thrown.
+
+```
+daysBetween(registeredAt, submittedAt) >= 90
+daysBetween(registeredAt, "2024-04-01") >= 90
+```
+
+#### Slicing an ordered collection
+
+`take(path, n)` keeps at most the first `n` elements in source order; `takeLast(path, n)` keeps at
+most the last `n`. `n` must be a non-negative whole number. A collection shorter than `n`, or empty,
+simply yields what it has.
+
+A slice is part of the path, so projection, filtering and aggregation continue from it:
+
+```
+sum(take(orders, 3).total) > 5000
+count(takeLast(loginEvents, 10)[successful == false]) >= 3
+```
+
+Order matters. `takeLast(events, 10)[failed == true]` counts failures **among the last ten events**;
+`takeLast(events[failed == true], 10)` counts **the last ten failures**.
+
+#### Membership — the `in` operator
+
+`element in source` is true when the source holds a value equal to the element. The source may be a
+`string_set` field, a projection across a collection, or a list variable:
+
+```
+sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+count(events[eventType in $importantEventTypes]) > 0
+```
+
+Both sides are matched under the normalizers declared on the fields, so `" ACME "` finds `"acme"`
+when the field declares `trim` and `lowercase`. An **empty or missing source selects nothing**.
+Membership composes with other filters on the same collection.
+
+> A written-out list — `country in ["de", "at"]` — is the plain field comparison of §5.3, not a value
+> expression. It keeps enforcing the field's declared `operators:` list.
+
+#### Collection predicates — `every` and `any`
+
+`every(collection[condition])` is true when every element satisfies the condition;
+`any(collection[condition])` is true when at least one does. Both stop as soon as the answer is
+decided.
+
+```
+every(lineItems[quantity >= 1])
+any(alerts[severity == "high"])
+```
+
+**Empty collections:** `every` is **true** (there is no element that fails) and `any` is **false**
+(there is no element that succeeds). A missing collection behaves like an empty one.
+
+Both are ordinary boolean conditions, so they combine with `and`, `or` and `not`, and they work over
+raw, filtered, sliced and joined collections:
+
+```
+every(take(lineItems, 5)[quantity >= 1]) and not any(alerts[severity == "high"])
+```
+
+#### Joining collections on a key — `sumByKey`
+
+`sumByKey(key, source, source, ...)` aligns two or more collections on a shared member and returns
+**one total per key**. The first argument is the key member's name as a string literal; each source
+is `<collection>.<numericMember>`.
+
+```
+min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
+```
+
+- **Outer join:** every key any source mentions appears; a source that does not mention it contributes `0`.
+- **Duplicate keys** within one source are summed, so the total is preserved.
+- **Key order** is first-seen, reading the sources left to right.
+- The result is an ordinary list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
 
 #### Field paths
 
@@ -1133,12 +1229,19 @@ A filter is a single comparison. This is narrower than a normal condition:
 
 | Allowed inside `[...]` | Not allowed inside `[...]` |
 |---|---|
-| `==`, `!=`, `>`, `>=`, `<`, `<=` | `and`, `or`, `not` |
-| named `gt`, `gte`, `lt`, `lte` | `equals`, `contains`, `in`, `between`, `regex`, `containsAny`, `containsAll` |
+| `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `contains` | `between`, `startsWith`, `endsWith`, `regex`, `containsAny`, `containsAll` |
+| named `equals`, `gt`, `gte`, `lt`, `lte` | `ignoreCase` |
+| `and`, `or`, `not` between predicates | |
 
-> **Rule:** Inside a filter, write equality as `==`, never as `equals`. To require two conditions on
-> the same element, chain filters: `transactions[label == "risk"][amount > 100]`.
-> Violations of this table are reported when the rules are compiled, not as validation warnings.
+> **Rule:** Both sides of a filter predicate are full value expressions — an aggregate, arithmetic, a
+> call, or a path that filters again are all legal, on either side. Names resolve against the element
+> with the document's fields behind them, the element winning for a name they share.
+>
+> `and`, `or` and `not` combine predicates over the same element. Chaining —
+> `transactions[label == "risk"][amount > 100]` — expresses the same thing as `and`, and is the only
+> spelling that predates it; there is no chained form of `or`.
+>
+> Violations of this table are reported at validation and again when the rules are compiled.
 
 #### Examples
 
@@ -1168,10 +1271,116 @@ sum(transactions.amount) * 0.03
 #### Validation rules (what the engine rejects)
 
 - Unknown function name → error.
-- Wrong argument count (not exactly 1) → error.
+- Wrong argument count for the function → error.
 - Argument that cannot resolve to a collection → error.
 - Numeric aggregate compared with a text literal → error.
 - `contains`, `startsWith`, etc. used with a value expression → error.
+- `abs` applied to a text field → error.
+- `daysBetween` given an operand that is not readable as a date → error.
+- `take` / `takeLast` with a negative or fractional size, or applied to something that is not a collection → error.
+- `every` / `any` without a condition, e.g. `every(orders)` → error.
+- `sumByKey` without a key literal, with fewer than two sources, joining on a member a source does not
+  declare, on members whose types disagree, or summing a member that is not numeric → error.
+
+#### Worked example
+
+Schema:
+
+```yaml
+name: billing
+fields:
+  priorityCustomerIds:
+    type: string_set
+    normalizers: [trim, lowercase]
+  reviewDate:
+    type: date
+  registeredAt:
+    type: date
+  invoices:
+    type: collection
+    fields:
+      customerId:
+        type: text
+        normalizers: [trim, lowercase]
+      amount:
+        type: decimal
+  loginEvents:
+    type: collection
+    fields:
+      successful:
+        type: boolean
+  lineItems:
+    type: collection
+    fields:
+      quantity:
+        type: integer
+  salesByMonth:
+    type: collection
+    fields:
+      month:
+        type: text
+      amount:
+        type: decimal
+  refundsByMonth:
+    type: collection
+    fields:
+      month:
+        type: text
+      amount:
+        type: decimal
+```
+
+Rules — one per feature:
+
+```
+rule "priority-exposure" {
+  description "Priority customers owe more than 10000."
+  when
+    sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+  then
+    flag "exposure"
+}
+
+rule "recent-login-failures" {
+  description "At least three of the last ten logins failed."
+  when
+    count(takeLast(loginEvents, 10)[successful == false]) >= 3
+  then
+    flag "login-failures"
+}
+
+rule "net-position" {
+  description "Every month nets out non-negative."
+  when
+    min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
+  then
+    flag "net-position"
+}
+
+rule "established-account" {
+  description "Registered at least 90 days before the review date."
+  when
+    daysBetween(registeredAt, reviewDate) >= 90
+  then
+    flag "tenure"
+}
+
+rule "balance-drift" {
+  description "Invoices are more than 1000 away from balanced, either way."
+  when
+    abs(sum(invoices.amount)) > 1000
+  then
+    flag "drift"
+}
+
+rule "line-item-sanity" {
+  description "Every line item has a real quantity."
+  when
+    every(lineItems[quantity >= 1])
+  then
+    flag "line-items"
+}
+```
 
 > For the full reference including all edge cases see [docs/expressions.md](docs/expressions.md).
 
@@ -1372,8 +1581,32 @@ entries:
 | `schema` | optional | Relative path to the field schema YAML file |
 | `actions` | optional | Relative path to the action schema YAML file |
 | `rules` | ✅ | List of relative paths to `.rule` files |
+| `scope` | optional | Name of a declared `collection`. The rules run **once per member** of it instead of once for the whole document. |
 
 > **No other keys are valid** at the entry level. Do not add keys like `version`, `description`, `priority`, or `enabled`.
+
+#### Evaluating once per collection member — `scope`
+
+Without `scope` a rule set is evaluated once against the whole document, which is the default and
+what every manifest written before this key means.
+
+```yaml
+entries:
+  - id: account-review
+    scope: accounts
+    schema: schema.yaml
+    rules:
+      - rules/exposure.rule
+```
+
+A scoped entry's rules are written from **one member's point of view**: they name the member's own
+fields directly (`balance`, not `accounts.balance`). Fields the member does not carry resolve
+against the document, so a rule can still read a shared threshold or watch list.
+
+The result reports every match with the member it came from, plus one entry per member carrying that
+member's own variables and `stoppedBy` — a `stop` ends one member's run, not the whole fan-out.
+
+The scope is rejected at load time when it names no field, or names a field that is not a collection.
 
 ### 6.3 Single-entry manifest example
 
@@ -1759,9 +1992,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | Date-only literal on a `date_time` field | `bookedAt equals "2024-06-15"` (use `"2024-06-15T00:00:00"`) |
 | Comparing a structure directly | `transactions equals "x"` — navigate into it or aggregate over it |
 | Unknown member of a declared structure | `orders.totl` when `orders` declares `total` |
-| `and` / `or` inside a filter | `transactions[a > 1 and b > 2]` — chain filters instead |
-| Named `equals` inside a filter | `transactions[label equals "risk"]` (use `==`) |
-| Text operator inside a filter | `transactions[label contains "risk"]` |
+| `between` or a text-matching operator inside a filter | `transactions[amount between 1 5]`, `transactions[label startsWith "r"]` |
+| `ignoreCase` inside a filter | `transactions[label == "risk" ignoreCase]` — normalize the member in the schema instead |
+| Unknown member inside a filter | `transactions[bogus > 1]` when the collection declares no `bogus` |
 | `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
 | Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
 | Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
@@ -1778,6 +2011,9 @@ The engine validates everything at load time and rejects the following. Never ge
 > single-segment `unknownThing > 1` is an error. Declare the structure to get real checking.
 
 ### Manifest constraints
+
+- `scope` naming a field the schema does not declare → rejected.
+- `scope` naming a field that is not a `collection` → rejected.
 
 | Constraint | Example of invalid usage |
 |---|---|

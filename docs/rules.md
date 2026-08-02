@@ -1098,8 +1098,9 @@ rule "flagged-customer" {
 | Comparing a collection or object directly | `Field 'orders' is a collection and cannot be compared directly` | Navigate into it (`orders.total`) or aggregate over it (`sum(orders.total)`) |
 | Misspelling a member of a declared collection | `Unknown field 'totl' in 'orders.totl'` | Check the nested `fields:` block in the schema |
 | Comparing a path that reads through a collection | `Field 'orders.total' reads through collection 'orders' …` | Aggregate it (`sum(orders.total) > 100`) or filter it (`count(orders[total > 100]) > 0`) |
-| `and` inside a path filter | `Only comparison expressions are supported in filter segments` | Chain filters: `orders[status == "paid"][total > 100]` |
-| `equals` inside a path filter | `Operator 'equals' is not supported in filter segments` | Use `==` inside `[...]` |
+| `between` inside a path filter | `Operator 'between' is not supported in filter segments` | Write the two bounds: `orders[total > 10 and total < 50]` |
+| `ignoreCase` inside a path filter | `The 'ignoreCase' modifier is not supported in filter segments` | Normalize the member in the schema instead |
+| Misspelling a member inside a path filter | `Unknown field 'stauts' in filter on 'orders'` | Check the collection's nested `fields:` block |
 | `ignoreCase` after a symbolic operator | `Expected 'then' block` | Use the word form: `name equals "Acme" ignoreCase` |
 | An action given the wrong number of arguments | `Action 'suppress' expects 0 arguments but got 1` | Match the action's `argTypes` — a bare name when it is `[]` |
 

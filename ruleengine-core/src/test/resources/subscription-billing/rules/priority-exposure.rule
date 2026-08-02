@@ -1,0 +1,7 @@
+rule "priority-exposure" {
+  description "Priority customers owe this account more than 10000."
+  when
+    sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+  then
+    review "priority-exposure"
+}

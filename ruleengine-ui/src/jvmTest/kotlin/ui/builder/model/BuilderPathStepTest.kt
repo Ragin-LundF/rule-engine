@@ -11,9 +11,9 @@ import kotlin.test.assertEquals
 class BuilderPathStepTest {
 
     private val path = listOf(
-        BuilderPathStep(
+        pathStep(
             name = "orders",
-            filters = listOf(BuilderFilter(field = "status", operator = "==", value = "paid")),
+            filters = listOf(filter(field = "status", operator = "==", value = "paid")),
         ),
         BuilderPathStep(name = "items"),
         BuilderPathStep(name = "price"),
@@ -54,7 +54,7 @@ class BuilderPathStepTest {
     @Test
     fun `removing a segment keeps the filters of the segments that stay`() {
         assertEquals(
-            expected = listOf(BuilderFilter(field = "status", operator = "==", value = "paid")),
+            expected = listOf(filter(field = "status", operator = "==", value = "paid")),
             actual = path.withoutSegment(depth = 2).first().filters,
         )
     }

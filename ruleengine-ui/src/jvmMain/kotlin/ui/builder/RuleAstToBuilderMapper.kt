@@ -7,6 +7,7 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
+import ruleengine.dsl.ast.ExtractionAst
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FunctionCallValueAst
 import ruleengine.dsl.ast.NotAst
@@ -19,6 +20,7 @@ import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.VariableAssignmentAst
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
+import ui.builder.model.BuilderExtraction
 import ui.builder.model.BuilderRule
 import ui.builder.model.BuilderVariable
 
@@ -43,21 +45,6 @@ import ui.builder.model.BuilderVariable
 object RuleAstToBuilderMapper {
 
     fun map(rule: RuleAst): BuilderRule {
-        // An extraction in either branch locks the rule: the Builder has no row that can edit one, and
-        // regenerating the DSL without it would delete it from the file.
-        val extractionBranch = when {
-            rule.actions.any { it.extraction != null } -> "then"
-            rule.elseActions.any { it.extraction != null } -> "else"
-            else -> null
-        }
-        if (extractionBranch != null) {
-            return BuilderRule.Unsupported(
-                id = rule.id,
-                reason = "Rule uses a regex extraction in its '$extractionBranch' block, " +
-                        "which the Builder cannot edit yet.",
-            )
-        }
-
         val conditionNodes = collectNodes(expr = rule.condition, joinToPrevious = "")
             ?: return BuilderRule.Unsupported(
                 id = rule.id,
@@ -256,6 +243,23 @@ object RuleAstToBuilderMapper {
             id = nextId(prefix = "act"),
             name = action.name,
             arguments = args,
+            extraction = mapExtraction(extraction = action.extraction),
+        )
+    }
+
+    /**
+     * The `extract … regex(…)` prefix, carried across so regenerating the rule does not delete it.
+     *
+     * Exhaustive over the sealed [ExtractionAst] rather than defaulting to null: a second extraction
+     * form added later has to be a compile error here, not an extraction that quietly disappears from
+     * the author's file the first time they touch the rule in the Builder.
+     */
+    private fun mapExtraction(extraction: ExtractionAst?): BuilderExtraction? = when (extraction) {
+        null -> null
+        is ExtractionAst.RegexExtraction -> BuilderExtraction(
+            sourceField = extraction.sourceField,
+            pattern = extraction.pattern,
+            groupIndex = extraction.groupIndex,
         )
     }
 

@@ -1,0 +1,5 @@
+actions:
+  flag:
+    argTypes: [string]
+  review:
+    argTypes: [string]

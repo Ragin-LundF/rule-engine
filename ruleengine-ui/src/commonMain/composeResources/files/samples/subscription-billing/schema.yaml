@@ -1,0 +1,62 @@
+name: subscription-billing
+fields:
+  # Evaluated once per member: every rule is written from one account's point of view, and names
+  # these members directly (`balance`, not `accounts.balance`).
+  accounts:
+    type: collection
+    fields:
+      id:
+        type: text
+      registeredAt:
+        type: date
+      invoices:
+        type: collection
+        fields:
+          customerId:
+            type: text
+            normalizers: [trim, lowercase]
+          amount:
+            type: decimal
+      payments:
+        type: collection
+        fields:
+          amount:
+            type: decimal
+      loginEvents:
+        type: collection
+        fields:
+          successful:
+            type: boolean
+      lineItems:
+        type: collection
+        fields:
+          quantity:
+            type: integer
+      alerts:
+        type: collection
+        fields:
+          severity:
+            type: text
+            normalizers: [trim, lowercase]
+      salesByMonth:
+        type: collection
+        fields:
+          month:
+            type: text
+          amount:
+            type: decimal
+      refundsByMonth:
+        type: collection
+        fields:
+          month:
+            type: text
+          amount:
+            type: decimal
+
+  # Document-wide. A scoped rule reads these through the fallback: an account does not carry them,
+  # so the name resolves against the document instead.
+  priorityCustomerIds:
+    type: string_set
+    normalizers: [trim, lowercase]
+  reviewDate:
+    type: date

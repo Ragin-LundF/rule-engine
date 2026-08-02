@@ -22,6 +22,7 @@ fun ProjectSession.toEditorState(): ManifestEditorState {
                 schemaPath = entry.schemaLink.orEmpty(),
                 actionsPath = entry.actionsLink.orEmpty(),
                 rulePaths = entry.ruleFiles,
+                scope = entry.scope.orEmpty(),
             )
         },
     )
@@ -29,11 +30,14 @@ fun ProjectSession.toEditorState(): ManifestEditorState {
 
 fun ManifestEditorState.toProjectEntries(): List<ProjectEntry> {
     return entries.map { entry ->
+        // Trimmed like the YAML bridge trims, so the session and the file on disk never disagree
+        // about what a path or a scope is.
         ProjectEntry(
-            id = entry.id,
-            schemaLink = entry.schemaPath.takeIf { it.isNotBlank() },
-            actionsLink = entry.actionsPath.takeIf { it.isNotBlank() },
-            ruleFiles = entry.rulePaths.filter { it.isNotBlank() },
+            id = entry.id.trim(),
+            schemaLink = entry.schemaPath.trim().takeIf { it.isNotBlank() },
+            actionsLink = entry.actionsPath.trim().takeIf { it.isNotBlank() },
+            ruleFiles = entry.rulePaths.map { it.trim() }.filter { it.isNotBlank() },
+            scope = entry.scope.trim().takeIf { it.isNotBlank() },
         )
     }
 }

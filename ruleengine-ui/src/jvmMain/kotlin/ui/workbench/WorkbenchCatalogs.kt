@@ -15,6 +15,8 @@ import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.evaluator.compiled.DslFunctions
+import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.OperatorOptions
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.catalog.CatalogFieldInfo
@@ -104,13 +106,23 @@ private fun MutableMap<String, CatalogFieldInfo>.putVariable(assignment: Variabl
 /**
  * Best-effort value type of a `set` expression, used only to pick the operator list.
  *
- * An aggregate or a calculation is always numeric and a literal types itself. A field path or
+ * A calculation is always numeric, a call is typed by what the engine says it returns, and a literal
+ * types itself. A field path or
  * another variable is left as [OperatorOptions.VARIABLE_TYPE]: resolving a path here would duplicate
  * the schema walk the engine already does, and the engine puts no type restriction on a variable
  * anyway, so the wider operator list is the honest answer rather than a guess.
  */
 private fun inferredVariableType(expr: ValueExpressionAst): String = when (expr) {
-    is FunctionCallValueAst, is ArithmeticValueAst -> "decimal"
+    // Not every call is numeric: `every`/`any` answer true or false and `sumByKey` answers a list,
+    // and offering ordering comparisons against either would produce rules that never match.
+    is FunctionCallValueAst -> when (DslFunctions.resultKindOf(name = expr.name)) {
+        FunctionResultKind.BOOLEAN -> "boolean"
+        FunctionResultKind.ARRAY -> OperatorOptions.LIST_VARIABLE_TYPE
+        FunctionResultKind.DATE -> "date"
+        else -> "decimal"
+    }
+
+    is ArithmeticValueAst -> "decimal"
     is LiteralValueAst -> when (expr.literal) {
         is NumberLiteral -> "decimal"
         is StringLiteral -> "text"

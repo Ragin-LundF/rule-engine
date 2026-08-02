@@ -78,6 +78,11 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 - **Nested data** — `collection` and `object` field types describe lists of records and nested records to any depth
 - **Action schema** — defines what outcomes a rule can produce
 - **Aggregate functions** — `sum`, `count`, `avg`, `median`, `max`, `min`, `subtract` over nested lists
+- **Value functions** — `abs`, `daysBetween` for magnitudes and calendar-day arithmetic
+- **Collection tools** — `take` / `takeLast` slicing, `in` membership filters, `every` / `any`
+  predicates, and `sumByKey` joins across collections
+- **Per-member evaluation** — a manifest entry may declare `scope: <collection>` to run its rules
+  once per member instead of once per document
 - **Filtered array paths** — `orders[status == "paid"].items[price > 0].price` filters at every level
 - **Arithmetic** — combine aggregates with `+`, `-`, `*`, `/`
 - **Text, numbers, flags and dates** — normalized text matching, numeric ranges, `true`/`false` flags, and date / date-time comparisons with an optional per-field date format

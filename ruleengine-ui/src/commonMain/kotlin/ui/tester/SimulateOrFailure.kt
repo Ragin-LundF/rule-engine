@@ -17,6 +17,7 @@ fun RuleSimulationService.simulateOrFailure(
     ruleText: String,
     ruleId: String,
     inputJson: String,
+    scope: String = "",
 ): SimulationResult {
     return runCatching {
         simulate(
@@ -25,6 +26,7 @@ fun RuleSimulationService.simulateOrFailure(
             ruleText = ruleText,
             ruleId = ruleId,
             inputJson = inputJson,
+            scope = scope,
         )
     }.getOrElse { failure ->
         SimulationResult(

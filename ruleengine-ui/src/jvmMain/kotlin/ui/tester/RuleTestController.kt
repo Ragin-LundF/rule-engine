@@ -47,6 +47,7 @@ internal class RuleTestController(
                 // rule text and the rule filter have to agree, and this is the one place both are read.
                 ruleId = if (state.showAllRules.value) "" else input.value.selectedRuleId,
                 inputJson = input.value.inputJson,
+                scope = state.activeScope.orEmpty(),
             )
             input.value = input.value.copy(isRunning = false, outcome = result.outcome)
             state.setStatus(

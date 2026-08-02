@@ -155,6 +155,7 @@ class BuilderEditorState private constructor(
                     id = action.id,
                     name = action.name,
                     arguments = action.arguments,
+                    extraction = action.extraction,
                 )
             }.toMutableStateList()
         }

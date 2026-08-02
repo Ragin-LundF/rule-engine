@@ -1,13 +1,43 @@
 package ruleengine.evaluator.compiled
 
-enum class AggregateFunctionName {
-    COUNT,
-    SUM,
-    SUBTRACT,
-    AVG,
-    MEDIAN,
-    MAX,
-    MIN;
+/**
+ * A DSL function that reduces or transforms already-evaluated values.
+ *
+ * Every member here is something `FunctionCallCompiledValueExpression` can evaluate from its
+ * arguments alone. A function that needs the *shape* of its argument — a predicate to run per
+ * element, or a key and a value read off the same element — does not belong here: by the time an
+ * argument has become a value, that shape is gone.
+ *
+ * The type name is historical; the enum started as the aggregate list and is published API.
+ * [isAggregate] separates the true reductions, which is what the visual editor offers in its
+ * aggregate picker, from the rest.
+ */
+enum class AggregateFunctionName(
+    /** The spelling the DSL uses, which is not always the enum name lowercased. */
+    val dslName: String,
+    /** How many arguments the function accepts. */
+    val arity: IntRange,
+    /** True for a reduction over a collection, i.e. what the Builder's aggregate picker offers. */
+    val isAggregate: Boolean = true,
+    /** What a call evaluates to, so the validator can type a comparison against it. */
+    val resultKind: FunctionResultKind = FunctionResultKind.NUMERIC
+) {
+    COUNT(dslName = "count", arity = 1..1),
+    SUM(dslName = "sum", arity = 1..1),
+    SUBTRACT(dslName = "subtract", arity = 1..1),
+    AVG(dslName = "avg", arity = 1..1),
+    MEDIAN(dslName = "median", arity = 1..1),
+    MAX(dslName = "max", arity = 1..1),
+    MIN(dslName = "min", arity = 1..1),
+
+    /**
+     * Magnitude of a single number. Not an aggregate: over a projected collection it would have to
+     * pick one of many values, so it is offered as a calculation rather than in the aggregate picker.
+     */
+    ABS(dslName = "abs", arity = 1..1, isAggregate = false),
+
+    /** Signed calendar days from the first argument to the second. */
+    DAYS_BETWEEN(dslName = "daysBetween", arity = 2..2, isAggregate = false);
 
     companion object {
 
@@ -19,12 +49,12 @@ enum class AggregateFunctionName {
          * on its own lowercased copy of the entry list.
          */
         fun fromName(name: String): AggregateFunctionName? {
-            return entries.firstOrNull { entry -> entry.name.equals(other = name, ignoreCase = true) }
+            return entries.firstOrNull { entry -> entry.dslName.equals(other = name, ignoreCase = true) }
         }
 
         /** Every function name in the spelling the DSL and diagnostics use. */
-        fun lowercaseNames(): List<String> {
-            return entries.map { entry -> entry.name.lowercase() }
+        fun dslNames(): List<String> {
+            return entries.map { entry -> entry.dslName }
         }
     }
 }

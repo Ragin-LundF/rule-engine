@@ -24,17 +24,22 @@ fun main() = application {
     val closeController = remember { AppCloseController() }
     closeController.onCloseConfirmed = ::exitApplication
 
+    val saveController = remember { AppSaveController() }
+
     Window(
         // Routed through the editor so unsaved work gets the same save/discard/cancel question that
         // opening another project does, instead of vanishing with the window.
         onCloseRequest = closeController::requestClose,
         title = "Rule Engine Editor",
         icon = painterResource(Res.drawable.app),
-        state = rememberWindowState(size = DpSize(1440.dp, 900.dp))
+        state = rememberWindowState(size = DpSize(1440.dp, 900.dp)),
+        // Preview rather than `onKeyEvent`: the DSL and YAML editors install their own key handlers,
+        // and a focused text field would otherwise see the chord first.
+        onPreviewKeyEvent = saveController::handleKey,
     ) {
         AppTheme {
             Surface(modifier = Modifier.fillMaxSize(), color = Bg) {
-                RuleEditor(closeController = closeController)
+                RuleEditor(closeController = closeController, saveController = saveController)
             }
         }
     }

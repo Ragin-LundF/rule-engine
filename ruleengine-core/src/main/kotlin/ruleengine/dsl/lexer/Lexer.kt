@@ -46,17 +46,9 @@ class Lexer(private val input: String) {
                 break
             }
 
-            // handle single-character tokens via map to reduce branching
-            val singleCharTokens = mapOf(
-                '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
-                '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
-                '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
-                ',' to TokenType.COMMA, '.' to TokenType.DOT,
-                '+' to TokenType.PLUS, '*' to TokenType.STAR, '/' to TokenType.SLASH
-            )
-
-            if (singleCharTokens.containsKey(c)) {
-                tokens += makeToken(type = singleCharTokens.getValue(key = c), text = c.toString())
+            val singleCharToken = SINGLE_CHAR_TOKENS[c]
+            if (singleCharToken != null) {
+                tokens += makeToken(type = singleCharToken, text = c.toString())
                 advance()
                 continue
             }
@@ -244,5 +236,19 @@ class Lexer(private val input: String) {
         }
 
         return Token(type = TokenType.NUMBER, text = sb.toString(), line = startLine, col = startCol)
+    }
+
+    private companion object {
+        /**
+         * Characters that are a token on their own. Held here rather than rebuilt inside the scan
+         * loop, where it cost one map allocation per character of every rule file.
+         */
+        val SINGLE_CHAR_TOKENS: Map<Char, TokenType> = mapOf(
+            '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
+            '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
+            '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
+            ',' to TokenType.COMMA, '.' to TokenType.DOT,
+            '+' to TokenType.PLUS, '*' to TokenType.STAR, '/' to TokenType.SLASH
+        )
     }
 }

@@ -3,7 +3,7 @@ package ui.builder
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isStructure
-import ruleengine.evaluator.compiled.AggregateFunctionName
+import ruleengine.evaluator.compiled.DslFunctions
 
 /**
  * The operator vocabulary for the visual editor: the names themselves, and the default list offered
@@ -77,14 +77,29 @@ object OperatorOptions {
      */
     val LIST_VARIABLE: List<String> = listOf(CONTAINS)
 
-    /** Aggregate functions understood by the engine, lowercase, in declaration order. */
-    val AGGREGATE_FUNCTIONS: List<String> = AggregateFunctionName.lowercaseNames()
+    /**
+     * Aggregate functions understood by the engine, in declaration order.
+     *
+     * The reductions only. A function such as `daysBetween` is a valid value expression but not a
+     * reduction over a collection, so offering it in a picker that then asks for a collection path
+     * would produce a rule the validator rejects. [ALL_FUNCTIONS] is the list for surfaces that must
+     * recognise everything the parser accepts.
+     */
+    val AGGREGATE_FUNCTIONS: List<String> = DslFunctions.aggregateNames()
+
+    /** Every function name the DSL accepts — for highlighting and completion, not for pickers. */
+    val ALL_FUNCTIONS: List<String> = DslFunctions.allNames()
 
     /** Arithmetic operators available in a calculation, in display order. */
     val ARITHMETIC_OPERATORS: List<String> = listOf("+", "-", "*", "/")
 
-    /** Operators available inside a filter segment (`orders[...]`). */
-    val FILTER_OPERATORS: List<String> = COMPARISON_NUMERIC
+    /**
+     * Operators available inside a filter segment (`orders[...]`).
+     *
+     * `in` is the one non-symbolic member: it tests an element's member against a list, a string set
+     * or another collection, which no symbolic operator expresses with the operands in that order.
+     */
+    val FILTER_OPERATORS: List<String> = COMPARISON_NUMERIC + IN
 
     /**
      * Catalog type of a rule output variable whose value type could not be inferred from its `set`
@@ -116,6 +131,16 @@ object OperatorOptions {
 
     /** True when [fieldType] is a collection or object, i.e. navigable rather than comparable. */
     fun isStructureType(fieldType: String): Boolean = fieldType.lowercase() in STRUCTURE_TYPES
+
+    /**
+     * True when [fieldType] holds text.
+     *
+     * Used by the extraction row: `Validator` rejects a regex extraction whose source field is not
+     * TEXT, so offering anything else would be offering a choice that cannot validate.
+     */
+    fun isTextType(fieldType: String): Boolean = fieldType.lowercase() == TEXT_TYPE
+
+    private const val TEXT_TYPE: String = "text"
 
     /** True when [fieldType] is an untyped rule output variable — see [VARIABLE_TYPE]. */
     fun isVariableType(fieldType: String): Boolean = fieldType.lowercase() == VARIABLE_TYPE

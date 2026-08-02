@@ -35,6 +35,10 @@ complexity:
     allowedFunctionsPerClass: 20
     allowedFunctionsPerInterface: 20
     allowedFunctionsPerObject: 20
+    # Private helpers do not count. The threshold is about how much API a type asks a caller to
+    # learn; a long chain of private phrase-makers that only call each other is a file-length
+    # question, which LargeClass already answers.
+    ignorePrivate: true
 
 performance:
   # disabled since Kotlin compiler optimizations since 1.1.60

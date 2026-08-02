@@ -24,5 +24,14 @@ data class EvaluationResult(
      * Without it a consumer cannot tell *"no further rule matched"* from *"no further rule ran"* — the
      * rules after this one produced nothing because they were never reached.
      */
-    val stoppedBy: String? = null
+    val stoppedBy: String? = null,
+    /**
+     * One entry per member of the scoped collection, or empty for a whole-document evaluation.
+     *
+     * `variables` and `stoppedBy` are per member and live inside each entry: a `stop` ends one
+     * member's run and says nothing about the next. At this level they are empty and null for a
+     * scoped result, while [matches] is the concatenation across members so that a consumer written
+     * before scoping still sees everything that fired.
+     */
+    val members: List<MemberEvaluation> = emptyList()
 )

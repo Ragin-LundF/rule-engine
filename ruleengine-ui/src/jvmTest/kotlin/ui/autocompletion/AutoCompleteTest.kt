@@ -3,6 +3,7 @@ package ui.autocompletion
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.evaluator.compiled.DslFunctions
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
 import ui.dsl.analyzeDslContext
@@ -97,6 +98,22 @@ class AutoCompleteTest {
         assertTrue(actual = labels.any { it.startsWith("median") }, message = "Missing median, got: $labels")
         assertTrue(actual = labels.any { it.startsWith("max") }, message = "Missing max, got: $labels")
         assertTrue(actual = labels.any { it.startsWith("min") }, message = "Missing min, got: $labels")
+    }
+
+    /**
+     * The completion catalog is hand-written, so nothing but this test stops a function added to the
+     * engine from being invisible in the editor.
+     */
+    @Test
+    fun `every engine function is offered as a completion`() {
+        val labels = whenCompletions().map { item -> item.label }
+
+        DslFunctions.allNames().forEach { function ->
+            assertTrue(
+                actual = labels.any { label -> label.startsWith(prefix = "$function(") },
+                message = "No completion for '$function', got: $labels",
+            )
+        }
     }
 
     @Test

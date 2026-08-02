@@ -3,7 +3,11 @@ package ui.builder
 import ui.builder.OperandText.LABEL_MAX_SEGMENTS
 import ui.builder.model.BuilderFilter
 import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathDecoration
 import ui.builder.model.BuilderPathStep
+import ui.builder.model.filters
+import ui.builder.model.namesAField
+import ui.builder.model.slice
 
 /**
  * Renders [BuilderOperand] trees as text.
@@ -30,7 +34,18 @@ object OperandText {
     fun toDsl(operand: BuilderOperand): String = when (operand) {
         is BuilderOperand.FieldRef -> pathToDsl(path = operand.path)
         is BuilderOperand.Literal -> literalToDsl(literal = operand)
+        is BuilderOperand.ListLiteral -> operand.items.joinToString(
+            separator = ", ",
+            prefix = "[",
+            postfix = "]",
+        ) { item -> quoteUnlessNumeric(value = item) }
+
         is BuilderOperand.Aggregate -> "${operand.function}(${pathToDsl(path = operand.path)})"
+        is BuilderOperand.Call -> {
+            val args = operand.args.joinToString(separator = ", ") { arg -> toDsl(operand = arg) }
+            "${operand.function}($args)"
+        }
+
         is BuilderOperand.Calc -> {
             val body = operand.terms.joinToString(separator = "") { term ->
                 val prefix = if (term.operator.isBlank()) "" else " ${term.operator} "
@@ -52,22 +67,65 @@ object OperandText {
         return quoteUnlessNumeric(value = trimmed)
     }
 
-    private fun pathToDsl(path: List<BuilderPathStep>): String =
-        path.joinToString(separator = ".") { step ->
-            step.name + step.filters
-                .filter { it.field.isNotBlank() }
-                .joinToString(separator = "") { filter -> "[${filterToDsl(filter = filter)}]" }
-        }
+    /**
+     * A path as DSL, applying each step's decorations in the order they were written.
+     *
+     * A slice wraps everything accumulated so far rather than appending to it — that is what the
+     * `take(orders, 3)` spelling means, and it is why the fold carries a running string instead of
+     * joining segments at the end.
+     */
+    private fun pathToDsl(path: List<BuilderPathStep>): String {
+        val builder = StringBuilder()
+        path.forEach { step ->
+            if (builder.isNotEmpty()) builder.append('.')
+            builder.append(step.name)
+            step.decorations.forEach { decoration ->
+                when (decoration) {
+                    is BuilderPathDecoration.Filter -> {
+                        if (decoration.filter.namesAField) {
+                            builder.append('[').append(filterToDsl(filter = decoration.filter)).append(']')
+                        }
+                    }
 
+                    is BuilderPathDecoration.Slice -> {
+                        val call = if (decoration.fromEnd) "takeLast" else "take"
+                        val inner = builder.toString()
+                        builder.setLength(0)
+                        builder.append(call).append('(').append(inner).append(", ").append(decoration.count).append(')')
+                    }
+                }
+            }
+        }
+        return builder.toString()
+    }
+
+    /**
+     * One restriction as DSL — the same three parts a comparison row writes, one level down.
+     *
+     * Each side goes through [toDsl], which is what keeps a membership source bare: a written-out
+     * list keeps its brackets, and a field or variable name must not be quoted or it turns into a
+     * text literal that can never match.
+     */
     private fun filterToDsl(filter: BuilderFilter): String =
-        "${filter.field} ${filter.operator} ${quoteUnlessNumeric(value = filter.value)}"
+        "${toDsl(operand = filter.left)} ${filter.operator} ${toDsl(operand = filter.right)}"
 
     // ── chip labels ───────────────────────────────────────────────────────────
 
     fun toLabel(operand: BuilderOperand): String = when (operand) {
         is BuilderOperand.FieldRef -> pathToLabel(path = operand.path)
         is BuilderOperand.Literal -> operand.text.ifBlank { "…" }
+        is BuilderOperand.ListLiteral -> operand.items.joinToString(
+            separator = ", ",
+            prefix = "[",
+            postfix = "]",
+        ).ifBlank { "[…]" }
+
         is BuilderOperand.Aggregate -> "${operand.function}(${pathToLabel(path = operand.path)})"
+        is BuilderOperand.Call -> {
+            val args = operand.args.joinToString(separator = ", ") { arg -> toLabel(operand = arg) }
+            "${operand.function}($args)"
+        }
+
         is BuilderOperand.Calc -> operand.terms.joinToString(separator = " ") { term ->
             val prefix = if (term.operator.isBlank()) "" else "${displayOperator(operator = term.operator)} "
             "$prefix${toLabel(operand = term.operand)}"
@@ -81,7 +139,9 @@ object OperandText {
      */
     private fun pathToLabel(path: List<BuilderPathStep>): String {
         val names = path.map { step ->
-            if (step.filters.any { it.field.isNotBlank() }) "${step.name}*" else step.name
+            val restricted = step.filters.any { filter -> filter.namesAField }
+            val sliced = step.slice != null
+            step.name + (if (restricted) "*" else "") + (if (sliced) "⋯" else "")
         }
         val shown = if (names.size <= LABEL_MAX_SEGMENTS) {
             names

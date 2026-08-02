@@ -3,7 +3,9 @@ package ruleengine.builder
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.action.ActionSchema
+import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
@@ -13,6 +15,7 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
+import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestLoader
 import ruleengine.manifest.ManifestPathResolution
@@ -39,7 +42,6 @@ import java.nio.file.Path
  * individual loaders (`FieldSchemaLoader`, `ActionSchemaLoader`, `Parser`, `Validator`, `Compiler`)
  * directly.
  */
-@Suppress("TooManyFunctions")
 object RuleEngineBuilder {
     /**
      * Loads every entry of the manifest at [manifestPath], or only the entry named [entryId].
@@ -135,7 +137,11 @@ object RuleEngineBuilder {
         val actions = loadActions(manifestPath = manifestPath, baseDir = baseDir, entry = entry)
         val asts = loadRuleAsts(manifestPath = manifestPath, baseDir = baseDir, entry = entry)
 
-        val validationResult = Validator.validate(asts = asts, schema = schema, actions = actions)
+        // A scoped entry's rules name the member's fields, so everything downstream of here — the
+        // validator, the compiler and the evaluator — works against the member's schema instead.
+        val ruleSchema = scopedSchema(manifestPath = manifestPath, entry = entry, schema = schema)
+
+        val validationResult = Validator.validate(asts = asts, schema = ruleSchema, actions = actions)
         if (!validationResult.isValid) {
             fail(
                 manifestPath = manifestPath,
@@ -146,7 +152,7 @@ object RuleEngineBuilder {
         }
 
         val compiledRules = runCatching {
-            Compiler.compileRules(asts = asts, schema = schema, normalizerRegistry = normalizerRegistry)
+            Compiler.compileRules(asts = asts, schema = ruleSchema, normalizerRegistry = normalizerRegistry)
         }.getOrElse { cause ->
             fail(manifestPath = manifestPath, entryId = entry.id, details = "rule compilation failed", cause = cause)
         }
@@ -157,7 +163,33 @@ object RuleEngineBuilder {
             schema = schema,
             actions = actions,
             warnings = validationResult.diagnostics.filter { it.severity != Severity.ERROR },
+            scope = entry.scope,
         )
+    }
+
+    /**
+     * The schema an entry's rules are written against, given its `scope`.
+     *
+     * Rejected at load time rather than left to fail per record: a scope naming nothing, or naming
+     * something that is not a collection, describes a rule set that could never run — and the
+     * manifest is exactly where that is worth saying.
+     */
+    private fun scopedSchema(manifestPath: Path, entry: ManifestEntry, schema: FieldSchema): FieldSchema {
+        val scope = entry.scope ?: return schema
+        val definition = schema.fields[FieldId(value = scope)]
+            ?: fail(
+                manifestPath = manifestPath,
+                entryId = entry.id,
+                details = "scope '$scope' is not a field of the schema",
+            )
+        if (definition.type != FieldType.COLLECTION) {
+            fail(
+                manifestPath = manifestPath,
+                entryId = entry.id,
+                details = "scope '$scope' is ${definition.type.name.lowercase()}, not a collection",
+            )
+        }
+        return ScopedEvaluation.memberSchema(schema = schema, scope = scope) ?: schema
     }
 
     private fun loadSchema(manifestPath: Path, baseDir: Path, entry: ManifestEntry): FieldSchema {

@@ -144,6 +144,103 @@ max(transactions[label == "risk"].amount) > 500
 min(transactions.amount) >= 0
 ```
 
+## 5a. Value Functions
+
+These transform values rather than reducing a collection.
+
+| Function | Description | Missing input |
+|---|---|---|
+| `abs(value)` | Magnitude of a number; zero and positives unchanged | missing |
+| `daysBetween(from, to)` | Signed whole calendar days from `from` to `to` | missing |
+
+`abs` accepts a field, an aggregate, an arithmetic expression or a variable, and preserves integer
+and decimal precision:
+
+```
+abs(sum(transactions.amount)) > 1000
+abs($netBalance) >= 500
+```
+
+`daysBetween` accepts `date` and `date_time` fields as well as an ISO-8601 date literal. A
+`date_time` is read at calendar-day precision, so the time of day never adds a day. The result is
+signed — a second operand that comes first is negative — and is valid in arithmetic and numeric
+comparisons.
+
+```
+daysBetween(customer.registeredAt, application.submittedAt) >= 90
+daysBetween(registeredAt, "2024-04-01") / 30 >= 3
+```
+
+## 5b. Slicing — `take` and `takeLast`
+
+`take(path, n)` keeps at most the first `n` elements in source order; `takeLast(path, n)` keeps at
+most the last `n`. `n` is a non-negative whole number. A shorter or empty collection yields what it
+has, without failing.
+
+A slice is part of the path, so projection, filtering and aggregation continue from it:
+
+```
+sum(take(orders, 3).total) > 5000
+count(takeLast(loginEvents, 10)[successful == false]) >= 3
+```
+
+**Order matters.** Slicing happens where it is written:
+
+| Expression | Means |
+|---|---|
+| `takeLast(events, 10)[failed == true]` | failures **among the last ten events** |
+| `takeLast(events[failed == true], 10)` | **the last ten failures** |
+
+## 5c. Membership — `in`
+
+`element in source` is true when the source holds a value equal to the element. The source may be a
+`string_set` field, a projection across a collection, or a list variable.
+
+```
+sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+count(events[eventType in $importantEventTypes]) > 0
+```
+
+- Both sides are matched under the normalizers declared on the fields.
+- An **empty or missing source selects nothing**.
+- Membership composes with other filters on the same collection.
+- A literal list — `country in ["de", "at"]` — is a plain field comparison, not a value expression,
+  and keeps enforcing the field's declared `operators:` list.
+
+## 5d. Collection Predicates — `every` and `any`
+
+`every(collection[condition])` holds when every element satisfies the condition; `any(...)` when at
+least one does. Both stop as soon as the answer is decided.
+
+```
+every(lineItems[quantity >= 1])
+any(alerts[severity == "high"])
+```
+
+| Collection | `every` | `any` |
+|---|---|---|
+| some elements | true when all satisfy | true when one satisfies |
+| empty | **true** | **false** |
+| missing | **true** | **false** |
+
+Both are boolean conditions, so they combine with `and`, `or` and `not`, and work over raw,
+filtered, sliced and joined collections.
+
+## 5e. Keyed Joins — `sumByKey`
+
+`sumByKey(key, source, source, ...)` aligns two or more collections on a shared member and returns
+one total per key. The first argument is the key member's name as a string literal; each source is
+`<collection>.<numericMember>`.
+
+```
+min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
+```
+
+- **Outer join** — every key any source mentions appears; a source not mentioning it contributes `0`.
+- **Duplicate keys** within one source are summed, so the overall total is preserved.
+- **Key order** is first-seen, reading the sources left to right.
+- The result is a list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
+
 ---
 
 ## 6. Array Projections
@@ -217,16 +314,33 @@ A filter is a single comparison — narrower than a normal condition:
 
 | Allowed | Not allowed |
 |---|---|
-| `==`, `!=`, `>`, `>=`, `<`, `<=` | `and`, `or`, `not` |
-| named `gt`, `gte`, `lt`, `lte` | `equals`, `contains`, `in`, `between`, `regex`, `containsAny`, `containsAll` |
+| `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `contains` | `between`, `startsWith`, `endsWith`, `regex`, `containsAny`, `containsAll` |
+| named `equals`, `gt`, `gte`, `lt`, `lte` | `ignoreCase` |
+| `and`, `or`, `not` between predicates | |
 
-Two points that catch people out:
+Both sides of a predicate are full value expressions, so a filter may hold whatever a comparison may:
 
-- Write equality as `==`, never as `equals`. `transactions[label equals "risk"]` is rejected.
-- To require two conditions on the same element, chain filters rather than using `and`:
-  `transactions[label == "risk"][amount > 100]`.
+```
+orders[count(items) > 2]              # an aggregate over the element's own collection
+orders[total * 2 > 100]               # arithmetic
+orders[items[price > 0].sku == "x"]   # a path that filters again
+orders[total > sum(items.price)]      # a computed right-hand side
+orders[origin.hub == "HAM"]           # a member reached through a nested object
+orders[status in ["paid", "sent"]]    # a written-out list
+orders[customerId in priorityIds]     # a document-level field as the source
+```
 
-These are reported when the rules are compiled, so they surface at load time rather than at runtime.
+Two points worth knowing:
+
+- A predicate names members of the **element**, with the document's own fields behind them — so
+  `invoices[customerId in priorityCustomerIds]` compares a member against a document field. A member
+  shadows a document field of the same name.
+- `and`, `or` and `not` combine predicates over the *same* element. Chaining filters —
+  `transactions[label == "risk"][amount > 100]` — also works and means the same thing as `and`, but
+  only `and`: there is no chained spelling of `or`.
+
+The operators in the right-hand column are rejected at validation, and again when the rules are
+compiled, so they surface at load time rather than at runtime.
 
 ### Examples
 
@@ -279,8 +393,17 @@ rule "majority-risk" {
 | `median` | missing | Always `false` |
 | `max` | missing | Always `false` |
 | `min` | missing | Always `false` |
+| `abs` | missing input → missing | Always `false` |
+| `daysBetween` | missing operand → missing | Always `false` |
+| `take` / `takeLast` | empty slice | Aggregates over it behave as for any empty collection |
+| `every` | — | **`true`** — no element fails |
+| `any` | — | **`false`** — no element succeeds |
+| `sumByKey` | no keys | `count(...) == 0`; `min`/`max` are missing |
 
 A missing value on either side of a comparison always produces `false`.
+
+`every` and `any` are the deliberate exceptions: they answer about the elements, and an empty
+collection has none to fail or to satisfy the condition.
 
 ---
 
@@ -303,8 +426,9 @@ A missing value on either side of a comparison always produces `false`.
 | `sum(transactions.amount) contains "x"` | Operator `contains` is not valid for numeric comparison |
 | `sum(transactions.amount) > "text"` | Right-hand side must be numeric |
 | `sum(orders.totl)` where `orders` declares `total` | `Unknown field 'totl' in 'orders.totl'` |
-| `transactions[label == "risk" and amount > 0]` | `Only comparison expressions are supported in filter segments` |
-| `transactions[label equals "risk"]` | `Operator 'equals' is not supported in filter segments` |
+| `transactions[label between 1 5]` | `Operator 'between' is not supported in filter segments` |
+| `transactions[label == "risk" ignoreCase]` | `The 'ignoreCase' modifier is not supported in filter segments` |
+| `transactions[bogus > 1]` where the element declares no `bogus` | `Unknown field 'bogus' in filter on 'transactions'` |
 | `transactions.amount > 100` as a plain condition | `Field 'transactions.amount' reads through collection 'transactions' …` — wrap it in an aggregate or a filter |
 
 > **One case is a warning, not an error:** if the **root** of a multi-segment path is not declared in

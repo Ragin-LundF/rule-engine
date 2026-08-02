@@ -6,6 +6,7 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.evaluator.RuleEngine
+import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
 
@@ -21,6 +22,7 @@ import ruleengine.evaluator.context.RuleContext
  * @property schema field schema the rules were compiled against (needed for normalisation)
  * @property actions action schema, or `null` when the manifest entry declares none
  * @property warnings non-fatal validation diagnostics; errors would have failed the build
+ * @property scope collection to evaluate once per member, or `null` for whole-document evaluation
  */
 data class LoadedRuleEngine(
     val entryId: String,
@@ -28,13 +30,26 @@ data class LoadedRuleEngine(
     val schema: FieldSchema,
     val actions: ActionSchema? = null,
     val warnings: List<ValidationDiagnostic> = emptyList(),
+    val scope: String? = null,
 ) {
+    /**
+     * The schema a scoped rule set resolves its paths against.
+     *
+     * Derived once, at construction: it depends on [schema] and [scope] but not on any input, and a
+     * scoped evaluation would otherwise rebuild it for every member.
+     */
+    private val memberSchema: FieldSchema? =
+        scope?.let { path -> ScopedEvaluation.memberSchema(schema = schema, scope = path) }
+
     /**
      * Normalises [input] against [schema] and evaluates it.
      *
      * Convenience wrapper around [RuleContext.of], [PreparedRuleContext.prepare] and
      * [RuleEngine.evaluate]. Use [engine] directly when a [PreparedRuleContext] is reused across
      * several evaluations.
+     *
+     * When the entry declares a [scope], the rules run once per member of that collection instead —
+     * see [ScopedEvaluation.evaluate] for what the result then holds.
      */
     fun evaluate(
         input: Map<String, Any?>,
@@ -42,6 +57,17 @@ data class LoadedRuleEngine(
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
     ): EvaluationResult {
         val ruleContext = RuleContext.of(entries = input.entries.map { it.key to it.value }.toTypedArray())
+        if (scope != null && memberSchema != null) {
+            return ScopedEvaluation.evaluate(
+                engine = engine,
+                document = ruleContext,
+                schema = schema,
+                memberSchema = memberSchema,
+                scope = scope,
+                includeTrace = includeTrace,
+                normalizerRegistry = normalizerRegistry,
+            )
+        }
         val prepared = PreparedRuleContext.prepare(
             ctx = ruleContext,
             schema = schema,

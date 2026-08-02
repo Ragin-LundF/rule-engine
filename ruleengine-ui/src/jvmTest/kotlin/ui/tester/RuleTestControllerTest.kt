@@ -34,6 +34,7 @@ class RuleTestControllerTest {
             ruleText: String,
             ruleId: String,
             inputJson: String,
+            scope: String,
         ): SimulationResult {
             lastRuleId = ruleId
             lastRuleText = ruleText
@@ -118,6 +119,7 @@ class RuleTestControllerTest {
                 ruleText: String,
                 ruleId: String,
                 inputJson: String,
+                scope: String,
             ): SimulationResult = throw IllegalStateException("boom")
         }
         val (state, controller) = controller(service = throwing)

@@ -74,6 +74,7 @@ internal fun BranchSection(
             ActionRowEditor(
                 action = action,
                 actions = catalogActions,
+                fields = catalogFields,
                 onChanged = { emitDslChange(editorState = editorState, onDslChange = onDslChange) },
                 onRemove = {
                     editorState.removeAction(id = action.id)

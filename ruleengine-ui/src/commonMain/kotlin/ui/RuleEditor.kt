@@ -7,5 +7,8 @@ expect suspend fun pickInputJsonFile(): String?
 expect fun copyToClipboard(text: String)
 
 @Composable
-expect fun RuleEditor(closeController: AppCloseController = AppCloseController())
+expect fun RuleEditor(
+    closeController: AppCloseController = AppCloseController(),
+    saveController: AppSaveController = AppSaveController(),
+)
 

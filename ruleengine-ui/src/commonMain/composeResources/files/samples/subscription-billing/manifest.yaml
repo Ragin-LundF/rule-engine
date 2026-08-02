@@ -1,0 +1,17 @@
+name: subscription-billing
+entries:
+  # `scope` is what makes this sample different from the others: the rules below run once per
+  # account rather than once for the whole document. Remove the line and they would be checked
+  # against the document, where `balance` and `invoices` do not exist.
+  - id: account-review
+    scope: accounts
+    schema: schema.yaml
+    actions: actions.yaml
+    # Order is execution order.
+    rules:
+      - rules/priority-exposure.rule
+      - rules/recent-failures.rule
+      - rules/net-position.rule
+      - rules/tenure-check.rule
+      - rules/balance-drift.rule
+      - rules/line-item-sanity.rule

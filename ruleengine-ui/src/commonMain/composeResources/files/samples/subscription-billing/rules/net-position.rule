@@ -1,0 +1,7 @@
+rule "negative-month" {
+  description "Some month's sales do not cover its refunds."
+  when
+    min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) < 0
+  then
+    review "negative-month"
+}

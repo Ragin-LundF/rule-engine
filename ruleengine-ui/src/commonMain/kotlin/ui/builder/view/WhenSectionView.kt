@@ -30,6 +30,7 @@ import ui.builder.components.row.ComparisonRowEditor
 import ui.builder.components.row.ConditionRowEditor
 import ui.builder.model.BuilderOperand
 import ui.builder.model.catalog.CatalogFieldInfo
+import ui.builder.model.catalog.firstCollectionPath
 import ui.builder.model.catalog.scalarPaths
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableConditionNode
@@ -89,12 +90,32 @@ internal fun WhenSection(
     }
 
     Spacer(modifier = Modifier.height(height = 8.dp))
+    catalogFields.firstCollectionPath()?.let { collection -> CollectionFieldsNote(collection = collection) }
     WhenAddButtons(
         editorState = editorState,
         catalogFields = catalogFields,
         onDslChange = onDslChange,
         onAdded = { selectedGroupIds.clear() },
     )
+}
+
+/**
+ * Why the field dropdown below is missing the collections the schema declares.
+ *
+ * Without it the omission looks like a defect: the schema plainly has the fields, and nothing on
+ * screen connects their absence to the row type that can read them.
+ */
+@Composable
+private fun CollectionFieldsNote(collection: String) {
+    Text(
+        text = "'$collection' is a collection, so a path through it has one value per element and " +
+                "cannot be compared here. Use + Calculation for count($collection) > 0 or " +
+                "sum($collection.<member>) > 100, or set the manifest entry's scope to " +
+                "'$collection' to run this rule once per member.",
+        style = MaterialTheme.typography.caption,
+        color = TextSecondary,
+    )
+    Spacer(modifier = Modifier.height(height = 8.dp))
 }
 
 /**

@@ -93,4 +93,43 @@ class CatalogScalarPathsTest {
 
         assertEquals(expected = emptyList(), actual = empty.scalarPaths())
     }
+
+    // ── firstCollectionPath: what the Builder names when it explains the omission ────────────────
+
+    /**
+     * The same descent as [scalarPaths], so the two never disagree about whether anything was left
+     * out — the note is only shown because the dropdown is short.
+     */
+    @Test
+    fun `a collection nested under objects is found by its dotted path`() {
+        assertEquals(expected = "reports.income.accountData", actual = catalog.firstCollectionPath())
+    }
+
+    @Test
+    fun `a top-level collection is found by its own name`() {
+        val flat = listOf(
+            CatalogFieldInfo(id = "caseId", type = "text"),
+            CatalogFieldInfo(
+                id = "reports",
+                type = "collection",
+                nestedFields = listOf(CatalogFieldInfo(id = "amount", type = "decimal")),
+            ),
+        )
+
+        assertEquals(expected = "reports", actual = flat.firstCollectionPath())
+    }
+
+    @Test
+    fun `a catalog of scalars has no collection, so no note is shown`() {
+        val flat = listOf(
+            CatalogFieldInfo(id = "amount", type = "decimal"),
+            CatalogFieldInfo(
+                id = "customer",
+                type = "object",
+                nestedFields = listOf(CatalogFieldInfo(id = "tier", type = "text")),
+            ),
+        )
+
+        assertEquals(expected = null, actual = flat.firstCollectionPath())
+    }
 }

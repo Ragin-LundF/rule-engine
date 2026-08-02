@@ -6,8 +6,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
@@ -17,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -28,12 +31,20 @@ import ui.PrimaryBlueLight
 import ui.TextSecondary
 import ui.builder.OperandRules
 import ui.builder.OperatorOptions
+import ui.builder.components.dropdown.DropdownSelector
 import ui.builder.components.dropdown.UNKNOWN_MARKER
 import ui.builder.components.row.FilterConditionRow
-import ui.builder.model.BuilderFilter
+import ui.builder.components.row.PlainTextField
+import ui.builder.model.BuilderPathDecoration
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.catalog.CatalogFieldInfo
+import ui.builder.model.filter
+import ui.builder.model.filters
+import ui.builder.model.namesAField
+import ui.builder.model.slice
+import ui.builder.model.withFilters
 import ui.builder.model.withSegmentName
+import ui.builder.model.withSlice
 import ui.builder.model.withoutSegment
 import ui.components.TinyButton
 
@@ -83,7 +94,8 @@ fun PathBreadcrumb(
                 PathSegmentPill(
                     name = step.name,
                     options = optionsPerDepth[depth],
-                    filterCount = step.filters.count { it.field.isNotBlank() },
+                    filterCount = step.filters.count { filter -> filter.namesAField },
+                    sliced = step.slice != null,
                     selected = selectedDepth == depth,
                     onNameSelected = { name ->
                         if (name != step.name) {
@@ -124,6 +136,7 @@ fun PathBreadcrumb(
             WhereDrawer(
                 step = step,
                 fieldOptions = OperandRules.filterFieldOptions(fields = fields, path = path, depth = depth),
+                filterFields = OperandRules.filterCatalog(fields = fields, path = path, depth = depth),
                 onStepChanged = { updated ->
                     onPathChanged(path.toMutableList().also { it[depth] = updated })
                 },
@@ -169,10 +182,11 @@ private fun AppendSegmentPill(onClick: () -> Unit) {
 private fun WhereDrawer(
     step: BuilderPathStep,
     fieldOptions: List<CatalogFieldInfo>,
+    filterFields: List<CatalogFieldInfo>,
     onStepChanged: (BuilderPathStep) -> Unit,
 ) {
-    // Nothing to show for a scalar segment that carries no restriction of its own.
-    if (fieldOptions.isEmpty() && step.filters.isEmpty()) return
+    // Nothing to show for a scalar segment that carries nothing of its own.
+    if (fieldOptions.isEmpty() && step.decorations.isEmpty()) return
 
     Column(
         modifier = Modifier
@@ -202,13 +216,14 @@ private fun WhereDrawer(
             FilterConditionRow(
                 filter = filter,
                 fieldOptions = fieldOptions,
+                fields = filterFields,
                 onFilterChanged = { updated ->
                     onStepChanged(
-                        step.copy(filters = step.filters.toMutableList().also { it[index] = updated })
+                        step.withFilters(filters = step.filters.toMutableList().also { it[index] = updated })
                     )
                 },
                 onRemove = {
-                    onStepChanged(step.copy(filters = step.filters.filterIndexed { i, _ -> i != index }))
+                    onStepChanged(step.withFilters(filters = step.filters.filterIndexed { i, _ -> i != index }))
                 },
             )
         }
@@ -219,8 +234,8 @@ private fun WhereDrawer(
                 text = if (step.filters.isEmpty()) "⊕ where" else "⊕ and",
                 onClick = {
                     onStepChanged(
-                        step.copy(
-                            filters = step.filters + BuilderFilter(
+                        step.withFilters(
+                            filters = step.filters + filter(
                                 field = fieldOptions.first().id,
                                 operator = OperatorOptions.FILTER_OPERATORS.first(),
                                 value = "",
@@ -230,5 +245,56 @@ private fun WhereDrawer(
                 },
             )
         }
+
+        SliceRow(step = step, onStepChanged = onStepChanged)
+    }
+}
+
+/**
+ * How many elements of this segment to keep, and from which end.
+ *
+ * Shown below the restrictions because that is where it takes effect: the slice sees whatever the
+ * restrictions above it left, which is the difference between "failures among the last ten events"
+ * and "the last ten failures".
+ */
+@Composable
+private fun SliceRow(step: BuilderPathStep, onStepChanged: (BuilderPathStep) -> Unit) {
+    val slice = step.slice
+    if (slice == null) {
+        TinyButton(
+            text = "⊕ first / last n",
+            onClick = {
+                onStepChanged(
+                    step.withSlice(slice = BuilderPathDecoration.Slice(fromEnd = false, count = "10"))
+                )
+            },
+        )
+        return
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "keep",
+            style = MaterialTheme.typography.caption,
+            color = TextSecondary,
+        )
+        DropdownSelector(
+            selected = if (slice.fromEnd) "last" else "first",
+            options = listOf("first", "last"),
+            onSelected = { choice ->
+                onStepChanged(step.withSlice(slice = slice.copy(fromEnd = choice == "last")))
+            },
+            modifier = Modifier.width(width = 80.dp),
+        )
+        PlainTextField(
+            value = slice.count,
+            placeholder = "10",
+            onValueChange = { count -> onStepChanged(step.withSlice(slice = slice.copy(count = count))) },
+            modifier = Modifier.width(width = 70.dp),
+        )
+        TinyButton(text = "×", onClick = { onStepChanged(step.withSlice(slice = null)) })
     }
 }

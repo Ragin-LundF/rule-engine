@@ -145,7 +145,7 @@ class ContainsSemanticsTest {
 
     @Test
     fun `a structure left operand does not match`() {
-        assertFalse(actual = contains(left = ObjectExpressionValue, right = text("a")))
+        assertFalse(actual = contains(left = ObjectExpressionValue(value = mapOf("a" to 1)), right = text("a")))
     }
 
     // ── cost ──────────────────────────────────────────────────────────────────

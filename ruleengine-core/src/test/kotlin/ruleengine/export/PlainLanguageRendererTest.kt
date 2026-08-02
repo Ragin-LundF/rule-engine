@@ -354,4 +354,81 @@ class PlainLanguageRendererTest {
         assertIs<PlainAny>(value = rendered.children.first())
         assertEquals(expected = PlainLeaf(text = "Amount is at least 500"), actual = rendered.children[1])
     }
+
+    // ── the wider call forms ──────────────────────────────────────────────────
+
+    /**
+     * A dropped slice would make the sentence claim more than the rule does: "the number of login
+     * events that failed" instead of "…of the last 10 login events".
+     */
+    @Test
+    fun `a slice is named in the sentence`() {
+        assertEquals(
+            expected = "the number of the last 10 loginEvents where Successful is false is at least 3",
+            actual = prose(condition = "count(takeLast(loginEvents, 10)[successful == false]) >= 3"),
+        )
+    }
+
+    @Test
+    fun `a prefix slice reads as the first n`() {
+        assertEquals(
+            expected = "the total Amount of the first 3 orders is more than 100",
+            actual = prose(condition = "sum(take(orders, 3).amount) > 100"),
+        )
+    }
+
+    /** A bare predicate is desugared to `== true`; spelling that out adds nothing. */
+    @Test
+    fun `a collection predicate reads as a sentence`() {
+        assertEquals(
+            expected = "every one of lineItems where Quantity is at least 1",
+            actual = prose(condition = "every(lineItems[quantity >= 1])"),
+        )
+        assertEquals(
+            expected = "at least one of alerts where Severity is \"high\"",
+            actual = prose(condition = """any(alerts[severity == "high"])"""),
+        )
+    }
+
+    @Test
+    fun `a keyed join names the key it joins on`() {
+        assertEquals(
+            expected = "the lowest (the per-month totals of Sales › Amount and Refunds › Amount) is at least 0",
+            actual = prose(condition = """min(sumByKey("month", sales.amount, refunds.amount)) >= 0"""),
+        )
+    }
+
+    @Test
+    fun `membership reads as one of`() {
+        assertEquals(
+            expected = "the total Amount of invoices where Customer Id is one of Priority Customer Ids " +
+                "is more than 10000",
+            actual = prose(condition = "sum(invoices[customerId in priorityCustomerIds].amount) > 10000"),
+        )
+    }
+
+    @Test
+    fun `the value functions read as phrases`() {
+        assertEquals(
+            expected = "the days between (Registered At, Review Date) is at least 90",
+            actual = prose(condition = "daysBetween(registeredAt, reviewDate) >= 90"),
+        )
+        assertEquals(
+            expected = "the magnitude of (the total Amount of invoices) is more than 1000",
+            actual = prose(condition = "abs(sum(invoices.amount)) > 1000"),
+        )
+    }
+
+    private fun prose(condition: String): String {
+        val rule = """
+            rule "prose" {
+              when
+                $condition
+              then
+                flag "x"
+            }
+        """.trimIndent()
+        val ast = Parser(input = rule).parseRules().single()
+        return (PlainLanguageRenderer.render(expr = ast.condition, schema = null) as PlainLeaf).text
+    }
 }

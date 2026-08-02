@@ -1,0 +1,26 @@
+name: account-review
+fields:
+  # Evaluated once per member: every rule below is written from one account's point of view.
+  accounts:
+    type: collection
+    fields:
+      id:
+        type: text
+      registeredAt:
+        type: date
+      balance:
+        type: decimal
+      invoices:
+        type: collection
+        fields:
+          customerId:
+            type: text
+            normalizers: [trim, lowercase]
+          amount:
+            type: decimal
+  # Document-wide, read by scoped rules through the fallback.
+  priorityCustomerIds:
+    type: string_set
+    normalizers: [trim, lowercase]
+  reviewDate:
+    type: date

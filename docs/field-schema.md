@@ -174,8 +174,8 @@ operators listed for that type can be ticked.
 
 > Symbolic operators `>`, `>=`, `<`, `<=` can be used in rules instead of the word forms.
 > For equality, prefer the word form `equals`: `==` is routed to the value-expression engine, which
-> skips the field's declared operator list and does not apply normalizers to the literal. See
-> [Rules](./rules.md#named-operators-vs-symbolic-operators).
+> skips the field's declared operator list. Both forms apply the field's normalizers to the literal.
+> See [Rules](./rules.md#named-operators-vs-symbolic-operators).
 
 ### String Set Field Operators
 

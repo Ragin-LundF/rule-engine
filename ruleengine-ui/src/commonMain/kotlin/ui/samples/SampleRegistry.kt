@@ -31,6 +31,25 @@ object SampleRegistry {
             ),
         ),
         SampleDescriptor(
+            id = "subscription-billing",
+            name = "Subscription Billing (per account)",
+            description = "One rule set evaluated once per account: membership filters over a " +
+                "priority list, a slice of recent logins, a keyed join across months, date " +
+                "arithmetic, an absolute drift and a collection-wide sanity check.",
+            category = SampleCategory.FINANCE,
+            manifestResPath = "files/samples/subscription-billing/manifest.yaml",
+            schemaResPath = "files/samples/subscription-billing/schema.yaml",
+            actionsResPath = "files/samples/subscription-billing/actions.yaml",
+            ruleResPaths = listOf(
+                "files/samples/subscription-billing/rules/priority-exposure.rule",
+                "files/samples/subscription-billing/rules/recent-failures.rule",
+                "files/samples/subscription-billing/rules/net-position.rule",
+                "files/samples/subscription-billing/rules/tenure-check.rule",
+                "files/samples/subscription-billing/rules/balance-drift.rule",
+                "files/samples/subscription-billing/rules/line-item-sanity.rule",
+            ),
+        ),
+        SampleDescriptor(
             id = "kyc-onboarding",
             name = "KYC Onboarding (Germany)",
             description = "Customer due diligence on a German business customer under the GwG: two " +

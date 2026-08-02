@@ -1,5 +1,7 @@
 package ruleengine.evaluator.compiled.value.result
 
+import java.time.LocalDate
+
 /**
  * Converts an [ExpressionValue] back to a plain Kotlin value for consumers outside the evaluator —
  * action arguments and `EvaluationResult.variables` — and compares two of them by value.
@@ -15,7 +17,13 @@ object ExpressionValues {
             is TextExpressionValue -> value.value
             is BooleanExpressionValue -> value.value
             is ArrayExpressionValue -> value.values.map { element -> unwrap(value = element) }
-            MissingExpressionValue, ObjectExpressionValue -> null
+            // ISO-8601 text rather than a `LocalDate`, so a date read into a variable or an action
+            // argument serialises the same way it did before dates reached the value path at all.
+            is DateExpressionValue -> value.value.toString()
+            // A structure stays `null` even though it now carries its element. Handing the map out
+            // here would change the shape of `EvaluationResult.variables` and of every action
+            // argument built from `set x = customer`, which consumers already read as null.
+            is ObjectExpressionValue, MissingExpressionValue -> null
         }
     }
 
@@ -36,7 +44,30 @@ object ExpressionValues {
 
             left is TextExpressionValue && right is TextExpressionValue -> left.value == right.value
             left is BooleanExpressionValue && right is BooleanExpressionValue -> left.value == right.value
+            // Placed after the text pair, so two strings still compare as text. A date matched
+            // against text only reaches here when one side really is a date, and then the ISO
+            // reading is the only one that could have been meant.
+            left is DateExpressionValue || right is DateExpressionValue -> {
+                val leftDate = asDate(value = left)
+                leftDate != null && leftDate == asDate(value = right)
+            }
+
             else -> false
+        }
+    }
+
+    /**
+     * [value] read as a calendar date, or null when it is not one.
+     *
+     * Text is accepted in ISO-8601 only. A collection member carries no [ruleengine.core.domain.dto.
+     * field.FieldDefinition], so a date inside one arrives as the string the input held and there is
+     * no declared `format` to read it with — ISO is the one spelling that needs no declaration.
+     */
+    fun asDate(value: ExpressionValue): LocalDate? {
+        return when (value) {
+            is DateExpressionValue -> value.value
+            is TextExpressionValue -> runCatching { LocalDate.parse(value.value) }.getOrNull()
+            else -> null
         }
     }
 

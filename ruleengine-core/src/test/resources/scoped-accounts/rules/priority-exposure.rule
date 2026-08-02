@@ -1,0 +1,7 @@
+rule "priority-exposure" {
+  description "Flags an account whose priority customers owe more than 10000."
+  when
+    sum(invoices[customerId in priorityCustomerIds].amount) > 10000
+  then
+    flag "priority-exposure"
+}

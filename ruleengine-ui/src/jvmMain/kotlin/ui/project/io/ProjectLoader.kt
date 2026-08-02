@@ -55,6 +55,7 @@ class ProjectLoader(private val dirtyState: ProjectDirtyState) {
                     schemaLink = entry.schema,
                     actionsLink = entry.actions,
                     ruleFiles = entry.rules,
+                    scope = entry.scope,
                 )
             }
             .ifEmpty { listOf(ProjectEntry(id = ProjectSession.DEFAULT_ENTRY_ID)) }
