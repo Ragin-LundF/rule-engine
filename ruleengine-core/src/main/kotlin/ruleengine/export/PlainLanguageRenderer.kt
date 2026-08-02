@@ -181,6 +181,7 @@ object PlainLanguageRenderer {
             ComparisonOperatorAst.GTE -> "is at least"
             ComparisonOperatorAst.LT -> "is less than"
             ComparisonOperatorAst.LTE -> "is at most"
+            ComparisonOperatorAst.CONTAINS -> "includes"
         }
     }
 

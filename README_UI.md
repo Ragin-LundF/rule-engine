@@ -30,17 +30,52 @@ Build everything:
 
 ---
 
+## What it looks like
+
+The sample gallery — every bundled project, loadable without touching the file system:
+
+![Sample gallery](docs/assets/ui/sample-gallery.png)
+
+The rule builder, with the `financial-transactions` sample open: rule tree on the left, the selected
+rule's WHEN conditions on the right.
+
+![Rule builder](docs/assets/ui/rule-builder.png)
+
+The same rules in the code view — plain `.rule` text, syntax highlighted. The whole editor comes in a
+dark and a light palette, switched with the ☀ / ☾ button in the top bar:
+
+![Code view, dark mode](docs/assets/ui/code-view.png)
+
+![Code view, light mode](docs/assets/ui/code-view-light.png)
+
+The **rule trees** diagram, one condition tree per rule:
+
+![Rule trees diagram](docs/assets/ui/diagram-rule-trees.png)
+
+The **manifest run** diagram — the whole entry on one spine, in evaluation order:
+
+![Manifest run diagram](docs/assets/ui/diagram-manifest-run.png)
+
+These are rendered off-screen from the real app by `DocScreenshotsTest`, which is skipped unless asked
+for:
+
+```bash
+./gradlew :ruleengine-ui:jvmTest -PdocScreenshots=true --tests '*DocScreenshotsTest*'
+```
+
+---
+
 ## What the editor gives you
 
 | Area | What you can do |
 |---|---|
-| **Sample gallery** | Open a ready-made project (financial transactions, log filter, product recommendation, access control) without touching the file system |
+| **Sample gallery** | Open a ready-made project — financial transactions, KYC onboarding, loan decisioning, log filter, product recommendation, access control, warehouse shipments — without touching the file system. Each carries its own manifest, so the diagram views work straight away |
 | **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
-| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands. The THEN block holds action rows and `set` rows |
+| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands. The THEN block holds action rows and `set` rows, and an optional ELSE block holds the same for a false condition |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
 | **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
-| **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched or not — whose condition trace expands on click |
+| **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched, else, partial, no match, or not evaluated — whose condition trace expands on click |
 
 ### Advanced conditions in the builder
 
@@ -69,8 +104,37 @@ The code view offers the same names through autocompletion, plus the `set` keywo
 The rule inspector lists what the selected rule publishes, and the test panel shows the value each
 variable actually took for the input you ran.
 
-Only `then`-block `extract` clauses are still code-only; a rule using one opens read-only in the
-builder with an explanation.
+Only `extract` clauses are still code-only; a rule using one — in either branch — opens read-only in
+the builder with an explanation.
+
+### The else branch in the builder
+
+A rule can say what to produce when its condition is false. **+ Else branch** under the THEN card adds
+the block and its first action; from then on the ELSE card behaves exactly like THEN, with its own
+**+ Action** and **+ Variable** buttons and the same row editors.
+
+Removing the last row from the ELSE card drops the branch and the button comes back. That is deliberate
+rather than a separate toggle: an empty `else` does not parse, so "the block exists" and "the block has
+something in it" are the same state in the DSL, and the builder keeps them the same state too.
+
+The test panel reports an else result as its own **else** status, in its own filter and count — never as
+"matched", because the rule's condition was false. The rule inspector shows an *Else actions* row for a
+rule that has one, and the table view prefixes the else outputs with `else` so they do not read as
+outputs the rule produces at the same time as its THEN ones.
+
+### Ending the run in the builder
+
+A branch can end the run with `stop`: the rules after it are not evaluated at all. **+ Stop** on a branch
+card adds it, and it then shows as a removable badge at the end of that branch — never as an editable row,
+because there is nothing about a `stop` to edit.
+
+The badge is always last, and stays last: the builder holds it as a flag on the branch rather than as an
+entry in the action list, so adding more actions or variables afterwards cannot push output below it. The
+generated DSL always writes `stop` as the block's final statement, which is what the parser requires.
+**+ Stop** disappears while a branch already has one.
+
+The test panel shows the consequence directly: rules after the halt are reported as **not evaluated**
+rather than as *no match* — the run never tested them.
 
 ---
 

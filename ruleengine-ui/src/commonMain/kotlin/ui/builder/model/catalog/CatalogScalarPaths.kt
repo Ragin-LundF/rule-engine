@@ -18,6 +18,10 @@ private const val OBJECT_TYPE: String = "object"
  *
  * A schema that declares flat dotted keys is unaffected: without nesting the ids pass through
  * unchanged.
+ *
+ * Rule output variables are included. They are scalars as far as a condition row is concerned, and
+ * [OperatorOptions.forCatalogField] is what keeps the row to operator spellings the parser routes
+ * through the expression path — a named operator would report `${'$'}name` as an unknown field.
  */
 fun List<CatalogFieldInfo>.scalarPaths(): List<CatalogFieldInfo> {
     return buildList {
@@ -39,10 +43,6 @@ private fun collectScalarPaths(
             // A collection's members are multi-valued once projected, which only an aggregate or a
             // filtered comparison row can handle — never a plain condition.
             OperatorOptions.isStructureType(fieldType = field.type) -> Unit
-
-            // A rule output variable is only legal in a symbolic comparison: the parser routes a
-            // named-operator condition down the legacy path, which reads `$total` as a field name.
-            field.id.startsWith(prefix = "$") -> Unit
 
             else -> target += field.copy(id = path)
         }

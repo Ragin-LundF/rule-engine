@@ -115,11 +115,11 @@ its size — see [Value Expressions § 10](./expressions.md#10-performance-notes
 on a field costs the same whether one rule reads it or twenty. See
 [Field Schema](./field-schema.md).
 
-**`shortCircuitByOutput` stops evaluating an output group once it is settled.** It helps when many
-rules produce the same output and you do not depend on match order. It cannot be combined with `set`
-variables — the build rejects that, because grouping by output reorders rules and a variable only
-reaches the rules declared after it. See
-[Integration Guide § 4.7](./integration-guide.md#output-based-short-circuit-optional-performance-optimisation).
+**`stop` ends the run, and everything after it costs nothing.** A rule whose branch ends in `stop`
+suppresses every rule declared after it for that record — not as an optimisation the engine guesses at,
+but because the author said so. Put the cheap, decisive guards first (a sanctioned country, a missing
+mandatory field) and the expensive rules behind them, and the expensive ones never run on the records
+that were already settled. See [Rules § The `else` Branch](./rules.md#the-else-branch).
 
 ---
 

@@ -30,11 +30,15 @@ data class RuleCatalog(
      *
      * Ordered by action, then by first appearance within that action, so every output of one kind
      * stays together while the rules underneath keep their evaluation order.
+     *
+     * Both branches count. An outcome a rule only produces in its `else` block is one the rule set can
+     * still decide, and leaving it out would make the summary claim less than the rules do. A rule that
+     * produces the same outcome in both branches is listed once.
      */
     fun rulesByOutcome(): Map<CatalogOutcome, List<CatalogRule>> {
         val grouped = linkedMapOf<CatalogOutcome, MutableList<CatalogRule>>()
         rules.forEach { rule ->
-            rule.outcomes.forEach { outcome ->
+            (rule.outcomes + rule.elseOutcomes).distinct().forEach { outcome ->
                 grouped.getOrPut(key = outcome) { mutableListOf() }.add(element = rule)
             }
         }

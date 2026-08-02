@@ -8,17 +8,25 @@
 #   - gt / lt / gte / lte
 #   - not operator
 #   - nested bracket groups
+#   - else (one condition, both outcomes)
 #
 # Schema: full-schema.yaml
 
 # ── IBAN format validation (regex) ──────────────────────────────────────────
 
-rule "non-dach-iban" {
-  description "The counterparty IBAN is issued outside the DACH region (DE, AT, CH)."
+# Written with an `else` rather than as `not iban regex …`: the region test appears once, in its positive
+# form, and both outcomes hang off it. The negated single-branch version left the domestic case unstated,
+# so nothing recorded that a counterparty *had* been checked and found local.
+
+rule "counterparty-region" {
+  description "A counterparty IBAN from outside the DACH region is flagged; a DACH one is recorded as domestic."
   when
-    not iban regex "^(DE|AT|CH)"
+    iban regex "^(DE|AT|CH)"
 
   then
+    label "domestic-counterparty"
+
+  else
     flag "foreign-iban"
     alert "non-dach-counterparty"
 }

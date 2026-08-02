@@ -1,0 +1,85 @@
+# 4. Identifying the people (§ 11 GwG for the representative, § 3 GwG for the beneficial owners).
+#
+# Same shape as company-identification.rule and the same reason for it: these are things the customer can
+# still do, so every one of them reports independently and none of them stops.
+#
+# Two of the checks aggregate over a collection rather than testing a flag, because the requirement is
+# about *every* person in a list, not about one field:
+#
+#   count(beneficialOwners[ownershipPercent > 25][identityVerified == false])
+#
+# The filters chain because a filter holds a single comparison — no `and` inside the brackets — so
+# "above the threshold" and "not yet verified" are applied one after the other. The 25 % threshold lives
+# here rather than in the input: the portal sends every declared holder and the rule decides who counts,
+# so a caller cannot pre-filter the list and quietly drop someone.
+#
+# Schema: schema.yaml
+
+rule "representative-identified" {
+  description "An authorised representative has completed an accepted identification procedure."
+  when
+    representativeIdentification in ["video-ident", "eid", "post-ident"]
+
+  then
+    satisfied "representative-identified"
+
+  else
+    message "Please have an authorised representative complete the identity check. You can use VideoIdent, the eID function of a German ID card, or PostIdent at a branch."
+    requirement "representative-identified"
+}
+
+# A power of attorney is only needed when the person acting is not an authorised representative, so the
+# "not required" case belongs on the satisfied side — the same trap as the register number.
+
+rule "power-of-attorney" {
+  description "Where someone acts for the company without being an authorised representative, a written power of attorney is on file."
+  when
+    powerOfAttorneyRequired equals false
+    or providedDocuments containsAny ["power-of-attorney"]
+
+  then
+    satisfied "power-of-attorney"
+
+  else
+    message "The person handling this application is not listed as an authorised representative. Please upload a signed power of attorney (Vollmacht)."
+    requirement "power-of-attorney"
+}
+
+rule "beneficial-owners-declared" {
+  description "At least one beneficial owner above the 25 percent threshold has been declared."
+  when
+    count(beneficialOwners[ownershipPercent > 25]) > 0
+
+  then
+    satisfied "beneficial-owners-declared"
+
+  else
+    message "Please tell us who owns the company: every natural person holding more than 25% of the capital or voting rights counts as a beneficial owner."
+    requirement "beneficial-owners-declared"
+}
+
+rule "beneficial-owners-identified" {
+  description "Every declared beneficial owner above the threshold has had their identity verified."
+  when
+    count(beneficialOwners[ownershipPercent > 25][identityVerified == false]) == 0
+
+  then
+    satisfied "beneficial-owners-identified"
+
+  else
+    message "One or more of your beneficial owners still needs to complete the identity check. Everyone holding more than 25% has to be identified."
+    requirement "beneficial-owners-identified"
+}
+
+rule "transparency-register-checked" {
+  description "The Transparenzregister has been queried for this company, which is what the declared ownership is verified against."
+  when
+    transparencyRegisterChecked equals true
+
+  then
+    satisfied "transparency-register-checked"
+
+  else
+    message "We could not find your company in the German transparency register (Transparenzregister). Please make sure your beneficial owners are registered there."
+    requirement "transparency-register-checked"
+}

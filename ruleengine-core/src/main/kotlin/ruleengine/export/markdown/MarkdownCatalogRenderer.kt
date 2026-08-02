@@ -1,6 +1,7 @@
 package ruleengine.export.markdown
 
 import ruleengine.export.CatalogText
+import ruleengine.export.dto.CatalogOutcome
 import ruleengine.export.dto.CatalogRule
 import ruleengine.export.dto.CatalogRuleFile
 import ruleengine.export.dto.RuleCatalog
@@ -46,19 +47,41 @@ object MarkdownCatalogRenderer {
 
         // Stated once, at the top: without it a reader assumes the first matching rule wins, which is
         // how most rule engines they have met behave, and every "but then why does rule 7 fire too?"
-        // question follows from that assumption.
+        // question follows from that assumption. The order sentence is not decoration either — it is
+        // what makes the `set` and `stop` notes below mean anything.
         out.append(
-            "Rules are independent. Every rule is checked against every record, and each one that " +
-                "matches contributes its own outcome — a later rule never overrides an earlier one.\n\n"
+            "Every rule is checked against every record, and each one that matches contributes its own " +
+                "outcome — a later rule never overrides an earlier one. Rules are evaluated **in the " +
+                "order they are listed below**, which is the order the engine uses: rule-file order, " +
+                "then the order the rules appear inside each file.\n\n"
         )
+
+        // Same reasoning as the variables note below: state the caveat only for a rule set it applies to.
+        if (catalog.rules.any { rule -> rule.elseOutcomes.isNotEmpty() }) {
+            out.append(
+                "Some rules also say what happens when they do *not* match. Those rules contribute an " +
+                    "outcome either way — the one listed under \"Then\" when the rule matches, the one " +
+                    "under \"Otherwise\" when it does not.\n\n"
+            )
+        }
 
         // Only when the rule set actually uses them: a reader of a rule set without variables should
         // not have to hold a caveat that never applies to what they are reading.
-        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() }) {
+        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() }) {
             out.append(
                 "Some rules publish a named value that the rules after them read. Those rules are " +
                     "order-dependent: the value only reaches a rule listed later, and only if the " +
                     "rule that publishes it matched.\n\n"
+            )
+        }
+
+        // Placed last of the three notes because it is the strongest claim on the reader: it changes
+        // whether the rules further down apply at all.
+        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse }) {
+            out.append(
+                "Some rules **end the run**. Where a rule says so, the rules listed after it are not " +
+                    "evaluated at all for that record — so a rule further down does not apply, whether " +
+                    "or not it would have matched.\n\n"
             )
         }
 
@@ -93,12 +116,29 @@ object MarkdownCatalogRenderer {
         return rule.description ?: CatalogText.flatten(condition = rule.condition)
     }
 
+    /**
+     * The index cell for a rule's outputs.
+     *
+     * An `else` outcome is prefixed rather than listed as a peer: in one glance cell, `label:low` next
+     * to `label:high` would read as two outcomes the rule produces together instead of one or the other.
+     */
     private fun outcomeSummary(rule: CatalogRule): String {
-        if (rule.outcomes.isEmpty()) {
+        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty()) {
             return "—"
         }
 
-        return rule.outcomes.joinToString(separator = ", ") { outcome -> "`${CatalogText.label(outcome = outcome)}`" }
+        val then = rule.outcomes.joinToString(separator = ", ") { outcome ->
+            "`${CatalogText.label(outcome = outcome)}`"
+        }
+        if (rule.elseOutcomes.isEmpty()) {
+            return then
+        }
+
+        val otherwise = rule.elseOutcomes.joinToString(separator = ", ") { outcome ->
+            "`${CatalogText.label(outcome = outcome)}`"
+        }
+        return listOf(then, "otherwise $otherwise").filter { part -> part.isNotEmpty() }
+            .joinToString(separator = "; ")
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────
@@ -156,19 +196,55 @@ object MarkdownCatalogRenderer {
         }
         out.append("\n")
 
-        if (rule.publishes.isNotEmpty()) {
-            val names = rule.publishes.joinToString(separator = ", ") { name -> "`$name`" }
-            out.append("**Publishes for later rules:** ").append(names).append("\n\n")
-        }
-
-        if (rule.outcomes.isNotEmpty()) {
-            val outcomes = rule.outcomes.joinToString(separator = ", ") { outcome ->
-                "`${CatalogText.label(outcome = outcome)}`"
-            }
-            out.append("**Then:** ").append(outcomes).append("\n\n")
-        }
+        appendBranch(
+            out = out,
+            label = "Then",
+            publishesLabel = "Publishes for later rules",
+            outcomes = rule.outcomes,
+            publishes = rule.publishes,
+            stops = rule.stopsOnThen,
+        )
+        // Written only when the rule declares an `else` block, so a reader is never told what happens
+        // "otherwise" for a rule where the answer is nothing.
+        appendBranch(
+            out = out,
+            label = "Otherwise",
+            publishesLabel = "Publishes for later rules otherwise",
+            outcomes = rule.elseOutcomes,
+            publishes = rule.elsePublishes,
+            stops = rule.stopsOnElse,
+        )
 
         out.append("In the rule language: `").append(rule.technicalCondition).append("`\n\n")
+    }
+
+    @Suppress("LongParameterList")
+    private fun appendBranch(
+        out: StringBuilder,
+        label: String,
+        publishesLabel: String,
+        outcomes: List<CatalogOutcome>,
+        publishes: List<String>,
+        stops: Boolean,
+    ) {
+        if (publishes.isNotEmpty()) {
+            val names = publishes.joinToString(separator = ", ") { name -> "`$name`" }
+            out.append("**").append(publishesLabel).append(":** ").append(names).append("\n\n")
+        }
+
+        if (outcomes.isNotEmpty()) {
+            val text = outcomes.joinToString(separator = ", ") { outcome ->
+                "`${CatalogText.label(outcome = outcome)}`"
+            }
+            out.append("**").append(label).append(":** ").append(text).append("\n\n")
+        }
+
+        // Stated per branch, because a rule can halt on one verdict and carry on with the other. A
+        // reader who misses this reads every rule below as still applying.
+        if (stops) {
+            out.append("**Stops here").append(if (label == "Then") "" else " (otherwise)")
+                .append(":** no rule listed after this one is evaluated.\n\n")
+        }
     }
 
     // ── shared formatting ─────────────────────────────────────────────────────

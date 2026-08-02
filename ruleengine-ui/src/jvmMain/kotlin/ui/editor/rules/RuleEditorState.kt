@@ -59,17 +59,41 @@ class RuleEditorState(
     val parsedManifest: MutableState<ProjectManifest?> = mutableStateOf(value = null)
     val selectedManifestEntry: MutableState<String?> = mutableStateOf(value = null)
     val selectedManifestRuleFile: MutableState<String?> = mutableStateOf(value = null)
+    /**
+     * True while the buffer holds the whole entry rather than one of its files.
+     *
+     * The text itself is in [ruleValue] either way — there is one buffer, and this says what it
+     * currently contains. Rule saving is skipped while it is set, because several files joined cannot
+     * be written back to one.
+     */
     val showAllRules: MutableState<Boolean> = mutableStateOf(value = false)
-    val allRulesText: MutableState<String> = mutableStateOf(value = "")
 
     /**
      * The current entry's rule files parsed one by one, keeping the file each rule came from.
      *
-     * [allRulesText] cannot answer that: it is the files joined together, and the join is exactly
-     * where the provenance is lost. The manifest run diagram needs it to label the file bands that
-     * show grouping into files is an organisation choice and not a runtime boundary.
+     * The joined buffer cannot answer that: the join is exactly where the provenance is lost. The
+     * manifest run diagram needs it to label the file bands that show grouping into files is an
+     * organisation choice and not a runtime boundary.
      */
     val entryRuleSources: MutableState<List<RuleSource>> = mutableStateOf(value = emptyList())
+
+    /**
+     * The entry's rule files as they currently stand, keyed by the manifest-relative path.
+     *
+     * This is the working copy, and every reader below prefers it. Disk is read **once**, by the
+     * explicit load that fills this map; navigating between files, switching to All files and every
+     * diagram then work from here. Re-reading a file on navigation is what used to hand back the text
+     * on disk and silently discard whatever the Builder had changed since.
+     *
+     * A bundled sample populates it directly — it arrives as Compose resources and has no
+     * [manifestBaseDir] to read from — which is now the same arrangement a project uses rather than a
+     * second code path.
+     *
+     * Emptied by [reset], so opening or creating a project is the one action that goes back to disk.
+     * An entry switch keeps it: the map is keyed by path across the whole project, and a file edited in
+     * one entry is still the working copy when that entry comes back.
+     */
+    val inMemoryRuleFiles: MutableState<Map<String, String>> = mutableStateOf(value = emptyMap())
 
     // Diagnostics
     val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
@@ -87,8 +111,14 @@ class RuleEditorState(
      */
     val diagnosticsExpanded: MutableState<Boolean> = mutableStateOf(value = false)
 
-    /** Whether the right inspector/simulate panel is expanded to its full width or collapsed to a strip. */
-    val rightPanelExpanded: MutableState<Boolean> = mutableStateOf(value = true)
+    /**
+     * Whether the right inspector/simulate panel is expanded to its full width or collapsed to a strip.
+     *
+     * Starts collapsed. Expanded, it and the rule tree together leave the center panel too little
+     * width for the Builder's rows, whose dropdowns and value boxes then overlap; the strip is one
+     * click from opening, and the layout it opens into is one the user chose.
+     */
+    val rightPanelExpanded: MutableState<Boolean> = mutableStateOf(value = false)
 
     /** Whether the Builder rule tree is expanded; collapsing it hands its width to the rule editor. */
     val ruleTreeExpanded: MutableState<Boolean> = mutableStateOf(value = true)
@@ -143,6 +173,9 @@ class RuleEditorState(
         manifestBaseDir.value = null
         parsedManifest.value = null
         selectedManifestEntry.value = null
+        // Belongs to the manifest, not to an entry: a project opened after a sample must read from disk
+        // again rather than keep finding the sample's files by the same relative paths.
+        inMemoryRuleFiles.value = emptyMap()
     }
 
     /**
@@ -163,7 +196,6 @@ class RuleEditorState(
         parsedActionSchema.value = null
 
         ruleValue.value = TextFieldValue(text = "")
-        allRulesText.value = ""
         showAllRules.value = false
         entryRuleSources.value = emptyList()
         selectedManifestRuleFile.value = null
@@ -190,13 +222,11 @@ class RuleEditorState(
     }
 
     /**
-     * Load all rule files for the current manifest entry and expose them via [allRulesText] and
-     * [entryRuleSources].
+     * Load all rule files for the current manifest entry into [ruleValue] and [entryRuleSources].
      *
      * Both come out of the same read so they can never disagree about which files were loaded: the
-     * concatenated text is what the code editor and the tester consume, while the per-file parse is
-     * what the manifest run diagram needs, since joining the files first would lose which file a rule
-     * was written in.
+     * joined text is what every view consumes, while the per-file parse is what the manifest run
+     * diagram needs, since joining the files first would lose which file a rule was written in.
      */
     fun loadAllRuleFilesForCurrentEntry() {
         loadRuleFiles(relativePaths = currentEntryRulePaths())
@@ -210,8 +240,21 @@ class RuleEditorState(
      * with the entry being switched to.
      */
     fun loadRuleFiles(relativePaths: List<String>) {
+        // Already showing the whole entry: the buffer holds it, and re-reading the files would drop
+        // whatever has been edited since. The joined buffer cannot be attributed back to the files it
+        // came from, so there is nothing to stash and nothing to gain by reloading.
+        if (showAllRules.value && ruleValue.value.text.isNotBlank() && relativePaths == currentEntryRulePaths()) {
+            return
+        }
+        stashOpenBufferInMemory()
         val loaded = readRuleFiles(relativePaths = relativePaths)
-        allRulesText.value = loaded.joinToString(separator = "\n\n") { (_, content) -> content }
+        // Fills the working copy on the way through, so this is the last time disk is read until the
+        // user explicitly loads again.
+        inMemoryRuleFiles.value = loaded.toMap()
+        // Into the one buffer every view reads. The Builder writes there, the code editor shows it and
+        // the tester runs it; a second copy of the same text is what let the Builder's edits and the
+        // other views disagree about what the entry says.
+        ruleValue.value = TextFieldValue(text = loaded.joinToString(separator = "\n\n") { (_, c) -> c })
         entryRuleSources.value = parseRuleSources(loaded = loaded)
         showAllRules.value = true
     }
@@ -232,6 +275,39 @@ class RuleEditorState(
         return parseRuleSources(loaded = readRuleFiles(relativePaths = currentEntryRulePaths()))
     }
 
+    /**
+     * The same, with the open buffer's text in place of the file it was loaded from.
+     *
+     * [parsedRuleFilesForCurrentEntry] deliberately reads only what is saved, which is right for an
+     * export and wrong for anything that has to keep up with typing. The Builder's operand picker is
+     * the case in point: a variable must be offered as soon as its `set` or `add` row exists, which is
+     * long before the file reaches disk — otherwise the row that declares `$topics` and the row that
+     * reads it can never both be on screen.
+     *
+     * What the buffer *represents* depends on how the entry was opened, and this follows it either
+     * way — the rule being: read the same text the Builder parses.
+     *
+     * A project opens one file at a time ([selectedManifestRuleFile] set), so the buffer replaces that
+     * file and the rest of the entry still contributes. A sample opens with every file concatenated
+     * and no file selected, so the buffer *is* the entry and stands alone. Reading the per-file list
+     * in that second case is what used to hide a variable until the sample was saved to disk — which
+     * for a sample never happens.
+     */
+    fun parsedRuleFilesForCurrentEntryWithOpenBuffer(): List<RuleSource> {
+        val openPath = selectedManifestRuleFile.value
+            ?: return parseRuleSources(loaded = listOf(WHOLE_ENTRY_BUFFER to ruleValue.value.text))
+
+        val paths = currentEntryRulePaths()
+        return parseRuleSources(
+            loaded = withOpenBuffer(
+                paths = paths,
+                saved = readRuleFiles(relativePaths = paths).toMap(),
+                openPath = openPath,
+                bufferText = ruleValue.value.text,
+            )
+        )
+    }
+
     /** True when the open rule file differs from what is on disk. */
     fun currentRuleFileHasUnsavedChanges(): Boolean {
         val relativePath = selectedManifestRuleFile.value ?: return false
@@ -247,19 +323,62 @@ class RuleEditorState(
         return parsedManifest.value?.entries?.find { it.id == selectedManifestEntry.value }?.rules.orEmpty()
     }
 
-    private fun readRuleFiles(relativePaths: List<String>): List<Pair<String, String>> {
-        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
-            ?: return emptyList()
+    /**
+     * Writes the open buffer back into [inMemoryRuleFiles] before something replaces it.
+     *
+     * The map is the working copy, so it has to keep up with the buffer: a file switch reads from it,
+     * and without this it would hand back the text as of the last explicit load and silently drop
+     * everything edited since. Saving is what writes through to disk; this only keeps the session
+     * consistent with itself.
+     *
+     * Only when a single file is open. In "All files" the buffer is the whole entry concatenated, and
+     * there is no way to attribute it back to the files it came from.
+     */
+    private fun stashOpenBufferInMemory() {
+        if (showAllRules.value || inMemoryRuleFiles.value.isEmpty()) {
+            return
+        }
+        val relativePath = selectedManifestRuleFile.value ?: return
+        if (relativePath !in inMemoryRuleFiles.value) {
+            return
+        }
+        inMemoryRuleFiles.value = inMemoryRuleFiles.value + (relativePath to ruleValue.value.text)
+    }
 
+    /**
+     * The working copy when there is one, and disk otherwise.
+     *
+     * The disk branch is reached only before the first [loadRuleFiles] of an entry — after that the
+     * map is authoritative, which is what keeps an unsaved edit from being read back over.
+     */
+    private fun readRuleFiles(relativePaths: List<String>): List<Pair<String, String>> {
+        val inMemory = inMemoryRuleFiles.value
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
+
+        // Per path, not all-or-nothing: the working copy holds the entry that was open, and switching
+        // to another entry asks for paths it has never seen. Falling back for each one keeps an edited
+        // file in the buffer while a file from a different entry is still read.
         return relativePaths.mapNotNull { relativePath ->
-            runCatching {
-                val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
-                relativePath to Files.readString(path)
-            }.getOrNull()
+            val content = inMemory[relativePath]
+                ?: base?.let { dir -> readRuleFileFromDisk(base = dir, relativePath = relativePath) }
+            content?.let { text -> relativePath to text }
         }
     }
 
-    private fun parseRuleSources(loaded: List<Pair<String, String>>): List<RuleSource> {
+    private fun readRuleFileFromDisk(base: Path, relativePath: String): String? {
+        return runCatching {
+            Files.readString(resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule"))
+        }.getOrNull()
+    }
+
+    /**
+     * Parses `(relativePath, content)` pairs into the per-file model the manifest run diagram reads.
+     *
+     * Not private, because a sample arrives as resource text rather than as files on disk: it has the
+     * same file grouping and needs the same diagram, so it goes through this rather than through a
+     * second parse that could disagree with it.
+     */
+    fun parseRuleSources(loaded: List<Pair<String, String>>): List<RuleSource> {
         return loaded.map { (relativePath, content) ->
             RuleSource(
                 relativePath = relativePath,
@@ -272,7 +391,21 @@ class RuleEditorState(
 
     /** Load a single rule file from the current manifest entry into the editor. */
     fun loadSingleManifestRuleFile(relativePath: String) {
+        stashOpenBufferInMemory()
         showAllRules.value = false
+
+        // The sample case: the file is already in memory, so there is nothing to read and no base
+        // directory to need. Checked first, because a sample has no base directory at all and would
+        // otherwise fail below with a message about a directory the user never chose.
+        inMemoryRuleFiles.value[relativePath]?.let { content ->
+            ruleValue.value = TextFieldValue(text = content)
+            selectedManifestRuleFile.value = relativePath
+            diagnosticsText.value = ""
+            diagnosticsList.value = emptyList()
+            setStatus(msg = "Loaded ${relativePath.substringAfterLast(delimiter = '/')}", kind = StatusKind.SUCCESS)
+            return
+        }
+
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
             reportManifestPathIssue(message = "Manifest base directory is not set")
             return
@@ -311,5 +444,34 @@ class RuleEditorState(
         diagnosticsText.value = message
         diagnosticsList.value = emptyList()
         setStatus(msg = message, kind = StatusKind.ERROR)
+    }
+}
+
+/**
+ * Stands in for a file name when the buffer holds the whole entry rather than one of its files.
+ *
+ * Only ever used as a [RuleSource] label; nothing resolves it as a path.
+ */
+internal const val WHOLE_ENTRY_BUFFER: String = "<entry>"
+
+/**
+ * The entry's `(relativePath, content)` pairs with [bufferText] standing in for [openPath].
+ *
+ * Kept as a free function so it can be tested without a manifest, a base directory or a file on
+ * disk. Order follows [paths], which is the manifest's — load-bearing, because a `set` publishes only
+ * to the rules after it and an `add` only from its own rule onward.
+ *
+ * A path with no saved content is dropped unless it is the open one, so a rule file created but not
+ * yet written still contributes the variables its buffer declares.
+ */
+internal fun withOpenBuffer(
+    paths: List<String>,
+    saved: Map<String, String>,
+    openPath: String?,
+    bufferText: String,
+): List<Pair<String, String>> {
+    return paths.mapNotNull { path ->
+        val content = if (path == openPath) bufferText else saved[path]
+        content?.let { text -> path to text }
     }
 }

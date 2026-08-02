@@ -41,14 +41,20 @@ fun ConditionRowEditor(
     // top-level fields: without this a nested schema resolves nothing and every row is marked unknown.
     val fieldOptions = remember(fields) { fields.scalarPaths() }
     val fieldInfo = fieldOptions.firstOrNull { it.id == condition.field }
-    val operators = OperatorOptions.forField(
+    val operators = OperatorOptions.forCatalogField(
+        fieldId = condition.field,
         fieldType = fieldInfo?.type ?: "text",
         schemaOperators = fieldInfo?.operators ?: emptyList(),
     )
-    // Only text-ish comparisons can be case-insensitive; the engine ignores the flag elsewhere.
-    val supportsIgnoreCase = fieldInfo == null ||
-        fieldInfo.type.lowercase() == "text" ||
-        fieldInfo.type.lowercase() == "string_set"
+    // Only text-ish comparisons can be case-insensitive; the engine ignores the flag elsewhere. A
+    // variable never qualifies: the expression path has no case-insensitive mode, and `ignoreCase`
+    // after such a comparison does not parse.
+    val supportsIgnoreCase = !OperatorOptions.isVariableId(fieldId = condition.field) &&
+        (
+            fieldInfo == null ||
+                fieldInfo.type.lowercase() == "text" ||
+                fieldInfo.type.lowercase() == "string_set"
+            )
 
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -116,7 +122,8 @@ private fun ConditionControls(
             fields = fieldOptions,
             onFieldSelected = { selectedField ->
                 condition.field = selectedField.id
-                val newOperators = OperatorOptions.forField(
+                val newOperators = OperatorOptions.forCatalogField(
+                    fieldId = selectedField.id,
                     fieldType = selectedField.type,
                     schemaOperators = selectedField.operators,
                 )

@@ -1,3 +1,21 @@
+# Severity-based routing. The suppression rule sits first and ends the run.
+#
+# "Discarded" has to mean discarded. The rules in slow-request.rule key off `responseTime` and never look
+# at `level`, so without the `stop` a suppressed DEBUG entry could still be tagged "performance-critical"
+# and page the SRE team — the entry would be both dropped and escalated. Stopping here is what makes the
+# suppression final, and it only works because this file is listed first in manifest.yaml.
+
+rule "noisy-debug-suppression" {
+  description "Debug and trace entries are discarded in production and staging, and nothing further is assessed."
+  when
+    level in ["DEBUG", "TRACE"]
+    and environment in ["production", "staging"]
+
+  then
+    suppress
+    stop
+}
+
 rule "critical-error" {
   description "A critical or fatal log entry that pages the on-call engineer."
   when

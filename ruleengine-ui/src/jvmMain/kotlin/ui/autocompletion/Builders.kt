@@ -33,10 +33,20 @@ public fun buildContextualCompletions(
             context = context,
             schema = schema
         ) + buildVariableCompletions(variableNames = variableNames)
+        // Both branches take the same clauses, so both get the same completions — except that only a
+        // `then` block can be followed by an `else`.
         DslSection.THEN -> buildThenCompletions(
             context = context,
             actionSchema = actionSchema,
             variableNames = variableNames,
+            offerElseKeyword = true,
+        )
+
+        DslSection.ELSE -> buildThenCompletions(
+            context = context,
+            actionSchema = actionSchema,
+            variableNames = variableNames,
+            offerElseKeyword = false,
         )
     }
 }
@@ -49,6 +59,18 @@ private fun buildVariableCompletions(variableNames: List<String>): List<Completi
             insertText = "\$$name",
             kind = CompletionKind.FIELD,
             hint = "variable"
+        )
+    }
+}
+
+/** A bare name per known variable, for the target of an `add` clause. */
+private fun buildListNameCompletions(variableNames: List<String>): List<CompletionItem> {
+    return variableNames.map { name ->
+        CompletionItem(
+            label = name,
+            insertText = name,
+            kind = CompletionKind.FIELD,
+            hint = "list variable"
         )
     }
 }
@@ -115,15 +137,30 @@ private fun buildThenCompletions(
     context: DslCursorContext,
     actionSchema: ActionSchema?,
     variableNames: List<String>,
+    offerElseKeyword: Boolean,
 ): List<CompletionItem> {
-    return if (context.afterAction == null) {
-        buildActionNameCompletions(actionSchema = actionSchema) + SET_KEYWORD_COMPLETION
-    } else {
-        buildActionArgCompletions(
+    // The target of an `add` is written bare, without the `$`, so neither an action argument nor a
+    // `$name` reference is what belongs here.
+    if (context.expectsListName) {
+        return buildListNameCompletions(variableNames = variableNames)
+    }
+
+    if (context.afterAction != null) {
+        return buildActionArgCompletions(
             actionName = context.afterAction,
             actionSchema = actionSchema
         ) + buildVariableCompletions(variableNames = variableNames)
     }
+
+    val keywords = buildList {
+        add(SET_KEYWORD_COMPLETION)
+        add(ADD_KEYWORD_COMPLETION)
+        add(STOP_KEYWORD_COMPLETION)
+        if (offerElseKeyword) {
+            add(ELSE_KEYWORD_COMPLETION)
+        }
+    }
+    return buildActionNameCompletions(actionSchema = actionSchema) + keywords
 }
 
 private val SET_KEYWORD_COMPLETION = CompletionItem(
@@ -131,4 +168,25 @@ private val SET_KEYWORD_COMPLETION = CompletionItem(
     insertText = "set name = ",
     kind = CompletionKind.KEYWORD,
     hint = "publish a variable for later rules"
+)
+
+private val ADD_KEYWORD_COMPLETION = CompletionItem(
+    label = "add",
+    insertText = "add \"\" to name",
+    kind = CompletionKind.KEYWORD,
+    hint = "append a value to a list variable"
+)
+
+private val ELSE_KEYWORD_COMPLETION = CompletionItem(
+    label = "else",
+    insertText = "else",
+    kind = CompletionKind.KEYWORD,
+    hint = "output when the condition does not hold"
+)
+
+private val STOP_KEYWORD_COMPLETION = CompletionItem(
+    label = "stop",
+    insertText = "stop",
+    kind = CompletionKind.KEYWORD,
+    hint = "end the run — no rule after this one is evaluated"
 )

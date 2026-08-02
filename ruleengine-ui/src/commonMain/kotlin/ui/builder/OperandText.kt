@@ -101,9 +101,23 @@ object OperandText {
     // ── shared quoting ────────────────────────────────────────────────────────
 
     /** Wraps [value] in double quotes unless it is already quoted. */
+    /**
+     * Wraps [value] in double quotes, escaping what would otherwise end the literal early.
+     *
+     * The escaping is not optional. A value containing a `"` — a message quoting a format, a purpose text
+     * with an inch mark — used to be emitted verbatim, which closed the string mid-word and made the rest
+     * of the rule unparseable. Because the Builder replaces the whole rule text on every edit, that
+     * corrupted the file rather than merely displaying wrongly.
+     *
+     * The backslash goes first: escaping the quotes first and the backslashes after would double the
+     * backslash this function had just inserted.
+     */
     private fun quote(value: String): String {
         if (value.startsWith(prefix = "\"") && value.endsWith(suffix = "\"")) return value
-        return "\"$value\""
+        val escaped = value
+            .replace(oldValue = "\\", newValue = "\\\\")
+            .replace(oldValue = "\"", newValue = "\\\"")
+        return "\"$escaped\""
     }
 
     /**

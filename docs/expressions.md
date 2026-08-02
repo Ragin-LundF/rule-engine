@@ -86,6 +86,26 @@ Value expression conditions use symbolic comparison operators:
 | `>=` | Greater than or equal |
 | `<` | Less than |
 | `<=` | Less than or equal |
+| `contains` | Membership in a list, or a substring of text — see below |
+
+`contains` is the one named operator this path accepts, and it is only meaningful when its left side
+is a variable. What it does depends on what that variable holds at evaluation time:
+
+| Left value | `contains` means |
+|---|---|
+| A list, from an `add` clause | true when some element equals the right side |
+| A text value | true when the right side is a substring, **case-sensitively** |
+| Missing (never assigned) | false — so `not $name contains "x"` is true |
+| A number, a boolean, a structure | false |
+
+Numbers compare by value, so a list holding `1` is found by `contains 1.0`.
+
+A plain `field contains "literal"` is **not** this operator. It stays on the named-operator path,
+which enforces the field's declared `operators:` list and applies its normalizers. Only a comparison
+with a variable, an aggregate, arithmetic or a filtered path comes here.
+
+`contains` with a left side that is not a variable — `count(orders) contains 5` — is accepted by the
+validator but can never match. There is no array type in the operand-kind check to reject it with.
 
 ```
 count(transactions) > 100

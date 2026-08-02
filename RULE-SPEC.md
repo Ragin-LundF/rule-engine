@@ -52,8 +52,10 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 ### Key Principles
 
 - The engine **validates everything at load time**. Typos, unknown fields, wrong operators, and wrong argument types are all caught before any rule runs.
-- Rules are **independent by default** — the engine checks every rule against the input and returns all that match; there is no priority or stop-first logic. Evaluation order is nonetheless deterministic: rules run in declaration order within a file, and across files in manifest `rules:` order, with matches returned in that same order.
-- The one exception is a **variable**: a rule's `then` block may `set` a named value that the rules after it read as `$name` (see §5.6). Order is then part of the meaning, not just of the output.
+- Every rule is checked against the input and **all that match are returned** — one rule matching never suppresses another by itself, and there is no implicit priority.
+- **Evaluation order is fixed and load-bearing.** Rules run in manifest `rules:` file order, then in declaration order within each file, and matches come back in that same order. The engine guarantees this because two constructs depend on it: a `set` clause publishes a value only the rules after it can read (§5.6), and a branch ending in `stop` ends the run at its own position (§5.11). Reordering the manifest can therefore change the result, not just its sequence.
+- A rule may also declare an **`else` branch** — output for the case where its condition is false (§5.10). It changes what a single rule can produce, not how rules relate: a rule that does not match still produces nothing unless it says otherwise.
+- A branch may end in **`stop`** (§5.11), which ends the run: the rules declared after it are not evaluated at all for that record. This is the one construct that lets one rule suppress another.
 - The engine **never modifies** input data. It only reads it and returns results. A variable lives for the duration of one evaluation and is never written back into the input.
 
 ---
@@ -589,7 +591,8 @@ You may define any action names that fit the domain. These are widely used conve
 - Extension: **`.rule`**
 - A single `.rule` file may contain **one or more rules**.
 - Lines starting with `#` are **comments** and are ignored.
-- Rules are evaluated **independently** — all matching rules fire; there is no stop-first or priority mechanism. Order is still deterministic: rules are evaluated in declaration order within a file (and across files in manifest `rules:` order), and matches are returned in that order.
+- All matching rules fire; there is no implicit priority. A rule can suppress the rules after it only by ending its branch with `stop` (§5.11).
+- Order is **fixed and guaranteed**: rules are evaluated in manifest `rules:` file order, then in declaration order within each file, and matches are returned in that order. `set` (§5.6) and `stop` (§5.11) both depend on it, so the order is part of the meaning.
 
 ### 5.2 Rule structure
 
@@ -604,6 +607,11 @@ rule "<rule-id>" {
     <action>
     <action>
     ...
+
+  else                         # OPTIONAL — see §5.10
+    <action>
+    ...
+    stop                       # OPTIONAL — see §5.11
 }
 ```
 
@@ -613,8 +621,10 @@ rule "<rule-id>" {
 | `description "<text>"` | ⬜ | One double-quoted sentence. If present it must be the **first** thing inside `{`, before `when`. May appear at most once per rule. |
 | `when` | ✅ | Keyword, followed by one or more conditions. |
 | `then` | ✅ | Keyword, followed by one or more actions and/or `set` clauses (§5.6). |
+| `else` | ⬜ | Keyword, followed by the output for a **false** condition. Same contents as `then`. At most once, and only after `then`. See §5.10. |
+| `stop` | ⬜ | Bare word, the **last** statement of a `then` or `else` block. Ends the run: the rules after this one are not evaluated. See §5.11. |
 
-**No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags`, `salience` or `else` — the engine rejects them.
+**No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags` or `salience` — the engine rejects them.
 
 #### The `description` clause
 
@@ -906,10 +916,88 @@ Writing rules:
 - `$1`, `$2`, … are **not** variables — an all-digit name is a regex capture group of an `extract`
   clause (see `docs/rules.md`).
 - A variable must not be named like a schema field.
-- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is only
-  valid with a symbolic comparison: `==`, `!=`, `>`, `>=`, `<`, `<=`.
+- Do **not** use a variable in a named-operator condition (`$turnover gte 100`). A variable is valid
+  with a symbolic comparison — `==`, `!=`, `>`, `>=`, `<`, `<=` — and with `contains`, which is the
+  one named operator it accepts (§5.6.1).
 - Variables make rule order semantically significant. Say so in the manifest with a comment when you
   generate one (§6).
+
+#### 5.6.1 List variables — the `add` clause
+
+A `set` publishes one value. To collect **several** values across rules, use `add`:
+
+```
+then
+  add <value expression> to <name>
+```
+
+Read it back with `contains`:
+
+```
+when
+  $<name> contains "something"
+```
+
+Use it for labelling: many rules producing the same outcome from different evidence, where each rule
+should skip its work once the outcome is already recorded.
+
+```
+rule "billing-from-refund" {
+  description "A refund request is a billing matter."
+
+  when
+    not $topics contains "billing"
+    and purpose contains "refund"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+rule "billing-from-invoice" {
+  description "So is an invoice question — but the topic is only claimed once."
+
+  when
+    not $topics contains "billing"
+    and purpose contains "invoice"
+
+  then
+    label "billing"
+    add "billing" to topics
+}
+
+rule "route-billing" {
+  description "Routing reads the finished list instead of the text again."
+
+  when
+    $topics contains "billing"
+
+  then
+    category "finance-team"
+}
+```
+
+The guard is what makes this scale. `and` stops at the first false condition, and the engine
+evaluates the cheapest condition of an `and` first — a list lookup is cheaper than a text search — so
+a rule whose topic is already recorded never runs its text matching, whichever order the two
+conditions are written in. An `or` is unaffected: it still evaluates its other branch.
+
+| Aspect | Behaviour |
+|---|---|
+| Duplicates | Ignored. Adding a value the list already holds changes nothing, so two rules reaching the same conclusion produce one entry. |
+| Order | Insertion order, kept. |
+| Visibility | The rules after the `add`, **and the condition of the rule that writes it** — which is what lets a rule guard on the list it fills in. |
+| Never added | Reading yields a missing value, so `contains` is **false** and `not … contains` is **true**. That is why the first rule of a guarded set fires. |
+| Several writers | Expected, and not a warning — unlike two rules `set`ting one name. |
+| Mixing | A name written by both `set` and `add` is an **error**: a variable is either a plain value or a list. |
+| Value | Any value expression, as with `set`. A missing value adds nothing but still creates the list. |
+| Result | Arrives as a list in `EvaluationResult.variables`. |
+
+`contains` reads a list as membership and a text value as a substring. On the expression path it does
+**not** apply the field's normalizers, so add values already in the form you will test for.
+
+> **`add` is a keyword.** An action may not be named `add`; the engine reports it as an error and the
+> action has to be renamed.
 
 ### 5.7 Rule ID conventions
 
@@ -1086,6 +1174,168 @@ sum(transactions.amount) * 0.03
 - `contains`, `startsWith`, etc. used with a value expression → error.
 
 > For the full reference including all edge cases see [docs/expressions.md](docs/expressions.md).
+
+### 5.10 The optional `else` branch
+
+A rule may declare what to produce when its condition is **false**. Write it as an `else` block after
+the `then` block:
+
+```
+rule "order-tier" {
+  description "An order of at least 1000 gets priority handling, anything smaller the standard path."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+
+  else
+    label "standard"
+}
+```
+
+Use it when a business statement has two outcomes over one threshold. Without `else` that needs two
+rules with the boundary written twice — `amount >= 1000` and `amount < 1000` — and the two drift apart
+the first time someone changes only one of them.
+
+The `else` block takes **exactly what a `then` block takes**: actions, `extract` clauses (§5.5) and
+`set` clauses (§5.6).
+
+```
+rule "order-tier" {
+  description "An order of at least 1000 is tier 2, anything smaller is tier 1."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+    set tierLevel = 2
+
+  else
+    label "standard"
+    set tierLevel = 1
+}
+```
+
+Rules:
+
+| Aspect | Behaviour |
+|---|---|
+| Optional | A rule without `else` behaves exactly as before: a false condition produces nothing. |
+| Position | After the `then` block, before the closing `}`. |
+| At most once | A second `else` on the same rule is an error. |
+| Never empty | `else` with no action and no `set` is an error — drop the keyword instead. |
+| Exclusive | Exactly one branch produces output per record. Never both, never neither. |
+| Not a match | The rule's condition was **false**. `else` says what to output, not that the rule matched. |
+| Variables | A `set` in `else` publishes to the following rules exactly as one in `then` does (§5.6). |
+
+The engine reports an `else` result alongside the ordinary matches, tagged with the branch that
+produced it, so a consumer can tell the two apart. Reading the result is covered in
+[docs/integration-guide.md](docs/integration-guide.md).
+
+> **`else` is a keyword.** An action may not be named `else`. If an action schema declares one, the
+> engine reports it as an error and the action has to be renamed.
+
+#### When to use separate rules instead
+
+`else` fits **one** condition with **two** outcomes. It does not extend to three or more bands: an
+`else` fires whenever its own condition is false, including for records another rule already handled,
+so chaining rules with `else` blocks makes a record collect every band it is not in.
+
+For three or more bands, give each band its own rule and no `else`:
+
+```
+rule "tier-high" {
+  description "An order of at least 1000 is high tier."
+  when
+    amount >= 1000
+  then
+    label "high"
+}
+
+rule "tier-mid" {
+  description "An order from 100 up to 1000 is mid tier."
+  when
+    amount >= 100
+    and amount < 1000
+  then
+    label "mid"
+}
+
+rule "tier-low" {
+  description "An order below 100 is low tier."
+  when
+    amount < 100
+  then
+    label "low"
+}
+```
+
+### 5.11 Ending the run — the `stop` keyword
+
+A branch may end the run. Write `stop` as the **last** statement of a `then` or `else` block:
+
+```
+rule "blocked-country" {
+  description "A payment to a sanctioned country is rejected outright; nothing else applies."
+
+  when
+    country in ["xx", "yy"]
+
+  then
+    label "rejected"
+    stop
+}
+```
+
+When that branch fires, the rule's own output is collected and then **no rule declared after it is
+evaluated** for that record. This is the only construct in the DSL by which one rule suppresses another.
+
+`stop` belongs to a branch, not to a rule, so a rule can halt on one verdict and carry on with the other:
+
+```
+rule "must-be-known-country" {
+  description "An unknown country is rejected and nothing further is assessed."
+
+  when
+    country in ["de", "at", "ch"]
+
+  then
+    label "known-country"
+
+  else
+    label "rejected"
+    stop
+}
+```
+
+An `else` block containing nothing but `stop` is valid and means "halt when this condition does not hold".
+
+Rules:
+
+| Aspect | Behaviour |
+|---|---|
+| Position | The **last** statement of its block. Anything written after it is an error. |
+| Scope | The remaining rules of the same manifest entry, across rule-file boundaries. |
+| Own output | Collected first — `stop` halts what comes *after* the rule, not the branch it sits in. |
+| Per branch | Valid in `then`, in `else`, or both. |
+| Variables | Compatible. A variable published before the `stop` is in the result; the rules that would have read it are simply never reached. |
+
+> **`stop` is a keyword.** An action may not be named `stop`. If an action schema declares one, the engine
+> reports it as an error and the action has to be renamed.
+
+> **Order becomes load-bearing.** A rule set using `stop` depends on its manifest order: moving a guard
+> rule below the rules it was meant to guard silently stops guarding them. Say so in a comment next to the
+> manifest `rules:` list when you generate one (§6).
+
+#### When to use it
+
+Use `stop` for a **guard**: a condition that settles the record outright, where every rule below it is
+not merely overridden but inapplicable — a sanctioned counterparty, a missing mandatory field, a record
+already rejected. Do not use it to express precedence between rules that should all contribute; that is
+what separate conditions are for.
 
 ---
 
@@ -1516,6 +1766,11 @@ The engine validates everything at load time and rejects the following. Never ge
 | Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
 | Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
 | Writing `$` on the left of `set` | `set $turnover = …` (the name is written bare after `set`) |
+| An empty `else` block | `else` followed straight by `}` — drop the keyword instead |
+| A second `else` on one rule | two `else` blocks in the same rule |
+| `else` before `then` | the false branch is written after the true one |
+| An action named `else` or `stop` in the action schema | `else:` or `stop:` declared under `actions:` — both are rule keywords |
+| Anything written after `stop` in the same block | `stop` followed by another action or a `set` clause |
 
 > **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
 > produces a warning and the rule still loads, because the root may be an undeclared structure read
@@ -1570,7 +1825,13 @@ The engine validates everything at load time and rejects the following. Never ge
       declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise.
 - [ ] `in` / `containsAny` / `containsAll` use a JSON-style list: `["a", "b"]`.
 - [ ] Filters inside `[...]` use only `==`, `!=`, `>`, `>=`, `<`, `<=` and contain no `and` / `or`.
-- [ ] Every action in every `then` block is defined in the action schema, with a matching argument count.
+- [ ] Every action in every `then` and `else` block is defined in the action schema, with a matching argument count.
+- [ ] An `else` block is used only where one condition has exactly two outcomes; three or more bands are
+      separate rules with no `else`.
+- [ ] No `else` block is empty, duplicated, or written before its `then`.
+- [ ] `stop` is the last statement of its block, and is used only for a guard that genuinely makes every
+      following rule inapplicable.
+- [ ] When any rule uses `stop`, the manifest `rules:` list carries a comment saying the order matters.
 - [ ] String action arguments are in double quotes; numeric arguments have no quotes; zero-argument
       actions are written bare.
 - [ ] Parentheses are used wherever AND/OR grouping could be ambiguous.

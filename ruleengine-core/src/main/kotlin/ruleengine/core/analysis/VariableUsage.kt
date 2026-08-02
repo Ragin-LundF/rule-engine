@@ -31,12 +31,19 @@ import ruleengine.dsl.ast.VariableRefLiteral
  */
 object VariableUsage {
 
-    /** Variables [rule] reads — in its condition, in its `set` expressions and in its action arguments. */
+    /**
+     * Variables [rule] reads — in its condition, in its `set` expressions and in its action arguments.
+     *
+     * Covers both branches: only one of them runs for a given record, but a variable either branch
+     * can read is one the rule depends on.
+     */
     fun readsOf(rule: RuleAst): Set<String> {
         val names = linkedSetOf<String>()
         collectFromExpression(expr = rule.condition, into = names)
-        rule.assignments.forEach { assignment -> collectFromValue(expr = assignment.expression, into = names) }
-        rule.actions.forEach { action ->
+        val assignments = rule.assignments + rule.elseAssignments
+        assignments.forEach { assignment -> collectFromValue(expr = assignment.expression, into = names) }
+        val actions = rule.actions + rule.elseActions
+        actions.forEach { action ->
             action.arguments.forEach { argument -> collectFromLiteral(literal = argument, into = names) }
         }
         return names
@@ -70,9 +77,14 @@ object VariableUsage {
         return names
     }
 
-    /** Variables [rule] publishes through its `set` clauses, in source order. */
+    /**
+     * Variables [rule] publishes through its `set` clauses, in source order, `then` branch first.
+     *
+     * A name set by both branches appears once: whichever branch runs, the variable is published.
+     */
     fun writesOf(rule: RuleAst): Set<String> {
-        return rule.assignments.mapTo(destination = linkedSetOf()) { assignment -> assignment.name }
+        val assignments = rule.assignments + rule.elseAssignments
+        return assignments.mapTo(destination = linkedSetOf()) { assignment -> assignment.name }
     }
 
     private fun collectFromExpression(expr: ExpressionAst, into: MutableSet<String>) {

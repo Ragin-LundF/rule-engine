@@ -109,15 +109,10 @@ actual fun RuleEditor(closeController: AppCloseController) {
     }
 
     // ── Parsed rules for the expanded diagram window ───────────────────────────
-    // Honours "All files" like the inline canvas does, so expanding a view does not silently
-    // narrow it back to the open file.
-    val expandedDiagramRules = remember(
-        key1 = state.ruleValue.value.text,
-        key2 = state.showAllRules.value,
-        key3 = state.allRulesText.value,
-    ) {
-        val text = if (state.showAllRules.value) state.allRulesText.value else state.ruleValue.value.text
-        runCatching { Parser(input = text).parseRules() }.getOrElse { emptyList() }
+    // The one buffer holds whatever the entry is showing — a single file or all of them — so
+    // expanding a view cannot narrow or widen what it draws.
+    val expandedDiagramRules = remember(key1 = state.ruleValue.value.text) {
+        runCatching { Parser(input = state.ruleValue.value.text).parseRules() }.getOrElse { emptyList() }
     }
 
     // ── All builder rules derived from all parsed rule ASTs ──────────────────────
@@ -176,7 +171,9 @@ actual fun RuleEditor(closeController: AppCloseController) {
         key3 = activeBuilderEditorState.ruleId,
     ) {
         builderCatalogVariablesFrom(
-            files = state.parsedRuleFilesForCurrentEntry(),
+            // The open buffer, not the saved file: a variable has to reach the operand picker as
+            // soon as its row is added, not once the file is written.
+            files = state.parsedRuleFilesForCurrentEntryWithOpenBuffer(),
             uptoRuleId = activeBuilderEditorState.ruleId.takeIf { it.isNotBlank() },
         )
     }

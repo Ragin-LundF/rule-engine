@@ -3,6 +3,7 @@ package ui.tester
 import ruleengine.compiler.Compiler
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.RuleAction
+import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
@@ -169,6 +170,7 @@ class JvmRuleSimulationService : RuleSimulationService {
                 ruleIds = targetAsts.map { ast -> ast.id },
                 matches = evalResult.matches,
                 tracesByRule = tracesByRule,
+                stoppedBy = evalResult.stoppedBy,
             ),
         )
     }
@@ -195,14 +197,23 @@ class JvmRuleSimulationService : RuleSimulationService {
         ruleIds: List<String>,
         matches: List<RuleMatch>,
         tracesByRule: Map<String, TraceNode>,
+        stoppedBy: String?,
     ): List<RuleResult> {
         val matchesById = matches.associateBy { match -> match.ruleId }
-        return ruleIds.map { id ->
+        // Everything after the halting rule was never reached. Derived from position rather than from an
+        // absent trace, because a rule that ran and short-circuited before its first condition also
+        // records nothing — the two are indistinguishable from the trace alone.
+        val stoppedAt = stoppedBy?.let { id -> ruleIds.indexOf(element = id) } ?: -1
+        return ruleIds.mapIndexed { index, id ->
             val match = matchesById[id]
             val tree = tracesByRule[id]
             RuleResult(
+                notEvaluated = stoppedAt >= 0 && index > stoppedAt,
                 ruleId = id,
-                matched = match != null,
+                // A rule in `matches` produced output, which is not the same as its condition having
+                // held: an `else` branch produces output precisely when it did not.
+                matched = match?.branch == RuleBranch.THEN,
+                branch = match?.branch,
                 actions = match?.actions?.map { action -> formatAction(action = action) }.orEmpty(),
                 assignments = match?.assignments?.map { (name, value) -> "$name = $value" }.orEmpty(),
                 traceRows = tree?.let { root -> conditionRows(node = root) }.orEmpty(),

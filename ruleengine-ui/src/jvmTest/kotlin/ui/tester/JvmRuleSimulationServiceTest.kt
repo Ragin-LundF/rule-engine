@@ -1,5 +1,6 @@
 package ui.tester
 
+import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.evaluator.trace.dto.NodeType
 import ui.tester.model.RuleMatchStatus
 import ui.tester.model.RuleResult
@@ -134,6 +135,35 @@ private val NEGATIVE_INPUT = """
 {
   "purpose": "Coffee shop",
   "amount": 5.50
+}
+""".trimIndent()
+
+private val STOPPING_RULES = """
+rule "stopper" {
+  when
+    purpose contains "rent"
+  then
+    label "rent"
+    stop
+}
+
+rule "after" {
+  when
+    amount >= 500
+  then
+    label "large"
+}
+""".trimIndent()
+
+private val ELSE_BRANCH_RULE = """
+rule "rent-or-other" {
+  when
+    purpose contains "rent"
+    and amount >= 500
+  then
+    label "rent"
+  else
+    label "other"
 }
 """.trimIndent()
 
@@ -335,6 +365,118 @@ class JvmRuleSimulationServiceTest {
             ),
         )
         assertEquals(expected = RuleMatchStatus.MATCHED, actual = ruleResult.status)
+    }
+
+    /**
+     * The regression this guards: the roster derived `matched` from mere presence in
+     * `EvaluationResult.matches`, which an `else` branch also puts a rule into — so a rule whose
+     * condition was false would have been reported as having matched.
+     */
+    @Test
+    fun `a rule whose else branch fired is ELSE_MATCHED and not matched`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = ELSE_BRANCH_RULE,
+            ruleId = "",
+            inputJson = NEGATIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        val ruleResult = outcome.ruleResults.single()
+        assertEquals(expected = false, actual = ruleResult.matched)
+        assertEquals(expected = RuleBranch.ELSE, actual = ruleResult.branch)
+        assertEquals(expected = RuleMatchStatus.ELSE_MATCHED, actual = ruleResult.status)
+        assertEquals(expected = listOf("""label "other""""), actual = ruleResult.actions)
+    }
+
+    @Test
+    fun `the same rule reports the then branch when its condition holds`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = ELSE_BRANCH_RULE,
+            ruleId = "",
+            inputJson = POSITIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        val ruleResult = outcome.ruleResults.single()
+        assertEquals(expected = true, actual = ruleResult.matched)
+        assertEquals(expected = RuleBranch.THEN, actual = ruleResult.branch)
+        assertEquals(expected = RuleMatchStatus.MATCHED, actual = ruleResult.status)
+        assertEquals(expected = listOf("""label "rent""""), actual = ruleResult.actions)
+    }
+
+    /** ELSE_MATCHED wins over PARTIAL: the rule has a definite answer, not a near miss. */
+    @Test
+    fun `an else-fired rule with a partially true trace is still ELSE_MATCHED`() {
+        val ruleResult = RuleResult(
+            ruleId = "tier",
+            matched = false,
+            branch = RuleBranch.ELSE,
+            actions = listOf("""label "low""""),
+            traceRows = listOf(
+                TraceRow(label = "purpose contains rent", result = true),
+                TraceRow(label = "amount gte 5000", result = false),
+            ),
+        )
+        assertEquals(expected = RuleMatchStatus.ELSE_MATCHED, actual = ruleResult.status)
+    }
+
+    /**
+     * The rules after a `stop` were never tested, so nothing is known about them. Reporting them as
+     * "no match" would be a claim the run never made.
+     */
+    @Test
+    fun `rules after a stop are NOT_EVALUATED rather than no match`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = STOPPING_RULES,
+            ruleId = "",
+            inputJson = POSITIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        assertEquals(
+            expected = RuleMatchStatus.MATCHED,
+            actual = outcome.ruleResults.single { it.ruleId == "stopper" }.status,
+        )
+        assertEquals(
+            expected = RuleMatchStatus.NOT_EVALUATED,
+            actual = outcome.ruleResults.single { it.ruleId == "after" }.status,
+        )
+    }
+
+    @Test
+    fun `the rules after a stop report normally when it does not fire`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = STOPPING_RULES,
+            ruleId = "",
+            inputJson = NEGATIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        assertTrue(
+            actual = outcome.ruleResults.none { it.status == RuleMatchStatus.NOT_EVALUATED },
+            message = "nothing halted the run: ${outcome.ruleResults.map { it.ruleId to it.status }}",
+        )
+    }
+
+    /** NOT_EVALUATED wins over every other status, including a trace left by an earlier run. */
+    @Test
+    fun `a not-evaluated rule is never reported as partial`() {
+        val ruleResult = RuleResult(
+            ruleId = "after",
+            matched = false,
+            notEvaluated = true,
+            actions = emptyList(),
+            traceRows = listOf(TraceRow(label = "purpose contains rent", result = true)),
+        )
+        assertEquals(expected = RuleMatchStatus.NOT_EVALUATED, actual = ruleResult.status)
     }
 
     @Test

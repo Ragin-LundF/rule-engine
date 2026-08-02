@@ -36,6 +36,8 @@ fun RuleInspector(
     rule: CatalogRule,
     conditionCount: Int = 0,
     actionCount: Int = 0,
+    /** Actions in the rule's `else` block. Zero when it declares none, which hides the row. */
+    elseActionCount: Int = 0,
     /** Names of the variables this rule publishes with `set`, without the `$` prefix. */
     variableNames: List<String> = emptyList(),
     diagnostics: List<UiDiagnostic> = emptyList(),
@@ -75,6 +77,12 @@ fun RuleInspector(
 
         InspectorRow(label = "Conditions", value = conditionCount.toString())
         InspectorRow(label = "Actions", value = actionCount.toString())
+
+        // Shown only for a rule that has a false branch, so the panel does not tell every other rule
+        // that it has zero of something it cannot have.
+        if (elseActionCount > 0) {
+            InspectorRow(label = "Else actions", value = elseActionCount.toString())
+        }
 
         // Listed by name rather than counted: which variables a rule publishes is what decides what
         // the rules after it can read, and a bare number would not say that.

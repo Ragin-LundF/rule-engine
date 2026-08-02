@@ -10,7 +10,6 @@ import ruleengine.evaluator.compiled.CompiledActionArgument
 import ruleengine.evaluator.compiled.logic.AndExpression
 import ruleengine.evaluator.compiled.numeric.ComparisonOperator
 import ruleengine.evaluator.compiled.numeric.DecimalComparisonExpression
-import ruleengine.evaluator.compiled.text.RegexExtractExpression
 import ruleengine.evaluator.compiled.text.TextEqualsExpression
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
@@ -68,77 +67,6 @@ class RuleEngineTest {
         assertEquals(expected = "rent-payment", actual = result.matches.first().ruleId)
     }
 
-    @Test
-    fun `short-circuit stops after first match per output group`() {
-        val first = labelRule(id = "first", label = "groceries")
-        val second = labelRule(id = "second", label = "groceries")
-
-        val withoutShortCircuit = engineFor(rules = listOf(first, second), shortCircuit = false)
-            .evaluate(prepared = preparedPurpose())
-        assertEquals(expected = 2, actual = withoutShortCircuit.matches.size)
-
-        val withShortCircuit = engineFor(rules = listOf(first, second), shortCircuit = true)
-            .evaluate(prepared = preparedPurpose())
-        assertEquals(expected = 1, actual = withShortCircuit.matches.size)
-        assertEquals(expected = "first", actual = withShortCircuit.matches.first().ruleId)
-    }
-
-    @Test
-    fun `rule shared across output groups is reported once`() {
-        val shared = CompiledRule(
-            id = "shared",
-            expression = purposeEquals(),
-            actions = listOf(
-                CompiledAction(name = "label", arguments = listOf(CompiledActionArgument.Static(value = "groceries"))),
-                CompiledAction(name = "score", arguments = listOf(CompiledActionArgument.Static(value = 10)))
-            )
-        )
-        val scoreOnly = CompiledRule(
-            id = "score-only",
-            expression = purposeEquals(),
-            actions = listOf(
-                CompiledAction(name = "score", arguments = listOf(CompiledActionArgument.Static(value = 10)))
-            )
-        )
-
-        val result = engineFor(rules = listOf(shared, scoreOnly), shortCircuit = true)
-            .evaluate(prepared = preparedPurpose())
-
-        assertEquals(expected = 2, actual = result.matches.size)
-        assertEquals(expected = 1, actual = result.matches.count { it.ruleId == "shared" })
-        assertEquals(expected = 1, actual = result.matches.count { it.ruleId == "score-only" })
-    }
-
-    @Test
-    fun `rules without static output are always evaluated`() {
-        val dynamic = CompiledRule(
-            id = "dynamic",
-            expression = purposeEquals(),
-            actions = listOf(
-                CompiledAction(
-                    name = "label",
-                    arguments = listOf(
-                        CompiledActionArgument.ExtractionRef(
-                            extraction = RegexExtractExpression(
-                                field = FieldId(value = "purpose"),
-                                pattern = Regex(pattern = "(.+)"),
-                                groupIndex = 1
-                            )
-                        )
-                    )
-                )
-            )
-        )
-        val labelled = labelRule(id = "labelled", label = "groceries")
-
-        val result = engineFor(rules = listOf(labelled, dynamic), shortCircuit = true)
-            .evaluate(prepared = preparedPurpose())
-
-        assertEquals(expected = 2, actual = result.matches.size)
-        val dynamicMatch = result.matches.first { it.ruleId == "dynamic" }
-        assertEquals(expected = "coffee", actual = dynamicMatch.actions.first().arguments.first())
-    }
-
     private fun purposeEquals(): TextEqualsExpression {
         return TextEqualsExpression(field = FieldId(value = "purpose"), expectedNormalized = "coffee")
     }
@@ -153,8 +81,8 @@ class RuleEngineTest {
         )
     }
 
-    private fun engineFor(rules: List<CompiledRule>, shortCircuit: Boolean): RuleEngine {
-        return RuleEngine(compiledRules = rules, shortCircuitByOutput = shortCircuit)
+    private fun engineFor(rules: List<CompiledRule>): RuleEngine {
+        return RuleEngine(compiledRules = rules)
     }
 
     @Test
@@ -163,7 +91,7 @@ class RuleEngineTest {
         val ids = listOf("gamma", "alpha", "beta")
         val rules = ids.map { labelRule(id = it, label = it) }
 
-        val result = engineFor(rules = rules, shortCircuit = false).evaluate(prepared = preparedPurpose())
+        val result = engineFor(rules = rules).evaluate(prepared = preparedPurpose())
 
         assertEquals(expected = ids, actual = result.matches.map { it.ruleId })
     }

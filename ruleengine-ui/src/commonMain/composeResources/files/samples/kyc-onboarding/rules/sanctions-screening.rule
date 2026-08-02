@@ -1,0 +1,26 @@
+# 2. Sanctions screening — the second and last rule that stops.
+#
+# A sanctions hit is a decision, not a missing document. There is nothing the customer can upload to
+# resolve it, so continuing would produce a checklist inviting them to try. The case leaves the
+# automated flow entirely and goes to a compliance officer.
+#
+# Contrast this with every rule after it: those describe things the customer *can* still do, so none of
+# them stops. That is the whole design of this sample — see rules/company-identification.rule.
+#
+# Schema: schema.yaml
+
+rule "sanctions-hit" {
+  description "A sanctions list match ends the automated onboarding and goes to compliance instead."
+  when
+    sanctionsListMatch equals true
+
+  then
+    status "rejected"
+    riskLevel "enhanced"
+    message "We are unable to continue your application online. Our compliance team will contact you directly."
+    review "sanctions-list-match"
+    stop
+
+  else
+    satisfied "sanctions-screening"
+}

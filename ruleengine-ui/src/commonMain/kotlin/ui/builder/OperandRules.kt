@@ -85,17 +85,37 @@ object OperandRules {
         right: BuilderOperand,
         fields: List<CatalogFieldInfo>,
     ): List<String> {
+        // A list is only ever tested for membership, so it replaces the symbolic set rather than
+        // extending it — every ordering or equality against a whole list evaluates to false.
+        if (isList(operand = left, fields = fields) || isList(operand = right, fields = fields)) {
+            return OperatorOptions.LIST_VARIABLE
+        }
         val numeric = isDefinitelyNumeric(operand = left, fields = fields) ||
             isDefinitelyNumeric(operand = right, fields = fields)
         return OperatorOptions.comparisonOperators(numeric = numeric)
     }
 
-    /** True when `ignoreCase` is meaningful for this row, i.e. both sides are textual. */
+    /** True when the operand resolves to a variable an `add` clause builds. */
+    private fun isList(operand: BuilderOperand, fields: List<CatalogFieldInfo>): Boolean {
+        val leaf = (operand as? BuilderOperand.FieldRef)
+            ?.let { ref -> fields.fieldAtPath(segments = ref.path.names) }
+            ?: return false
+        return OperatorOptions.isListVariableType(fieldType = leaf.type)
+    }
+
+    /**
+     * True when `ignoreCase` is meaningful for this row, i.e. both sides are textual.
+     *
+     * A list membership test is not: `ComparisonCompiledExpression` compares elements by value, and
+     * `ignoreCase` after a variable operand does not parse.
+     */
     fun supportsIgnoreCase(
         left: BuilderOperand,
         right: BuilderOperand,
         fields: List<CatalogFieldInfo>,
-    ): Boolean = !isDefinitelyNumeric(operand = left, fields = fields) &&
+    ): Boolean = !isList(operand = left, fields = fields) &&
+        !isList(operand = right, fields = fields) &&
+        !isDefinitelyNumeric(operand = left, fields = fields) &&
         !isDefinitelyNumeric(operand = right, fields = fields)
 
     /**
