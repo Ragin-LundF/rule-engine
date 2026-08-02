@@ -30,6 +30,38 @@ Build everything:
 
 ---
 
+## What it looks like
+
+The sample gallery — every bundled project, loadable without touching the file system:
+
+![Sample gallery](docs/assets/ui/sample-gallery.png)
+
+The rule builder, with the `financial-transactions` sample open: rule tree on the left, the selected
+rule's WHEN conditions on the right.
+
+![Rule builder](docs/assets/ui/rule-builder.png)
+
+The same rules in the code view — plain `.rule` text, syntax highlighted:
+
+![Code view](docs/assets/ui/code-view.png)
+
+The **rule trees** diagram, one condition tree per rule:
+
+![Rule trees diagram](docs/assets/ui/diagram-rule-trees.png)
+
+The **manifest run** diagram — the whole entry on one spine, in evaluation order:
+
+![Manifest run diagram](docs/assets/ui/diagram-manifest-run.png)
+
+These are rendered off-screen from the real app by `DocScreenshotsTest`, which is skipped unless asked
+for:
+
+```bash
+./gradlew :ruleengine-ui:jvmTest -PdocScreenshots=true --tests '*DocScreenshotsTest*'
+```
+
+---
+
 ## What the editor gives you
 
 | Area | What you can do |
