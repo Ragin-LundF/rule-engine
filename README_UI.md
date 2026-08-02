@@ -34,7 +34,7 @@ Build everything:
 
 | Area | What you can do |
 |---|---|
-| **Sample gallery** | Open a ready-made project (financial transactions, log filter, product recommendation, access control) without touching the file system |
+| **Sample gallery** | Open a ready-made project — financial transactions, KYC onboarding, loan decisioning, log filter, product recommendation, access control, warehouse shipments — without touching the file system. Each carries its own manifest, so the diagram views work straight away |
 | **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
 | **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands. The THEN block holds action rows and `set` rows, and an optional ELSE block holds the same for a false condition |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |

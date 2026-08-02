@@ -10,6 +10,7 @@ import ui.workbench.areas.applySample
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -28,6 +29,7 @@ class ApplySampleTest {
         name = "Demo",
         description = "d",
         category = SampleCategory.entries.first(),
+        manifestResPath = "m",
         schemaResPath = "s",
         actionsResPath = "a",
         ruleResPaths = listOf("r"),
@@ -35,6 +37,15 @@ class ApplySampleTest {
 
     private val loaded = LoadedSample(
         descriptor = descriptor,
+        manifestYaml = """
+            name: demo
+            entries:
+              - id: demo-entry
+                schema: schema.yaml
+                actions: actions.yaml
+                rules:
+                  - rules/big.rule
+        """.trimIndent(),
         schemaYaml = """
             schema: demo-v1
             fields:
@@ -47,7 +58,8 @@ class ApplySampleTest {
               label:
                 argTypes: [string]
         """.trimIndent(),
-        rulesText = "rule \"big\" {\n  when\n    amount >= 500\n  then\n    label \"big\"\n}",
+        rulesText = RULE_TEXT,
+        ruleFiles = listOf("rules/big.rule" to RULE_TEXT),
     )
 
     private fun state() = RuleEditorState(scope = CoroutineScope(EmptyCoroutineContext))
@@ -96,6 +108,108 @@ class ApplySampleTest {
         assertEquals(expected = "", actual = state.diagnosticsText.value)
     }
 
+    // ── manifest and file switching ───────────────────────────────────────────
+
+    /** Without the manifest in state the manifest run diagram has no entry to draw for a sample. */
+    @Test
+    fun `the sample's manifest is loaded and its entry selected`() {
+        val state = state()
+
+        state.applySample(descriptor = descriptor, loaded = loaded)
+
+        assertEquals(expected = loaded.manifestYaml, actual = state.manifestText.value)
+        assertNotNull(actual = state.parsedManifest.value)
+        assertEquals(expected = "demo-entry", actual = state.selectedManifestEntry.value)
+    }
+
+    /**
+     * The regression this guards: every path that resolves a rule file by manifest-relative path read
+     * from disk, and a sample has no directory. All-files came up empty, which the diagrams rendered as
+     * "No valid rules to display".
+     */
+    @Test
+    fun `the All-files view is populated for a sample`() {
+        val state = state()
+
+        state.applySample(descriptor = descriptor, loaded = loaded)
+
+        assertTrue(actual = state.showAllRules.value)
+        assertEquals(expected = RULE_TEXT, actual = state.allRulesText.value)
+        assertEquals(
+            expected = listOf("rules/big.rule"),
+            actual = state.entryRuleSources.value.map { source -> source.relativePath },
+        )
+        assertEquals(
+            expected = listOf("big"),
+            actual = state.entryRuleSources.value.single().rules.map { rule -> rule.id },
+        )
+    }
+
+    /** Switching to a single file used to report "Manifest base directory is not set" for a sample. */
+    @Test
+    fun `switching to a single rule file works for a sample`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = loaded)
+
+        state.loadSingleManifestRuleFile(relativePath = "rules/big.rule")
+
+        assertFalse(actual = state.showAllRules.value)
+        assertEquals(expected = "rules/big.rule", actual = state.selectedManifestRuleFile.value)
+        assertEquals(expected = RULE_TEXT, actual = state.ruleValue.value.text)
+        assertEquals(expected = StatusKind.SUCCESS, actual = state.statusKind.value)
+    }
+
+    /** And back again — the round trip the rule tree drives. */
+    @Test
+    fun `switching back to All files restores every rule file`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = loaded)
+        state.loadSingleManifestRuleFile(relativePath = "rules/big.rule")
+
+        state.loadAllRuleFilesForCurrentEntry()
+
+        assertTrue(actual = state.showAllRules.value)
+        assertEquals(expected = RULE_TEXT, actual = state.allRulesText.value)
+        assertEquals(expected = 1, actual = state.entryRuleSources.value.size)
+    }
+
+    /**
+     * A project opened after a sample must read from disk again. Leaving the sample's files registered
+     * would let a project entry resolve a same-named relative path to the sample's content.
+     */
+    @Test
+    fun `loading a sample and then resetting clears the in-memory rule files`() {
+        val state = state()
+        state.applySample(descriptor = descriptor, loaded = loaded)
+        assertTrue(actual = state.inMemoryRuleFiles.value.isNotEmpty())
+
+        state.reset()
+
+        assertTrue(actual = state.inMemoryRuleFiles.value.isEmpty())
+    }
+
+    /**
+     * The reported symptom: a sample loaded after a project kept that project's rule sources and
+     * All-files mode, so the workbench went on showing the previous rules — against the new schema,
+     * which made every field in them read as undeclared.
+     */
+    @Test
+    fun `a sample loaded after a project does not inherit the project's rule files`() {
+        val state = state()
+        state.manifestBaseDir.value = "/somewhere/else"
+        state.inMemoryRuleFiles.value = mapOf("rules/stale.rule" to "rule \"stale\" {}")
+        state.entryRuleSources.value = state.parseRuleSources(loaded = listOf("rules/stale.rule" to "rule \"x\" {}"))
+
+        state.applySample(descriptor = descriptor, loaded = loaded)
+
+        assertNull(actual = state.manifestBaseDir.value)
+        assertEquals(expected = setOf("rules/big.rule"), actual = state.inMemoryRuleFiles.value.keys)
+        assertEquals(
+            expected = listOf("rules/big.rule"),
+            actual = state.entryRuleSources.value.map { source -> source.relativePath },
+        )
+    }
+
     @Test
     fun `the status line names the sample`() {
         val state = state()
@@ -119,5 +233,9 @@ class ApplySampleTest {
         assertEquals(expected = "fields: [ this is not a schema", actual = state.schemaText.value)
         assertNull(actual = state.parsedSchema.value)
         assertEquals(expected = loaded.rulesText, actual = state.ruleValue.value.text, message = "rules still load")
+    }
+
+    private companion object {
+        const val RULE_TEXT: String = "rule \"big\" {\n  when\n    amount >= 500\n  then\n    label \"big\"\n}"
     }
 }

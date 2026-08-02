@@ -8,6 +8,7 @@ import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.manifest.ManifestLoader
 import ruleengine.schema.ActionSchemaLoader
@@ -114,8 +115,33 @@ class SampleProjectBuilderTest {
                     actual = reparsed.description,
                     message = "Round-trip dropped the description of rule '${ast.id}' of '$name'.",
                 )
+                assertEquals(
+                    expected = outputShape(rule = ast),
+                    actual = outputShape(rule = reparsed),
+                    message = "Round-trip changed the output side of rule '${ast.id}' of '$name'.\n" +
+                        "Generated:\n$generated",
+                )
             }
         }
+    }
+
+    /**
+     * Everything the rule produces, as one comparable value: both branches' actions and `set` names, and
+     * whether either branch ends the run.
+     *
+     * Checked because the Builder replaces the whole rule text. A mapper that quietly dropped an `else`
+     * block or a `stop` would delete it from the sample on the first edit, and the condition assertion
+     * above would not notice — the condition is untouched either way.
+     */
+    private fun outputShape(rule: RuleAst): String {
+        return listOf(
+            "then=" + rule.actions.joinToString { action -> action.name },
+            "sets=" + rule.assignments.joinToString { assignment -> assignment.name },
+            "else=" + rule.elseActions.joinToString { action -> action.name },
+            "elseSets=" + rule.elseAssignments.joinToString { assignment -> assignment.name },
+            "stopOnThen=${rule.stopOnThen}",
+            "stopOnElse=${rule.stopOnElse}",
+        ).joinToString(separator = " | ")
     }
 
     @Test

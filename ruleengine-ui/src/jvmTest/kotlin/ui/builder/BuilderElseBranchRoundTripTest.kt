@@ -8,6 +8,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
+import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderRule
 import ui.builder.model.mutable.BuilderEditorState
@@ -361,6 +362,61 @@ class BuilderElseBranchRoundTripTest {
             actual = regenerated.trim(),
         )
         assertNoErrors(dsl = regenerated)
+    }
+
+    // ── quoting ───────────────────────────────────────────────────────────────
+
+    /**
+     * The regression this guards: an action argument containing a `"` was emitted verbatim, which closed
+     * the string literal mid-word and left the rest of the rule unparseable. Since the Builder replaces
+     * the whole rule text on every edit, that corrupted the file rather than only rendering wrongly.
+     *
+     * A customer-facing `message` quoting an expected format is the realistic case — see the
+     * `kyc-onboarding` sample.
+     */
+    @Test
+    fun `an action argument containing a quote survives the round-trip`() {
+        val original = """
+            rule "format-hint" {
+              description "d"
+              when
+                amount >= 1
+              then
+                label "use the format \"HRB 123456\" exactly"
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(dsl = original)
+        val regenerated = BuilderToRuleDsl.generate(state = state).orEmpty()
+
+        // Parses at all — before the fix this threw rather than returning a rule.
+        val reparsed = Parser(input = regenerated).parseRules().single()
+        assertEquals(
+            expected = """use the format "HRB 123456" exactly""",
+            actual = assertIs<StringLiteral>(value = reparsed.actions.single().arguments.single()).value,
+        )
+        assertNoErrors(dsl = regenerated)
+    }
+
+    @Test
+    fun `an action argument containing a backslash survives the round-trip`() {
+        val original = """
+            rule "path-hint" {
+              description "d"
+              when
+                amount >= 1
+              then
+                label "a\\b"
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(dsl = original)
+        val reparsed = Parser(input = BuilderToRuleDsl.generate(state = state).orEmpty()).parseRules().single()
+
+        assertEquals(
+            expected = """a\b""",
+            actual = assertIs<StringLiteral>(value = reparsed.actions.single().arguments.single()).value,
+        )
     }
 
     private fun builderStateFromDsl(dsl: String): BuilderEditorState {

@@ -6,6 +6,25 @@
 #
 # Schema: schema.yaml
 
+# A knock-out check, first and final.
+#
+# Arrears end the application whatever the ratios say, so this is written as a `stop`: the rule declines
+# and no rule after it — in this file or in risk-pricing.rule — is evaluated. Position is what makes that
+# correct. Left further down, "auto-approve" would already have fired for an applicant with good ratios
+# and the result would carry an approval *and* a decline. A declined application is also not priced,
+# which is exactly what stopping before risk-pricing.rule achieves.
+
+rule "arrears-on-existing-commitment" {
+  description "The applicant is already behind on another loan, which ends the application regardless of the ratios."
+  when
+    count(existingLoans[inArrears == true]) > 0
+
+  then
+    decision "decline"
+    reason "arrears-on-an-existing-commitment"
+    stop
+}
+
 rule "auto-approve" {
   description "A comfortably affordable application from a clean file, decided without a human underwriter."
   when
@@ -60,16 +79,6 @@ rule "thin-collateral" {
     decision "refer"
     reason "loan-to-value-above-ninety-percent"
     requireDocument "additional-security"
-}
-
-rule "arrears-on-existing-commitment" {
-  description "The applicant is already behind on another loan, which ends the application regardless of the ratios."
-  when
-    count(existingLoans[inArrears == true]) > 0
-
-  then
-    decision "decline"
-    reason "arrears-on-an-existing-commitment"
 }
 
 rule "unsecured-high-exposure" {

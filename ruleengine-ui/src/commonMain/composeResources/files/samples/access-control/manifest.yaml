@@ -4,11 +4,16 @@ name: access-control
 # Enforce role-based permissions, IP allowlisting/blocklisting,
 # and time-based access restrictions on API routes.
 
+#
+# The order matters here: ip-filter.rule ends the run for a blocklisted address with `stop`, so it has
+# to be checked before the role and time rules can grant anything.
+
 entries:
   - id: access-control
     schema: schema.yaml
     actions: actions.yaml
     rules:
-      - rules/role-check.rule
+      # First: the source-address block list, which ends the run for a blocked caller.
       - rules/ip-filter.rule
+      - rules/role-check.rule
       - rules/time-restriction.rule

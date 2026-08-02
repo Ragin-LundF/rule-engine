@@ -1,0 +1,36 @@
+# Every rule in this sample answers the same two audiences at once, which is why there are two
+# parallel action families rather than one.
+#
+#   * `message` is written for the customer and shown as-is in the onboarding UI.
+#   * `requirement` / `satisfied` are ids for the frontend to key its checklist on.
+#
+# Emitting both from the same rule is what lets an application render "3 of 7 done" with the three
+# ticked off by name, instead of repeating "further documents required" after every single upload.
+
+actions:
+
+  # A sentence for the customer, in their language, shown as-is.
+  message:
+    argTypes: [string]
+
+  # A requirement that is still open. The frontend keys its checklist entry on this id.
+  requirement:
+    argTypes: [string]
+
+  # A requirement that is met. Emitted explicitly rather than left to be inferred from the absence of
+  # a `requirement`: a checklist that ticks items off only when nothing said they were missing cannot
+  # tell "done" from "not checked yet".
+  satisfied:
+    argTypes: [string]
+
+  # The overall verdict of the run — one per evaluation.
+  status:
+    argTypes: [string]
+
+  # Risk classification per GwG: "standard" or "enhanced" (§ 15 verstärkte Sorgfaltspflichten).
+  riskLevel:
+    argTypes: [string]
+
+  # Hand the case to a compliance officer, with the reason.
+  review:
+    argTypes: [string]

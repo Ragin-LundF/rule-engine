@@ -1,0 +1,83 @@
+# 3. Identifying the company (§ 11 GwG) — and the reason none of these rules stops.
+#
+# Every rule from here on is a *parallel* requirement check. They deliberately do not stop, because the
+# point is to report everything that is still open in one run: the frontend then renders a checklist the
+# customer can work through in any order.
+#
+# A `stop` on the first missing document would produce the behaviour this sample exists to avoid — the
+# customer uploads the Handelsregisterauszug, re-submits, and is told "further documents required"; they
+# upload the shareholder list, re-submit, and are told the same thing again. Seven uploads, seven rounds,
+# and at no point a list of what is actually left.
+#
+# Each rule follows the same shape, and that shape is the `else` branch doing its job:
+#
+#   when  <the requirement is met>
+#   then  satisfied "<id>"
+#   else  message "<what the customer should do>"  +  requirement "<id>"
+#
+# One condition, both outcomes, stated once. As two rules it would need the condition and its negation,
+# and nothing would stop a later edit from leaving a requirement both satisfied and open.
+#
+# Schema: schema.yaml
+
+rule "commercial-register-extract" {
+  description "A recent Handelsregisterauszug is on file — extracts older than three months are not accepted."
+  when
+    providedDocuments containsAny ["commercial-register-extract"]
+    and commercialRegisterExtractAgeDays <= 90
+
+  then
+    satisfied "commercial-register-extract"
+
+  else
+    message "Please upload a current extract from the commercial register (Handelsregisterauszug), issued within the last three months."
+    requirement "commercial-register-extract"
+}
+
+rule "articles-of-association" {
+  description "The current articles of association or partnership agreement are on file."
+  when
+    providedDocuments containsAny ["articles-of-association"]
+
+  then
+    satisfied "articles-of-association"
+
+  else
+    message "Please upload your current articles of association (Gesellschaftsvertrag or Satzung)."
+    requirement "articles-of-association"
+}
+
+rule "shareholder-list" {
+  description "The shareholder list is on file, which is what the declared ownership is checked against."
+  when
+    providedDocuments containsAny ["shareholder-list"]
+
+  then
+    satisfied "shareholder-list"
+
+  else
+    message "Please upload the current list of shareholders (Gesellschafterliste)."
+    requirement "shareholder-list"
+}
+
+# A GbR or a sole trader has no Handelsregister entry, so the number is only required of the legal forms
+# that actually have one.
+#
+# The "not applicable" case has to be written into the *satisfied* side, not left to the `else`. Phrased
+# as `not legalForm in [...] and commercialRegisterNumber regex …` the rule would read correctly and
+# behave backwards: for a GbR the condition is false, so the `else` would fire and ask a GbR for the one
+# number a GbR cannot have.
+
+rule "commercial-register-number" {
+  description "Companies entered in the commercial register have given their HRA or HRB number; other legal forms are exempt."
+  when
+    legalForm in ["gbr", "einzelunternehmen"]
+    or commercialRegisterNumber regex "^HR[AB] ?[0-9]+$"
+
+  then
+    satisfied "commercial-register-number"
+
+  else
+    message "Please enter your commercial register number as it appears on the extract, for example \"HRB 123456\"."
+    requirement "commercial-register-number"
+}

@@ -41,10 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       of its own branches is not, since only one of them ever runs.
     - `else` is now a keyword, so an action may not be named `else`. An action schema that declares one is
       reported as an error naming the declaration, not every rule that uses it.
-    - **`shortCircuitByOutput` cannot be combined with an `else` branch.** The optimisation closes an
-      output group at its first match, which is only sound while a rule that does not match produces
-      nothing. `RuleEngineBuilder` now fails the build with an explicit message naming the branching
-      rules, the same way it already refuses to combine the flag with variables.
 
 - **The else branch in the editor.** `else` is highlighted as structure, autocompleted after a `then`
   block, and offers the same action and `set` completions inside it. In the visual Builder, **+ Else
@@ -91,6 +87,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Test panel reports the rules after a `stop` as **not evaluated**, with their own filter and count,
   rather than as *no match* — the run never tested them, so nothing is known about whether they would
   have fired.
+
+- **A KYC onboarding sample (Germany).** Customer due diligence on a business customer, modelled on the
+  obligations of the Geldwäschegesetz: identify the company and its representative, identify beneficial
+  owners above the 25 % threshold, check the Transparenzregister, screen for sanctions and politically
+  exposed persons, classify the risk. It is built to show the difference between the two constructs —
+  `stop` appears exactly twice, where nothing the customer can upload would help (the order was never
+  submitted, or there is a sanctions hit), while every requirement check uses an `else` branch and
+  deliberately does *not* stop, so one run reports every outstanding document at once. That is what lets a
+  frontend render "11 of 15 done" with the open items named, instead of repeating "further documents
+  required" after each upload. `KycSampleBehaviourTest` pins that property.
+
+- **Branch examples in the existing samples**, placed where the rules were already asking for one. Four
+  turned out to fix real contradictions rather than illustrate a feature:
+    - `access-control` — a blocklisted **admin** previously collected both `deny "ip-blocklist"` and
+      `allow "full-access"`. The block list now ends the run, and `ip-filter.rule` moved ahead of the role
+      rules. Its rate-limit rule also gained an `else` for the public default.
+    - `product-recommendation` — an out-of-stock luxury item was both excluded *and* recommended to the
+      premium shelf; the stock check now runs first and stops.
+    - `loan-decisioning` — an applicant in arrears with good ratios got `decision "approve"` *and*
+      `decision "decline"`, then was priced. The arrears knock-out now runs first and stops, as its own
+      description always claimed it did.
+    - `log-filter` — `suppress` did not suppress: a slow DEBUG entry was dropped *and* paged the SRE team
+      at p1. The suppression rule moved to the severity file, first, and stops.
+    - `financial-transactions` — a `payment-cadence` rule shows the plainest `else`: one boolean, two labels.
+
+### Fixed
+
+- **The Builder corrupted a rule containing a quoted action argument.** `OperandText.quote` wrapped a value
+  in quotes without escaping the ones inside it, so a `message "use the format \"HRB 123456\""` was
+  re-emitted with the string ending mid-word and the rest of the rule unparseable. Because the Builder
+  replaces the whole rule text on every edit, this corrupted the file rather than only rendering wrongly.
+  Backslashes are escaped too.
+- **A sample loaded after a project showed the project's rules against the sample's schema.** `applySample`
+  never reset the project buffers, so `entryRuleSources` and All-files mode survived the switch and the
+  workbench kept rendering the previous rule set — against the new schema, which made every field in it
+  read as undeclared.
+- **Samples now behave like projects in the workbench.** They carry their manifest into the editor, so the
+  manifest run diagram has an entry to draw, and their rule files are registered in memory under the same
+  manifest-relative paths a project uses. Everything that resolves a rule file by path — switching to a
+  single file in the rule tree, the All-files view, every diagram, the rule-overview export — read from
+  disk and silently produced nothing for a sample: switching files reported "Manifest base directory is
+  not set", and All-files came up empty, which the diagrams rendered as "No valid rules to display".
+- **`financial-transactions` shipped without two of its five rule files.** The gallery loaded it from a
+  registry list that had drifted from the manifest, so the aggregate and boolean/date rules never appeared.
+  `SampleRegistryTest` now pins the registry against each manifest, for the file list and the order.
 
 ### Removed
 

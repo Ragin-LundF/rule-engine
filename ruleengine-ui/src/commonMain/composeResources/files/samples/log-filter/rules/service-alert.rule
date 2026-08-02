@@ -22,13 +22,3 @@ rule "auth-service-failure" {
     tag "auth-failure"
     alert "security-team"
 }
-
-rule "noisy-debug-suppression" {
-  description "Debug and trace entries are discarded in production and staging."
-  when
-    level in ["DEBUG", "TRACE"]
-    and environment in ["production", "staging"]
-
-  then
-    suppress
-}

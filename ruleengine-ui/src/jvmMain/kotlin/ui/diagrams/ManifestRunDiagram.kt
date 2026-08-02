@@ -209,8 +209,10 @@ private fun StepBadge(index: Int) {
 /**
  * Where the entry ends up: one result carrying every match.
  *
- * Spelled out because the engine's behaviour is easy to assume wrong — there is no priority and no
- * stop-first, so this is a collection point, not a winner.
+ * Spelled out because the engine's behaviour is easy to assume wrong — there is no priority, so this is
+ * a collection point and not a winner. The one exception is named rather than left out: a branch ending
+ * in `stop` does suppress the rules after it, and a reader who assumes "every rule always runs" would
+ * misread a rule set built around a guard.
  */
 @Composable
 private fun ResultCollectorNode(ruleCount: Int) {
@@ -226,13 +228,14 @@ private fun ResultCollectorNode(ruleCount: Int) {
         Column(verticalArrangement = Arrangement.spacedBy(space = 5.dp)) {
             DiagramEyebrow(text = "RESULT", color = LabelActions)
             DiagramIdentifier(
-                text = "EvaluationResult(matches = List<RuleMatch>, trace)",
+                text = "EvaluationResult(matches, trace, variables, stoppedBy)",
                 color = LabelArg,
                 fontSize = 12,
             )
             DiagramNote(
-                text = "All $ruleCount rules are evaluated and every match is returned, in the order " +
-                    "numbered above. There is no priority and no stop-first.",
+                text = "The $ruleCount rules are evaluated in the order numbered above and every " +
+                    "match is returned in that order. There is no priority: a rule only suppresses " +
+                    "the ones after it by ending its branch with `stop`.",
             )
         }
     }

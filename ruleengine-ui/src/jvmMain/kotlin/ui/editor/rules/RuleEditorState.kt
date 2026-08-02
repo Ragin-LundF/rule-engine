@@ -71,6 +71,20 @@ class RuleEditorState(
      */
     val entryRuleSources: MutableState<List<RuleSource>> = mutableStateOf(value = emptyList())
 
+    /**
+     * The entry's rule files held in memory, keyed by the manifest-relative path — the sample case.
+     *
+     * A bundled sample arrives as Compose resources and has no [manifestBaseDir] to read from. Without
+     * this, everything that loads rule files by path silently produced nothing for a sample: switching to
+     * a single file reported "Manifest base directory is not set", and the All-files view and every
+     * diagram came up empty.
+     *
+     * It is a fallback rather than a second code path: the readers below prefer it when it is populated,
+     * so a sample goes through exactly the same file switching, All-files view and diagrams as a project
+     * on disk. Empty for a project, which is what keeps disk the default.
+     */
+    val inMemoryRuleFiles: MutableState<Map<String, String>> = mutableStateOf(value = emptyMap())
+
     // Diagnostics
     val diagnosticsList: MutableState<List<ValidationDiagnostic>> = mutableStateOf(value = emptyList())
     val diagnosticsText: MutableState<String> = mutableStateOf(value = "")
@@ -143,6 +157,9 @@ class RuleEditorState(
         manifestBaseDir.value = null
         parsedManifest.value = null
         selectedManifestEntry.value = null
+        // Belongs to the manifest, not to an entry: a project opened after a sample must read from disk
+        // again rather than keep finding the sample's files by the same relative paths.
+        inMemoryRuleFiles.value = emptyMap()
     }
 
     /**
@@ -248,6 +265,13 @@ class RuleEditorState(
     }
 
     private fun readRuleFiles(relativePaths: List<String>): List<Pair<String, String>> {
+        val inMemory = inMemoryRuleFiles.value
+        if (inMemory.isNotEmpty()) {
+            return relativePaths.mapNotNull { relativePath ->
+                inMemory[relativePath]?.let { content -> relativePath to content }
+            }
+        }
+
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
             ?: return emptyList()
 
@@ -259,7 +283,14 @@ class RuleEditorState(
         }
     }
 
-    private fun parseRuleSources(loaded: List<Pair<String, String>>): List<RuleSource> {
+    /**
+     * Parses `(relativePath, content)` pairs into the per-file model the manifest run diagram reads.
+     *
+     * Not private, because a sample arrives as resource text rather than as files on disk: it has the
+     * same file grouping and needs the same diagram, so it goes through this rather than through a
+     * second parse that could disagree with it.
+     */
+    fun parseRuleSources(loaded: List<Pair<String, String>>): List<RuleSource> {
         return loaded.map { (relativePath, content) ->
             RuleSource(
                 relativePath = relativePath,
@@ -273,6 +304,19 @@ class RuleEditorState(
     /** Load a single rule file from the current manifest entry into the editor. */
     fun loadSingleManifestRuleFile(relativePath: String) {
         showAllRules.value = false
+
+        // The sample case: the file is already in memory, so there is nothing to read and no base
+        // directory to need. Checked first, because a sample has no base directory at all and would
+        // otherwise fail below with a message about a directory the user never chose.
+        inMemoryRuleFiles.value[relativePath]?.let { content ->
+            ruleValue.value = TextFieldValue(text = content)
+            selectedManifestRuleFile.value = relativePath
+            diagnosticsText.value = ""
+            diagnosticsList.value = emptyList()
+            setStatus(msg = "Loaded ${relativePath.substringAfterLast(delimiter = '/')}", kind = StatusKind.SUCCESS)
+            return
+        }
+
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: run {
             reportManifestPathIssue(message = "Manifest base directory is not set")
             return
