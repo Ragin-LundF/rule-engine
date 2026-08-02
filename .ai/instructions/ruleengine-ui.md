@@ -59,6 +59,16 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
 - **Updating patterns:**
     - New DSL keywords/operators must be added to the `build*Completions` functions in `ui/autocompletion/Builders.kt`.
     - New DSL keywords/operators must also be added to the relevant `DSL_NAMED_OPS`, `DSL_STRUCTURE`, or `DSL_LOGIC` sets in `SyntaxHighlighter.kt`.
+    - A new *structural* keyword (one that opens a block, like `when` / `then` / `else`) additionally needs:
+      a `DslSection` case plus its transition in `ui/dsl/DslContext.kt`, an entry in `DSL_BLOCK_KEYWORDS`
+      in `ui/editor/rules/DesktopRuleEditorItems.kt`, and a branch in `buildContextualCompletions`.
+    - A clause with no value to edit (`stop`) belongs in the Builder as a **removable badge with an add
+      button**, not as a row: a row would offer a dropdown and a value box for choices that do not exist.
+      Hold it as a `Boolean` on the branch rather than an entry in the action list — that is what keeps it
+      pinned to the end of the block however the author edits around it.
+    - A new clause inside a rule block must round-trip through **both** `ui/builder/RuleAstToBuilderMapper.kt`
+      and `ui/builder/BuilderToRuleDsl.kt`. The Builder replaces the whole rule text on every edit, so
+      anything the mapper drops is deleted from the file.
 
 ## When to also read core instructions
 

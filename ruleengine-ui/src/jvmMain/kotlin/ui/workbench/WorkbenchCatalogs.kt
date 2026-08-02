@@ -4,6 +4,7 @@ import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ArithmeticValueAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.FieldAccessAst
 import ruleengine.dsl.ast.FunctionCallValueAst
@@ -12,6 +13,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.ast.VariableRefAst
 import ui.builder.OperatorOptions
 import ui.builder.model.catalog.CatalogActionInfo
@@ -52,9 +54,16 @@ internal fun builderCatalogFieldsFrom(schema: FieldSchema?): List<CatalogFieldIn
 /**
  * Rule output variables in scope at [uptoRuleId], as extra entries for the builder's operand picker.
  *
- * Scope follows the engine's own rule: a `$name` only resolves when an *earlier* rule of the entry
- * assigns it, where "earlier" means manifest file order and then in-file source order — exactly the
- * order [files] arrives in. Passing `null` for [uptoRuleId] returns every variable of the entry.
+ * Scope follows the engine's own rule: a `$name` resolves when an *earlier* rule of the entry assigns
+ * it, where "earlier" means manifest file order and then in-file source order — exactly the order
+ * [files] arrives in. Passing `null` for [uptoRuleId] returns every variable of the entry.
+ *
+ * With one exception, mirroring `VariableScopeValidator`: the edited rule's **own `add` clauses** are
+ * in scope for its own condition, because that is what lets a rule guard on the list it fills in. Its
+ * `set` clauses are not — a rule cannot read a plain value it has not published yet.
+ *
+ * Both branches count. A `set` or an `add` in an `else` block publishes to the following rules exactly
+ * like one in `then`; only one branch runs per record, and which one is a runtime question.
  *
  * Ids carry the `$` prefix so the picker writes the DSL spelling straight through, and so
  * `scalarPaths` can keep them out of plain condition rows, where the parser would read `$total` as
@@ -67,18 +76,29 @@ internal fun builderCatalogVariablesFrom(
     val variables = LinkedHashMap<String, CatalogFieldInfo>()
     for (file in files) {
         for (rule in file.rules) {
+            val assignments = rule.assignments + rule.elseAssignments
             if (rule.id == uptoRuleId) {
+                assignments.filter { assignment -> assignment.kind == AssignmentKindAst.ADD }
+                    .forEach { assignment -> variables.putVariable(assignment = assignment) }
                 return variables.values.toList()
             }
-            for (assignment in rule.assignments) {
-                variables[assignment.name] = CatalogFieldInfo(
-                    id = "\$${assignment.name}",
-                    type = inferredVariableType(expr = assignment.expression),
-                )
-            }
+            assignments.forEach { assignment -> variables.putVariable(assignment = assignment) }
         }
     }
     return variables.values.toList()
+}
+
+private fun MutableMap<String, CatalogFieldInfo>.putVariable(assignment: VariableAssignmentAst) {
+    this[assignment.name] = CatalogFieldInfo(
+        id = "\$${assignment.name}",
+        // An `add` builds a list whatever its value expression is, so the value tells us nothing
+        // here — the clause does.
+        type = if (assignment.kind == AssignmentKindAst.ADD) {
+            OperatorOptions.LIST_VARIABLE_TYPE
+        } else {
+            inferredVariableType(expr = assignment.expression)
+        },
+    )
 }
 
 /**

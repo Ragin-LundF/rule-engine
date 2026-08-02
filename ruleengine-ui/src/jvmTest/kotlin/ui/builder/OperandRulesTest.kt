@@ -1,9 +1,11 @@
 package ui.builder
 
+import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.catalog.CatalogFieldInfo
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 /**
  * What a filter row on a path segment may name.
@@ -44,6 +46,51 @@ class OperandRulesTest {
         // 'origin' itself is gone: it holds no value to compare. Its scalar member is offered instead.
         // 'scans' is gone too — projecting a collection yields many values, not one.
         assertEquals(expected = listOf("code", "damaged", "origin.hub"), actual = options.map { it.id })
+    }
+
+    // ── list variables ────────────────────────────────────────────────────────
+
+    private val listVariable = BuilderOperand.FieldRef(
+        path = listOf(BuilderPathStep(name = "\$topics")),
+    )
+    private val literal = BuilderOperand.Literal(text = "billing", numeric = false)
+    private val variableFields = listOf(
+        CatalogFieldInfo(id = "\$topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
+        CatalogFieldInfo(id = "\$tier", type = OperatorOptions.VARIABLE_TYPE),
+    )
+
+    @Test
+    fun `a list variable offers contains and nothing else`() {
+        val operators = OperandRules.operatorsFor(
+            left = listVariable,
+            right = literal,
+            fields = variableFields,
+        )
+
+        assertEquals(expected = listOf(OperatorOptions.CONTAINS), actual = operators)
+    }
+
+    /** `contains` on an aggregate or a plain comparison is either rejected or can never match. */
+    @Test
+    fun `an untyped variable still offers the symbolic comparisons and no contains`() {
+        val untyped = BuilderOperand.FieldRef(
+            path = listOf(BuilderPathStep(name = "\$tier")),
+        )
+
+        val operators = OperandRules.operatorsFor(left = untyped, right = literal, fields = variableFields)
+
+        assertEquals(expected = OperatorOptions.COMPARISON_NUMERIC, actual = operators)
+    }
+
+    @Test
+    fun `a list variable row does not offer ignoreCase`() {
+        assertFalse(
+            actual = OperandRules.supportsIgnoreCase(
+                left = listVariable,
+                right = literal,
+                fields = variableFields,
+            )
+        )
     }
 
     @Test

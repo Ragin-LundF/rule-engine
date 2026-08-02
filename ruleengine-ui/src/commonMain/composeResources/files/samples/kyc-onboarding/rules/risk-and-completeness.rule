@@ -1,0 +1,65 @@
+# 6. Risk classification and the overall verdict — last, because it reads the whole picture.
+#
+# The risk rules do not stop either, and that is a deliberate difference from the sanctions hit. A PEP or
+# a high-risk country means enhanced due diligence under § 15 GwG — more checking, not a rejection — so
+# the customer still gets their document checklist alongside the note that a manual review follows.
+#
+# Schema: schema.yaml
+
+# ── Risk classification (§ 15 GwG) ──────────────────────────────────────────
+
+rule "politically-exposed-person" {
+  description "A beneficial owner or representative is a politically exposed person, which requires enhanced due diligence."
+  when
+    count(beneficialOwners[politicallyExposed == true]) > 0
+    or count(representatives[politicallyExposed == true]) > 0
+
+  then
+    riskLevel "enhanced"
+    review "politically-exposed-person"
+    message "One of the people you named holds or held a public office. This does not stop your application — it means a compliance officer reviews it personally."
+}
+
+rule "high-risk-jurisdiction" {
+  description "The company is incorporated in or operates from a jurisdiction on the EU high-risk list."
+  when
+    countryOfIncorporation in ["ir", "kp", "mm", "sy", "af"]
+    or operatingCountries containsAny ["ir", "kp", "mm", "sy", "af"]
+
+  then
+    riskLevel "enhanced"
+    review "high-risk-jurisdiction"
+    message "Because of the countries involved, your application needs an additional review step. We may come back to you for more detail."
+}
+
+# ── The overall verdict ─────────────────────────────────────────────────────
+
+# One condition, two outcomes, so the frontend always gets exactly one `status` to render a headline
+# from — next to the per-requirement flags every rule above emitted, which say *which* items are open.
+#
+# The condition restates the requirements rather than counting the flags: a rule cannot read what
+# another rule emitted, only what another rule published with `set`. Restating them keeps the completeness
+# test in one readable place, at the cost of having to keep it in step with the rules above — which is
+# what the sample's test in SampleProjectBuilderTest is there to notice.
+
+rule "case-completeness" {
+  description "Every customer-actionable requirement is met, so the case can go forward for review."
+  when
+    providedDocuments containsAll ["commercial-register-extract", "articles-of-association", "shareholder-list"]
+    and commercialRegisterExtractAgeDays <= 90
+    and representativeIdentification in ["video-ident", "eid", "post-ident"]
+    and transparencyRegisterChecked equals true
+    and count(beneficialOwners[ownershipPercent > 25]) > 0
+    and count(beneficialOwners[ownershipPercent > 25][identityVerified == false]) == 0
+    and businessPurpose in ["payment-acceptance", "payroll", "treasury", "lending", "investment"]
+    and vatId regex "^DE[0-9]{9}$"
+    and referenceIban regex "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+
+  then
+    status "ready-for-review"
+    message "Thank you — everything we need has arrived. We are reviewing your application and will be in touch shortly."
+
+  else
+    status "documents-outstanding"
+    message "We still need a few things from you. The list above shows exactly what is open — you can upload them in any order."
+}

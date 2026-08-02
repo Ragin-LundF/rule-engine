@@ -6,11 +6,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import ruleengine.core.domain.dto.RuleBranch
+import ruleengine.dsl.ast.AssignmentKindAst
 import ui.builder.OperatorOptions
+import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderLockKind
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderRule
+import ui.builder.model.BuilderVariable
 import ui.builder.model.pathOperand
 
 /** Converts a [MutableConditionNode] tree to an immutable [BuilderConditionNode] tree. */
@@ -25,12 +29,19 @@ fun MutableConditionNode.toImmutable(): BuilderConditionNode = when (this) {
     )
 }
 
+@Suppress("LongParameterList")
 class BuilderEditorState private constructor(
     val ruleId: String,
     description: String,
     val conditionNodes: SnapshotStateList<MutableConditionNode>,
     val actions: SnapshotStateList<MutableBuilderAction>,
     val variables: SnapshotStateList<MutableBuilderVariable>,
+    /** Actions of the `else` block. Empty when the rule declares no false branch. */
+    val elseActions: SnapshotStateList<MutableBuilderAction>,
+    /** `set` rows of the `else` block. */
+    val elseVariables: SnapshotStateList<MutableBuilderVariable>,
+    stopOnThen: Boolean,
+    stopOnElse: Boolean,
     val isLocked: Boolean,
     val lockReason: String,
     val lockKind: BuilderLockKind = BuilderLockKind.NONE,
@@ -38,9 +49,57 @@ class BuilderEditorState private constructor(
     /** The rule's optional `description` clause. Editable, unlike [ruleId], which is renamed separately. */
     var description by mutableStateOf(value = description)
 
+    /**
+     * Whether the THEN branch ends the run.
+     *
+     * A flag rather than a row in [actions], which is what keeps `stop` pinned to the end of the branch:
+     * there is no position for it to hold, so adding another action afterwards cannot push output below
+     * it, and the generated DSL always writes it last.
+     */
+    var stopOnThen by mutableStateOf(value = stopOnThen)
+
+    /** Whether the ELSE branch ends the run. The [stopOnThen] counterpart for the false branch. */
+    var stopOnElse by mutableStateOf(value = stopOnElse)
+
     private var nextConditionId = conditionNodes.size + 1
-    private var nextActionId = actions.size + 1
-    private var nextVariableId = variables.size + 1
+
+    // One counter per kind across both branches: a row id has to be unique within the rule, because
+    // the views key on it and a duplicate would make a removal in one branch hit the other.
+    private var nextActionId = actions.size + elseActions.size + 1
+    private var nextVariableId = variables.size + elseVariables.size + 1
+
+    /** The action rows of [branch], so a caller can drive either branch through the same code. */
+    fun actionsOf(branch: RuleBranch): SnapshotStateList<MutableBuilderAction> {
+        return if (branch == RuleBranch.THEN) actions else elseActions
+    }
+
+    /** The `set` and `add` rows of [branch]. */
+    fun variablesOf(branch: RuleBranch): SnapshotStateList<MutableBuilderVariable> {
+        return if (branch == RuleBranch.THEN) variables else elseVariables
+    }
+
+    /** Whether [branch] ends the run. */
+    fun stopOf(branch: RuleBranch): Boolean {
+        return if (branch == RuleBranch.THEN) stopOnThen else stopOnElse
+    }
+
+    /** Adds or removes the `stop` on [branch]. */
+    fun setStop(branch: RuleBranch, stop: Boolean) {
+        if (branch == RuleBranch.THEN) {
+            stopOnThen = stop
+        } else {
+            stopOnElse = stop
+        }
+    }
+
+    /**
+     * True when the rule declares an `else` block that produces something.
+     *
+     * A bare `stop` counts: "halt the run when this condition does not hold" is a real branch, and the
+     * DSL can express it.
+     */
+    val hasElseBranch: Boolean
+        get() = elseActions.isNotEmpty() || elseVariables.isNotEmpty() || stopOnElse
 
     companion object {
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
@@ -48,20 +107,12 @@ class BuilderEditorState private constructor(
                 ruleId = rule.id,
                 description = rule.description,
                 conditionNodes = rule.conditionNodes.map { it.toMutable() }.toMutableStateList(),
-                actions = rule.actions.map {
-                    MutableBuilderAction(
-                        id = it.id,
-                        name = it.name,
-                        arguments = it.arguments,
-                    )
-                }.toMutableStateList(),
-                variables = rule.variables.map {
-                    MutableBuilderVariable(
-                        id = it.id,
-                        name = it.name,
-                        expression = it.expression,
-                    )
-                }.toMutableStateList(),
+                actions = rule.actions.toMutableActions(),
+                variables = rule.variables.toMutableVariables(),
+                elseActions = rule.elseActions.toMutableActions(),
+                elseVariables = rule.elseVariables.toMutableVariables(),
+                stopOnThen = rule.stopOnThen,
+                stopOnElse = rule.stopOnElse,
                 isLocked = false,
                 lockReason = "",
                 lockKind = BuilderLockKind.NONE,
@@ -73,6 +124,10 @@ class BuilderEditorState private constructor(
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 variables = mutableStateListOf(),
+                elseActions = mutableStateListOf(),
+                elseVariables = mutableStateListOf(),
+                stopOnThen = false,
+                stopOnElse = false,
                 isLocked = true,
                 lockReason = rule.reason,
                 lockKind = BuilderLockKind.UNSUPPORTED_SYNTAX,
@@ -84,10 +139,35 @@ class BuilderEditorState private constructor(
                 conditionNodes = mutableStateListOf(),
                 actions = mutableStateListOf(),
                 variables = mutableStateListOf(),
+                elseActions = mutableStateListOf(),
+                elseVariables = mutableStateListOf(),
+                stopOnThen = false,
+                stopOnElse = false,
                 isLocked = true,
                 lockReason = "No rule selected.",
                 lockKind = BuilderLockKind.NO_RULE_SELECTED,
             )
+        }
+
+        private fun List<BuilderAction>.toMutableActions(): SnapshotStateList<MutableBuilderAction> {
+            return map { action ->
+                MutableBuilderAction(
+                    id = action.id,
+                    name = action.name,
+                    arguments = action.arguments,
+                )
+            }.toMutableStateList()
+        }
+
+        private fun List<BuilderVariable>.toMutableVariables(): SnapshotStateList<MutableBuilderVariable> {
+            return map { variable ->
+                MutableBuilderVariable(
+                    id = variable.id,
+                    name = variable.name,
+                    expression = variable.expression,
+                    kind = variable.kind,
+                )
+            }.toMutableStateList()
         }
 
         private fun BuilderConditionNode.toMutable(): MutableConditionNode = when (this) {
@@ -214,9 +294,32 @@ class BuilderEditorState private constructor(
         return condition
     }
 
-    /** Removes the leaf or group with the given [id] from the top level. */
+    /**
+     * Removes the leaf or group with the given [id], wherever it sits in the tree.
+     *
+     * Recursive, like [replaceNode] — a row inside a group is still a row with an × on it, and
+     * removing only from the top level made that × silently do nothing.
+     */
     fun removeCondition(id: String) {
-        conditionNodes.removeAll { it.id == id }
+        removeIn(nodes = conditionNodes, id = id)
+    }
+
+    private fun removeIn(nodes: SnapshotStateList<MutableConditionNode>, id: String): Boolean {
+        if (nodes.removeAll { it.id == id }) {
+            return true
+        }
+        for (group in nodes.filterIsInstance<MutableConditionNode.Group>()) {
+            if (!removeIn(nodes = group.nodes, id = id)) {
+                continue
+            }
+            // A group that has lost its last child renders as `()`, which does not parse, so the
+            // empty parentheses go with it.
+            if (group.nodes.isEmpty()) {
+                nodes.remove(element = group)
+            }
+            return true
+        }
+        return false
     }
 
     /**
@@ -299,41 +402,57 @@ class BuilderEditorState private constructor(
         return comparison
     }
 
-    /** Adds a new empty action with the given number of default arguments. */
-    fun addAction(defaultName: String = "", defaultArgCount: Int = 0): MutableBuilderAction {
+    /** Adds a new empty action to [branch], with the given number of default arguments. */
+    fun addAction(
+        defaultName: String = "",
+        defaultArgCount: Int = 0,
+        branch: RuleBranch = RuleBranch.THEN,
+    ): MutableBuilderAction {
         val action = MutableBuilderAction(
             id = "act-${nextActionId++}",
             name = defaultName,
             arguments = List(defaultArgCount) { "" }.toMutableList(),
         )
-        actions.add(action)
+        actionsOf(branch = branch).add(action)
         return action
     }
 
-    /** Removes the action with the given [id]. */
+    /**
+     * Removes the action with the given [id] from whichever branch holds it.
+     *
+     * Row ids are unique across the rule, so the caller does not have to say which branch it means —
+     * and a view that guessed wrong would silently delete nothing.
+     */
     fun removeAction(id: String) {
         actions.removeAll { it.id == id }
+        elseActions.removeAll { it.id == id }
     }
 
     /**
-     * Adds a new `set` row after the existing ones.
+     * Adds a new assignment row to [branch], after the existing ones.
      *
-     * The default expression is a blank literal rather than a field reference: a `set` clause is
-     * usually written to hold something computed, and an empty value box is the one starting point
-     * that is wrong for no one.
+     * The default expression is a blank literal rather than a field reference: an assignment is
+     * usually written to hold something the author types, and an empty value box is the one starting
+     * point that is wrong for no one. [kind] decides whether the row reads as a `set` or an `add`.
      */
-    fun addVariable(defaultName: String = ""): MutableBuilderVariable {
+    fun addVariable(
+        defaultName: String = "",
+        branch: RuleBranch = RuleBranch.THEN,
+        kind: AssignmentKindAst = AssignmentKindAst.SET,
+    ): MutableBuilderVariable {
         val variable = MutableBuilderVariable(
             id = "var-${nextVariableId++}",
             name = defaultName,
             expression = BuilderOperand.Literal(text = "", numeric = false),
+            kind = kind,
         )
-        variables.add(variable)
+        variablesOf(branch = branch).add(variable)
         return variable
     }
 
-    /** Removes the `set` row with the given [id]. */
+    /** Removes the assignment row with the given [id] from whichever branch holds it. */
     fun removeVariable(id: String) {
         variables.removeAll { it.id == id }
+        elseVariables.removeAll { it.id == id }
     }
 }

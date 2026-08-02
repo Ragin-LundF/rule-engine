@@ -184,6 +184,9 @@ object EvaluateCli {
         outputMap["matches"] = evaluationResult.matches.map { match ->
             mapOf(
                 "ruleId" to match.ruleId,
+                // Without this a reader cannot tell a rule whose condition held from one whose `else`
+                // branch fired, and would take every entry for a match.
+                "branch" to match.branch.name.lowercase(),
                 "actions" to match.actions.map { action ->
                     mapOf(
                         "name" to action.name,
@@ -192,6 +195,9 @@ object EvaluateCli {
                 },
             )
         }
+        // Only written when a rule actually halted the run, so an ordinary result keeps its shape.
+        // Without it the absence of later rules reads as "they did not match" rather than "never ran".
+        evaluationResult.stoppedBy?.let { ruleId -> outputMap["stoppedBy"] = ruleId }
         if (includeTrace && evaluationResult.trace != null) {
             // result.trace is DecisionTree
             outputMap["decisionTree"] = evaluationResult.trace

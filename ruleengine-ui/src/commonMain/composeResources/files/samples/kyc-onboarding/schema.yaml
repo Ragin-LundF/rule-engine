@@ -1,0 +1,209 @@
+schema: kyc-onboarding-v1
+
+# Input contract of a German B2B onboarding case, in the shape an onboarding portal hands it over:
+# what the applicant company is, which documents have arrived so far, and what the automated register
+# and screening lookups came back with.
+#
+# The model follows the customer due diligence obligations of the Geldwäschegesetz (GwG) for a legal
+# entity: identify the contracting party (§ 11), identify the beneficial owners above the 25 % threshold
+# (§ 3), check the Transparenzregister, screen for politically exposed persons and sanctions, and apply
+# enhanced due diligence where the risk calls for it (§ 15).
+#
+# Note what is *not* in here: any notion of "the case is complete". That is the rules' conclusion, not
+# the caller's input — see rules/case-completeness.rule.
+
+fields:
+
+  # ── The order the customer came through ─────────────────────────────────────
+
+  # The onboarding order itself. Nothing is assessed until this says the customer finished it.
+  orderStatus:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  # ── The applicant company ───────────────────────────────────────────────────
+
+  companyName:
+    type: text
+    normalizers:
+      - trim
+    operators:
+      - equals
+      - contains
+
+  # GmbH, UG, AG, KG, OHG, GbR, eK — the legal form decides which register applies and which
+  # documents exist at all. A GbR has no Handelsregister entry.
+  legalForm:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  # Handelsregister number, e.g. "HRB 123456". Uppercased so the rules can compare it directly.
+  commercialRegisterNumber:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - startsWith
+      - regex
+
+  # How old the submitted Handelsregisterauszug is. An extract is only accepted while it is recent.
+  commercialRegisterExtractAgeDays:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  countryOfIncorporation:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  # Where the business actually operates, which can reach further than where it is registered.
+  operatingCountries:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll
+
+  # Purpose of the business relationship (§ 10 (1) Nr. 2 GwG).
+  businessPurpose:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+      - contains
+
+  expectedMonthlyVolume:
+    type: decimal
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte
+      - between
+
+  # ── What has been uploaded so far ───────────────────────────────────────────
+
+  # Document ids the portal has received. Every requirement rule tests this set, so a newly uploaded
+  # document changes exactly one requirement and leaves the others where they were.
+  providedDocuments:
+    type: string_set
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - containsAny
+      - containsAll
+
+  # ── Verification state, filled in by the automated lookups ──────────────────
+
+  # How the legal representative was identified. BaFin accepts VideoIdent, the eID function of the
+  # German ID card, and PostIdent; "none" means it has not happened yet.
+  representativeIdentification:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  # True when the person acting for the company is not itself an authorised representative, in which
+  # case a written power of attorney is required.
+  powerOfAttorneyRequired:
+    type: boolean
+    operators:
+      - equals
+
+  # Whether the Transparenzregister lookup has been performed for this company.
+  transparencyRegisterChecked:
+    type: boolean
+    operators:
+      - equals
+
+  # Whether the customer has declared where the funds come from.
+  sourceOfFundsDeclared:
+    type: boolean
+    operators:
+      - equals
+
+  # A hit on an EU, UN or OFAC sanctions list. Onboarding cannot continue on a hit.
+  sanctionsListMatch:
+    type: boolean
+    operators:
+      - equals
+
+  vatId:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - startsWith
+      - regex
+
+  referenceIban:
+    type: text
+    normalizers:
+      - trim
+      - uppercase
+    operators:
+      - equals
+      - startsWith
+      - regex
+
+  # ── The people behind the company ───────────────────────────────────────────
+
+  # Natural persons holding more than 25 % of capital or voting rights are the beneficial owners
+  # (§ 3 GwG). The list carries everyone the company declared, including smaller holdings, so the
+  # rules apply the threshold themselves rather than trusting the caller to have applied it.
+  beneficialOwners:
+    type: collection
+    fields:
+      name:
+        type: text
+      ownershipPercent:
+        type: decimal
+      identityVerified:
+        type: boolean
+      politicallyExposed:
+        type: boolean
+
+  # Geschäftsführer / Vorstand — the persons who may act for the company.
+  representatives:
+    type: collection
+    fields:
+      name:
+        type: text
+      identityVerified:
+        type: boolean
+      politicallyExposed:
+        type: boolean

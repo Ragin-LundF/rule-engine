@@ -46,6 +46,18 @@ internal object ValueExpressionValidator {
             return
         }
 
+        // `contains` compares a list against one of its elements, or text against a substring, so its
+        // two sides are not meant to have the same kind. [ValueKind] cannot express that: it has no
+        // ARRAY member, and `kindOf` reports every array-like type as NUMERIC — so checking this pair
+        // would reject `orders[status == "paid"].tag contains "a"` as NUMERIC-versus-TEXT.
+        //
+        // The cost of skipping is that a nonsense pairing such as `count(orders) contains 5` validates
+        // and then never matches. Closing that needs an ARRAY kind, which is a wider change than this
+        // operator warrants.
+        if (expr.operator == ComparisonOperatorAst.CONTAINS) {
+            return
+        }
+
         if (leftKind != rightKind) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,

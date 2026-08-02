@@ -1,0 +1,52 @@
+schema: support-triage-v1
+
+fields:
+
+  # What the customer wrote. Normalised so every rule can be written in lowercase.
+  subject:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+      - collapse_whitespace
+    operators:
+      - contains
+      - startsWith
+      - regex
+
+  body:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+      - collapse_whitespace
+    operators:
+      - contains
+      - regex
+
+  channel:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  customerTier:
+    type: text
+    normalizers:
+      - trim
+      - lowercase
+    operators:
+      - equals
+      - in
+
+  attachmentCount:
+    type: integer
+    operators:
+      - equals
+      - gt
+      - gte
+      - lt
+      - lte

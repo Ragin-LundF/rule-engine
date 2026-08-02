@@ -33,9 +33,18 @@ kotlin {
                 implementation(project(":ruleengine-core"))
                 implementation(libs.bundles.jackson)
                 implementation(kotlin("test"))
+                // Renders the app off-screen for the README screenshots (DocScreenshotsTest).
+                // The framework-agnostic artifact, not `compose.desktop.uiTestJUnit4`: the JUnit 4
+                // one only adds the `ComposeTestRule`, which `runDesktopComposeUiTest` does not use.
+                implementation(compose.uiTest)
             }
         }
     }
+}
+
+// Screenshots are only regenerated on demand: ./gradlew :ruleengine-ui:jvmTest -PdocScreenshots=true
+tasks.named("jvmTest") {
+    systemProperty("docScreenshots", providers.gradleProperty("docScreenshots").getOrElse(""))
 }
 
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat

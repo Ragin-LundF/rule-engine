@@ -46,8 +46,6 @@ object RuleEngineBuilder {
      *
      * @param manifestPath path to the manifest YAML (or JSON) file
      * @param entryId when set, only this entry is built; the result is a single-element map
-     * @param shortCircuitByOutput passed to [RuleEngine]; stops evaluating once every declared
-     *   output has been produced
      * @param normalizerRegistry normalizer registry used for compilation
      * @return the built engines keyed by manifest entry id
      * @throws RuleEngineBuildException if the manifest, any referenced file or any rule is invalid
@@ -55,7 +53,6 @@ object RuleEngineBuilder {
     fun fromManifest(
         manifestPath: Path,
         entryId: String? = null,
-        shortCircuitByOutput: Boolean = false,
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
     ): Map<String, LoadedRuleEngine> {
         val manifest = runCatching {
@@ -72,7 +69,6 @@ object RuleEngineBuilder {
                 manifestPath = manifestPath,
                 baseDir = baseDir,
                 entry = entry,
-                shortCircuitByOutput = shortCircuitByOutput,
                 normalizerRegistry = normalizerRegistry,
             )
         }
@@ -86,12 +82,10 @@ object RuleEngineBuilder {
     fun fromManifestEntry(
         manifestPath: Path,
         entryId: String,
-        shortCircuitByOutput: Boolean = false,
         normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
     ): LoadedRuleEngine = fromManifest(
         manifestPath = manifestPath,
         entryId = entryId,
-        shortCircuitByOutput = shortCircuitByOutput,
         normalizerRegistry = normalizerRegistry,
     ).getValue(entryId)
 
@@ -135,7 +129,6 @@ object RuleEngineBuilder {
         manifestPath: Path,
         baseDir: Path,
         entry: ManifestEntry,
-        shortCircuitByOutput: Boolean,
         normalizerRegistry: NormalizerRegistry,
     ): LoadedRuleEngine {
         val schema = loadSchema(manifestPath = manifestPath, baseDir = baseDir, entry = entry)
@@ -158,25 +151,9 @@ object RuleEngineBuilder {
             fail(manifestPath = manifestPath, entryId = entry.id, details = "rule compilation failed", cause = cause)
         }
 
-        // Short-circuiting groups rules by output and so reorders them, while a `set` clause only
-        // reaches the rules declared after it. Combining the two would make which variable a rule
-        // sees depend on grouping, so the build fails instead of quietly changing the outcome.
-        if (shortCircuitByOutput) {
-            val assigningRules = compiledRules.filter { rule -> rule.assignments.isNotEmpty() }
-            if (assigningRules.isNotEmpty()) {
-                fail(
-                    manifestPath = manifestPath,
-                    entryId = entry.id,
-                    details = "shortCircuitByOutput cannot be used with variables, because it evaluates " +
-                            "rules by output group rather than in declaration order; " +
-                            "rules with a 'set' clause: ${assigningRules.joinToString { rule -> rule.id }}",
-                )
-            }
-        }
-
         return LoadedRuleEngine(
             entryId = entry.id,
-            engine = RuleEngine(compiledRules = compiledRules, shortCircuitByOutput = shortCircuitByOutput),
+            engine = RuleEngine(compiledRules = compiledRules),
             schema = schema,
             actions = actions,
             warnings = validationResult.diagnostics.filter { it.severity != Severity.ERROR },

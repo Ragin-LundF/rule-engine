@@ -1,0 +1,7 @@
+actions:
+  topic:
+    argTypes: [string]
+  queue:
+    argTypes: [string]
+  priority:
+    argTypes: [string]

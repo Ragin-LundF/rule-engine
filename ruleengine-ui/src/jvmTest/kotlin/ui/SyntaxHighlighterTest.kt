@@ -88,6 +88,20 @@ class SyntaxHighlighterTest {
     }
 
     @Test
+    fun `else is coloured as structure, not as an action name`() {
+        val result = annotate(
+            text = "rule \"r\" {\n  when\n    purpose contains \"rent\"\n" +
+                    "  then\n    label \"x\"\n  else\n    label \"y\"\n}",
+        )
+
+        assertEquals(
+            expected = colorOf(annotated = result, token = "then"),
+            actual = colorOf(annotated = result, token = "else"),
+            message = "else is structure, like then",
+        )
+    }
+
+    @Test
     fun `named operators and logic words are distinguished from plain identifiers`() {
         val result = annotate(
             text = "rule \"r\" {\n  when\n    purpose contains \"a\"\n    and amount >= 5\n  then\n    label \"x\"\n}",

@@ -1,0 +1,34 @@
+name: kyc-onboarding
+
+# Sample: KYC Onboarding (Germany)
+# Customer due diligence on a German business customer, modelled on the obligations of the
+# Geldwäschegesetz (GwG): identify the company and its representative (§ 11), identify the beneficial
+# owners above the 25 % threshold (§ 3), check the Transparenzregister, screen for sanctions and
+# politically exposed persons, and classify the risk (§ 15).
+#
+# The sample is built around the two branch constructs, and around the difference between them:
+#
+#   * `stop` appears exactly twice, both times where nothing the customer can upload would help — the
+#     order was never submitted, or the applicant is on a sanctions list. Both end the run with one
+#     sentence instead of a checklist.
+#   * every other requirement uses an `else` branch and deliberately does *not* stop, so one run reports
+#     everything that is still open. That is what lets a frontend show "3 of 7 done" with the open items
+#     named, rather than saying "further documents required" once per upload.
+#
+# The order below is what makes the two guards work: they have to be evaluated before the requirement
+# rules they short-circuit.
+
+entries:
+  - id: kyc-onboarding
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      # First: no finished order means there is nothing to assess.
+      - rules/application-gate.rule
+      # Second: a sanctions hit ends the automated flow.
+      - rules/sanctions-screening.rule
+      # From here on every rule reports independently and none of them stops.
+      - rules/company-identification.rule
+      - rules/people-identification.rule
+      - rules/business-details.rule
+      - rules/risk-and-completeness.rule

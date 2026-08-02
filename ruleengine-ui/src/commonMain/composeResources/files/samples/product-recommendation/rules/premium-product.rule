@@ -1,3 +1,20 @@
+# The stock check comes first and ends the run.
+#
+# "Must not be recommended" only holds if nothing downstream gets the chance to recommend it. None of
+# the rules below look at `stock`, so without the `stop` an out-of-stock luxury item would come back
+# both excluded *and* recommended to the premium shelf, and the caller would have to reconcile that.
+# `stop` states the intent in the rule instead of leaving it to the consumer.
+
+rule "out-of-stock-exclusion" {
+  description "The product is out of stock, so it is excluded and nothing else is recommended for it."
+  when
+    stock equals 0
+
+  then
+    exclude "out-of-stock"
+    stop
+}
+
 rule "luxury-item" {
   description "An expensive, highly rated product with a substantial review count."
   when
@@ -22,13 +39,4 @@ rule "high-rated-affordable" {
     badge "top-rated"
     recommend "best-value"
     boost 80
-}
-
-rule "out-of-stock-exclusion" {
-  description "The product is out of stock and must not be recommended."
-  when
-    stock equals 0
-
-  then
-    exclude "out-of-stock"
 }

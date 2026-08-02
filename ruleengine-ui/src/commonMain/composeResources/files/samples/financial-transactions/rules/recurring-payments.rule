@@ -2,6 +2,26 @@
 # Both are editable in Builder mode: a boolean field offers a true/false dropdown,
 # a date field takes quoted ISO dates.
 
+# The plainest case for an `else` branch: one boolean, two labels. Every payment gets exactly one of
+# them, and the boundary between them exists in one place. Written as two rules it would be
+# `recurring equals true` and `recurring equals false` — the same decision stated twice, where nothing
+# stops a later edit from leaving both true or neither.
+#
+# The two rules after it are *not* a pair like this: they add an amount band on top of the flag, so a
+# payment can match neither.
+
+rule "payment-cadence" {
+  description "Marks every payment as either part of a recurring series or a one-off."
+  when
+    recurring equals true
+
+  then
+    label "recurring"
+
+  else
+    label "one-off"
+}
+
 rule "recurring-subscription" {
   description "A small recurring payment is treated as a subscription."
   when

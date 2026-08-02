@@ -1,0 +1,38 @@
+# Shipping. The last topic file, and the one that shows an `add` in an `else` branch.
+
+rule "shipping-delayed-parcel" {
+  description "A delivery has not arrived."
+  when
+    not $topics contains "shipping"
+    and (subject contains "where is my parcel"
+    or subject contains "not delivered"
+    or subject contains "delayed")
+
+  then
+    topic "shipping"
+    add "shipping" to topics
+}
+
+rule "shipping-damaged-parcel" {
+  description "A delivery arrived broken."
+  when
+    not $topics contains "shipping"
+    and (subject contains "damaged"
+    or subject contains "arrived broken")
+
+  then
+    topic "shipping"
+    add "shipping" to topics
+}
+
+rule "photo-evidence" {
+  description "A ticket with attachments carries evidence; one without has to be asked for it."
+  when
+    attachmentCount > 0
+
+  then
+    add "has-evidence" to topics
+
+  else
+    add "needs-evidence" to topics
+}

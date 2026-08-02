@@ -12,15 +12,14 @@ import ruleengine.dsl.ast.StringLiteral
  *
  * These two are not the same thing and the outcome map must not blur them:
  *
- * - [staticOutputKey] mirrors `RuleEngine.staticOutputKeys` exactly. It is the key the engine buckets
- *   rules by when `shortCircuitByOutput` is enabled, and it uses the **whole** first argument. So
- *   `assessment "transit:green"` and `assessment "transit:red"` are two different buckets and the
- *   rules producing them never compete with each other.
+ * - [staticOutputKey] is the exact output a rule declares: the action name plus the **whole** first
+ *   argument. So `assessment "transit:green"` and `assessment "transit:red"` are two different buckets,
+ *   and the rules producing them never decide the same value.
  * - [displayFamily] is a reading aid with no runtime meaning. It collapses the `:`-separated prefix
  *   of the value so a human sees the `assessment:transit` family at a glance.
  *
- * A rule that emits several actions belongs to one bucket per action, which is also what
- * `RuleEngine.staticOutputKeys` does.
+ * A rule that emits several actions belongs to one bucket per action, because it can decide each of
+ * those outputs.
  */
 object OutcomeKey {
 

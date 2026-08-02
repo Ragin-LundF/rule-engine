@@ -4,6 +4,7 @@ import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.dto.field.FieldSchema
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
+import ui.builder.OperatorOptions
 
 /** Completions offered inside a rule's `when` block. */
 internal fun buildAggregateFunctionCompletions(): List<CompletionItem> {
@@ -96,6 +97,9 @@ internal fun buildOperatorCompletions(
     fieldName: String,
     schema: FieldSchema?
 ): List<CompletionItem> {
+    if (fieldName.startsWith(prefix = "$")) {
+        return variableOperatorCompletions(variableName = fieldName)
+    }
     val def = resolveFieldByIdentifier(
         identifier = fieldName,
         schema = schema
@@ -117,6 +121,25 @@ internal fun buildOperatorCompletions(
             insertText = "$displayId $op $placeholder",
             kind = CompletionKind.OPERATOR,
             hint = def.type.name.lowercase()
+        )
+    }
+}
+
+/**
+ * Operators for a `${'$'}variable` operand, which resolves to no schema field.
+ *
+ * A variable carries whatever the assigning clause produced, and which clause that was is not known
+ * here, so both shapes are offered: the symbolic comparisons a `set` value takes, and `contains` for
+ * a list built by `add`.
+ */
+private fun variableOperatorCompletions(variableName: String): List<CompletionItem> {
+    val operators = OperatorOptions.COMPARISON_NUMERIC + OperatorOptions.CONTAINS
+    return operators.map { op ->
+        CompletionItem(
+            label = "$op $variableName",
+            insertText = "$variableName $op ",
+            kind = CompletionKind.OPERATOR,
+            hint = "variable"
         )
     }
 }

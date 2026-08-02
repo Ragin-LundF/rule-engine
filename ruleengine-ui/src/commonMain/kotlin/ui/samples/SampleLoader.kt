@@ -7,17 +7,32 @@ import ui.samples.model.SampleDescriptor
 
 @OptIn(ExperimentalResourceApi::class)
 suspend fun loadSample(descriptor: SampleDescriptor): LoadedSample {
+    val manifestYaml = Res.readBytes(descriptor.manifestResPath).decodeToString()
     val schemaYaml = Res.readBytes(descriptor.schemaResPath).decodeToString()
     val actionsYaml = Res.readBytes(descriptor.actionsResPath).decodeToString()
-    val ruleTexts = mutableListOf<String>()
-    for (path in descriptor.ruleResPaths) {
-        ruleTexts.add(Res.readBytes(path).decodeToString())
+
+    val ruleFiles = descriptor.ruleResPaths.map { resPath ->
+        manifestRelativePath(resPath = resPath) to Res.readBytes(resPath).decodeToString()
     }
-    val rulesText = ruleTexts.joinToString(separator = "\n\n")
+
     return LoadedSample(
         descriptor = descriptor,
+        manifestYaml = manifestYaml,
         schemaYaml = schemaYaml,
         actionsYaml = actionsYaml,
-        rulesText = rulesText,
+        rulesText = ruleFiles.joinToString(separator = "\n\n") { (_, content) -> content },
+        ruleFiles = ruleFiles,
     )
+}
+
+/**
+ * The path a manifest would use for this rule file — `rules/x.rule` out of
+ * `files/samples/<id>/rules/x.rule`.
+ *
+ * The manifest run diagram labels its file bands with the manifest's own relative paths, so a sample has
+ * to hand over the same spelling a project does rather than the resource path it was read from.
+ */
+private fun manifestRelativePath(resPath: String): String {
+    return resPath.substringAfter(delimiter = "/rules/", missingDelimiterValue = "")
+        .let { name -> if (name.isEmpty()) resPath.substringAfterLast(delimiter = '/') else "rules/$name" }
 }

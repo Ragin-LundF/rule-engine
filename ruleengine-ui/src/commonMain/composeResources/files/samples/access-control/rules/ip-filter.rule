@@ -1,5 +1,27 @@
-rule "internal-network-allow" {
-  description "Requests from the internal network ranges are allowed with a generous rate limit."
+# Source-address rules, evaluated before anything else.
+#
+# The block list is a guard: it ends the run with `stop`, so a blocked address is never handed to the
+# role or time rules. Without that, a blocklisted administrator would still collect
+# `allow "full-access"` from role-check.rule — the deny and the allow would both come back and the
+# caller would have to decide which one wins. That is why this file is listed first in manifest.yaml.
+
+rule "blocklisted-ip" {
+  description "The source address is on the block list or has been reported for abuse; nothing else is assessed."
+  when
+    tags containsAny ["blocklisted", "abuse-reported"]
+
+  then
+    deny "ip-blocklist"
+    log "blocked-request"
+    stop
+}
+
+# An `else` branch gives one condition two outcomes, so the internal-network test and the public
+# default limit are written against a single boundary. As two rules it would need the range list and
+# its negation, and adding an internal range later would mean editing both.
+
+rule "network-origin-rate-limit" {
+  description "Requests from an internal network range get a generous rate limit; everything else the public default."
   when
     ip startsWith "10."
     or ip startsWith "192.168."
@@ -8,16 +30,9 @@ rule "internal-network-allow" {
   then
     allow "internal-network"
     rateLimit 10000
-}
 
-rule "blocklisted-ip" {
-  description "The source address is on the block list or has been reported for abuse."
-  when
-    tags containsAny ["blocklisted", "abuse-reported"]
-
-  then
-    deny "ip-blocklist"
-    log "blocked-request"
+  else
+    rateLimit 100
 }
 
 rule "suspicious-ip-rate-limit" {

@@ -69,11 +69,20 @@ internal fun RulesAreaContent(
         onTreeRuleSelected = { relativePath, ruleId ->
             // The file load stays at this level: it is disk I/O against the editor's manifest state,
             // and it has to happen before the selection is parked as pending.
-            if (relativePath == state.selectedManifestRuleFile.value || relativePath == "current") {
-                builderRules.select(ruleId = ruleId)
-            } else {
-                state.loadSingleManifestRuleFile(relativePath)
-                builderRules.selectWhenParsed(ruleId = ruleId)
+            when {
+                // In "All files" the buffer already holds every rule of the entry, so there is
+                // nothing to load — and loading one file would replace the buffer with a snapshot of
+                // that file alone, throwing away every unsaved edit in the other ones. This is the
+                // path a sample takes, which opens in All files with no single file selected.
+                state.showAllRules.value -> builderRules.select(ruleId = ruleId)
+
+                relativePath == state.selectedManifestRuleFile.value || relativePath == "current" ->
+                    builderRules.select(ruleId = ruleId)
+
+                else -> {
+                    state.loadSingleManifestRuleFile(relativePath)
+                    builderRules.selectWhenParsed(ruleId = ruleId)
+                }
             }
         },
         testContent = {
@@ -110,20 +119,15 @@ private fun RulesTestContent(
         state = testInputState,
         onStateChange = onTestInputStateChange,
         onRunTest = {
-            testController.run(
-                ruleText = if (state.showAllRules.value) {
-                    state.allRulesText.value
-                } else {
-                    state.ruleValue.value.text
-                },
-            )
+            // The buffer the Builder and the code editor edit, so a run always tests what is on
+            // screen rather than a copy taken when the files were loaded.
+            testController.run(ruleText = state.ruleValue.value.text)
         },
         onLoadJson = { testController.loadInputJson() },
         ruleIds = catalogRules.map { it.id },
         ruleSelectionEnabled = !state.showAllRules.value,
         runEnabled = state.parsedSchema.value != null &&
-                (state.ruleValue.value.text.isNotBlank() ||
-                        state.showAllRules.value && state.allRulesText.value.isNotBlank()) &&
+                state.ruleValue.value.text.isNotBlank() &&
                 !hasErrors,
         runReason = when {
             state.parsedSchema.value == null -> "Load a field schema first"

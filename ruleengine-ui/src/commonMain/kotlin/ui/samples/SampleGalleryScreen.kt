@@ -236,8 +236,14 @@ private fun RuleCountBadge(count: Int) {
 
 private fun SampleCategory.colors(): Pair<Color, Color> = when (this) {
     SampleCategory.FINANCE -> PrimaryBlue to PrimaryGlow
+    // Shares the security palette: compliance and access control are the same kind of gatekeeping to a
+    // reader scanning the gallery, and a sixth accent would only add a colour nothing else uses.
+    SampleCategory.COMPLIANCE -> AccentPurple to AccentPurpleSoft
     SampleCategory.LOGGING -> AccentOrange to AccentOrangeSoft
     SampleCategory.ECOMMERCE -> AccentGreen to AccentGreenSoft
     SampleCategory.SECURITY -> AccentPurple to AccentPurpleSoft
     SampleCategory.LOGISTICS -> AccentCyan to AccentCyanSoft
+    // Shares the logging palette: both are streams of incoming messages being sorted, and the
+    // gallery has no accent left that is not already carrying a meaning.
+    SampleCategory.SUPPORT -> AccentOrange to AccentOrangeSoft
 }

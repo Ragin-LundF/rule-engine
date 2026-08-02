@@ -1,0 +1,27 @@
+# 1. The gate: is there a finished order to assess at all?
+#
+# This is the one rule in the sample that stops on a *missing* precondition rather than on a decision.
+# An unfinished order has no meaningful KYC verdict: the customer has not told us who they are yet, so
+# listing seven missing documents would be noise on top of the one thing that actually needs doing.
+# `stop` ends the run here, and the customer gets exactly one sentence.
+#
+# The `else` branch is where the stop lives, which is worth reading twice: the *false* case is the
+# abnormal one. Written the other way round — `when orderStatus != "completed"` — the rule would say
+# what it rejects rather than what it requires, and the requirement id would sit in the `then`.
+#
+# Schema: schema.yaml
+
+rule "order-completed" {
+  description "Nothing is assessed until the customer has finished the onboarding order."
+  when
+    orderStatus equals "completed"
+
+  then
+    satisfied "order-completed"
+
+  else
+    status "order-incomplete"
+    message "Your application has not been submitted yet. Please complete and submit the onboarding form — we will start the review as soon as it arrives."
+    requirement "order-completed"
+    stop
+}

@@ -7,8 +7,11 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderOperand
+import ui.builder.model.BuilderPathStep
+import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.diagrams.model.RuleSource
 import ui.workbench.builderCatalogVariablesFrom
@@ -163,6 +166,196 @@ class BuilderVariableRoundTripTest {
             expected = OperatorOptions.COMPARISON_NUMERIC,
             actual = OperatorOptions.forField(fieldType = OperatorOptions.VARIABLE_TYPE),
         )
+    }
+
+    // ── add clauses ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `an add clause survives the builder round-trip`() {
+        val original = """
+            rule "billing" {
+              description "d"
+              when
+                amount >= 1
+              then
+                add "billing" to topics
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(dsl = original)
+
+        val row = state.variables.single()
+        assertEquals(expected = "topics", actual = row.name)
+        assertEquals(expected = AssignmentKindAst.ADD, actual = row.kind)
+
+        val regenerated = BuilderToRuleDsl.generate(state = state).orEmpty()
+        assertTrue(
+            actual = regenerated.contains(other = """add "billing" to topics"""),
+            message = "expected an add clause, got:\n$regenerated",
+        )
+    }
+
+    /**
+     * The kinds must not be normalised into each other. An `add` written back as a `set` would turn
+     * an accumulator into a scalar and break every guard reading it.
+     */
+    @Test
+    fun `a set and an add in one block keep their kinds and order`() {
+        val original = """
+            rule "mixed" {
+              description "d"
+              when
+                amount >= 1
+              then
+                add "billing" to topics
+                set tier = 2
+            }
+        """.trimIndent()
+
+        val state = builderStateFromDsl(dsl = original)
+
+        assertEquals(
+            expected = listOf(AssignmentKindAst.ADD, AssignmentKindAst.SET),
+            actual = state.variables.map { row -> row.kind },
+        )
+
+        val regenerated = BuilderToRuleDsl.generate(state = state).orEmpty()
+        assertTrue(
+            actual = regenerated.indexOf(string = """add "billing" to topics""") <
+                regenerated.indexOf(string = "set tier = 2"),
+            message = "expected the add first, got:\n$regenerated",
+        )
+    }
+
+    @Test
+    fun `a guard reading a list variable survives the builder round-trip`() {
+        val original = """
+            rule "guarded" {
+              description "d"
+              when
+                not ${'$'}topics contains "billing"
+                and amount >= 1
+              then
+                add "billing" to topics
+            }
+        """.trimIndent()
+
+        val regenerated = BuilderToRuleDsl.generate(state = builderStateFromDsl(dsl = original)).orEmpty()
+
+        assertTrue(
+            actual = regenerated.contains(other = """not ${'$'}topics contains "billing""""),
+            message = "expected the guard to survive, got:\n$regenerated",
+        )
+    }
+
+    /** A variable an `add` builds is typed as a list, which is what makes the row offer `contains`. */
+    @Test
+    fun `the operand catalog types an accumulator as a list variable`() {
+        val files = listOf(
+            RuleSource(
+                relativePath = "topics.rule",
+                rules = Parser(
+                    input = """
+                        rule "billing" {
+                          description "d"
+                          when
+                            amount >= 1
+                          then
+                            add "billing" to topics
+                            set tier = 2
+                        }
+                    """.trimIndent()
+                ).parseRules(),
+            )
+        )
+
+        val catalog = builderCatalogVariablesFrom(files = files, uptoRuleId = null)
+            .associate { info -> info.id to info.type }
+
+        assertEquals(expected = OperatorOptions.LIST_VARIABLE_TYPE, actual = catalog["${'$'}topics"])
+        assertEquals(expected = "decimal", actual = catalog["${'$'}tier"])
+    }
+
+    /**
+     * The engine lets a rule guard on the list it fills in, so the operand picker has to offer that
+     * list while editing that very rule — otherwise the row cannot resolve `${'$'}topics`, falls back to
+     * the text operators, and offers only `==` and `!=` for a membership test.
+     */
+    @Test
+    fun `the catalog offers a list the edited rule is itself the first to write`() {
+        val files = listOf(
+            RuleSource(
+                relativePath = "topics.rule",
+                rules = Parser(
+                    input = """
+                        rule "billing-from-refund" {
+                          description "d"
+                          when
+                            not ${'$'}topics contains "billing"
+                          then
+                            add "billing" to topics
+                        }
+                    """.trimIndent()
+                ).parseRules(),
+            )
+        )
+
+        val catalog = builderCatalogVariablesFrom(files = files, uptoRuleId = "billing-from-refund")
+            .associate { info -> info.id to info.type }
+
+        assertEquals(expected = OperatorOptions.LIST_VARIABLE_TYPE, actual = catalog["${'$'}topics"])
+    }
+
+    /** And the row must then offer `contains` rather than the text fallback. */
+    @Test
+    fun `a guard row on that list offers contains`() {
+        val fields = listOf(
+            CatalogFieldInfo(id = "${'$'}topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
+        )
+
+        val operators = OperandRules.operatorsFor(
+            left = BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "${'$'}topics"))),
+            right = BuilderOperand.Literal(text = "billing", numeric = false),
+            fields = fields,
+        )
+
+        assertEquals(expected = listOf(OperatorOptions.CONTAINS), actual = operators)
+    }
+
+    /** A `set` in an `else` block is in scope for the engine, so the picker must offer it too. */
+    @Test
+    fun `the catalog offers variables written in an else branch`() {
+        val files = listOf(
+            RuleSource(
+                relativePath = "topics.rule",
+                rules = Parser(
+                    input = """
+                        rule "evidence" {
+                          description "d"
+                          when
+                            amount >= 1
+                          then
+                            add "has-evidence" to topics
+                          else
+                            set fallbackTier = 1
+                        }
+                        rule "reader" {
+                          description "d"
+                          when
+                            amount >= 1
+                          then
+                            label "x"
+                        }
+                    """.trimIndent()
+                ).parseRules(),
+            )
+        )
+
+        val catalog = builderCatalogVariablesFrom(files = files, uptoRuleId = "reader")
+            .associate { info -> info.id to info.type }
+
+        assertEquals(expected = OperatorOptions.LIST_VARIABLE_TYPE, actual = catalog["${'$'}topics"])
+        assertEquals(expected = "decimal", actual = catalog["${'$'}fallbackTier"])
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

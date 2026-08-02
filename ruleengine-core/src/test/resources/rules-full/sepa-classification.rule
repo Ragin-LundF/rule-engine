@@ -8,11 +8,29 @@
 #   - gte / lte / gt / lt
 #   - not operator
 #   - bracket groups + combined operators
+#   - stop (a compliance guard that ends the run)
 #
 # Schema: full-schema.yaml
 # Note: sepaCode field has normalizers [trim, uppercase], so values are
 #       uppercased before comparison. The purposeNorm field has [trim, lowercase,
 #       german_umlaut_fold] applied.
+
+# ── Compliance guard (stop) ─────────────────────────────────────────────────
+# First and final: a blocked booking is rejected, and none of the classification rules below run for
+# it. Left at the end of the file it would still be rejected, but only after being labelled "rent" or
+# "streaming" on the way — a rejected booking carrying a spending category is a contradiction.
+
+rule "flagged-customer" {
+  description "The customer carries a compliance tag, so the booking is blocked and nothing further is classified."
+  when
+    tags containsAny ["blocked", "sanctioned", "aml-watch"]
+
+  then
+    flag "compliance"
+    alert "flagged-customer-transaction"
+    reject "aml-block"
+    stop
+}
 
 # ── SEPA code-based classification ──────────────────────────────────────────
 
@@ -134,15 +152,4 @@ rule "premium-customer-transfer" {
   then
     label "premium-credit"
     score 100
-}
-
-rule "flagged-customer" {
-  description "The customer carries a compliance tag, so the booking is blocked and reported."
-  when
-    tags containsAny ["blocked", "sanctioned", "aml-watch"]
-
-  then
-    flag "compliance"
-    alert "flagged-customer-transaction"
-    reject "aml-block"
 }

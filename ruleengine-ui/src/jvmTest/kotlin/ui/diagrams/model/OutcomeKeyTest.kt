@@ -29,10 +29,10 @@ class OutcomeKeyTest {
     }
 
     /**
-     * The property the outcome map exists to make visible. `RuleEngine.staticOutputKeys` keys on the
-     * *whole* first argument, so two rules a reader would call "the transit decision" land in two
-     * different buckets and never short-circuit each other. If this ever collapses to one key the
-     * engine's grouping changed and the view is lying.
+     * The property the outcome map exists to make visible. The key uses the *whole* first argument, so
+     * two rules a reader would call "the transit decision" land in two different buckets and never
+     * decide the same value. If this ever collapses to one key, the view starts claiming the two rules
+     * compete when they do not.
      */
     @Test
     fun `two values under the same prefix are separate buckets`() {

@@ -65,10 +65,24 @@ class MarkdownCatalogRendererTest {
     }
 
     @Test
-    fun `states that rules are independent`() {
-        // Most rule engines a reader has met are first-match-wins; without this they will assume the
-        // same here and misread every rule that follows.
-        assertTrue(actual = warehouse().contains(other = "Rules are independent."))
+    fun `states that every matching rule contributes and that order is fixed`() {
+        // Most rule engines a reader has met are first-match-wins; without the first sentence they will
+        // assume the same here and misread every rule that follows. The second is what makes the `set`
+        // and `stop` notes mean anything: they are claims about position, so the order has to be stated.
+        val markdown = warehouse()
+
+        assertTrue(
+            actual = markdown.contains(other = "a later rule never overrides an earlier one"),
+            message = markdown,
+        )
+        assertTrue(
+            actual = markdown.contains(other = "in the order they are listed below"),
+            message = markdown,
+        )
+        assertTrue(
+            actual = markdown.contains(other = "rule-file order, then the order the rules appear inside each file"),
+            message = markdown,
+        )
     }
 
     @Test
@@ -215,6 +229,49 @@ class MarkdownCatalogRendererTest {
         assertEquals(expected = warehouse(), actual = warehouse())
     }
 
+    // ── else branch ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `an else branch is rendered as an Otherwise section`() {
+        val markdown = renderRules(rules = TIERED_RULE)
+
+        assertTrue(actual = markdown.contains(other = "**Then:** `label high`"), message = markdown)
+        assertTrue(actual = markdown.contains(other = "**Otherwise:** `label low`"), message = markdown)
+        assertTrue(
+            actual = markdown.contains(other = "**Publishes for later rules otherwise:** `tierLevel`"),
+            message = markdown,
+        )
+    }
+
+    @Test
+    fun `the glance row shows the else outcome as an alternative, not a peer`() {
+        val markdown = renderRules(rules = TIERED_RULE)
+
+        assertTrue(
+            actual = markdown.contains(other = "`label high`; otherwise `label low`"),
+            message = markdown,
+        )
+    }
+
+    @Test
+    fun `an else outcome appears in the outcome summary`() {
+        val markdown = renderRules(rules = TIERED_RULE)
+        val outcomes = markdown.substringAfter(delimiter = "## Outcomes this rule set can produce")
+
+        assertTrue(actual = outcomes.contains(other = "low"), message = outcomes)
+    }
+
+    @Test
+    fun `the branching note is only written for a rule set that has one`() {
+        assertTrue(actual = renderRules(rules = TIERED_RULE).contains(other = "do *not* match"))
+        assertFalse(actual = oneRule(condition = "weightKg >= 1").contains(other = "do *not* match"))
+    }
+
+    @Test
+    fun `a rule without an else branch gets no Otherwise section`() {
+        assertFalse(actual = oneRule(condition = "weightKg >= 1").contains(other = "**Otherwise:**"))
+    }
+
     @Test
     fun `an entry with no rules says so instead of rendering an empty table`() {
         val catalog = RuleCatalog(
@@ -227,5 +284,20 @@ class MarkdownCatalogRendererTest {
 
         assertTrue(actual = markdown.contains(other = "No rules are defined in this entry."))
         assertFalse(actual = markdown.contains(other = "| Rule | What it does |"))
+    }
+
+    private companion object {
+        val TIERED_RULE: String = """
+            rule "tier" {
+              description "A heavy shipment is high tier, anything else is low tier."
+              when
+                weightKg >= 1000
+              then
+                label "high"
+              else
+                label "low"
+                set tierLevel = 1
+            }
+        """.trimIndent()
     }
 }

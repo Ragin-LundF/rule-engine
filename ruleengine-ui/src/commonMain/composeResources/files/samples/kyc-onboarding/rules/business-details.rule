@@ -1,0 +1,62 @@
+# 5. The business relationship itself (§ 10 (1) Nr. 2 GwG) — purpose, funds and payout account.
+#
+# Still parallel, still no `stop`. These are the last of the customer-actionable requirements.
+#
+# Schema: schema.yaml
+
+rule "business-purpose-stated" {
+  description "The customer has said what the business relationship is for, which the law requires to be recorded."
+  when
+    businessPurpose in ["payment-acceptance", "payroll", "treasury", "lending", "investment"]
+
+  then
+    satisfied "business-purpose-stated"
+
+  else
+    message "Please tell us what you intend to use the account for, so we can record the purpose of the business relationship."
+    requirement "business-purpose-stated"
+}
+
+# Source of funds is only asked for above a volume where it is proportionate. Below that the requirement
+# does not apply, so — as with the register number and the power of attorney — the exempt case is written
+# into the satisfied side rather than left to the `else`.
+
+rule "source-of-funds" {
+  description "Above 50,000 per month the origin of the funds has been declared; below it the question is not asked."
+  when
+    expectedMonthlyVolume <= 50000
+    or sourceOfFundsDeclared equals true
+
+  then
+    satisfied "source-of-funds"
+
+  else
+    message "For the transaction volume you expect, we need to know where the funds originate. Please complete the source-of-funds declaration."
+    requirement "source-of-funds"
+}
+
+rule "vat-id" {
+  description "A German VAT identification number has been supplied in the expected format."
+  when
+    vatId regex "^DE[0-9]{9}$"
+
+  then
+    satisfied "vat-id"
+
+  else
+    message "Please enter your VAT identification number (USt-IdNr.) in the format DE123456789."
+    requirement "vat-id"
+}
+
+rule "reference-account" {
+  description "A SEPA reference account has been named for payouts."
+  when
+    referenceIban regex "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+
+  then
+    satisfied "reference-account"
+
+  else
+    message "Please add the IBAN of the business account you want payouts sent to."
+    requirement "reference-account"
+}

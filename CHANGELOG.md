@@ -5,6 +5,227 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **List variables — the `add` clause and `contains`.** A `set` publishes one value; `add` collects
+  several across rules, and `contains` reads the list back.
+
+  ```
+  rule "billing-from-refund" {
+    description "A refund request is a billing matter."
+    when
+      not $topics contains "billing"
+      and purpose contains "refund"
+    then
+      label "billing"
+      add "billing" to topics
+  }
+  ```
+
+  Written for labelling: many rules producing the same outcome from different evidence, where the
+  expensive part of each rule is the text matching. A rule guards itself on the list, so once the
+  outcome is recorded the rest stop before doing that work again — and the outcome is produced once
+  instead of once per rule that could have reached it.
+    - **The guard is cheap by construction.** `and` stops at its first false condition, and the engine
+      evaluates the cheapest condition of an `and` first, so the list lookup runs before the text
+      search whichever order they are written in. `or` is unaffected — a false first operand still
+      lets the second decide.
+    - **Set semantics.** Adding a value the list already holds changes nothing. Insertion order is
+      kept, and the value arrives as a `List<Any?>` in `EvaluationResult.variables`.
+    - **A rule may read the list it writes.** Unlike `set`, an `add` publishes its name in time for
+      its own rule's condition — which is what lets the first rule of a guarded set guard itself. An
+      unassigned list reads as missing, `contains` on missing is false, and `not` of that is true, so
+      the first rule correctly fires. `set total = $total + amount` has no such starting point, so
+      reading a `set` variable before it is assigned remains an error.
+    - `contains` reads a list as membership and a text value as a substring. It is the one named
+      operator a variable accepts; `field contains "literal"` is unchanged and still takes the
+      named-operator path, with the field's declared `operators:` list enforced and its normalizers
+      applied.
+    - Several rules adding to one name is expected and produces no warning, unlike two rules `set`ting
+      one name. A name written by both a `set` and an `add` is an error: a variable is either a plain
+      value or a list.
+    - Supported in the visual Builder — an assignment row switches between `set` and `add`, and a list
+      variable offers `contains` — and in the editor's autocomplete and syntax highlighting.
+    - New **Support Triage** sample demonstrating the pattern end to end.
+
+- **An optional `else` branch on a rule.** A rule's `then` block says what to produce when its condition
+  holds; an `else` block after it says what to produce when the condition is false.
+
+  ```
+  rule "order-tier" {
+    description "An order of at least 1000 gets priority handling, anything smaller the standard path."
+    when
+      amount >= 1000
+    then
+      label "priority"
+      set tierLevel = 2
+    else
+      label "standard"
+      set tierLevel = 1
+  }
+  ```
+
+  Use it where a business statement has two outcomes over one threshold. Expressing that without `else`
+  takes two rules with the boundary written twice, and the two drift apart the first time someone changes
+  only one of them.
+    - The `else` block takes **exactly** what a `then` block takes — actions, `extract` clauses and `set`
+      clauses — because it is parsed by the same code. A `set` in `else` publishes to the following rules
+      just like one in `then`.
+    - Optional, at most once per rule, and never empty: `else` with nothing in it is a parse error rather
+      than a silent no-op, since it would be indistinguishable from having no `else` at all.
+    - Exactly one branch produces output per record. Never both, never neither.
+    - Validated at load time on both branches: an unknown action, a wrong argument type, a bad extraction
+      pattern or a `$name` with no earlier `set` is reported in an `else` block exactly as in a `then`
+      block. Two rules assigning the same variable is still a warning; **one rule** assigning it in both
+      of its own branches is not, since only one of them ever runs.
+    - `else` is now a keyword, so an action may not be named `else`. An action schema that declares one is
+      reported as an error naming the declaration, not every rule that uses it.
+
+- **The else branch in the editor.** `else` is highlighted as structure, autocompleted after a `then`
+  block, and offers the same action and `set` completions inside it. In the visual Builder, **+ Else
+  branch** under the THEN card adds the block and its first action; from there the ELSE card behaves like
+  THEN, with its own **+ Action** and **+ Variable**. Removing the last else row drops the branch — an
+  empty `else` is not a legal spelling of "absent", so the Builder does not pretend it is.
+
+- **`stop` — a branch can end the run.** Written as the last statement of a `then` or `else` block, it
+  means: collect this rule's output, then evaluate no rule declared after it.
+
+  ```
+  rule "blocked-country" {
+    description "A payment to a sanctioned country is rejected outright; nothing else applies."
+    when
+      country in ["xx", "yy"]
+    then
+      label "rejected"
+      stop
+  }
+  ```
+
+  This is the first construct in the DSL by which one rule suppresses another. Use it for a guard whose
+  verdict makes every rule below it inapplicable — a sanctioned counterparty, a missing mandatory field.
+    - `stop` belongs to a **branch**, not a rule, so a rule can halt on one verdict and carry on with the
+      other. An `else` block holding nothing but `stop` is valid: "halt when this condition does not hold".
+    - It must be the block's **last** statement. Anything after it is a parse error — those lines would in
+      fact still run, since a branch's output resolves before the halt, and a block with `stop` in the
+      middle would read as if half of it were dead.
+    - Reaches across rule files: an entry's files are one ordered list at runtime.
+    - Compatible with variables. A variable published before the `stop` is in the result; the rules that
+      would have read it are simply never reached.
+    - `stop` is now a keyword, so an action may not be named `stop` — an action schema declaring one is
+      reported as an error naming the declaration.
+    - `EvaluationResult.stoppedBy` names the rule that halted the run, or is `null` when every rule ran.
+      Without it a consumer cannot tell *"no further rule matched"* from *"no further rule ran"*.
+      `EvaluateCli` emits it as `stoppedBy` when a rule halted.
+
+- **`stop` in the Builder is a badge, not a typed word.** Each branch card has a **+ Stop** button; once
+  added, `stop` shows as a removable badge pinned to the end of that branch. It is held as a flag rather
+  than a row, so adding more actions or variables afterwards cannot push output below it — the generated
+  DSL always writes `stop` last, which is what the parser requires. **+ Stop** disappears while the branch
+  already has one.
+
+- The Test panel reports the rules after a `stop` as **not evaluated**, with their own filter and count,
+  rather than as *no match* — the run never tested them, so nothing is known about whether they would
+  have fired.
+
+- **A KYC onboarding sample (Germany).** Customer due diligence on a business customer, modelled on the
+  obligations of the Geldwäschegesetz: identify the company and its representative, identify beneficial
+  owners above the 25 % threshold, check the Transparenzregister, screen for sanctions and politically
+  exposed persons, classify the risk. It is built to show the difference between the two constructs —
+  `stop` appears exactly twice, where nothing the customer can upload would help (the order was never
+  submitted, or there is a sanctions hit), while every requirement check uses an `else` branch and
+  deliberately does *not* stop, so one run reports every outstanding document at once. That is what lets a
+  frontend render "11 of 15 done" with the open items named, instead of repeating "further documents
+  required" after each upload. `KycSampleBehaviourTest` pins that property.
+
+- **Branch examples in the existing samples**, placed where the rules were already asking for one. Four
+  turned out to fix real contradictions rather than illustrate a feature:
+    - `access-control` — a blocklisted **admin** previously collected both `deny "ip-blocklist"` and
+      `allow "full-access"`. The block list now ends the run, and `ip-filter.rule` moved ahead of the role
+      rules. Its rate-limit rule also gained an `else` for the public default.
+    - `product-recommendation` — an out-of-stock luxury item was both excluded *and* recommended to the
+      premium shelf; the stock check now runs first and stops.
+    - `loan-decisioning` — an applicant in arrears with good ratios got `decision "approve"` *and*
+      `decision "decline"`, then was priced. The arrears knock-out now runs first and stops, as its own
+      description always claimed it did.
+    - `log-filter` — `suppress` did not suppress: a slow DEBUG entry was dropped *and* paged the SRE team
+      at p1. The suppression rule moved to the severity file, first, and stops.
+    - `financial-transactions` — a `payment-cadence` rule shows the plainest `else`: one boolean, two labels.
+
+### Changed
+
+- **`add` is now a reserved action name.** It is a `then`-block keyword, so an action schema declaring
+  an action called `add` is rejected at load time with a rename suggestion (`append`), the same way
+  `else` and `stop` already were. Unlike those two, an existing rule set *can* have been using this
+  name — rename the action and the rules that write it.
+
+- `EvaluationResult.matches` now means **every rule that produced output**, and `RuleMatch` carries a
+  `branch: RuleBranch` (`THEN` / `ELSE`) saying why. A rule without an `else` block can only ever report
+  `THEN`, which is the default, so nothing changes for a rule set that uses no branches. Code that reads
+  `matches` as "the rules whose condition held" should filter:
+
+  ```kotlin
+  val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
+  ```
+
+- `DecisionTree.matchedRules` keeps its existing meaning and lists **only** the rules whose condition
+  held. A rule whose `else` branch fired is not in it — the trace answers "did the condition hold", which
+  the `result` flag on that rule's own node already reports.
+- **The documentation no longer claims rules are independent.** They are checked independently and all
+  matches are returned, but evaluation order is a *guarantee* the engine makes and two constructs depend
+  on it: `set` publishes only to the rules after it, and `stop` ends the run at its own position. The
+  claim is corrected in `RULE-SPEC.md` §1 and §5.1, `docs/rules.md`, `docs/manifest.md` and
+  `docs/performance.md` — and in the exported rule overviews, which stated it to the business reader.
+- `EvaluateCli` emits `"branch": "then"|"else"` per match. Without it the JSON would read as if every
+  entry were a rule whose condition held.
+- Exported rule overviews (Markdown and Word) gain an *Otherwise* section per branching rule, list its
+  else outcomes in the at-a-glance row as an alternative rather than a peer, and include them in the
+  outcome summary. The explanatory note about branching rules is written only for a rule set that has one.
+- The test panel reports an else result as its own **else** status, with its own filter and count. It
+  previously had no way to express this: the roster derived "matched" from mere presence in
+  `EvaluationResult.matches`, so an else-fired rule would have been reported as having matched.
+
+### Fixed
+
+- **The Builder corrupted a rule containing a quoted action argument.** `OperandText.quote` wrapped a value
+  in quotes without escaping the ones inside it, so a `message "use the format \"HRB 123456\""` was
+  re-emitted with the string ending mid-word and the rest of the rule unparseable. Because the Builder
+  replaces the whole rule text on every edit, this corrupted the file rather than only rendering wrongly.
+  Backslashes are escaped too.
+- **A sample loaded after a project showed the project's rules against the sample's schema.** `applySample`
+  never reset the project buffers, so `entryRuleSources` and All-files mode survived the switch and the
+  workbench kept rendering the previous rule set — against the new schema, which made every field in it
+  read as undeclared.
+- **Samples now behave like projects in the workbench.** They carry their manifest into the editor, so the
+  manifest run diagram has an entry to draw, and their rule files are registered in memory under the same
+  manifest-relative paths a project uses. Everything that resolves a rule file by path — switching to a
+  single file in the rule tree, the All-files view, every diagram, the rule-overview export — read from
+  disk and silently produced nothing for a sample: switching files reported "Manifest base directory is
+  not set", and All-files came up empty, which the diagrams rendered as "No valid rules to display".
+- **`financial-transactions` shipped without two of its five rule files.** The gallery loaded it from a
+  registry list that had drifted from the manifest, so the aggregate and boolean/date rules never appeared.
+  `SampleRegistryTest` now pins the registry against each manifest, for the file list and the order.
+
+### Removed
+
+- **`shortCircuitByOutput` is gone** — removed from `RuleEngine`, from both `RuleEngineBuilder` entry
+  points, and from the docs. **This is a breaking change** for any caller that passed it.
+
+  The flag grouped rules by static output and closed each group at its first match. It was already
+  incompatible with every feature added since 1.5.0 — variables (1.5.1), and now `else` and `stop` all
+  failed the build when combined with it — because all three depend on declaration order, which grouping
+  by output discards. Its own documentation noted that it was inert on the common rule set, where every
+  rule emits a distinct value.
+
+  There is no drop-in replacement, and `stop` is not one: `stop` halts the whole run, while the flag
+  skipped rules within a single output group and kept evaluating the others. What replaces it in practice
+  is ordering plus `stop` — put the cheap decisive guards first and the expensive rules behind them, and
+  the expensive ones never run on records that were already settled.
+
+  In exchange, `matches` is now **unconditionally** in declaration order, and `RuleEngine` lost the
+  grouping path entirely.
+
 ## 1.5.1
 
 ### Added
