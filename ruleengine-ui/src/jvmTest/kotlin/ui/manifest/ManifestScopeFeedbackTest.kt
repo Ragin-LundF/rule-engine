@@ -1,7 +1,9 @@
 package ui.manifest
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -11,11 +13,11 @@ import ui.manifest.model.ManifestEditorState
 import kotlin.test.Test
 
 /**
- * That the schema actually reaches the scope field.
+ * That the schema actually reaches the scope picker.
  *
  * [scopeIssue] is pinned on its own by `ScopeIssueTest`; what this adds is the wiring, which is the
  * half that was broken. The types travel from the parsed schema through five composables to get
- * here, and a verdict computed correctly but never rendered is the same silent fallback as before.
+ * here, and options computed correctly but never rendered are the same silent fallback as before.
  */
 class ManifestScopeFeedbackTest {
 
@@ -77,12 +79,38 @@ class ManifestScopeFeedbackTest {
         }
     }
 
-    /** With nothing typed the field says what could be, since it is free text with no picker. */
+    /** A dropdown cannot offer emptiness, so the default has to be a visible entry of its own. */
     @OptIn(ExperimentalTestApi::class)
     @Test
-    fun `an empty scope lists the collections instead`() {
+    fun `no scope shows the none entry`() {
         renderWith(scope = "") {
-            onNodeWithText(text = "Collections in this schema: reports").assertIsDisplayed()
+            onNodeWithText(text = SCOPE_NONE).assertIsDisplayed()
+        }
+    }
+
+    /** What the picker exists for: the legal values are read off the schema, not typed from memory. */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `the menu offers the schema's collections and nothing else`() {
+        renderWith(scope = "") {
+            onNodeWithText(text = SCOPE_NONE).performClick()
+            waitForIdle()
+            onNodeWithText(text = "reports").assertIsDisplayed()
+            // `caseId` is text, so it could never be scoped over.
+            onAllNodesWithText(text = "caseId").assertCountEquals(expectedSize = 0)
+        }
+    }
+
+    /**
+     * A manifest can arrive from disk or from the YAML tab carrying a scope the picker would never
+     * have offered. Swapping it for something legal would be a silent edit of the user's file, so
+     * the widget keeps it and marks it instead.
+     */
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun `an undeclared scope is kept and marked rather than dropped`() {
+        renderWith(scope = "tag") {
+            onNodeWithText(text = "tag ⚠").assertIsDisplayed()
         }
     }
 

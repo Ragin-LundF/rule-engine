@@ -30,6 +30,7 @@ import ui.BgElevated
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextSecondary
+import ui.builder.components.dropdown.DropdownSelector
 import ui.components.PathListEditor
 import ui.components.SectionTitle
 import ui.components.StatusBadge
@@ -125,6 +126,9 @@ fun ManifestEditorPanel(
 }
 
 private const val YAML_PARSE_DELAY_MS = 500L
+
+/** The picker's stand-in for an absent scope, since a dropdown cannot offer emptiness. */
+internal const val SCOPE_NONE: String = "(none — run once per document)"
 
 @Composable
 @Suppress("LongParameterList")
@@ -263,40 +267,56 @@ private fun ManifestEntryFields(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
     )
-    // Left blank the rules run once for the whole document, which is the default and what every
+    // A picker rather than free text: there are only ever a handful of legal values and the schema
+    // knows all of them, so the whole class of mistyped scopes stops existing. Left at
+    // [SCOPE_NONE] the rules run once for the whole document, which is the default and what every
     // manifest written before this setting existed means.
-    val issue = scopeIssue(scope = entry.scope, fieldTypes = fieldTypes)
-    OutlinedTextField(
-        value = entry.scope,
-        onValueChange = { onEntryChange(entry.copy(scope = it)) },
-        label = { Text("Scope — run once per collection member (optional)") },
-        placeholder = { Text("collection field, e.g. accounts") },
-        isError = issue != null,
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
+    Text(
+        text = "Scope — run once per collection member (optional)",
+        style = MaterialTheme.typography.caption,
+        color = TextSecondary,
     )
-    ScopeFieldNote(issue = issue, fieldTypes = fieldTypes)
+    DropdownSelector(
+        selected = entry.scope.ifBlank { SCOPE_NONE },
+        options = scopeOptions(scope = entry.scope, fieldTypes = fieldTypes),
+        onSelected = { picked ->
+            onEntryChange(entry.copy(scope = if (picked == SCOPE_NONE) "" else picked))
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    ScopeFieldNote(issue = scopeIssue(scope = entry.scope, fieldTypes = fieldTypes))
 }
 
 /**
- * What the schema has to say about the scope just typed.
+ * What the picker offers, given what the schema declares.
  *
- * The engine's own complaint when the scope cannot work, and otherwise the names that would — the
- * field is free text, and without the list a wrong guess is invisible until the project is loaded
- * somewhere else.
+ * A scope the schema does not declare is deliberately *not* added: `DropdownSelector` prepends an
+ * off-list value to its own menu and marks it, which is the whole point here — the bad value stays
+ * visible and selectable instead of being silently swapped for something legal.
+ *
+ * The exception is having no schema at all, where there is nothing to check the name against. The
+ * value the manifest already carries is offered as itself rather than accused of being undeclared.
+ */
+private fun scopeOptions(scope: String, fieldTypes: Map<String, String>?): List<String> = buildList {
+    add(SCOPE_NONE)
+    addAll(collectionNames(fieldTypes = fieldTypes))
+    if (fieldTypes == null && scope.isNotBlank()) add(scope)
+}
+
+/**
+ * Why the scope cannot work, when it cannot.
+ *
+ * The picker's own marker says *that* a value is off-list; this says *why*, in the engine's words.
+ * Both are still needed once the field is a dropdown, because a manifest can arrive from disk or
+ * from the YAML tab carrying a scope the picker would never have offered.
  */
 @Composable
-private fun ScopeFieldNote(issue: String?, fieldTypes: Map<String, String>?) {
-    val collections = collectionNames(fieldTypes = fieldTypes)
-    val text = when {
-        issue != null -> issue
-        collections.isEmpty() -> return
-        else -> "Collections in this schema: ${collections.joinToString(separator = ", ")}"
-    }
+private fun ScopeFieldNote(issue: String?) {
+    if (issue == null) return
     Text(
-        text = text,
+        text = issue,
         style = MaterialTheme.typography.caption,
-        color = if (issue != null) MaterialTheme.colors.error else TextSecondary,
+        color = MaterialTheme.colors.error,
     )
 }
 
