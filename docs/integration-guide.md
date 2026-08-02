@@ -181,7 +181,6 @@ val loaded = RuleEngineBuilder.fromManifestEntry(
 |---|---|---|
 | `manifestPath` | — | Path to the manifest YAML (or JSON) file |
 | `entryId` | `null` | Build only this entry instead of all of them |
-| `shortCircuitByOutput` | `false` | Enable the output-based short-circuit optimisation (see section 4.7) |
 | `normalizerRegistry` | `NormalizerRegistry.default` | Normalizer registry used for compilation |
 
 ### What is validated
@@ -469,38 +468,16 @@ val engine = RuleEngine(compiledRules = compiledRules)
 The `RuleEngine` instance is **immutable and thread-safe** after construction.
 Create it once and reuse it for all evaluations.
 
-#### Output-Based Short-Circuit (Optional Performance Optimisation)
+#### Evaluation Order
 
-By default the engine evaluates **every** rule against every input. When a large ruleset
-contains many rules that produce the **same output** (e.g. hundreds of rules all assigning
-the same set of labels), you can skip redundant work by enabling `shortCircuitByOutput`:
+The engine evaluates **every** rule against every input, in the order of the `compiledRules` list —
+manifest `rules:` file order, then the order the rules appear inside each file — and `result.matches`
+is returned in that same order.
 
-```kotlin
-val engine = RuleEngine(compiledRules = compiledRules, shortCircuitByOutput = true)
-```
-
-When enabled, the engine groups rules by every **static output** they declare
-(`actionName:value`, e.g. `label:rent`). Within each group, evaluation stops at the **first
-matching rule** — further rules in that group would only re-produce an output that is
-already settled. This is most effective when the heaviest conditions (e.g. `regex`) are the
-ones that get skipped.
-
-Behaviour notes:
-
-- A rule with multiple static outputs belongs to multiple groups and is reported **at most
-  once**.
-- Rules with **dynamic** outputs (e.g. a value extracted via `extract`) cannot be grouped
-  and are **always** evaluated.
-- With the flag enabled, `result.matches` is ordered by output group rather than by rule
-  declaration order.
-
-- The flag **cannot be combined with rule variables**. A `set` clause only reaches the rules declared
-  after it, and grouping by output reorders evaluation, so `RuleEngineBuilder` fails the build with
-  `shortCircuitByOutput cannot be used with variables` rather than producing an order-dependent
-  result.
-
-Leave the flag at its default (`false`) when you need every matching rule reported or must
-preserve declaration order — behaviour is then identical to previous versions.
+That ordering is a **guarantee**, and two constructs depend on it: a `set` clause publishes a value only
+the rules after it can read, and a branch ending in `stop` ends the run at its own position. Build the
+list through `RuleEngineBuilder` (or preserve manifest order yourself) and the order is correct by
+construction.
 
 ### 4.8 Evaluating Input Data
 
@@ -576,14 +553,16 @@ val result = engine.evaluate(prepared = prepared)
 
 ```kotlin
 import ruleengine.core.domain.dto.EvaluationResult
+import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.core.domain.dto.RuleAction
 
 val result: EvaluationResult = engine.evaluate(prepared = prepared)
 
-// result.matches is a List<RuleMatch>
+// result.matches is a List<RuleMatch> — every rule that produced output, either branch
 for (match: RuleMatch in result.matches) {
-    println("Rule matched: ${match.ruleId}")
+    val branch = if (match.branch == RuleBranch.THEN) "matched" else "did not match (else)"
+    println("Rule ${match.ruleId}: $branch")
 
     for (action: RuleAction in match.actions) {
         println("  ${action.name}: ${action.arguments}")
@@ -592,15 +571,27 @@ for (match: RuleMatch in result.matches) {
 ```
 
 `EvaluationResult`:
-- `matches: List<RuleMatch>` — all rules that matched, in the order they were declared (or in output-group order when `shortCircuitByOutput` is enabled — see section 4.7)
+- `matches: List<RuleMatch>` — every rule that produced output, in the order they were declared. A rule appears here when
+  its condition held, **or** when the condition was false and the rule declares an `else` branch;
+  `RuleMatch.branch` says which. For the rules whose condition actually held, filter on
+  `RuleBranch.THEN`:
+  ```kotlin
+  val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
+  ```
+  A rule without an `else` block can only ever report `RuleBranch.THEN`, so this list means exactly what
+  it did before for a rule set that uses no branches.
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
 - `variables: Map<String, Any?>` — the final value of every variable a matching rule published with a
   `set` clause, keyed by name without the `$`. Empty for a rule set that uses none.
 
 `RuleMatch`:
 - `ruleId: String` — the rule's ID
-- `actions: List<RuleAction>` — the actions the rule declared
+- `actions: List<RuleAction>` — the actions the branch that ran declared
 - `assignments: Map<String, Any?>` — the variables **this** rule published, in assignment order
+- `branch: RuleBranch` — `THEN` when the rule's condition held, `ELSE` when it did not and the rule
+  declares an `else` block (see [rules.md](rules.md)). Defaults to `THEN`, which is the only value a
+  rule without an `else` block can report — so existing code that ignores this field keeps its meaning.
+  **A match is not by itself proof that the condition was true.**
 
 `RuleAction`:
 - `name: String` — the action name (e.g. `"label"`)
@@ -697,7 +688,9 @@ Example JSON output:
 
 `DecisionTree`:
 - `root: DecisionNode?` — the root node of the evaluation tree
-- `matchedRules: List<String>` — IDs of matched rules
+- `matchedRules: List<String>` — IDs of the rules whose condition held. A rule whose `else` branch fired
+  is **not** listed here: the trace answers "did the condition hold", which the `result` flag on that
+  rule's own node also reports. Read `EvaluationResult.matches` for what the run produced.
 
 `DecisionNode`:
 - `id` — unique node identifier within the trace
@@ -893,7 +886,7 @@ fields:
 | Package | Contents |
 |---|---|
 | `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
-| `ruleengine.core.domain.dto` | Evaluation results: `RuleMatch`, `EvaluationResult`, `RuleAction`, plus `OperatorId`, `NormalizerId` |
+| `ruleengine.core.domain.dto` | Evaluation results: `RuleMatch`, `EvaluationResult`, `RuleAction`, `RuleBranch`, plus `OperatorId`, `NormalizerId` |
 | `ruleengine.core.domain.dto.field` | Field model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId` |
 | `ruleengine.core.domain.dto.action` | Action model: `ActionSchema`, `ActionDefinition`, `ActionArgType` |
 | `ruleengine.core.domain` | Logic over that model: `FieldPathResolver` / `FieldPathResolution` (dotted-path resolution), `TemporalFormat` (date pattern parsing), `DefaultActionSchema` |

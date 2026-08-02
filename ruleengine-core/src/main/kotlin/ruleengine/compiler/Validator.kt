@@ -34,15 +34,23 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.VariableAssignmentAst
 import ruleengine.dsl.ast.VariableRefLiteral
 
 object Validator {
+
+    /** Keyword an action may not be named, mapped to the rename suggested in the diagnostic. */
+    private val RESERVED_ACTION_NAMES = mapOf(
+        "else" to "otherwise",
+        "stop" to "halt",
+    )
 
     fun validate(asts: List<RuleAst>, schema: FieldSchema, actions: ActionSchema? = null): ValidationResult {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
         val ids = mutableSetOf<String>()
 
         validateAliasUniqueness(schema = schema, diagnostics = diagnostics)
+        validateActionNamesAreNotKeywords(actionSchema = actions, diagnostics = diagnostics)
 
         for (rule in asts) {
             if (!ids.add(rule.id)) {
@@ -61,6 +69,34 @@ object Validator {
         VariableScopeValidator.validate(asts = asts, schema = schema, diagnostics = diagnostics)
 
         return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+    }
+
+    /**
+     * An action may not be named `else` or `stop`, which the parser reads as branch structure.
+     *
+     * Checked on the schema rather than on each use, so the report names the declaration that has to
+     * change instead of every rule that writes it. Only these two are listed: the other structural
+     * words have been unusable as action names since before they were introduced, so a rule set using
+     * one cannot exist to be broken.
+     */
+    private fun validateActionNamesAreNotKeywords(
+        actionSchema: ActionSchema?,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        if (actionSchema == null) {
+            return
+        }
+        for ((keyword, alternative) in RESERVED_ACTION_NAMES) {
+            if (keyword !in actionSchema.actions) {
+                continue
+            }
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Action '$keyword' is declared in the action schema, " +
+                        "but '$keyword' is a rule keyword",
+                suggestion = "Rename the action, for example to '$alternative'",
+            )
+        }
     }
 
     /** Two fields sharing an alias make every rule that uses it ambiguous. */
@@ -104,7 +140,32 @@ object Validator {
 
         validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
 
-        for (assignment in rule.assignments) {
+        // Both branches carry the same kinds of clause, so both go through the same checks.
+        validateBranch(
+            assignments = rule.assignments,
+            branchActions = rule.actions,
+            schema = schema,
+            actions = actions,
+            diagnostics = diagnostics
+        )
+        validateBranch(
+            assignments = rule.elseAssignments,
+            branchActions = rule.elseActions,
+            schema = schema,
+            actions = actions,
+            diagnostics = diagnostics
+        )
+    }
+
+    /** The `set` clauses and actions of one branch — a rule's `then` block or its `else` block. */
+    private fun validateBranch(
+        assignments: List<VariableAssignmentAst>,
+        branchActions: List<ActionAst>,
+        schema: FieldSchema,
+        actions: ActionSchema?,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
+        for (assignment in assignments) {
             ValueExpressionValidator.validateValue(
                 expr = assignment.expression,
                 schema = schema,
@@ -114,7 +175,7 @@ object Validator {
 
         // Always validate extraction clauses so invalid patterns / unknown fields are caught
         // even when no action schema is supplied.
-        for (a in rule.actions) {
+        for (a in branchActions) {
             if (a.extraction != null) {
                 validateExtraction(
                     extraction = a.extraction,
@@ -126,7 +187,7 @@ object Validator {
 
         if (actions != null) {
             validateActions(
-                actions = rule.actions,
+                actions = branchActions,
                 actionSchema = actions,
                 diagnostics = diagnostics
             )

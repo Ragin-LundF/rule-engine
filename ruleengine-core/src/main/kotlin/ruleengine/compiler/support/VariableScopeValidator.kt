@@ -4,6 +4,7 @@ import ruleengine.core.analysis.VariableUsage
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
+import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.VariableAssignmentAst
 
@@ -17,7 +18,9 @@ import ruleengine.dsl.ast.VariableAssignmentAst
  *
  * It is deliberately an over-approximation: a variable assigned by a rule that does not match at
  * runtime still counts as defined here, and reads as missing during evaluation. The check exists to
- * catch typos and forward references, not to prove a variable is always populated.
+ * catch typos and forward references, not to prove a variable is always populated. A `set` in an
+ * `else` block counts the same way — only one branch of a rule ever runs, and which one is a runtime
+ * question this check does not ask.
  */
 internal object VariableScopeValidator {
 
@@ -38,31 +41,64 @@ internal object VariableScopeValidator {
                 diagnostics = diagnostics
             )
 
-            for (assignment in rule.assignments) {
-                checkReads(
-                    names = VariableUsage.readsOfValue(expr = assignment.expression),
-                    rule = rule,
-                    defined = defined,
-                    diagnostics = diagnostics
-                )
-                checkAssignment(
-                    assignment = assignment,
-                    rule = rule,
-                    fieldNames = fieldNames,
-                    assignedBy = assignedBy,
-                    diagnostics = diagnostics
-                )
-                defined += assignment.name
-            }
+            // Both branches are walked, in source order. Only one of them runs for a given record,
+            // but which one is a runtime question the over-approximation deliberately does not ask.
+            checkBranch(
+                assignments = rule.assignments,
+                actions = rule.actions,
+                rule = rule,
+                fieldNames = fieldNames,
+                defined = defined,
+                assignedBy = assignedBy,
+                diagnostics = diagnostics
+            )
+            checkBranch(
+                assignments = rule.elseAssignments,
+                actions = rule.elseActions,
+                rule = rule,
+                fieldNames = fieldNames,
+                defined = defined,
+                assignedBy = assignedBy,
+                diagnostics = diagnostics
+            )
+        }
+    }
 
-            // Checked after the assignments: an action of the same rule sees what that rule just set.
+    /** The `set` clauses and actions of one branch, in the order the engine applies them. */
+    @Suppress("LongParameterList")
+    private fun checkBranch(
+        assignments: List<VariableAssignmentAst>,
+        actions: List<ActionAst>,
+        rule: RuleAst,
+        fieldNames: Set<String>,
+        defined: MutableSet<String>,
+        assignedBy: MutableMap<String, String>,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        for (assignment in assignments) {
             checkReads(
-                names = VariableUsage.readsOfActions(actions = rule.actions),
+                names = VariableUsage.readsOfValue(expr = assignment.expression),
                 rule = rule,
                 defined = defined,
                 diagnostics = diagnostics
             )
+            checkAssignment(
+                assignment = assignment,
+                rule = rule,
+                fieldNames = fieldNames,
+                assignedBy = assignedBy,
+                diagnostics = diagnostics
+            )
+            defined += assignment.name
         }
+
+        // Checked after the assignments: an action of the same rule sees what that rule just set.
+        checkReads(
+            names = VariableUsage.readsOfActions(actions = actions),
+            rule = rule,
+            defined = defined,
+            diagnostics = diagnostics
+        )
     }
 
     private fun checkReads(

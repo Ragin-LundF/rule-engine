@@ -78,6 +78,36 @@ surface shows, so it needs a product decision rather than a refactor.
 
 If the change affects DSL keywords or operators, also update relevant UI syntax highlighting and autocomplete rules.
 
+## Extending a rule's output side
+
+A new clause in a `then` / `else` block touches, in order:
+
+1. `ThenBlockParser.parse()` — the keyword dispatch (`"extract"` / `"set"` / `"stop"` / else an action
+   name). Both branches share this one function; `Parser.parseOptionalElseBlock` calls it a second time.
+2. A node in the flat `dsl/ast` package, plus `RuleAst`'s **hand-written** `equals`/`hashCode` — they
+   exclude `line`/`column` deliberately, so a new field has to be added to both by hand.
+3. `Validator.validateBranch`, which runs once per branch. Never validate `rule.actions` directly, or
+   the `else` block goes unchecked.
+4. `Compiler.compileRule` and `CompiledRule`.
+5. `RuleEngine.evaluateRule`, which selects a branch from the condition's verdict, and `evaluateAll`,
+   which owns the ordered loop and the `stop` break.
+6. `VariableUsage` / `FieldUsage` / `VariableScopeValidator` if the clause reads or writes anything.
+7. `RuleCatalogBuilder` plus the Markdown and DOCX renderers, or it is missing from every export.
+8. `EvaluateCli.writeEvaluationResult` if it shows up in a result.
+
+**A structural keyword must also block implicit `and`.** `Parser.INFIX_AND_BLOCK_KEYWORDS` is what stops
+`when`'s implicit line-break `and` from reading the word as a field name — omit it and a misplaced
+keyword is reported as an unknown field instead of a block ordering mistake. `stop` is deliberately *not*
+in that set: it never legally follows a condition, and leaving it out keeps a schema field named `stop`
+usable in a `when` block.
+
+**A keyword an action cannot be named goes in `Validator.RESERVED_ACTION_NAMES`,** which reports it
+against the action-schema declaration rather than against every rule that writes it.
+
+**Declaration order is a guarantee, not an accident.** `set` and `stop` both depend on it. Anything that
+reorders evaluation breaks them — which is why `shortCircuitByOutput` was removed rather than guarded a
+third time.
+
 ## Adding normalizers
 
 - Use `NormalizerRegistry.default` to access built-in normalizers, and `NormalizerRegistry.ids` to enumerate them (the schema editor and YAML completions both read that list).

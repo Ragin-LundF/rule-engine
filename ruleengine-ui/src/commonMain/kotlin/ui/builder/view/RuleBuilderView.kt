@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import ruleengine.core.domain.dto.RuleBranch
 import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
@@ -38,7 +39,7 @@ import ui.builder.model.mutable.BuilderEditorState
 /**
  * Editable visual representation of a single rule in Builder mode.
  *
- * Renders WHEN / THEN blocks derived from [editorState].
+ * Renders WHEN / THEN blocks derived from [editorState], plus an ELSE block when the rule has one.
  * On every change, calls [onDslChange] with freshly generated DSL text so the
  * Code editor stays in sync. Falls back to a friendly message for locked rules.
  *
@@ -93,14 +94,62 @@ fun RuleBuilderView(
         }
 
         BuilderCard {
-            ThenSection(
+            BranchSection(
                 editorState = editorState,
+                branch = RuleBranch.THEN,
                 catalogActions = catalogActions,
                 catalogFields = catalogFields,
                 onDslChange = onDslChange,
             )
         }
+
+        // The ELSE card appears only once the rule has a false branch. Until then the author gets a
+        // single button, so a rule that needs no `else` never has an empty block to look past.
+        if (editorState.hasElseBranch) {
+            BuilderCard {
+                BranchSection(
+                    editorState = editorState,
+                    branch = RuleBranch.ELSE,
+                    catalogActions = catalogActions,
+                    catalogFields = catalogFields,
+                    onDslChange = onDslChange,
+                )
+            }
+        } else {
+            AddElseBranchButton(
+                editorState = editorState,
+                catalogActions = catalogActions,
+                onDslChange = onDslChange,
+            )
+        }
     }
+}
+
+/**
+ * Creates the ELSE block by adding its first action.
+ *
+ * There is no separate "has an else block" flag: the block exists exactly while it holds something,
+ * which is also the only state the DSL can express — an empty `else` does not parse. Removing the last
+ * else row therefore drops the branch, and this button comes back.
+ */
+@Composable
+private fun AddElseBranchButton(
+    editorState: BuilderEditorState,
+    catalogActions: List<CatalogActionInfo>,
+    onDslChange: (String) -> Unit,
+) {
+    AddButton(
+        label = "+ Else branch",
+        onClick = {
+            val defaultAction = catalogActions.firstOrNull()
+            editorState.addAction(
+                defaultName = defaultAction?.name ?: "",
+                defaultArgCount = if (defaultAction?.argType == "none") 0 else 1,
+                branch = RuleBranch.ELSE,
+            )
+            emitDslChange(editorState = editorState, onDslChange = onDslChange)
+        },
+    )
 }
 
 @Composable

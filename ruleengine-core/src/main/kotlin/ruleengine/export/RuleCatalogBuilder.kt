@@ -178,6 +178,10 @@ object RuleCatalogBuilder {
             technicalCondition = ValueExpressionRenderer.renderExpression(expr = rule.condition),
             outcomes = rule.actions.map { action -> outcome(action = action) },
             publishes = rule.assignments.map { assignment -> assignment.name },
+            elseOutcomes = rule.elseActions.map { action -> outcome(action = action) },
+            elsePublishes = rule.elseAssignments.map { assignment -> assignment.name },
+            stopsOnThen = rule.stopOnThen,
+            stopsOnElse = rule.stopOnElse,
         )
     }
 

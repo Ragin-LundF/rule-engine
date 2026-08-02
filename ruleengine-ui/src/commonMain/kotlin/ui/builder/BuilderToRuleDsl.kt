@@ -24,8 +24,13 @@ import ui.builder.model.mutable.MutableConditionNode
  *     and field operator value
  *   then
  *     action arg
+ *   else
+ *     action otherArg
  * }
  * ```
+ *
+ * The `else` block is written only when the rule has one; it is optional in the DSL and empty is not
+ * a legal spelling of "absent".
  */
 object BuilderToRuleDsl {
 
@@ -55,18 +60,51 @@ object BuilderToRuleDsl {
             indent = 4,
         )
 
-        sb.appendLine("  then")
-        // Assignments first: the engine applies them before it resolves the actions, so an action
-        // reading `$name` must be written after the `set` that publishes it.
-        state.variables.forEach { variable ->
-            sb.appendLine("    ${renderVariable(variable)}")
+        appendBranch(
+            sb = sb,
+            keyword = "then",
+            variables = state.variables,
+            actions = state.actions,
+            stop = state.stopOnThen,
+        )
+        // Emitted only when it has content: an empty `else` block does not parse, so a rule the author
+        // has not given a false branch must not get the keyword either.
+        if (state.hasElseBranch) {
+            appendBranch(
+                sb = sb,
+                keyword = "else",
+                variables = state.elseVariables,
+                actions = state.elseActions,
+                stop = state.stopOnElse,
+            )
         }
-        state.actions.forEach { action ->
-            sb.appendLine("    ${renderAction(action)}")
-        }
+
         sb.appendLine("}")
 
         return sb.toString()
+    }
+
+    private fun appendBranch(
+        sb: StringBuilder,
+        keyword: String,
+        variables: List<MutableBuilderVariable>,
+        actions: List<MutableBuilderAction>,
+        stop: Boolean,
+    ) {
+        sb.appendLine("  $keyword")
+        // Assignments first: the engine applies them before it resolves the actions, so an action
+        // reading `$name` must be written after the `set` that publishes it.
+        variables.forEach { variable ->
+            sb.appendLine("    ${renderVariable(variable)}")
+        }
+        actions.forEach { action ->
+            sb.appendLine("    ${renderAction(action)}")
+        }
+        // Always last, which the parser requires. The Builder holds it as a flag rather than a row, so
+        // there is no ordering to get wrong here however the author edited the branch.
+        if (stop) {
+            sb.appendLine("    stop")
+        }
     }
 
     /**

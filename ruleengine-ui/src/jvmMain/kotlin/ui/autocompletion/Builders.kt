@@ -33,10 +33,20 @@ public fun buildContextualCompletions(
             context = context,
             schema = schema
         ) + buildVariableCompletions(variableNames = variableNames)
+        // Both branches take the same clauses, so both get the same completions — except that only a
+        // `then` block can be followed by an `else`.
         DslSection.THEN -> buildThenCompletions(
             context = context,
             actionSchema = actionSchema,
             variableNames = variableNames,
+            offerElseKeyword = true,
+        )
+
+        DslSection.ELSE -> buildThenCompletions(
+            context = context,
+            actionSchema = actionSchema,
+            variableNames = variableNames,
+            offerElseKeyword = false,
         )
     }
 }
@@ -115,15 +125,23 @@ private fun buildThenCompletions(
     context: DslCursorContext,
     actionSchema: ActionSchema?,
     variableNames: List<String>,
+    offerElseKeyword: Boolean,
 ): List<CompletionItem> {
-    return if (context.afterAction == null) {
-        buildActionNameCompletions(actionSchema = actionSchema) + SET_KEYWORD_COMPLETION
-    } else {
-        buildActionArgCompletions(
+    if (context.afterAction != null) {
+        return buildActionArgCompletions(
             actionName = context.afterAction,
             actionSchema = actionSchema
         ) + buildVariableCompletions(variableNames = variableNames)
     }
+
+    val keywords = buildList {
+        add(SET_KEYWORD_COMPLETION)
+        add(STOP_KEYWORD_COMPLETION)
+        if (offerElseKeyword) {
+            add(ELSE_KEYWORD_COMPLETION)
+        }
+    }
+    return buildActionNameCompletions(actionSchema = actionSchema) + keywords
 }
 
 private val SET_KEYWORD_COMPLETION = CompletionItem(
@@ -131,4 +149,18 @@ private val SET_KEYWORD_COMPLETION = CompletionItem(
     insertText = "set name = ",
     kind = CompletionKind.KEYWORD,
     hint = "publish a variable for later rules"
+)
+
+private val ELSE_KEYWORD_COMPLETION = CompletionItem(
+    label = "else",
+    insertText = "else",
+    kind = CompletionKind.KEYWORD,
+    hint = "output when the condition does not hold"
+)
+
+private val STOP_KEYWORD_COMPLETION = CompletionItem(
+    label = "stop",
+    insertText = "stop",
+    kind = CompletionKind.KEYWORD,
+    hint = "end the run — no rule after this one is evaluated"
 )

@@ -42,8 +42,10 @@ import ui.tester.model.RuleResult
 
 private const val FILTER_ALL = "All"
 private const val FILTER_MATCHED = "Matched"
+private const val FILTER_ELSE = "Else"
 private const val FILTER_PARTIAL = "Partial"
 private const val FILTER_NO_MATCH = "No match"
+private const val FILTER_NOT_EVALUATED = "Not evaluated"
 
 /**
  * Must be a getter, not a `val`.
@@ -110,8 +112,10 @@ fun RuleResultsView(
 private fun matchesFilter(result: RuleResult, filter: String): Boolean {
     return when (filter) {
         FILTER_MATCHED -> result.status == RuleMatchStatus.MATCHED
+        FILTER_ELSE -> result.status == RuleMatchStatus.ELSE_MATCHED
         FILTER_PARTIAL -> result.status == RuleMatchStatus.PARTIAL
         FILTER_NO_MATCH -> result.status == RuleMatchStatus.NO_MATCH
+        FILTER_NOT_EVALUATED -> result.status == RuleMatchStatus.NOT_EVALUATED
         else -> true
     }
 }
@@ -123,16 +127,23 @@ private fun toggle(ids: Set<String>, id: String): Set<String> {
 private fun statusColor(status: RuleMatchStatus): Color {
     return when (status) {
         RuleMatchStatus.MATCHED -> AccentGreen
+        // Green like a match: the rule decided and produced output. It is a different decision, not a
+        // worse one, which the label is what distinguishes.
+        RuleMatchStatus.ELSE_MATCHED -> AccentGreen
         RuleMatchStatus.PARTIAL -> AccentOrange
         RuleMatchStatus.NO_MATCH -> AccentRed
+        // Muted, not red: the rule did not fail, it was never asked.
+        RuleMatchStatus.NOT_EVALUATED -> TextMuted
     }
 }
 
 private fun statusLabel(status: RuleMatchStatus): String {
     return when (status) {
         RuleMatchStatus.MATCHED -> "matched"
+        RuleMatchStatus.ELSE_MATCHED -> "else"
         RuleMatchStatus.PARTIAL -> "partial"
         RuleMatchStatus.NO_MATCH -> "no match"
+        RuleMatchStatus.NOT_EVALUATED -> "not evaluated"
     }
 }
 
@@ -141,18 +152,25 @@ private fun statusLabel(status: RuleMatchStatus): String {
 private fun SummaryLine(results: List<RuleResult>) {
     val byStatus = results.groupingBy { result -> result.status }.eachCount()
     val matched = byStatus[RuleMatchStatus.MATCHED] ?: 0
+    val elseMatched = byStatus[RuleMatchStatus.ELSE_MATCHED] ?: 0
     val partial = byStatus[RuleMatchStatus.PARTIAL] ?: 0
     val noMatch = byStatus[RuleMatchStatus.NO_MATCH] ?: 0
+    val notEvaluated = byStatus[RuleMatchStatus.NOT_EVALUATED] ?: 0
     val actions = results.sumOf { result -> result.actions.size }
 
     // Coloured by the best outcome in the run, so the headline never reads worse than the roster.
     val color = when {
-        matched > 0 -> AccentGreen
+        matched > 0 || elseMatched > 0 -> AccentGreen
         partial > 0 -> AccentOrange
         else -> AccentRed
     }
+    // Each optional count is shown only when the run produced one, so a rule set that uses neither
+    // branches nor `stop` keeps the headline it had.
+    val elsePart = if (elseMatched > 0) "$elseMatched else · " else ""
+    val stoppedPart = if (notEvaluated > 0) " · $notEvaluated not evaluated" else ""
     Text(
-        text = "$matched matched · $partial partial · $noMatch no match · $actions action(s)",
+        text = "$matched matched · $elsePart$partial partial · $noMatch no match$stoppedPart · " +
+                "$actions action(s)",
         style = MaterialTheme.typography.subtitle1,
         color = color,
     )
@@ -258,7 +276,10 @@ private fun RulesHeaderRow(filter: String, onFilterChange: (String) -> Unit) {
         Spacer(modifier = Modifier.weight(weight = 1f))
         DropdownSelector(
             selected = filter,
-            options = listOf(FILTER_ALL, FILTER_MATCHED, FILTER_PARTIAL, FILTER_NO_MATCH),
+            options = listOf(
+                FILTER_ALL, FILTER_MATCHED, FILTER_ELSE, FILTER_PARTIAL, FILTER_NO_MATCH,
+                FILTER_NOT_EVALUATED,
+            ),
             onSelected = onFilterChange,
             modifier = Modifier.width(width = 160.dp),
         )

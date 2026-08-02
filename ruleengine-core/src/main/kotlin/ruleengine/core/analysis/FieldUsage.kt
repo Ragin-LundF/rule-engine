@@ -33,7 +33,8 @@ import ruleengine.dsl.ast.VariableRefAst
 object FieldUsage {
 
     /**
-     * Every field path read by [rule], from its condition and from its `set` expressions.
+     * Every field path read by [rule], from its condition and from the `set` expressions of both
+     * branches.
      *
      * Assignments count: `set totalWeightKg = sum(parcels.weightKg)` is a read of `parcels.weightKg`
      * as much as a condition would be, and leaving it out would drop the field from the flow view
@@ -42,7 +43,8 @@ object FieldUsage {
     fun fieldsOf(rule: RuleAst): Set<String> {
         val fields = mutableSetOf<String>()
         collectFromExpression(expr = rule.condition, prefix = "", into = fields)
-        rule.assignments.forEach { assignment ->
+        val assignments = rule.assignments + rule.elseAssignments
+        assignments.forEach { assignment ->
             collectFromValue(expr = assignment.expression, prefix = "", into = fields)
         }
         return fields

@@ -16,6 +16,7 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.VariableAssignmentAst
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderRule
@@ -30,7 +31,8 @@ import ui.builder.model.BuilderVariable
  *   field paths (including filtered ones, at any depth) or literals
  * - [NotAst] — rendered as a negation flag on the node it wraps
  * - Flat or nested combinations of [AndAst] and [OrAst]
- * - [ActionAst] with [StringLiteral] or [NumberLiteral] arguments
+ * - [ActionAst] with [StringLiteral] or [NumberLiteral] arguments, in the `then` block and in the
+ *   optional `else` block
  *
  * Tree structure is preserved via [BuilderConditionNode.Group] nodes so that parenthesized grouping
  * is maintained through the round-trip.
@@ -41,11 +43,18 @@ import ui.builder.model.BuilderVariable
 object RuleAstToBuilderMapper {
 
     fun map(rule: RuleAst): BuilderRule {
-        val extraction = rule.actions.firstOrNull { it.extraction != null }
-        if (extraction != null) {
+        // An extraction in either branch locks the rule: the Builder has no row that can edit one, and
+        // regenerating the DSL without it would delete it from the file.
+        val extractionBranch = when {
+            rule.actions.any { it.extraction != null } -> "then"
+            rule.elseActions.any { it.extraction != null } -> "else"
+            else -> null
+        }
+        if (extractionBranch != null) {
             return BuilderRule.Unsupported(
                 id = rule.id,
-                reason = "Rule uses a regex extraction in its 'then' block, which the Builder cannot edit yet.",
+                reason = "Rule uses a regex extraction in its '$extractionBranch' block, " +
+                        "which the Builder cannot edit yet.",
             )
         }
 
@@ -55,14 +64,10 @@ object RuleAstToBuilderMapper {
                 reason = unsupportedReason(expr = rule.condition),
             )
 
-        val variables = rule.assignments.map { assignment ->
-            val expression = mapValueExpression(expr = assignment.expression)
-                ?: return BuilderRule.Unsupported(
-                    id = rule.id,
-                    reason = "Rule assigns '${assignment.name}' from an expression the Builder cannot edit yet.",
-                )
-            BuilderVariable(id = nextId(prefix = "var"), name = assignment.name, expression = expression)
-        }
+        val variables = mapVariables(assignments = rule.assignments)
+            ?: return BuilderRule.Unsupported(id = rule.id, reason = unsupportedAssignmentReason(rule = rule))
+        val elseVariables = mapVariables(assignments = rule.elseAssignments)
+            ?: return BuilderRule.Unsupported(id = rule.id, reason = unsupportedAssignmentReason(rule = rule))
 
         return BuilderRule.Supported(
             id = rule.id,
@@ -70,7 +75,27 @@ object RuleAstToBuilderMapper {
             conditionNodes = conditionNodes,
             actions = rule.actions.map { mapAction(action = it) },
             variables = variables,
+            elseActions = rule.elseActions.map { mapAction(action = it) },
+            elseVariables = elseVariables,
+            stopOnThen = rule.stopOnThen,
+            stopOnElse = rule.stopOnElse,
         )
+    }
+
+    /** Null when any assignment's right-hand side is an expression the Builder cannot render. */
+    private fun mapVariables(assignments: List<VariableAssignmentAst>): List<BuilderVariable>? {
+        return assignments.map { assignment ->
+            val expression = mapValueExpression(expr = assignment.expression) ?: return null
+            BuilderVariable(id = nextId(prefix = "var"), name = assignment.name, expression = expression)
+        }
+    }
+
+    private fun unsupportedAssignmentReason(rule: RuleAst): String {
+        val assignments = rule.assignments + rule.elseAssignments
+        val name = assignments.firstOrNull { assignment ->
+            mapValueExpression(expr = assignment.expression) == null
+        }?.name
+        return "Rule assigns '$name' from an expression the Builder cannot edit yet."
     }
 
     // ── recursive node collection ─────────────────────────────────────────────

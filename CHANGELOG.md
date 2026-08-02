@@ -5,6 +5,140 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **An optional `else` branch on a rule.** A rule's `then` block says what to produce when its condition
+  holds; an `else` block after it says what to produce when the condition is false.
+
+  ```
+  rule "order-tier" {
+    description "An order of at least 1000 gets priority handling, anything smaller the standard path."
+    when
+      amount >= 1000
+    then
+      label "priority"
+      set tierLevel = 2
+    else
+      label "standard"
+      set tierLevel = 1
+  }
+  ```
+
+  Use it where a business statement has two outcomes over one threshold. Expressing that without `else`
+  takes two rules with the boundary written twice, and the two drift apart the first time someone changes
+  only one of them.
+    - The `else` block takes **exactly** what a `then` block takes — actions, `extract` clauses and `set`
+      clauses — because it is parsed by the same code. A `set` in `else` publishes to the following rules
+      just like one in `then`.
+    - Optional, at most once per rule, and never empty: `else` with nothing in it is a parse error rather
+      than a silent no-op, since it would be indistinguishable from having no `else` at all.
+    - Exactly one branch produces output per record. Never both, never neither.
+    - Validated at load time on both branches: an unknown action, a wrong argument type, a bad extraction
+      pattern or a `$name` with no earlier `set` is reported in an `else` block exactly as in a `then`
+      block. Two rules assigning the same variable is still a warning; **one rule** assigning it in both
+      of its own branches is not, since only one of them ever runs.
+    - `else` is now a keyword, so an action may not be named `else`. An action schema that declares one is
+      reported as an error naming the declaration, not every rule that uses it.
+    - **`shortCircuitByOutput` cannot be combined with an `else` branch.** The optimisation closes an
+      output group at its first match, which is only sound while a rule that does not match produces
+      nothing. `RuleEngineBuilder` now fails the build with an explicit message naming the branching
+      rules, the same way it already refuses to combine the flag with variables.
+
+- **The else branch in the editor.** `else` is highlighted as structure, autocompleted after a `then`
+  block, and offers the same action and `set` completions inside it. In the visual Builder, **+ Else
+  branch** under the THEN card adds the block and its first action; from there the ELSE card behaves like
+  THEN, with its own **+ Action** and **+ Variable**. Removing the last else row drops the branch — an
+  empty `else` is not a legal spelling of "absent", so the Builder does not pretend it is.
+
+- **`stop` — a branch can end the run.** Written as the last statement of a `then` or `else` block, it
+  means: collect this rule's output, then evaluate no rule declared after it.
+
+  ```
+  rule "blocked-country" {
+    description "A payment to a sanctioned country is rejected outright; nothing else applies."
+    when
+      country in ["xx", "yy"]
+    then
+      label "rejected"
+      stop
+  }
+  ```
+
+  This is the first construct in the DSL by which one rule suppresses another. Use it for a guard whose
+  verdict makes every rule below it inapplicable — a sanctioned counterparty, a missing mandatory field.
+    - `stop` belongs to a **branch**, not a rule, so a rule can halt on one verdict and carry on with the
+      other. An `else` block holding nothing but `stop` is valid: "halt when this condition does not hold".
+    - It must be the block's **last** statement. Anything after it is a parse error — those lines would in
+      fact still run, since a branch's output resolves before the halt, and a block with `stop` in the
+      middle would read as if half of it were dead.
+    - Reaches across rule files: an entry's files are one ordered list at runtime.
+    - Compatible with variables. A variable published before the `stop` is in the result; the rules that
+      would have read it are simply never reached.
+    - `stop` is now a keyword, so an action may not be named `stop` — an action schema declaring one is
+      reported as an error naming the declaration.
+    - `EvaluationResult.stoppedBy` names the rule that halted the run, or is `null` when every rule ran.
+      Without it a consumer cannot tell *"no further rule matched"* from *"no further rule ran"*.
+      `EvaluateCli` emits it as `stoppedBy` when a rule halted.
+
+- **`stop` in the Builder is a badge, not a typed word.** Each branch card has a **+ Stop** button; once
+  added, `stop` shows as a removable badge pinned to the end of that branch. It is held as a flag rather
+  than a row, so adding more actions or variables afterwards cannot push output below it — the generated
+  DSL always writes `stop` last, which is what the parser requires. **+ Stop** disappears while the branch
+  already has one.
+
+- The Test panel reports the rules after a `stop` as **not evaluated**, with their own filter and count,
+  rather than as *no match* — the run never tested them, so nothing is known about whether they would
+  have fired.
+
+### Removed
+
+- **`shortCircuitByOutput` is gone** — removed from `RuleEngine`, from both `RuleEngineBuilder` entry
+  points, and from the docs. **This is a breaking change** for any caller that passed it.
+
+  The flag grouped rules by static output and closed each group at its first match. It was already
+  incompatible with every feature added since 1.5.0 — variables (1.5.1), and now `else` and `stop` all
+  failed the build when combined with it — because all three depend on declaration order, which grouping
+  by output discards. Its own documentation noted that it was inert on the common rule set, where every
+  rule emits a distinct value.
+
+  There is no drop-in replacement, and `stop` is not one: `stop` halts the whole run, while the flag
+  skipped rules within a single output group and kept evaluating the others. What replaces it in practice
+  is ordering plus `stop` — put the cheap decisive guards first and the expensive rules behind them, and
+  the expensive ones never run on records that were already settled.
+
+  In exchange, `matches` is now **unconditionally** in declaration order, and `RuleEngine` lost the
+  grouping path entirely.
+
+### Changed
+
+- `EvaluationResult.matches` now means **every rule that produced output**, and `RuleMatch` carries a
+  `branch: RuleBranch` (`THEN` / `ELSE`) saying why. A rule without an `else` block can only ever report
+  `THEN`, which is the default, so nothing changes for a rule set that uses no branches. Code that reads
+  `matches` as "the rules whose condition held" should filter:
+
+  ```kotlin
+  val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
+  ```
+
+- `DecisionTree.matchedRules` keeps its existing meaning and lists **only** the rules whose condition
+  held. A rule whose `else` branch fired is not in it — the trace answers "did the condition hold", which
+  the `result` flag on that rule's own node already reports.
+- **The documentation no longer claims rules are independent.** They are checked independently and all
+  matches are returned, but evaluation order is a *guarantee* the engine makes and two constructs depend
+  on it: `set` publishes only to the rules after it, and `stop` ends the run at its own position. The
+  claim is corrected in `RULE-SPEC.md` §1 and §5.1, `docs/rules.md`, `docs/manifest.md` and
+  `docs/performance.md` — and in the exported rule overviews, which stated it to the business reader.
+- `EvaluateCli` emits `"branch": "then"|"else"` per match. Without it the JSON would read as if every
+  entry were a rule whose condition held.
+- Exported rule overviews (Markdown and Word) gain an *Otherwise* section per branching rule, list its
+  else outcomes in the at-a-glance row as an alternative rather than a peer, and include them in the
+  outcome summary. The explanatory note about branching rules is written only for a rule set that has one.
+- The test panel reports an else result as its own **else** status, with its own filter and count. It
+  previously had no way to express this: the roster derived "matched" from mere presence in
+  `EvaluationResult.matches`, so an else-fired rule would have been reported as having matched.
+
 ## 1.5.1
 
 ### Added

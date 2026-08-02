@@ -1,6 +1,7 @@
 package ruleengine.export.docx
 
 import ruleengine.export.CatalogText
+import ruleengine.export.dto.CatalogOutcome
 import ruleengine.export.dto.CatalogRule
 import ruleengine.export.dto.CatalogRuleFile
 import ruleengine.export.dto.RuleCatalog
@@ -91,6 +92,47 @@ object DocxCatalogWriter {
             "</w:body></w:document>"
     }
 
+    /**
+     * The three things that stop the document reading as a flat list of independent checks.
+     *
+     * Each is written only for a rule set it applies to: a reader of a rule set with no branches, no
+     * variables and no `stop` should not have to hold caveats that never come up. Ordered by how much
+     * they demand of the reader, strongest last — `stop` changes whether the rules further down apply
+     * at all.
+     */
+    private fun appendCaveats(out: StringBuilder, catalog: RuleCatalog) {
+        if (catalog.rules.any { rule -> rule.elseOutcomes.isNotEmpty() }) {
+            out.append(
+                DocxXml.paragraph(
+                    style = "Normal",
+                    text = "Some rules also say what happens when they do not match. Those rules " +
+                        "contribute an outcome either way — the one listed under \"Then\" when the rule " +
+                        "matches, the one under \"Otherwise\" when it does not.",
+                )
+            )
+        }
+        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() }) {
+            out.append(
+                DocxXml.paragraph(
+                    style = "Normal",
+                    text = "Some rules publish a named value that the rules after them read. Those " +
+                        "rules are order-dependent: the value only reaches a rule listed later, and " +
+                        "only if the rule that publishes it matched.",
+                )
+            )
+        }
+        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse }) {
+            out.append(
+                DocxXml.paragraph(
+                    style = "Normal",
+                    text = "Some rules end the run. Where a rule says so, the rules listed after it are " +
+                        "not evaluated at all for that record — so a rule further down does not apply, " +
+                        "whether or not it would have matched.",
+                )
+            )
+        }
+    }
+
     private fun appendCover(out: StringBuilder, catalog: RuleCatalog, generatedOn: String?) {
         out.append(
             DocxXml.paragraph(
@@ -113,23 +155,13 @@ object DocxCatalogWriter {
         out.append(
             DocxXml.paragraph(
                 style = "Normal",
-                text = "Rules are independent. Every rule is checked against every record, and each " +
-                    "one that matches contributes its own outcome — a later rule never overrides an " +
-                    "earlier one.",
+                text = "Every rule is checked against every record, and each one that matches " +
+                    "contributes its own outcome — a later rule never overrides an earlier one. Rules " +
+                    "are evaluated in the order they are listed below, which is the order the engine " +
+                    "uses: rule-file order, then the order the rules appear inside each file.",
             )
         )
-        // Only when the rule set actually uses them: a reader of a rule set without variables should
-        // not have to hold a caveat that never applies to what they are reading.
-        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() }) {
-            out.append(
-                DocxXml.paragraph(
-                    style = "Normal",
-                    text = "Some rules publish a named value that the rules after them read. Those " +
-                        "rules are order-dependent: the value only reaches a rule listed later, and " +
-                        "only if the rule that publishes it matched.",
-                )
-            )
-        }
+        appendCaveats(out = out, catalog = catalog)
         out.append(
             DocxXml.paragraph(
                 style = "Normal",
@@ -165,12 +197,20 @@ object DocxCatalogWriter {
         return rule.description ?: CatalogText.flatten(condition = rule.condition)
     }
 
+    /**
+     * The index cell for a rule's outputs.
+     *
+     * An `else` outcome is prefixed rather than listed as a peer: in one glance cell, `label:low` under
+     * `label:high` would read as two outcomes the rule produces together instead of one or the other.
+     */
     private fun outcomeSummary(rule: CatalogRule): String {
-        if (rule.outcomes.isEmpty()) {
+        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty()) {
             return "—"
         }
 
-        return rule.outcomes.joinToString(separator = "\n") { outcome -> CatalogText.label(outcome = outcome) }
+        val lines = rule.outcomes.map { outcome -> CatalogText.label(outcome = outcome) } +
+                rule.elseOutcomes.map { outcome -> "otherwise ${CatalogText.label(outcome = outcome)}" }
+        return lines.joinToString(separator = "\n")
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────
@@ -232,21 +272,60 @@ object DocxCatalogWriter {
             out.append(DocxXml.bullet(text = text, depth = depth))
         }
 
-        if (rule.publishes.isNotEmpty()) {
-            out.append(DocxXml.paragraph(style = "FieldLabel", text = "Publishes for later rules"))
-            rule.publishes.forEach { name ->
+        appendBranch(
+            out = out,
+            label = "Then",
+            publishesLabel = "Publishes for later rules",
+            outcomes = rule.outcomes,
+            publishes = rule.publishes,
+            stops = rule.stopsOnThen,
+        )
+        // Written only when the rule declares an `else` block, so a reader is never told what happens
+        // "otherwise" for a rule where the answer is nothing.
+        appendBranch(
+            out = out,
+            label = "Otherwise",
+            publishesLabel = "Publishes for later rules otherwise",
+            outcomes = rule.elseOutcomes,
+            publishes = rule.elsePublishes,
+            stops = rule.stopsOnElse,
+        )
+
+        out.append(DocxXml.paragraph(style = "FieldLabel", text = "In the rule language"))
+        out.append(DocxXml.paragraph(style = "TechCondition", text = rule.technicalCondition))
+    }
+
+    @Suppress("LongParameterList")
+    private fun appendBranch(
+        out: StringBuilder,
+        label: String,
+        publishesLabel: String,
+        outcomes: List<CatalogOutcome>,
+        publishes: List<String>,
+        stops: Boolean,
+    ) {
+        if (publishes.isNotEmpty()) {
+            out.append(DocxXml.paragraph(style = "FieldLabel", text = publishesLabel))
+            publishes.forEach { name ->
                 out.append(DocxXml.bullet(text = name, depth = 0, code = true))
             }
         }
 
-        if (rule.outcomes.isNotEmpty()) {
-            out.append(DocxXml.paragraph(style = "FieldLabel", text = "Then"))
-            rule.outcomes.forEach { outcome ->
+        if (outcomes.isNotEmpty()) {
+            out.append(DocxXml.paragraph(style = "FieldLabel", text = label))
+            outcomes.forEach { outcome ->
                 out.append(DocxXml.bullet(text = CatalogText.label(outcome = outcome), depth = 0, code = true))
             }
         }
 
-        out.append(DocxXml.paragraph(style = "FieldLabel", text = "In the rule language"))
-        out.append(DocxXml.paragraph(style = "TechCondition", text = rule.technicalCondition))
+        // Stated per branch, because a rule can halt on one verdict and carry on with the other. A
+        // reader who misses this reads every rule below as still applying.
+        if (stops) {
+            val suffix = if (label == "Then") "" else " (otherwise)"
+            out.append(DocxXml.paragraph(style = "FieldLabel", text = "Stops here$suffix"))
+            out.append(
+                DocxXml.paragraph(style = "Normal", text = "No rule listed after this one is evaluated.")
+            )
+        }
     }
 }

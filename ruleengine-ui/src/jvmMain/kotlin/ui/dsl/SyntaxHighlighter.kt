@@ -32,7 +32,7 @@ import ui.builder.OperatorOptions
 // Syntax token colours are defined centrally in ui.Theme so the whole workbench
 // shares the same palette; they are imported here from the ui package.
 
-private val DSL_STRUCTURE = setOf("rule", "when", "then", "description")
+private val DSL_STRUCTURE = setOf("rule", "when", "then", "else", "stop", "description")
 private val DSL_LOGIC = setOf("and", "or", "not")
 private val DSL_BOOL = setOf("true", "false")
 private val OP_CHARS = setOf('>', '<', '=', '!')

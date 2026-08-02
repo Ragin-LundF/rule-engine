@@ -92,7 +92,7 @@ private class DslScan {
     }
 
     private fun identifier(word: String) {
-        // `when`/`then` are section markers only at the rule's own depth — nested inside a
+        // `when`/`then`/`else` are section markers only at the rule's own depth — nested inside a
         // bracket expression they are ordinary words.
         if (braceDepth == 1 && word == "when") {
             section = DslSection.WHEN
@@ -105,9 +105,15 @@ private class DslScan {
             afterAction = null
             return
         }
+        if (braceDepth == 1 && word == "else") {
+            section = DslSection.ELSE
+            afterAction = null
+            return
+        }
         when (section) {
             DslSection.WHEN -> whenIdentifier(word = word)
-            DslSection.THEN -> afterAction = word
+            // Both branches take the same clauses, so the last word read is tracked the same way.
+            DslSection.THEN, DslSection.ELSE -> afterAction = word
             else -> Unit
         }
     }

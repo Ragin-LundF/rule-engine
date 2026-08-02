@@ -55,7 +55,10 @@ fun InspectorPanel(
                 rule = rule,
                 conditionCount = builderState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
                 actionCount = builderState?.actions?.size ?: 0,
-                variableNames = builderState?.variables?.map { it.name }.orEmpty(),
+                elseActionCount = builderState?.elseActions?.size ?: 0,
+                variableNames = builderState?.let { state ->
+                    (state.variables + state.elseVariables).map { it.name }
+                }.orEmpty(),
                 diagnostics = diagnostics,
                 modifier = modifier,
             )

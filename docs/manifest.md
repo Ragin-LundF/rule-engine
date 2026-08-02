@@ -103,14 +103,19 @@ Each entry is loaded and evaluated independently.
 
 ---
 
-## Rule Order and Variables
+## Rule Order
 
-For plain rules the order of the `rules:` list is only visible in the results: every rule is checked
-against every record, and the order decides in which order the matches come back.
+The order of the `rules:` list is the order the engine evaluates in — this list first, then the order the
+rules are declared inside each file. That is a guarantee, not an implementation detail.
 
-That changes as soon as a rule publishes a [variable](rules.md#variables--the-set-clause). A `set`
-clause makes its value available to the rules **after** it in this list, so the order becomes part of
-the meaning:
+For plain rules the order is only visible in the results: every rule is checked against every record, and
+the order decides in which order the matches come back.
+
+Two constructs make it **part of the meaning**, so that reordering the list changes the outcome rather
+than just its sequence.
+
+A [variable](rules.md#variables--the-set-clause): a `set` clause makes its value available to the rules
+**after** it in this list.
 
 ```yaml
 entries:
@@ -130,8 +135,20 @@ fail with `reads unknown variable '$orderTotal'`.
 Variables are scoped to a single entry and a single evaluation. Two entries never see each other's
 variables, and nothing carries over from one input record to the next.
 
-The `shortCircuitByOutput` option evaluates rules by output group rather than in declaration order, so
-it cannot be combined with variables; the build fails with an explicit message if you try.
+A `stop` makes the order load-bearing in a second way: the rules listed after the rule that stops are not
+evaluated at all. Move a guard rule down and it silently stops guarding the rules that were above it.
+Comment the intent, the same way as for a variable:
+
+```yaml
+entries:
+  - id: orders
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      # First: sanctioned-country guard, ends the run — everything below assumes it passed.
+      - rules/sanctions.rule
+      - rules/pricing.rule
+```
 
 ---
 

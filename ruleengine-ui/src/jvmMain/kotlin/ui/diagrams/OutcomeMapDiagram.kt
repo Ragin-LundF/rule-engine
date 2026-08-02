@@ -32,14 +32,17 @@ import ui.util.Plurals
  *
  * - The **family** heading is a reading aid with no runtime meaning — action name plus the
  *   `:`-separated prefix of the value, so `assessment:transit` reads as one decision.
- * - Each **bucket** row is a real `RuleEngine.staticOutputKeys` key, which uses the *whole* first
- *   argument. `assessment:transit:green` and `assessment:transit:red` are therefore separate buckets
- *   and those rules never compete, however much the family heading suggests they do.
+ * - Each **bucket** row keys on the *whole* first argument. `assessment:transit:green` and
+ *   `assessment:transit:red` are therefore separate buckets, and those rules never compete for the
+ *   same value however much the family heading suggests they do.
  *
- * That distinction is worth the extra layer: with `shortCircuitByOutput` enabled the engine stops a
- * bucket at its first match, so a bucket holding one rule means the flag does nothing for it. On a
- * rule set where every rule emits a distinct value — the common case — the flag is inert, and the
- * only way to see that is to show the bucket sizes.
+ * That distinction is worth the extra layer, because the question the view answers is "which rules can
+ * decide the same thing". A bucket holding several rules is where a record can pick up the same output
+ * twice, or where two rules disagree about one decision; a bucket holding one rule cannot. Reading it
+ * off the file layout is impossible, which is why this view exists.
+ *
+ * Note that an `else` outcome is deliberately absent: this groups what a rule produces when it matches.
+ * A rule's false branch is shown in the rule tree and in the exported overview.
  */
 @Composable
 internal fun OutcomeMapDiagram(rules: List<RuleAst>) {
@@ -89,7 +92,7 @@ private fun FamilySection(family: String, buckets: Map<String, List<RuleAst>>) {
             )
             if (exclusive) {
                 DiagramChip(
-                    text = "mutually exclusive — separate buckets, no short-circuit",
+                    text = "mutually exclusive — one rule per value",
                     textColor = LabelOp,
                 )
             }
@@ -121,9 +124,10 @@ private fun BucketRow(bucketKey: String, rules: List<RuleAst>) {
             DiagramIdentifier(text = bucketKey, color = LabelValue)
             DiagramNote(
                 text = if (competing) {
-                    "${rules.size} rules compete · first match wins"
+                    // Every matching rule fires, so a record can pick this value up more than once.
+                    "${rules.size} rules can decide this"
                 } else {
-                    "1 rule · no short-circuit effect"
+                    "1 rule decides this"
                 },
                 color = if (competing) LabelOp else TextDesc.copy(alpha = 0.7f),
             )
@@ -143,8 +147,9 @@ private fun BucketRow(bucketKey: String, rules: List<RuleAst>) {
 }
 
 /**
- * Rules the engine can never bucket. It evaluates these unconditionally even with
- * `shortCircuitByOutput` on, so they belong in the view rather than being dropped as uninteresting.
+ * Rules whose output cannot be read off the rule text — an extracted or variable argument is only known
+ * at evaluation time. They belong in the view rather than being dropped: a reader comparing the buckets
+ * against the rule set would otherwise find rules missing with no explanation.
  */
 @Composable
 private fun UngroupedSection(rules: List<RuleAst>) {
@@ -153,8 +158,8 @@ private fun UngroupedSection(rules: List<RuleAst>) {
             horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DiagramIdentifier(text = "always evaluated", color = TextDesc, fontSize = 13, weight = FontWeight.SemiBold)
-            DiagramNote(text = "no static output — never grouped, never short-circuited")
+            DiagramIdentifier(text = "not groupable", color = TextDesc, fontSize = 13, weight = FontWeight.SemiBold)
+            DiagramNote(text = "output only known at evaluation time — cannot be grouped")
         }
         rules.forEach { rule ->
             Column(
@@ -175,8 +180,8 @@ private fun UngroupedSection(rules: List<RuleAst>) {
 
 /**
  * Family to bucket to rules, keeping insertion order so the view follows declaration order rather
- * than an alphabetical shuffle. A rule with several actions appears under each of them, which is what
- * `RuleEngine.staticOutputKeys` does too.
+ * than an alphabetical shuffle. A rule with several actions appears under each of them, because it can
+ * decide each of those outputs.
  */
 private fun groupByFamily(rules: List<RuleAst>): Map<String, Map<String, List<RuleAst>>> {
     val families = linkedMapOf<String, LinkedHashMap<String, MutableList<RuleAst>>>()

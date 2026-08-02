@@ -16,6 +16,14 @@ sealed interface BuilderRule {
         val actions: List<BuilderAction>,
         /** `set` rows of the THEN block, rendered above the actions. */
         val variables: List<BuilderVariable> = emptyList(),
+        /** Actions of the ELSE block. Empty when the rule declares no false branch. */
+        val elseActions: List<BuilderAction> = emptyList(),
+        /** `set` rows of the ELSE block, rendered above its actions. */
+        val elseVariables: List<BuilderVariable> = emptyList(),
+        /** True when the THEN branch ends the run — rendered as a removable badge, always last. */
+        val stopOnThen: Boolean = false,
+        /** True when the ELSE branch ends the run. */
+        val stopOnElse: Boolean = false,
     ) : BuilderRule
 
     /** Rule that contains syntax the Builder cannot safely render. */

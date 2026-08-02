@@ -1,5 +1,6 @@
 package ruleengine.builder
 
+import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.core.errors.RuleEngineBuildException
 import ruleengine.core.errors.Severity
 import ruleengine.jackson.JacksonUtil
@@ -387,16 +388,6 @@ class RuleEngineBuilderTest {
     }
 
     @Test
-    fun `shortCircuitByOutput is passed to the engine`() {
-        val engines = RuleEngineBuilder.fromManifest(manifestPath = FULL_MANIFEST, shortCircuitByOutput = true)
-
-        // The rent input only matches one rule, so the result stays the same; this asserts the flag
-        // is accepted and the engine remains usable.
-        val result = engines.getValue("full").evaluate(input = readInput(relativePath = "inputs/rent-input.json"))
-        assertTrue(actual = result.matches.isNotEmpty())
-    }
-
-    @Test
     fun `a variable set in one rule file is visible to the next rule file of the same entry`() {
         val dir = writeProject()
         Files.writeString(dir.resolve("rules/a.rule"), VARIABLE_WRITER_RULE)
@@ -410,24 +401,35 @@ class RuleEngineBuilderTest {
         assertEquals(expected = "seen", actual = result.variables["marker"])
     }
 
+    /** `stop` reaches across rule files, because an entry's files are one ordered list at runtime. */
     @Test
-    fun `shortCircuitByOutput is rejected when a rule assigns a variable`() {
+    fun `a stop in one rule file suppresses the rules of the next file`() {
         val dir = writeProject()
-        Files.writeString(dir.resolve("rules/a.rule"), VARIABLE_WRITER_RULE)
+        Files.writeString(dir.resolve("rules/a.rule"), STOPPING_RULE)
+        Files.writeString(dir.resolve("rules/b.rule"), LATER_RULE)
+        writeManifest(dir = dir, rules = listOf("rules/a.rule", "rules/b.rule"))
+
+        val loaded = RuleEngineBuilder.fromManifestEntry(manifestPath = dir.resolve("manifest.yaml"), entryId = "e")
+        val result = loaded.evaluate(input = MATCHING_INPUT)
+
+        assertEquals(expected = listOf("stopper"), actual = result.matches.map { it.ruleId })
+        assertEquals(expected = "stopper", actual = result.stoppedBy)
+    }
+
+    @Test
+    fun `an else branch loads and evaluates through the manifest`() {
+        val dir = writeProject()
+        Files.writeString(dir.resolve("rules/a.rule"), ELSE_BRANCH_RULE)
         writeManifest(dir = dir, rules = listOf("rules/a.rule"))
 
-        val failure = assertFailsWithBuildException {
-            RuleEngineBuilder.fromManifestEntry(
-                manifestPath = dir.resolve("manifest.yaml"),
-                entryId = "e",
-                shortCircuitByOutput = true,
-            )
-        }
+        val loaded = RuleEngineBuilder.fromManifestEntry(manifestPath = dir.resolve("manifest.yaml"), entryId = "e")
 
-        assertTrue(
-            actual = failure.message.orEmpty().contains("shortCircuitByOutput cannot be used with variables"),
-            message = "unexpected message: ${failure.message}"
-        )
+        val matched = loaded.evaluate(input = MATCHING_INPUT).matches.single()
+        assertEquals(expected = RuleBranch.THEN, actual = matched.branch)
+
+        val elseFired = loaded.evaluate(input = mapOf("p" to "other")).matches.single()
+        assertEquals(expected = RuleBranch.ELSE, actual = elseFired.branch)
+        assertEquals(expected = listOf("no"), actual = elseFired.actions.single().arguments)
     }
 
     private fun assertFailsWithBuildException(block: () -> Unit): RuleEngineBuildException =
@@ -538,6 +540,37 @@ class RuleEngineBuilderTest {
             actions:
               label:
                 argTypes: [string]
+        """.trimIndent()
+
+        val STOPPING_RULE: String = """
+            rule "stopper" {
+              when
+                p equals "x"
+              then
+                label "first"
+                stop
+            }
+        """.trimIndent()
+
+        /** A rule that matches [MATCHING_INPUT], for asserting it is *not* reached after a `stop`. */
+        val LATER_RULE: String = """
+            rule "later" {
+              when
+                p equals "x"
+              then
+                label "second"
+            }
+        """.trimIndent()
+
+        val ELSE_BRANCH_RULE: String = """
+            rule "branching" {
+              when
+                p equals "x"
+              then
+                label "yes"
+              else
+                label "no"
+            }
         """.trimIndent()
 
         val VARIABLE_WRITER_RULE: String = """

@@ -12,8 +12,9 @@ The syntax is intentionally simple and close to natural language, so that busine
 
 - A `.rule` file can contain **one or more rules**.
 - Each rule has a unique **ID** (a string in double quotes).
-- Rules are evaluated **independently** — the engine checks every rule against the input and returns *all* that match. There is no priority or stop-first logic; one rule matching never suppresses another.
-- Evaluation order **is deterministic**: rules run in the order they are declared in the file, and matches are returned in that same order. Across multiple files, the [manifest](./manifest.md) `rules:` list order applies first, then declaration order within each file. This does not change *which* rules match — only the order in which matches are returned.
+- Every rule is checked against the input and *all* that match are returned — one rule matching never suppresses another by itself. There is no implicit priority.
+- Rules are evaluated in a **fixed, guaranteed order**: the [manifest](./manifest.md) `rules:` list order first, then the order the rules are declared within each file. Matches are returned in that same order.
+- That order is **part of the meaning**, not only of the output. Two constructs depend on it: a `set` clause publishes a value only the rules *after* it can read, and a branch ending in `stop` ends the run at its own position, so the rules after it are not evaluated. Reordering the manifest can therefore change the result, not just its sequence.
 
 ---
 
@@ -30,6 +31,10 @@ rule "rule-id" {
     <action>
     <action>
     ...
+
+  else
+    <action>
+    ...
 }
 ```
 
@@ -39,6 +44,7 @@ rule "rule-id" {
 | `description "..."` | ⬜ | One sentence explaining what the rule is for. Must come first, before `when` |
 | `when` | ✅ | One or more conditions that must be true |
 | `then` | ✅ | One or more actions to return when the rule matches |
+| `else` | ⬜ | What to return when the condition is **false**. Same contents as `then` |
 
 ### Minimal Example
 
@@ -420,6 +426,216 @@ All of them are returned when the rule matches.
 
 ---
 
+## The `else` Branch
+
+A rule can also say what to produce when its condition is **false**.
+Write it as an `else` block after the `then` block:
+
+```
+rule "order-tier" {
+  description "An order of at least 1000 gets priority handling, anything smaller the standard path."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+
+  else
+    label "standard"
+}
+```
+
+The `else` block is **optional**. A rule without one behaves exactly as it always has: a false
+condition produces nothing at all.
+
+### Why
+
+Without `else`, a business statement with two outcomes over one threshold needs two rules, and the
+threshold gets written twice:
+
+```
+rule "order-priority" {
+  when
+    amount >= 1000
+  then
+    label "priority"
+}
+
+rule "order-standard" {
+  when
+    amount < 1000
+  then
+    label "standard"
+}
+```
+
+That works, but the boundary now lives in two places. The first time someone moves one of them and not
+the other, orders of exactly 1000 either get both labels or neither. One rule with an `else` has one
+boundary.
+
+### What an `else` block can contain
+
+Exactly what a `then` block can: actions, `extract` clauses and `set` clauses.
+
+```
+rule "order-tier" {
+  description "An order of at least 1000 is tier 2, anything smaller is tier 1."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+    set tierLevel = 2
+
+  else
+    label "standard"
+    set tierLevel = 1
+}
+```
+
+A `set` in the `else` block publishes to the rules after it exactly as one in `then` does — the
+variable carries whatever the branch that actually ran assigned.
+
+### Rules
+
+| Aspect | Behaviour |
+|---|---|
+| Optional | Omit it and a false condition produces nothing, as before. |
+| Position | After the `then` block, before the closing `}`. |
+| At most once | A second `else` on the same rule is an error. |
+| Never empty | `else` with nothing in it is an error. Drop the keyword instead. |
+| Exclusive | Exactly one branch runs per record. Never both, never neither. |
+| Not a match | An `else` result means the condition was **false**. It says what to output, not that the rule matched. |
+
+`else` is a keyword, so an action cannot be named `else`. If your action schema declares one, the engine
+reports an error and the action has to be renamed.
+
+### Reading the result
+
+An `else` result is returned alongside the ordinary matches, tagged with the branch that produced it,
+so nothing has to guess which half of the rule ran. See
+[integration-guide.md](integration-guide.md).
+
+### Use separate rules for three or more bands
+
+`else` fits **one** condition with **two** outcomes. An `else` fires whenever its own condition is
+false — including for records another rule already handled — so a chain of rules with `else` blocks
+makes a record collect every band it is *not* in.
+
+For three or more bands, give each its own rule and no `else`:
+
+```
+rule "tier-high" {
+  when
+    amount >= 1000
+  then
+    label "high"
+}
+
+rule "tier-mid" {
+  when
+    amount >= 100
+    and amount < 1000
+  then
+    label "mid"
+}
+
+rule "tier-low" {
+  when
+    amount < 100
+  then
+    label "low"
+}
+```
+
+---
+
+---
+
+## Ending the Run — the `stop` Keyword
+
+A branch can end the run. Write `stop` as the **last** statement of a `then` or `else` block:
+
+```
+rule "blocked-country" {
+  description "A payment to a sanctioned country is rejected outright; nothing else applies."
+
+  when
+    country in ["xx", "yy"]
+
+  then
+    label "rejected"
+    stop
+}
+```
+
+When that branch fires, the rule's own output is collected and then **no rule declared after it is
+evaluated** for that record. This is what makes a guard rule a guard: everything below it is not merely
+overridden, it never runs.
+
+### Which branch stops
+
+`stop` belongs to a branch, not to the rule, so a rule can halt on one verdict and carry on with the
+other:
+
+```
+rule "must-be-known-country" {
+  description "An unknown country is rejected and nothing further is assessed."
+
+  when
+    country in ["de", "at", "ch"]
+
+  then
+    label "known-country"
+
+  else
+    label "rejected"
+    stop
+}
+```
+
+Here a known country continues through the rest of the rule set; an unknown one ends the run. An
+`else` block containing nothing but `stop` is valid and means exactly that.
+
+### Rules
+
+| Aspect | Behaviour |
+|---|---|
+| Position | The **last** statement in its block. Anything after it is an error. |
+| Scope | The remaining rules of the same manifest entry, across file boundaries. |
+| Own output | Collected first. `stop` halts what comes *after* the rule, not the branch it sits in. |
+| Per branch | Valid in `then`, in `else`, or both. |
+| Variables | Compatible. A variable published before the `stop` is in the result; the rules that would have read it are simply not reached. |
+
+`stop` is a keyword, so an action cannot be named `stop`.
+
+### Why `stop` must be last
+
+The lines below a `stop` would still run — a branch's output resolves before the halt takes effect — so a
+block with `stop` in the middle would read as if half of it were dead. Requiring it last removes the
+question. The visual Builder holds it as a badge pinned to the end of the branch, so it cannot get out of
+place there.
+
+### Reading the result
+
+`EvaluationResult.stoppedBy` names the rule that halted the run, or is `null` when every rule was
+evaluated. Without it, a consumer cannot tell *"no further rule matched"* from *"no further rule ran"*.
+See [integration-guide.md](integration-guide.md).
+
+The Test panel shows the difference directly: rules after the halt are reported as **not evaluated**
+rather than as *no match*.
+
+### Order becomes load-bearing
+
+A rule set using `stop` depends on its manifest order. Moving a guard rule below the rules it was meant
+to guard silently stops guarding them. Say so in a comment next to the `rules:` list when you write one —
+see [manifest.md](manifest.md).
+
+---
+
+
 ## Variables — the `set` Clause
 
 A rule can publish a named value that the rules **after** it can read.
@@ -505,7 +721,7 @@ rule "turnover-score" {
 | Does a variable change the input? | No. The engine never modifies input data; a variable lives only for the duration of one evaluation. |
 
 > **This makes rule order significant.**
-> Without variables, rules are independent and order only affects the order of the results. A rule that
+> Without variables or a `stop`, order only affects the order of the results. A rule that
 > reads `$name` depends on an earlier rule having run and matched, so moving rule files around in the
 > manifest can change the outcome.
 
@@ -531,15 +747,6 @@ letter or `_`.
 The "assigned by an earlier rule" check is deliberately generous: it only asks that *some* earlier rule
 assigns the name, not that the rule will actually match at runtime. Catching typos and forward
 references is the point; proving a variable is always populated is not possible before the data arrives.
-
-### Not Compatible With `shortCircuitByOutput`
-
-`shortCircuitByOutput` groups rules by their output and stops each group at its first match, which
-reorders evaluation. That is incompatible with variables, so a build that combines the two fails with
-an explicit message rather than producing an order-dependent result. See
-[integration-guide.md](integration-guide.md).
-
----
 
 ## Extracting Values into Actions — the `extract` Clause
 

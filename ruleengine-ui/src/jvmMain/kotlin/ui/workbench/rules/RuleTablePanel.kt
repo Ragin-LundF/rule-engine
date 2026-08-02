@@ -238,7 +238,7 @@ private fun RowScope.RuleActionsCell(rule: BuilderRule) {
     ) {
         when (rule) {
             is BuilderRule.Supported -> {
-                if (rule.actions.isEmpty()) {
+                if (rule.actions.isEmpty() && rule.elseActions.isEmpty()) {
                     Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
                 } else {
                     rule.actions.forEach { action ->
@@ -246,6 +246,15 @@ private fun RowScope.RuleActionsCell(rule: BuilderRule) {
                             text = action.toDisplaySummary(),
                             style = MaterialTheme.typography.body2,
                             color = TextSecondary,
+                        )
+                    }
+                    // Prefixed rather than listed as a peer: in one cell, two bare action lines read as
+                    // outputs the rule produces together instead of one or the other.
+                    rule.elseActions.forEach { action ->
+                        Text(
+                            text = "else ${action.toDisplaySummary()}",
+                            style = MaterialTheme.typography.body2,
+                            color = TextMuted,
                         )
                     }
                 }

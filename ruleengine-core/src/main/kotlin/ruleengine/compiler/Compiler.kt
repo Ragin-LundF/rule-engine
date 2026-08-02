@@ -94,18 +94,34 @@ object Compiler {
             normalizerRegistry = normalizerRegistry,
             ruleId = ast.id
         )
-        val compiledActions = ast.actions.map { action ->
-            compileAction(action = action, schema = schema, ruleId = ast.id)
-        }
-        val compiledAssignments = ast.assignments.map { assignment ->
-            compileAssignment(assignment = assignment, schema = schema, ruleId = ast.id)
-        }
         return CompiledRule(
             id = ast.id,
             expression = expr,
-            actions = compiledActions,
-            assignments = compiledAssignments
+            actions = compileActions(actions = ast.actions, schema = schema, ruleId = ast.id),
+            assignments = compileAssignments(assignments = ast.assignments, schema = schema, ruleId = ast.id),
+            elseActions = compileActions(actions = ast.elseActions, schema = schema, ruleId = ast.id),
+            elseAssignments = compileAssignments(assignments = ast.elseAssignments, schema = schema, ruleId = ast.id),
+            stopOnThen = ast.stopOnThen,
+            stopOnElse = ast.stopOnElse
         )
+    }
+
+    private fun compileActions(
+        actions: List<ActionAst>,
+        schema: FieldSchema,
+        ruleId: String?
+    ): List<CompiledAction> {
+        return actions.map { action -> compileAction(action = action, schema = schema, ruleId = ruleId) }
+    }
+
+    private fun compileAssignments(
+        assignments: List<VariableAssignmentAst>,
+        schema: FieldSchema,
+        ruleId: String?
+    ): List<CompiledAssignment> {
+        return assignments.map { assignment ->
+            compileAssignment(assignment = assignment, schema = schema, ruleId = ruleId)
+        }
     }
 
     private fun compileAssignment(

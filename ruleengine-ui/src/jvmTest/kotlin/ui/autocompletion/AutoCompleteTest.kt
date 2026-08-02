@@ -5,6 +5,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldType
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
+import ui.dsl.analyzeDslContext
 import ui.dsl.model.DslCursorContext
 import ui.dsl.model.DslSection
 import kotlin.test.Test
@@ -129,6 +130,63 @@ class AutoCompleteTest {
         assertEquals(
             expected = listOf("containsAny", "containsAll"),
             actual = defaultOperatorsForType(fieldType = FieldType.STRING_SET),
+        )
+    }
+
+    // --- else branch ---
+
+    @Test
+    fun `a then block offers the else keyword`() {
+        assertTrue(
+            actual = branchCompletions(section = DslSection.THEN).map { it.label }.contains(element = "else"),
+            message = "else must be offered after a then block",
+        )
+    }
+
+    /** There is no nested `else`, so offering the keyword inside one would only produce a parse error. */
+    @Test
+    fun `an else block does not offer the else keyword again`() {
+        assertTrue(
+            actual = branchCompletions(section = DslSection.ELSE).map { it.label }.none { it == "else" },
+            message = "else must not be offered inside an else block",
+        )
+    }
+
+    @Test
+    fun `an else block offers the same action clauses as a then block`() {
+        val then = branchCompletions(section = DslSection.THEN).map { it.label }.filter { it != "else" }
+
+        assertEquals(expected = then, actual = branchCompletions(section = DslSection.ELSE).map { it.label })
+    }
+
+    private fun branchCompletions(section: DslSection): List<CompletionItem> {
+        return buildContextualCompletions(
+            context = DslCursorContext(section = section),
+            schema = null,
+            actionSchema = null,
+        )
+    }
+
+    // --- section detection ---
+
+    @Test
+    fun `the cursor after else is in the ELSE section`() {
+        val text = "rule \"r\" {\n  when\n    amount >= 1\n  then\n    label \"x\"\n  else\n    "
+
+        assertEquals(
+            expected = DslSection.ELSE,
+            actual = analyzeDslContext(text = text, cursorPos = text.length).section,
+        )
+    }
+
+    /** A closing brace ends the rule, so the next token starts fresh rather than staying in ELSE. */
+    @Test
+    fun `the cursor after the rule's closing brace is back at top level`() {
+        val text = "rule \"r\" {\n  when\n    amount >= 1\n  then\n    label \"x\"\n  else\n    label \"y\"\n}\n"
+
+        assertEquals(
+            expected = DslSection.TOP_LEVEL,
+            actual = analyzeDslContext(text = text, cursorPos = text.length).section,
         )
     }
 }

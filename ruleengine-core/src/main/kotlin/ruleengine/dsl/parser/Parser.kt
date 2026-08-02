@@ -56,8 +56,12 @@ class Parser(private val input: String) {
         /**
          * Identifiers that must never be read as the start of an implicitly `and`-joined condition:
          * `then` closes the `when` block, and the rest are infix keywords with their own handling.
+         *
+         * `else` is listed even though it can only legally follow `then`: without it, a misplaced
+         * `else` inside the condition would be read as a field named `else` and reported as an unknown
+         * field, instead of as the block ordering mistake it is.
          */
-        val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "and", "or", "ignoreCase")
+        val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "else", "and", "or", "ignoreCase")
     }
 
     private fun current(): Token = cursor.current()
@@ -121,6 +125,7 @@ class Parser(private val input: String) {
 
         advance()
         val thenBlock = thenBlockParser.parse()
+        val elseBlock = parseOptionalElseBlock()
 
         expect(type = TokenType.RBRACE)
         return RuleAst(
@@ -129,9 +134,54 @@ class Parser(private val input: String) {
             condition = condition,
             actions = thenBlock.actions,
             assignments = thenBlock.assignments,
+            elseActions = elseBlock?.actions.orEmpty(),
+            elseAssignments = elseBlock?.assignments.orEmpty(),
+            stopOnThen = thenBlock.stop,
+            stopOnElse = elseBlock?.stop == true,
             line = first.line,
             column = first.col,
         )
+    }
+
+    /**
+     * Consumes the optional `else` block that may follow the `then` block.
+     *
+     * Both branches have the same grammar, so this reuses [ThenBlockParser] rather than restating it.
+     * A repeated clause is rejected rather than merged: two `else` blocks on one rule is an authoring
+     * mistake, and silently concatenating them would hide it.
+     *
+     * An empty block is rejected too. It would evaluate as a no-op, indistinguishable from having no
+     * `else` at all, so accepting it would silently keep a half-written rule. A block holding only
+     * `stop` is not empty: it means "halt the run when this condition does not hold".
+     */
+    @Suppress("ThrowsCount")
+    private fun parseOptionalElseBlock(): ThenBlock? {
+        val tok = current()
+        if (tok.type != TokenType.IDENT || tok.text != "else") {
+            return null
+        }
+
+        advance()
+        val block = thenBlockParser.parse()
+        if (block.actions.isEmpty() && block.assignments.isEmpty() && !block.stop) {
+            throw ParseException(
+                line = tok.line,
+                column = tok.col,
+                messageText = "Empty 'else' block: declare at least one action, 'set' clause or 'stop', " +
+                        "or drop the 'else' keyword"
+            )
+        }
+
+        val next = current()
+        if (next.type == TokenType.IDENT && next.text == "else") {
+            throw ParseException(
+                line = next.line,
+                column = next.col,
+                messageText = "Duplicate 'else' block"
+            )
+        }
+
+        return block
     }
 
     /**
