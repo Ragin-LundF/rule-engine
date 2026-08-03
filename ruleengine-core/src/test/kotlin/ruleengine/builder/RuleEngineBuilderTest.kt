@@ -60,6 +60,25 @@ class RuleEngineBuilderTest {
     }
 
     @Test
+    fun `a location without the classpath prefix is read from the filesystem`() {
+        val loaded = RuleEngineBuilder.fromManifestEntry(
+            manifestLocation = FULL_MANIFEST.toString(),
+            entryId = "full",
+        )
+
+        assertEquals(expected = "full", actual = loaded.entryId)
+    }
+
+    @Test
+    fun `a filesystem location loads every entry by default`() {
+        val dir = writeMultiEntryProject()
+
+        val engines = RuleEngineBuilder.fromManifest(manifestLocation = dir.resolve("manifest.yaml").toString())
+
+        assertEquals(expected = listOf("first", "second"), actual = engines.keys.toList())
+    }
+
+    @Test
     fun `unknown entryId fails and lists the available ids`() {
         val failure = assertFailsWithBuildException {
             RuleEngineBuilder.fromManifest(manifestPath = FULL_MANIFEST, entryId = "nope")

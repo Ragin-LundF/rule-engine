@@ -28,12 +28,14 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`. Its `dto/` holds the whole `PreparedValue` sealed hierarchy and stays flat — sealed subclasses must share a package. |
 | `ruleengine.evaluator.trace` | `TraceCollector`, `RecordingTraceCollector`, `NoopTraceCollector`, plus the internal `MutableNode` the collector builds. Immutable `DecisionTree` / `DecisionNode` live in its `dto/`. |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader`, and DTO classes. |
-| `ruleengine.manifest` | `ProjectManifest`, `ManifestLoader`. |
+| `ruleengine.manifest` | `ProjectManifest`, `ManifestLoader`, plus the `ManifestFileResolver` seam that decides *where* a manifest's files come from: `ManifestFile` (`OnDisk` / `InMemory` / `Unavailable`), `FileSystemManifestFileResolver`, `ManifestPathResolver`. At the 8-file cap — new location support goes in a subpackage. |
+| `ruleengine.manifest.classpath` | `ClasspathManifestFileResolver`; resolves a manifest's files as classpath resources. Reads through `ClassLoader.getResourceAsStream` only, never a `URL` or a `Path` — that is what makes it work inside a plain jar, a Spring Boot executable jar and a nested jar alike. Nothing here may start scanning the classpath: a manifest enumerates its files. |
+| `ruleengine.manifest.source` | `ManifestSource`; turns one location string into the manifest plus the resolver serving its files. The `classpath:` prefix is defined here and nowhere else — every entry point that takes a location routes through it, so the filesystem and classpath cases can never drift apart. |
 | `ruleengine.jackson` | `JacksonUtil` singleton exposing the configured `jsonMapper`. YAML is read by feeding a `YAMLFactory` parser to that mapper (see `FieldSchemaLoader`). |
 | `ruleengine.cli` | `EvaluateCli`, `ValidatorCli`; command-line entry points. |
-| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine`; assembles a ready-to-evaluate engine from a manifest or directory. |
+| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine`; assembles a ready-to-evaluate engine from a manifest location (`fromManifest`, `fromManifestEntry`) or behind a custom `ManifestFileResolver`. |
 | `ruleengine.export` | Rule catalog export: `RuleCatalogBuilder`, `PlainLanguageRenderer`, `CatalogText`, `FieldLabels`, plus `docx/`, `markdown/` and `dto/`. |
-| `ruleengine.core.io` | `FileInputSupport`; bounded file reads and rule-file discovery. |
+| `ruleengine.core.io` | `FileInputSupport`; bounded reads from a `Path` or an `InputStream`, and rule-file discovery. `walkRuleFiles` is filesystem-only by design — there is deliberately no classpath equivalent, because it would require classpath scanning. |
 | `ruleengine.core.analysis` | `FieldUsage`; reports which field paths a rule reads, by walking the AST. Used by the export catalog and by the UI's field-flow diagram. |
 
 ## Core design patterns

@@ -21,60 +21,64 @@ import ruleengine.export.dto.CatalogRuleFile
 import ruleengine.export.dto.ParsedRuleFile
 import ruleengine.export.dto.RuleCatalog
 import ruleengine.manifest.ManifestEntry
-import ruleengine.manifest.ManifestLoader
-import ruleengine.manifest.ManifestPathResolution
-import ruleengine.manifest.ManifestPathResolver
+import ruleengine.manifest.ManifestFile
+import ruleengine.manifest.ManifestFileResolver
+import ruleengine.manifest.ProjectManifest
+import ruleengine.manifest.classpath.ClasspathManifestFileResolver
+import ruleengine.manifest.source.ManifestSource
 import ruleengine.schema.FieldSchemaLoader
 import java.nio.file.Path
 
 /**
  * Builds the [RuleCatalog] every exporter renders from.
  *
- * Two entry points, because there are two callers with very different starting points: a headless
- * caller has a manifest on disk and nothing loaded, while the workbench already holds the entry's
- * rule files parsed and re-reading them would both duplicate work and ignore unsaved edits.
+ * Three entry points, because there are callers with very different starting points: a headless caller
+ * has a manifest on disk or packaged in its own jar ([fromManifest]) and nothing loaded, while the
+ * workbench ([build]) already holds the entry's rule files parsed and re-reading them would both
+ * duplicate work and ignore unsaved edits.
  */
 object RuleCatalogBuilder {
 
     /**
-     * Reads a manifest and builds one catalog per entry, or only [entryId] when given.
+     * Reads the manifest at [manifestLocation] and builds one catalog per entry, or only [entryId]
+     * when given.
+     *
+     * A location prefixed with `classpath:` is a classpath resource — so a service whose rules ship
+     * inside its own jar can still export its rule documentation at runtime — and anything else is a
+     * filesystem path. See [ruleengine.manifest.source.ManifestSource] for how a location is read.
      *
      * Parses each rule file separately rather than going through
      * [ruleengine.builder.RuleEngineBuilder], which concatenates an entry's files into one list and
      * so loses the file grouping the document is organised by.
+     *
+     * @param classLoader loader for a `classpath:` location; ignored for a filesystem one
+     */
+    fun fromManifest(
+        manifestLocation: String,
+        entryId: String? = null,
+        classLoader: ClassLoader = ClasspathManifestFileResolver.defaultClassLoader(),
+    ): List<RuleCatalog> {
+        return fromSource(
+            source = ManifestSource.of(location = manifestLocation, classLoader = classLoader),
+            entryId = entryId,
+        )
+    }
+
+    /**
+     * The typed variant of [fromManifest], for a caller that already holds a [Path]; a manifest
+     * packaged in a jar has none and is named by a `classpath:` location instead.
      */
     fun fromManifest(manifestPath: Path, entryId: String? = null): List<RuleCatalog> {
-        val manifest = ManifestLoader.load(path = manifestPath)
-        val baseDir = manifestPath.toAbsolutePath().normalize().parent
-            ?: throw RuleEngineBuildException(
-                manifestPath = manifestPath,
-                entryId = entryId,
-                details = "Manifest has no parent directory to resolve its entries against",
-            )
+        return fromSource(source = ManifestSource.ofPath(manifestPath = manifestPath), entryId = entryId)
+    }
 
-        val entries = if (entryId == null) {
-            manifest.entries
-        } else {
-            manifest.entries.filter { entry -> entry.id == entryId }
-        }
-
-        if (entries.isEmpty()) {
-            val known = manifest.entries.joinToString(separator = ", ") { entry -> entry.id }
-            throw RuleEngineBuildException(
-                manifestPath = manifestPath,
-                entryId = entryId,
-                details = "No such entry. Known entries: $known",
-            )
-        }
-
-        return entries.map { entry ->
-            buildEntry(
-                projectName = manifest.name,
-                entry = entry,
-                baseDir = baseDir,
-                manifestPath = manifestPath,
-            )
-        }
+    private fun fromSource(source: ManifestSource, entryId: String?): List<RuleCatalog> {
+        return buildCatalogs(
+            location = source.location,
+            manifest = source.readManifest(),
+            entryId = entryId,
+            resolver = source.resolver,
+        )
     }
 
     /**
@@ -106,16 +110,51 @@ object RuleCatalogBuilder {
 
     // ── entry loading ─────────────────────────────────────────────────────────
 
+    /**
+     * The load phase the manifest entry points share, once [resolver] has decided where the
+     * manifest's files come from. [location] only labels failures.
+     */
+    private fun buildCatalogs(
+        location: Path,
+        manifest: ProjectManifest,
+        entryId: String?,
+        resolver: ManifestFileResolver,
+    ): List<RuleCatalog> {
+        val entries = if (entryId == null) {
+            manifest.entries
+        } else {
+            manifest.entries.filter { entry -> entry.id == entryId }
+        }
+
+        if (entries.isEmpty()) {
+            val known = manifest.entries.joinToString(separator = ", ") { entry -> entry.id }
+            throw RuleEngineBuildException(
+                manifestPath = location,
+                entryId = entryId,
+                details = "No such entry. Known entries: $known",
+            )
+        }
+
+        return entries.map { entry ->
+            buildEntry(
+                projectName = manifest.name,
+                entry = entry,
+                resolver = resolver,
+                manifestPath = location,
+            )
+        }
+    }
+
     private fun buildEntry(
         projectName: String?,
         entry: ManifestEntry,
-        baseDir: Path,
+        resolver: ManifestFileResolver,
         manifestPath: Path,
     ): RuleCatalog {
         val schema = entry.schema?.let { relative ->
-            FieldSchemaLoader.load(
-                path = resolve(
-                    baseDir = baseDir,
+            loadSchema(
+                file = resolve(
+                    resolver = resolver,
                     relativePath = relative,
                     label = "schema",
                     manifestPath = manifestPath,
@@ -125,15 +164,14 @@ object RuleCatalogBuilder {
         }
 
         val files = entry.rules.map { relative ->
-            val path = resolve(
-                baseDir = baseDir,
+            val file = resolve(
+                resolver = resolver,
                 relativePath = relative,
                 label = "rules",
                 manifestPath = manifestPath,
                 entryId = entry.id,
             )
-            val text = FileInputSupport.readBoundedText(path = path, kind = "rule file")
-            ParsedRuleFile(relativePath = relative, rules = Parser(input = text).parseRules())
+            ParsedRuleFile(relativePath = relative, rules = Parser(input = ruleText(file = file)).parseRules())
         }
 
         return build(
@@ -145,23 +183,36 @@ object RuleCatalogBuilder {
         )
     }
 
+    private fun loadSchema(file: ManifestFile.Available): FieldSchema {
+        return when (file) {
+            is ManifestFile.OnDisk -> FieldSchemaLoader.load(path = file.path)
+            is ManifestFile.InMemory ->
+                FieldSchemaLoader.loadFromString(content = file.content, nameHint = file.nameHint)
+        }
+    }
+
+    private fun ruleText(file: ManifestFile.Available): String {
+        return when (file) {
+            is ManifestFile.OnDisk -> FileInputSupport.readBoundedText(path = file.path, kind = "rule file")
+            is ManifestFile.InMemory -> file.content
+        }
+    }
+
     private fun resolve(
-        baseDir: Path,
+        resolver: ManifestFileResolver,
         relativePath: String,
         label: String,
         manifestPath: Path,
         entryId: String,
-    ): Path {
-        return when (val resolution = ManifestPathResolver.resolveWithinBase(
-            baseDir = baseDir,
-            relativePath = relativePath,
-            label = label,
-        )) {
-            is ManifestPathResolution.Accepted -> resolution.path
-            is ManifestPathResolution.Rejected -> throw RuleEngineBuildException(
+    ): ManifestFile.Available {
+        val file = resolver.resolve(relativePath = relativePath, label = label)
+
+        return when (file) {
+            is ManifestFile.Available -> file
+            is ManifestFile.Unavailable -> throw RuleEngineBuildException(
                 manifestPath = manifestPath,
                 entryId = entryId,
-                details = resolution.message,
+                details = file.message,
             )
         }
     }

@@ -9,6 +9,7 @@ This guide is for **developers** who want to embed the Rule Engine into a JVM ap
 1. [Adding the Dependency](#1-adding-the-dependency)
 2. [Core Concepts for Developers](#2-core-concepts-for-developers)
 3. [Quick Start: RuleEngineBuilder](#3-quick-start-ruleenginebuilder)
+   - [Loading from the classpath](#loading-from-the-classpath)
 4. [Advanced Rule Engine Preparation](#4-advanced-rule-engine-preparation)
    - [Manifest-Based Loading by Hand](#41-manifest-based-loading-by-hand)
    - [Loading a Field Schema](#42-loading-a-field-schema)
@@ -21,6 +22,7 @@ This guide is for **developers** who want to embed the Rule Engine into a JVM ap
    - [Reading the Result](#49-reading-the-result)
 5. [Tracing — Decision Tree Output](#5-tracing--decision-tree-output)
 6. [Loading from Strings and Readers](#6-loading-from-strings-and-readers)
+   - [Serving a manifest from a custom location](#serving-a-manifest-from-a-custom-location)
 7. [Thread Safety and Lifecycle](#7-thread-safety-and-lifecycle)
 8. [Error Handling](#8-error-handling)
 9. [Extending the Engine](#9-extending-the-engine)
@@ -111,12 +113,14 @@ phases driven one component at a time.
 every referenced file relative to the manifest, loads the field and action schema, parses the rule
 files in manifest order, validates them and compiles them into a ready engine.
 
+A manifest is named by a location string: a `classpath:` prefix reads it from the classpath, anything
+else from the filesystem.
+
 ```kotlin
 import ruleengine.builder.RuleEngineBuilder
-import java.nio.file.Path
 
 // Loads every entry of the manifest, keyed by entry id
-val engines = RuleEngineBuilder.fromManifest(manifestPath = Path.of("rules/manifest.yaml"))
+val engines = RuleEngineBuilder.fromManifest(manifestLocation = "rules/manifest.yaml")
 
 val loaded = engines.getValue("transactions")
 
@@ -161,7 +165,7 @@ are never read:
 
 ```kotlin
 val engines = RuleEngineBuilder.fromManifest(
-    manifestPath = Path.of("rules/manifest.yaml"),
+    manifestLocation = "rules/manifest.yaml",
     entryId = "transactions"
 )
 ```
@@ -170,7 +174,7 @@ val engines = RuleEngineBuilder.fromManifest(
 
 ```kotlin
 val loaded = RuleEngineBuilder.fromManifestEntry(
-    manifestPath = Path.of("rules/manifest.yaml"),
+    manifestLocation = "rules/manifest.yaml",
     entryId = "transactions"
 )
 ```
@@ -179,9 +183,14 @@ val loaded = RuleEngineBuilder.fromManifestEntry(
 
 | Parameter | Default | Purpose |
 |---|---|---|
-| `manifestPath` | — | Path to the manifest YAML (or JSON) file |
+| `manifestLocation` | — | `classpath:`-prefixed resource name, or a path to the manifest YAML (or JSON) file |
 | `entryId` | `null` | Build only this entry instead of all of them |
+| `classLoader` | thread context class loader | Loader a `classpath:` location is looked up in; ignored for a filesystem location |
 | `normalizerRegistry` | `NormalizerRegistry.default` | Normalizer registry used for compilation |
+
+Both entry points also accept a `manifestPath: Path` instead of `manifestLocation`, for a caller that
+already holds one — `RuleEngineBuilder.fromManifest(manifestPath = Path.of("rules/manifest.yaml"))`. A
+manifest packaged in a jar has no `Path`, which is what the `classpath:` location is for.
 
 ### What is validated
 
@@ -215,16 +224,56 @@ try {
 
 Warnings never fail the build; inspect `loaded.warnings` if you want to surface them.
 
-> **Note:** The builder loads from the filesystem. For custom sources (strings, readers, classpath
-> resources) or partial pipelines, use the individual components described in section 4.
+### Loading from the classpath
+
+When the rules ship *inside* the application instead of next to it, prefix the location with
+`classpath:` — the same entry points read it:
+
+```kotlin
+// src/main/resources/rules/{manifest.yaml,schema.yaml,actions.yaml,rules/*.rule}
+val loaded = RuleEngineBuilder.fromManifestEntry(
+    manifestLocation = "classpath:rules/manifest.yaml",
+    entryId = "transactions"
+)
+```
+
+This reads through `ClassLoader.getResourceAsStream` and nothing else, which is what makes it work
+identically for an exploded `target`/`build` directory, a plain library jar, a Spring Boot executable
+jar and a jar nested inside one.
+
+> **A filesystem location cannot read from inside an executable jar.** A resource under
+> `BOOT-INF/classes` resolves to a `jar:nested:/app.jar/!BOOT-INF/classes/!/rules/manifest.yaml` URL
+> (Spring Boot 3.2+) or a `jar:file:/app.jar!/BOOT-INF/classes!/…` URL, and the JDK ships no
+> `FileSystemProvider` for either nested form — so no `Path` can be constructed at all. Rules packaged
+> under `BOOT-INF/lib/*.jar` are a jar inside a jar and have the same problem. Use `classpath:` for
+> packaged rules and a plain path only for rules that live on the filesystem beside the application.
+
+Rules for resource names after the prefix:
+
+- Always `/`-separated, and never starting with `/` (a leading slash is accepted and ignored).
+- Resolved relative to the manifest resource's own directory, exactly like the filesystem variant. A
+  path that leaves that directory (`../shared/schema.yaml`) is rejected.
+- `getResourceAsStream` returns the **first** match on the classpath. If two jars both ship
+  `rules/manifest.yaml`, which one wins depends on classpath order — namespace the prefix
+  (`com/acme/rules/manifest.yaml`) when the rules are published as a library.
+- The default loader is the thread context class loader, so the application's own resources are found
+  under `spring-boot-devtools`, where the app is reloaded by a separate class loader.
+
+`RuleCatalogBuilder.fromManifest` takes the same locations, for exporting rule documentation at
+runtime from packaged rules.
+
+> **Note:** For content that is already in memory (a string, a reader, a database row) or for a partial
+> pipeline, use the individual components described in section 4. If the rules live somewhere neither
+> the filesystem nor the classpath covers, implement `ruleengine.manifest.ManifestFileResolver` — see
+> section 6.
 
 ---
 
 ## 4. Advanced Rule Engine Preparation
 
 Use the individual components when `RuleEngineBuilder` does not fit: rules that come from a database
-or a classpath resource instead of files, a validation-only tool that never compiles, a custom
-assembly of schemas and rule sets, or full control over each phase.
+instead of files, a validation-only tool that never compiles, a custom assembly of schemas and rule
+sets, or full control over each phase.
 
 ### 4.1 Manifest-Based Loading by Hand
 
@@ -784,8 +833,38 @@ ManifestLoader.loadFromString(content = yamlString)
 
 All loaders accept both YAML and JSON content.
 
-> **Note:** `RuleEngineBuilder` reads from the filesystem only. Content that lives in a database, a
-> classpath resource or memory has to go through these loaders — see section 4.
+> **Note:** `RuleEngineBuilder.fromManifest` reads from the filesystem and, with a `classpath:`
+> location, from the classpath. Content that lives in memory has to go through these loaders — see
+> section 4 — or through a custom resolver, below.
+
+### Serving a manifest from a custom location
+
+If the manifest and its files live somewhere neither the filesystem nor the classpath covers — a
+database table, an object store, a config server — implement `ManifestFileResolver` instead of
+reassembling the load pipeline by hand:
+
+```kotlin
+import ruleengine.manifest.ManifestFile
+import ruleengine.manifest.ManifestFileResolver
+
+class DatabaseManifestFileResolver(private val projectId: Long) : ManifestFileResolver {
+    override fun resolve(relativePath: String, label: String): ManifestFile {
+        val content = repository.findFile(projectId = projectId, path = relativePath)
+            ?: return ManifestFile.Unavailable(message = "$label file '$relativePath' not found")
+
+        return ManifestFile.InMemory(content = content, nameHint = relativePath.substringAfterLast('/'))
+    }
+}
+```
+
+Contract:
+
+- Report every problem as `ManifestFile.Unavailable` rather than throwing, so the builder can attribute
+  the failure to the manifest entry it belongs to.
+- Reject a `relativePath` that leaves the manifest's own location instead of following it. Both built-in
+  resolvers do; a resolver that does not turns a manifest into an arbitrary-read primitive.
+- Return `ManifestFile.OnDisk` when the content really is a file, so the `Path`-based loaders are used
+  unchanged; `ManifestFile.InMemory` otherwise.
 
 ---
 
@@ -935,7 +1014,7 @@ fields:
 
 | Package | Contents |
 |---|---|
-| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading |
+| `ruleengine.builder` | `RuleEngineBuilder`, `LoadedRuleEngine` — one-call manifest loading from the filesystem or the classpath |
 | `ruleengine.core.domain.dto` | Evaluation results: `RuleMatch`, `EvaluationResult`, `RuleAction`, `RuleBranch`, plus `OperatorId`, `NormalizerId` |
 | `ruleengine.core.domain.dto.field` | Field model: `FieldSchema`, `FieldDefinition`, `FieldType`, `FieldId` |
 | `ruleengine.core.domain.dto.action` | Action model: `ActionSchema`, `ActionDefinition`, `ActionArgType` |
@@ -951,7 +1030,9 @@ fields:
 | `ruleengine.evaluator.trace` | `TraceCollector` |
 | `ruleengine.evaluator.trace.dto` | `DecisionTree`, `DecisionNode`, `toJson()` |
 | `ruleengine.schema` | `FieldSchemaLoader`, `ActionSchemaLoader` |
-| `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry`, `ManifestPathResolver` |
+| `ruleengine.manifest` | `ManifestLoader`, `ProjectManifest`, `ManifestEntry`, `ManifestPathResolver`, `ManifestFileResolver`, `ManifestFile` |
+| `ruleengine.manifest.classpath` | `ClasspathManifestFileResolver` — resolves a manifest's files as classpath resources |
+| `ruleengine.manifest.source` | `ManifestSource` — reads a location string (`classpath:` prefix or filesystem path) into a manifest plus its resolver |
 | `ruleengine.jackson` | `JacksonUtil` — shared `ObjectMapper` instance |
 
 ---
@@ -964,15 +1045,15 @@ import org.springframework.context.annotation.Configuration
 import ruleengine.builder.LoadedRuleEngine
 import ruleengine.builder.RuleEngineBuilder
 import ruleengine.core.domain.dto.RuleMatch
-import java.nio.file.Path
 
 @Configuration
 class RuleEngineConfig {
 
+    // Rules live in src/main/resources/rules/, so they travel inside the executable jar.
     @Bean
     fun transactionRules(): LoadedRuleEngine =
         RuleEngineBuilder.fromManifestEntry(
-            manifestPath = Path.of("config/rules/manifest.yaml"),
+            manifestLocation = "classpath:rules/manifest.yaml",
             entryId = "transactions"
         )
 }
@@ -997,14 +1078,34 @@ A single `LoadedRuleEngine` bean carries the engine and its schema together, so 
 needed. A `RuleEngineBuildException` during bean creation fails application startup, which is the
 intended behaviour: the application never serves traffic with rules that did not validate.
 
+A `classpath:` location is the right choice here even during development: it works under `bootRun`,
+inside `java -jar build/libs/app.jar` and from any working directory, because no path is involved. Use
+a filesystem location only for rules deliberately kept **outside** the jar so they can be changed
+without a rebuild — and then use an absolute path or one derived from configuration, never a bare
+`config/rules/manifest.yaml`: that resolves against the process working directory, so it works under
+`bootRun` and breaks as soon as the jar is started from somewhere else.
+
+Because both are the same parameter, the location can come straight from configuration and switch
+between packaged and externalised rules without a code change:
+
+```kotlin
+// rules.manifest = classpath:rules/manifest.yaml   (packaged)
+// rules.manifest = /etc/app/rules/manifest.yaml    (externalised)
+@Bean
+fun transactionRules(@Value("\${rules.manifest}") manifest: String): LoadedRuleEngine =
+    RuleEngineBuilder.fromManifestEntry(manifestLocation = manifest, entryId = "transactions")
+```
+
 ---
 
 ## Checklist for Integration
 
 - [ ] Library added to `dependencies`
-- [ ] Manifest (or schema + rule files) placed on the classpath or filesystem
-- [ ] Engine built once at application startup — `RuleEngineBuilder.fromManifest` unless a manual
-      pipeline is required
+- [ ] Manifest (or schema + rule files) placed on the classpath (`src/main/resources`) or on the
+      filesystem beside the application
+- [ ] Engine built once at application startup — `RuleEngineBuilder.fromManifest` with a `classpath:`
+      location for packaged rules or a path for rules on the filesystem, a manual pipeline only if
+      neither fits
 - [ ] Validation result checked — fail fast if rules are invalid (the builder does this for you)
 - [ ] `LoadedRuleEngine` / `RuleEngine` stored as a singleton/bean — not re-created per request
 - [ ] Input passed per request/record via `LoadedRuleEngine.evaluate` (or `RuleContext` +
