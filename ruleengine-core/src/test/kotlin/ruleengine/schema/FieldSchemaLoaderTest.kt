@@ -320,6 +320,26 @@ class FieldSchemaLoaderTest {
     }
 
     @Test
+    fun `a blank alias throws SchemaLoadException`() {
+        val exception = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(
+                content = """
+                    schema: blank-alias
+                    fields:
+                      reports:
+                        type: object
+                        fields:
+                          amount:
+                            type: decimal
+                            alias: ""
+                """.trimIndent()
+            )
+        }
+
+        assertTrue(actual = exception.details.contains(other = "blank alias"), message = exception.details)
+    }
+
+    @Test
     fun `a malformed format pattern throws SchemaLoadException`() {
         val exception = assertFailsWith<SchemaLoadException> {
             FieldSchemaLoader.loadFromString(

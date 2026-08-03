@@ -12,6 +12,7 @@ import ui.builder.model.catalog.CatalogFieldInfo
 fun FieldDefinition.toCatalogFieldInfo(): CatalogFieldInfo = CatalogFieldInfo(
     id = id.value,
     type = type.name.lowercase(),
+    alias = alias,
     operators = operators.map { it.value },
     format = format ?: "",
     nestedFields = fields.values.map { it.toCatalogFieldInfo() },

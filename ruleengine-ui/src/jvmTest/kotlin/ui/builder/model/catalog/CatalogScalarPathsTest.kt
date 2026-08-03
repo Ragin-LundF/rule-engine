@@ -132,4 +132,38 @@ class CatalogScalarPathsTest {
 
         assertEquals(expected = null, actual = flat.firstCollectionPath())
     }
+
+    // ── aliases ─────────────────────────────────────────────────────────────────────────────────
+
+    private val aliased = listOf(
+        CatalogFieldInfo(
+            id = "shipment",
+            type = "object",
+            nestedFields = listOf(
+                CatalogFieldInfo(
+                    id = "customer",
+                    type = "object",
+                    nestedFields = listOf(
+                        CatalogFieldInfo(id = "loyaltyTier", type = "text", alias = "tier"),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    @Test
+    fun `an aliased nested scalar is offered under both spellings`() {
+        assertEquals(
+            expected = listOf("shipment.customer.loyaltyTier", "tier"),
+            actual = aliased.scalarPaths().map { it.id },
+        )
+    }
+
+    @Test
+    fun `an alias resolves as one segment of a nested path`() {
+        assertEquals(
+            expected = "loyaltyTier",
+            actual = aliased.fieldAtPath(segments = listOf("shipment", "customer", "tier"))?.id,
+        )
+    }
 }

@@ -102,17 +102,19 @@ internal object ValueExpressionCompiler {
         for ((index, segment) in expr.path.withIndex()) {
             when (segment) {
                 is FieldSegmentAst -> {
-                    val name = if (index == 0) {
-                        FieldPathResolver.resolveName(identifier = segment.name, fields = schema.fields)
+                    val names = if (index == 0) {
+                        FieldPathResolver.expandRoot(name = segment.name, schema = schema)
                     } else {
-                        segment.name
+                        listOf(FieldPathResolver.resolveName(identifier = segment.name, fields = fields))
                     }
-                    compiledSegments += CompiledFieldSegment(name = name)
-                    definition = fields[FieldId(value = name)]
-                    // An undeclared member ends the walk. Continuing against the outer schema would
-                    // let a top-level field of the same name lend its normalizers to a member that
-                    // declares none.
-                    fields = definition?.fields.orEmpty()
+                    for (name in names) {
+                        compiledSegments += CompiledFieldSegment(name = name)
+                        definition = fields[FieldId(value = name)]
+                        // An undeclared member ends the walk. Continuing against the outer schema would
+                        // let a top-level field of the same name lend its normalizers to a member that
+                        // declares none.
+                        fields = definition?.fields.orEmpty()
+                    }
                 }
 
                 is FilterSegmentAst -> {

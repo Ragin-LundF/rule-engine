@@ -66,7 +66,13 @@ private fun collectScalarPaths(
             // filtered comparison row can handle — never a plain condition.
             OperatorOptions.isStructureType(fieldType = field.type) -> Unit
 
-            else -> target += field.copy(id = path)
+            else -> {
+                target += field.copy(id = path)
+                // The alias is a legal identifier on its own, so offer it as its own entry rather than
+                // relabelling the path: the Builder stores whichever spelling the author picked, and an
+                // alias-authored rule then resolves by exact match.
+                field.alias?.let { alias -> target += field.copy(id = alias) }
+            }
         }
     }
 }

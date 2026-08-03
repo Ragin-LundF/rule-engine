@@ -9,7 +9,7 @@ package ui.builder.model.catalog
 fun List<CatalogFieldInfo>.fieldsAtPath(segments: List<String>): List<CatalogFieldInfo> {
     var current = this
     for (segment in segments) {
-        val match = current.firstOrNull { it.id == segment } ?: return emptyList()
+        val match = current.firstOrNull { it.id == segment || it.alias == segment } ?: return emptyList()
         current = match.nestedFields
     }
     return current
@@ -21,7 +21,7 @@ fun List<CatalogFieldInfo>.fieldAtPath(segments: List<String>): CatalogFieldInfo
     var current: CatalogFieldInfo? = null
     var candidates = this
     for (segment in segments) {
-        current = candidates.firstOrNull { it.id == segment } ?: return null
+        current = candidates.firstOrNull { it.id == segment || it.alias == segment } ?: return null
         candidates = current.nestedFields
     }
     return current

@@ -375,8 +375,9 @@ object Compiler {
      * ending the walk at an undeclared member, so a document field of the same name cannot lend its
      * normalizers to a member that declares none.
      *
-     * Only the first segment resolves aliases, again matching the modern path: an alias names a
-     * top-level field, not a member halfway down.
+     * Every segment resolves aliases against the members it is looked up in, matching
+     * `ValueExpressionValidator.resolveMember`, so a member declared with an alias may be written either
+     * way inside a predicate.
      */
     private fun resolveFilterMember(field: String, schema: FieldSchema): FilterMember {
         val flat = FieldPathResolver.resolveName(identifier = field, fields = schema.fields)
@@ -389,8 +390,9 @@ object Compiler {
         var definition: FieldDefinition? = null
         var fields = schema.fields
         for (name in field.split('.')) {
-            segments += CompiledFieldSegment(name = name)
-            definition = fields[FieldId(value = name)]
+            val resolved = FieldPathResolver.resolveName(identifier = name, fields = fields)
+            segments += CompiledFieldSegment(name = resolved)
+            definition = fields[FieldId(value = resolved)]
             fields = definition?.fields.orEmpty()
         }
         return FilterMember(segments = segments, definition = definition)

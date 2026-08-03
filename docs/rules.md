@@ -269,6 +269,9 @@ email contains "@gmail.com"
 vendor equals "VEND-123"
 ```
 
+An alias whose path reads through a `collection` is the one exception — write it inside the aggregate or the
+filter (`sum(orders.orderTotal)`), never on its own.
+
 ### AND — All conditions must be true
 
 ```

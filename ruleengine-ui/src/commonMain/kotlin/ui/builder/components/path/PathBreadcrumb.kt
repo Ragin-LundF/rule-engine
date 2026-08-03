@@ -78,7 +78,8 @@ fun PathBreadcrumb(
 ) {
     var selectedDepth by remember { mutableStateOf<Int?>(value = null) }
     val optionsPerDepth = path.indices.map { depth ->
-        OperandRules.segmentOptions(fields = fields, path = path, depth = depth).map { it.id }
+        OperandRules.segmentOptions(fields = fields, path = path, depth = depth)
+            .flatMap { field -> listOfNotNull(field.id, field.alias) }
     }
     // Only the first break matters: every segment below an undeclared one has nothing to offer.
     val firstUnknown = path.indices.firstOrNull { depth -> path[depth].name !in optionsPerDepth[depth] }

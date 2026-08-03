@@ -2,6 +2,7 @@ package ui.autocompletion
 
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.FieldType
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
 import ui.builder.OperatorOptions
@@ -54,32 +55,31 @@ internal fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionI
         add(CompletionItem(label = "false", insertText = "false", kind = CompletionKind.LITERAL, hint = "boolean"))
         addAll(buildAggregateFunctionCompletions())
         val offered = mutableSetOf<String>()
-        schema?.fields?.forEach { (_, def) ->
-            val label = def.getDisplayId()
-            offered += label
-            add(
-                CompletionItem(
-                    label = label,
-                    insertText = label,
-                    kind = CompletionKind.FIELD,
-                    hint = def.type.name.lowercase()
+        fun offer(label: String, type: FieldType) {
+            if (offered.add(label)) {
+                add(
+                    CompletionItem(
+                        label = label,
+                        insertText = label,
+                        kind = CompletionKind.FIELD,
+                        hint = type.name.lowercase(),
+                    )
                 )
-            )
+            }
         }
-        // Members of an `object` are usable in a plain condition, so offer their dotted paths as well.
+        schema?.fields?.forEach { (id, def) ->
+            offer(label = id.value, type = def.type)
+            def.alias?.let { alias -> offer(label = alias, type = def.type) }
+        }
+        // Members of an `object` are usable in a plain condition, so offer their dotted paths as well,
+        // plus every bare alias whose target is reachable without crossing a collection.
         schema?.let { loaded ->
             FieldPathResolver.scalarPaths(schema = loaded).forEach { (id, def) ->
-                if (offered.add(id.value)) {
-                    add(
-                        CompletionItem(
-                            label = id.value,
-                            insertText = id.value,
-                            kind = CompletionKind.FIELD,
-                            hint = def.type.name.lowercase()
-                        )
-                    )
-                }
+                offer(label = id.value, type = def.type)
             }
+            loaded.aliasTargets
+                .filter { target -> target.collectionPath == null }
+                .forEach { target -> offer(label = target.alias, type = target.definition.type) }
         }
     }
 }

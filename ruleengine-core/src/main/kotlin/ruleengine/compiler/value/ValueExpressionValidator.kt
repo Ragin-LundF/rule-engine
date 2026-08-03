@@ -241,8 +241,12 @@ internal object ValueExpressionValidator {
     ): ValueKind {
         val rootSegment = expr.path.firstOrNull() as? FieldSegmentAst ?: return ValueKind.UNKNOWN
         val isSingleSegment = expr.path.size == 1
-        val resolvedId = FieldPathResolver.resolveName(identifier = rootSegment.name, fields = schema.fields)
-        var current: FieldDefinition? = schema.fields[FieldId(value = resolvedId)]
+        var current: FieldDefinition? = null
+        var members = schema.fields
+        for (name in FieldPathResolver.expandRoot(name = rootSegment.name, schema = schema)) {
+            current = members[FieldId(value = name)]
+            members = current?.fields.orEmpty()
+        }
 
         if (current == null) {
             // A single-segment path must name a declared field. For longer paths the root may be an

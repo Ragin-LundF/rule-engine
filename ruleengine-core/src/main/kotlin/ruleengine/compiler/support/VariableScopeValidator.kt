@@ -230,6 +230,7 @@ internal object VariableScopeValidator {
                 add(fieldId.value)
                 definition.alias?.let { alias -> add(alias) }
             }
+            addAll(schema.aliasTargets.map { it.alias })
         }
     }
 }

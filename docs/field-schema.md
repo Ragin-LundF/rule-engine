@@ -34,8 +34,10 @@ Field aliases allow you to define a user-friendly name for a field that is diffe
 
 ### Usage and Constraints
 
-- **Uniqueness:** Every `alias` must be unique across the entire schema. The engine will fail to load if two different fields share the same alias.
+- **Uniqueness:** Every `alias` must be unique across the entire schema. Two fields sharing one alias is reported as an error when the schema is validated.
 - **Readability:** Use aliases to map complex or technical field names (e.g., `sepa_transaction_amount_decimal`) to something simple and intuitive (e.g., `amount`).
+- **Depth:** an alias may be declared on a field at any depth and used on its own, provided the path to it does not read through a `collection`. An alias on a collection member is written in place of the segment it renames — `sum(orders.orderTotal)` — not on its own.
+- **No shadowing:** an alias equal to a declared field name or dotted path is reported as a warning and can never be used on its own, because the declared name wins.
 
 Example:
 
