@@ -5,6 +5,63 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.8.0
+
+### Added
+
+- **Rules can be loaded from the classpath, so they may ship inside a jar.** A manifest is named by a
+  location string, and a `classpath:` prefix is what selects the classpath — the same entry points
+  (`RuleEngineBuilder.fromManifest` / `fromManifestEntry`, `RuleCatalogBuilder.fromManifest`) read
+  both places:
+
+  ```kotlin
+  // src/main/resources/rules/{manifest.yaml,schema.yaml,actions.yaml,rules/*.rule}
+  val packaged = RuleEngineBuilder.fromManifestEntry(
+      manifestLocation = "classpath:rules/manifest.yaml",
+      entryId = "transactions"
+  )
+  val onDisk = RuleEngineBuilder.fromManifestEntry(
+      manifestLocation = "/etc/app/rules/manifest.yaml",
+      entryId = "transactions"
+  )
+  ```
+
+  Previously the only entry points were typed on `java.nio.file.Path` and therefore could never read
+  rules packaged inside an application. A resource under `BOOT-INF/classes` of a Spring Boot executable
+  jar resolves to a `jar:nested:/app.jar/!BOOT-INF/classes/!/…` URL (Boot 3.2+) or a
+  `jar:file:/app.jar!/BOOT-INF/classes!/…` URL, and the JDK ships no `FileSystemProvider` for either
+  nested form — so no `Path` exists at all. Rules under `BOOT-INF/lib/*.jar` are a jar inside a jar and
+  have the same problem.
+
+  The classpath route reads through `ClassLoader.getResourceAsStream` and nothing else, which is why an
+  exploded build directory, a plain library jar, a Boot executable jar and a nested jar all behave
+  identically. Nothing is scanned — a manifest already enumerates every file it uses — so no reflection
+  or classpath-scanning dependency was added. The default loader is the thread context class loader, so
+  the application's own resources are still found under `spring-boot-devtools`.
+
+  The prefix lives in one place, `ManifestSource` (`ruleengine.manifest.source`), which turns a location
+  into the manifest plus the resolver that serves its files. The `Path` overloads of `fromManifest` and
+  `fromManifestEntry` are unchanged, for callers that already hold one.
+
+  The documented Spring Boot example previously used `Path.of("config/rules/manifest.yaml")`, which
+  resolves against the process working directory: it worked under `bootRun` and broke wherever the jar
+  was started from another directory. `docs/integration-guide.md` now shows a `classpath:` location and
+  keeps a filesystem one only for rules deliberately kept outside the jar.
+
+- **`ManifestFileResolver` — a public seam for rules that live somewhere else entirely.** Implement it
+  to serve a manifest's files from a database, an object store or a config server without reassembling
+  the load pipeline by hand; both builders accept any implementation. `ManifestFile` describes what a
+  resolver returns (`OnDisk`, `InMemory`, `Unavailable`), and the two built-in implementations are
+  `FileSystemManifestFileResolver` and `ClasspathManifestFileResolver`.
+
+  A resolver must reject a path that leaves the manifest's own location. Both built-in ones do, including
+  the classpath resolver — `getResourceAsStream` happens to return `null` for `rules/../x` inside a jar,
+  but on an exploded classpath the same name resolves, which would otherwise have read outside the
+  manifest's directory.
+
+  `FileInputSupport.readBoundedText` gained an `InputStream` overload so classpath content keeps the
+  25 MB size guard. It decodes UTF-8 strictly, matching the `Path` variant.
+
 ## 1.7.0
 
 ### Added
