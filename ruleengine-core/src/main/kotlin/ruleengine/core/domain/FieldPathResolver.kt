@@ -20,7 +20,12 @@ object FieldPathResolver {
 
     private const val PATH_SEPARATOR = '.'
 
-    /** Resolves [identifier] against [schema], honouring aliases at every level. */
+    /**
+     * Resolves [identifier] against [schema].
+     *
+     * Order: declared top-level name → top-level alias → dotted walk with a per-segment alias → bare alias
+     * declared at any depth.
+     */
     fun resolve(identifier: String, schema: FieldSchema): FieldPathResolution {
         val flat = resolveInFields(identifier = identifier, fields = schema.fields)
         if (flat != null) {
@@ -29,10 +34,36 @@ object FieldPathResolver {
 
         val segments = identifier.split(PATH_SEPARATOR)
         if (segments.size < 2) {
-            return FieldPathResolution.Unknown
+            return resolveBareAlias(identifier = identifier, schema = schema)
         }
 
         return walk(segments = segments, fields = schema.fields)
+    }
+
+    /**
+     * A bare alias declared on a nested field, resolved to the path it stands for.
+     *
+     * A declared name always wins: the caller has already tried a direct hit and a top-level alias, so
+     * reaching here means the identifier names nothing at the top level.
+     */
+    private fun resolveBareAlias(identifier: String, schema: FieldSchema): FieldPathResolution {
+        val target = schema.aliasPaths[identifier] ?: return FieldPathResolution.Unknown
+        val collectionPath = target.collectionPath
+        if (collectionPath != null) {
+            return FieldPathResolution.CrossesCollection(collectionPath = collectionPath)
+        }
+        return FieldPathResolution.Resolved(id = target.path, definition = target.definition)
+    }
+
+    /**
+     * The canonical segments [name] stands for as the root of a path: one segment for a declared name or a
+     * top-level alias, several for a bare alias on a nested field, and [name] itself when nothing matches —
+     * an undeclared root stays permissive, as it was before nested declarations existed.
+     */
+    fun expandRoot(name: String, schema: FieldSchema): List<String> {
+        resolveInFields(identifier = name, fields = schema.fields)?.let { return listOf(it.name) }
+        schema.aliasPaths[name]?.let { return it.path.value.split(PATH_SEPARATOR) }
+        return listOf(name)
     }
 
     /**

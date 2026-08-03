@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.8.1
+
+### Added
+
+- **A field `alias` now works on its own at any nesting depth.** `alias:` was only a synonym for the
+  segment it was declared on, so an alias on a nested field could only be written in its path position
+  (`reports.income.TRANSACTION_HISTORY_DAYS`) — the bare spelling the documentation advertised returned
+  `Unknown field`. A bare alias now resolves to the path it stands for, unless that path reads through a
+  `collection`, which is reported as the usual "yields one value per element" error naming the collection.
+  Resolution order is declared name → top-level alias → dotted path → bare alias, so no existing schema
+  changes meaning. `RULE-SPEC.md` §3.6 documents the contract with legal and illegal examples.
+
+### Fixed
+
+- **An alias inside a filter predicate or an aggregate projection read the wrong key, silently.**
+  `sum(orders.orderTotal)` and `orders[ACCOUNT_TYPE == "CHECKING"]` validated clean, compiled a segment
+  named after the alias and then found no such key in the input — producing a missing value or a false
+  negative with no diagnostic at all. Both now resolve every segment against the members it is looked up
+  in, matching what the validator already accepted.
+- **Duplicate aliases were only detected among top-level fields.** The documented load-time uniqueness
+  guarantee did not apply to any alias declared inside an `object` or `collection`. Uniqueness is now
+  checked across the whole tree as an ERROR, and an alias that collides with a declared field name or
+  dotted path is a WARNING — the declared name wins, so such an alias can never be used.
+- **`alias: ""` is rejected when the schema loads** instead of quietly declaring a second name nothing
+  can write.
+- **The visual Builder ignored aliases entirely.** `alias` was not carried across the engine → Builder
+  boundary, so an alias-authored condition row matched no field, fell back to `text` and offered the
+  wrong operators. The field dropdown now offers the alias next to the canonical path, path breadcrumbs
+  accept an alias segment, and the code editor's completions and highlighting cover nested paths and
+  nested aliases.
+
 ## 1.8.0
 
 ### Added

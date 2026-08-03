@@ -6,6 +6,11 @@ package ui.builder.model.catalog
 data class CatalogFieldInfo(
     val id: String,
     val type: String,
+    /**
+     * The field's declared alias, if any. Kept so a dropdown can offer the alias spelling and an
+     * alias-authored rule resolves.
+     */
+    val alias: String? = null,
     val operators: List<String> = emptyList(),
     /** Date pattern declared for a `date` / `date_time` field, used as a value hint. Empty means ISO. */
     val format: String = "",

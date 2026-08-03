@@ -96,6 +96,7 @@ schema: <schema-name>          # optional but recommended; use versioned names, 
 fields:
   <fieldName>:                 # camelCase identifier, must be unique within the schema
     type: <type>               # REQUIRED — exactly one value from the type table below
+    alias: <alias>             # OPTIONAL — a second name for this field, unique across the whole schema
     normalizers:               # OPTIONAL — only valid on text and string_set fields
       - <normalizer>           # zero or more values from the normalizer table below, applied in order
     operators:                 # OPTIONAL — if omitted, all operators valid for the type are allowed
@@ -400,6 +401,14 @@ fields:
       - lt
       - lte
       - between
+
+  # Technical source name kept, with a readable alias for rule authors
+  sepa_transaction_amount_decimal:
+    type: decimal
+    alias: transferAmount
+    operators:
+      - gt
+      - gte
 ```
 
 ### 3.5 Nested Data — Collections and Objects
@@ -465,8 +474,9 @@ fields:
       customer:
         type: object
         fields:
-          tier:
+          loyaltyTier:
             type: text
+            alias: tier
             normalizers:
               - trim
               - lowercase
@@ -476,6 +486,7 @@ fields:
 rule "fast-gold-shipment" {
   when
     shipment.transitDays <= 2
+    # 'tier' is an alias for 'loyaltyTier'; 'tier' on its own works too
     and shipment.customer.tier equals "gold"
     and shipment.pickedUpAt >= "01.03.2026"
 
@@ -516,6 +527,85 @@ orders[...]
 is a complete bundle built on both shapes: a `shipment` object read by plain conditions, and `parcels` and
 `checkpoints` collections read by aggregates and filters. It ships two input files and is executed by
 `WarehouseShipmentsIntegrationTest`, so every path in it is known to work.
+
+### 3.6 Field Aliases
+
+`alias:` gives one field a second name. Both names mean the same field and either may be written in a rule.
+An alias exists for **readability**: use it when the source field name is technical (`sepa_txn_amt_dec`) or
+when a deeply nested path would be repeated in many rules.
+
+```yaml
+schema: reports-v1
+
+fields:
+  reports:
+    type: object
+    fields:
+      income:
+        type: object
+        fields:
+          daysOfReport:
+            type: integer
+            alias: transactionHistoryDays
+```
+
+Both spellings compile to the same field:
+
+```
+when transactionHistoryDays >= 85                       # the alias on its own
+when reports.income.transactionHistoryDays >= 85         # the alias in place of the segment it renames
+when reports.income.daysOfReport >= 85                   # the declared path
+```
+
+#### Rules for aliases
+
+| Rule | Why |
+|---|---|
+| An alias must be **unique across the whole schema**, at every depth | Two fields sharing one alias is a load-time ERROR |
+| An alias must not equal any declared field name or dotted path | The declared name wins, so the alias would be unreachable — a load-time WARNING |
+| An alias on a field **inside a `collection`** can never be used on its own | A path through a collection yields one value per element; write it inside the aggregate or the filter |
+| A `collection` or `object` field may carry an alias | Use it where the structure itself is named: `count(orders)` → `count(purchases)` |
+| Do **not** alias a field whose name is already business-readable | An alias per field doubles the vocabulary and buys nothing |
+
+#### Illegal — a bare alias for a collection member
+
+```yaml
+fields:
+  orders:
+    type: collection
+    fields:
+      total:
+        type: decimal
+        alias: orderTotal
+```
+
+```
+when orderTotal > 100          # REJECTED — reads through collection 'orders'
+```
+
+Write it in its path position instead:
+
+```
+when sum(orders.orderTotal) > 100
+when count(orders[orderTotal > 100]) > 0
+```
+
+#### Illegal — a duplicate alias
+
+```yaml
+fields:
+  income:
+    type: object
+    fields:
+      total: {type: decimal, alias: total_amount}
+  spending:
+    type: object
+    fields:
+      total: {type: decimal, alias: total_amount}   # ERROR: duplicate alias 'total_amount'
+```
+
+> **Rule:** Declare an alias only when it earns its place. When in doubt, omit `alias:` and write the full
+> dotted path in the rule — that always works and is never ambiguous.
 
 ---
 
@@ -1831,6 +1921,9 @@ fields:
       - containsAll
 ```
 
+No `alias:` appears here — every field already has a business-readable name. Declare an alias only for a
+technical or deeply nested field, see [3.6](#36-field-aliases).
+
 ---
 
 ### Output: `schemas/actions.yaml`
@@ -1955,6 +2048,8 @@ The engine validates everything at load time and rejects the following. Never ge
 | Malformed `format` pattern | `format: "QQQQQQ"` (not a valid `DateTimeFormatter` pattern) |
 | `format` that cannot represent the value | `format: "MM-dd"` on a `date` (no year), `format: "yyyy-MM-dd"` on a `date_time` (no time) |
 | Empty `format` | `format: ""` — omit the key instead to get ISO |
+| Duplicate alias | two fields both declaring `alias: amount`, at any depth |
+| Blank alias | `alias: ""` — omit the key instead |
 
 > **Operator names must be canonical.** Write the spelling from the operator tables in
 > [3.3](#33-operators--exhaustive-list-by-type): `startsWith`, not `starts_with` or `startswith`;
@@ -1966,6 +2061,10 @@ The engine validates everything at load time and rejects the following. Never ge
 > does not support (`operators: [contains]` on an `integer`) still loads; the error surfaces on the rule
 > that uses it. Declaring only a subset restricts the field to that subset, so a rule using any other
 > operator is rejected even though the type supports it.
+>
+> **An alias must not collide with a declared field name.** The declared name wins and the alias becomes
+> unreachable; the engine warns rather than rejecting. **An alias inside a `collection` cannot be used on
+> its own** — see [3.6](#36-field-aliases).
 
 ### Action schema constraints
 
@@ -2040,6 +2139,8 @@ The engine validates everything at load time and rejects the following. Never ge
 - [ ] No `operators:` or `normalizers:` on a `collection` / `object` field.
 - [ ] A date whose time of day matters is a `date_time`, not a `date`.
 - [ ] `format:` appears only on `date` / `date_time` fields, and only when the data is not ISO-8601.
+- [ ] Every alias is unique across the whole schema and collides with no declared field name.
+- [ ] No alias is declared for a field whose name is already business-readable.
 - [ ] The schema has a versioned `schema:` name (e.g. `my-schema-v1`).
 
 ### Checklist: Action Schema

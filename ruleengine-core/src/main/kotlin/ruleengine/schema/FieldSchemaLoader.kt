@@ -78,6 +78,7 @@ object FieldSchemaLoader {
         val operators = raw.operators?.map { OperatorId(value = it) }?.toSet() ?: emptySet()
         validateOperators(fieldName = fieldName, operators = operators)
         validateFormat(fieldName = fieldName, type = type, format = raw.format)
+        validateAlias(fieldName = fieldName, alias = raw.alias)
 
         // Recurse into nested members; a nested structure carries its own `fields`, so depth is unbounded.
         val nested = raw.fields?.let { rawNested ->
@@ -131,6 +132,19 @@ object FieldSchemaLoader {
             throw SchemaLoadException(
                 path = Path.of(fieldName.value),
                 details = "Unknown operator '${unknown.first().value}' for field '${fieldName.value}'"
+            )
+        }
+    }
+
+    /**
+     * Rejects a blank alias, which is indistinguishable from no alias everywhere except a string compare
+     * and so would silently declare a field with a second name nothing can ever write.
+     */
+    private fun validateAlias(fieldName: FieldId, alias: String?) {
+        if (alias != null && alias.isBlank()) {
+            throw SchemaLoadException(
+                path = Path.of(fieldName.value),
+                details = "field '${fieldName.value}' declares a blank alias; omit the key instead"
             )
         }
     }

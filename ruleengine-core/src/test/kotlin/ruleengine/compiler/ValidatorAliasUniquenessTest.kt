@@ -10,6 +10,8 @@ import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.StringLiteral
+import ruleengine.schema.FieldSchemaLoader
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class ValidatorAliasUniquenessTest {
@@ -85,5 +87,73 @@ class ValidatorAliasUniquenessTest {
         
         assertTrue(result.diagnostics.none { it.message.contains("Duplicate alias") }, 
             "Should not have duplicate alias errors")
+    }
+
+    @Test
+    fun `should report a duplicate alias declared on two nested fields`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: nested_dup
+
+                fields:
+                  income:
+                    type: object
+                    fields:
+                      total:
+                        type: decimal
+                        alias: total_amount
+                  spending:
+                    type: object
+                    fields:
+                      total:
+                        type: decimal
+                        alias: total_amount
+            """.trimIndent()
+        )
+        val rule = RuleAst(id = "rule1", condition = AndAst(emptyList()), actions = emptyList())
+
+        val errors = Validator.validate(listOf(rule), schema).diagnostics
+            .filter { it.severity == Severity.ERROR && it.message.contains("Duplicate alias") }
+
+        assertEquals(expected = 1, actual = errors.size, message = "Expected one error, got: $errors")
+        assertTrue(
+            actual = errors.first().message.contains("income.total") &&
+                errors.first().message.contains("spending.total"),
+            message = "The error must name both nested paths, got: ${errors.first().message}"
+        )
+    }
+
+    @Test
+    fun `an alias equal to a declared path is a warning and not an error`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                schema: shadowing
+
+                fields:
+                  income:
+                    type: object
+                    fields:
+                      total:
+                        type: decimal
+                      net:
+                        type: decimal
+                        alias: income.total
+            """.trimIndent()
+        )
+        val rule = RuleAst(id = "rule1", condition = AndAst(emptyList()), actions = emptyList())
+
+        val diagnostics = Validator.validate(listOf(rule), schema).diagnostics
+
+        assertEquals(
+            expected = 1,
+            actual = diagnostics.count {
+                it.severity == Severity.WARNING && it.message.contains("is also a declared field name")
+            },
+            message = "Expected one shadowing warning, got: $diagnostics"
+        )
+        assertTrue(
+            actual = diagnostics.none { it.severity == Severity.ERROR },
+            message = "Shadowing must not reject the schema, got: $diagnostics"
+        )
     }
 }

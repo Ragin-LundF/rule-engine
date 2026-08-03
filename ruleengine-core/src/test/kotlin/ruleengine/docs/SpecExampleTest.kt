@@ -93,10 +93,20 @@ class SpecExampleTest {
     private fun isRuleBlock(block: FencedBlock): Boolean =
         block.content.contains(other = "rule \"") && !block.content.contains(other = "<")
 
+    /**
+     * A block the document itself marks as wrong, with an `# ERROR:` comment on the offending line.
+     *
+     * RULE-SPEC teaches by counter-example — a duplicate alias, a member that cannot be compared — so a
+     * few blocks must not be folded into the merged schema or asserted to be valid. The marker keeps that
+     * opt-out visible in the document rather than hidden in a list here.
+     */
+    private fun isDeliberatelyInvalid(block: FencedBlock): Boolean = block.content.contains(other = "# ERROR:")
+
     private fun isFieldSchemaBlock(block: FencedBlock): Boolean =
         block.language == "yaml" &&
             block.content.contains(other = "fields:") &&
-            !block.content.contains(other = "<")
+            !block.content.contains(other = "<") &&
+            !isDeliberatelyInvalid(block = block)
 
     private fun isActionSchemaBlock(block: FencedBlock): Boolean =
         block.language == "yaml" &&

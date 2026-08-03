@@ -104,21 +104,30 @@ object Validator {
         }
     }
 
-    /** Two fields sharing an alias make every rule that uses it ambiguous. */
+    /** Two fields sharing an alias make every rule that uses it ambiguous, at any nesting depth. */
     private fun validateAliasUniqueness(schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
-        val aliasToFieldId = mutableMapOf<String, FieldId>()
-        schema.fields.forEach { (fieldId, definition) ->
-            definition.alias?.let { alias ->
-                val existingFieldId = aliasToFieldId[alias]
-                if (existingFieldId != null) {
-                    diagnostics += ValidationDiagnostic(
-                        severity = Severity.ERROR,
-                        message = "Duplicate alias '$alias' found in fields " +
-                                "'${existingFieldId.value}' and '${fieldId.value}'"
-                    )
-                } else {
-                    aliasToFieldId[alias] = fieldId
-                }
+        val declared = FieldPathResolver.scalarPaths(schema = schema).keys.map { it.value }.toSet() +
+            schema.fields.keys.map { it.value }
+        val seen = mutableMapOf<String, FieldId>()
+        for (target in schema.aliasTargets) {
+            val existing = seen[target.alias]
+            if (existing != null) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Duplicate alias '${target.alias}' found in fields " +
+                            "'${existing.value}' and '${target.path.value}'",
+                    suggestion = "Give each field its own alias, or drop one of them",
+                )
+                continue
+            }
+            seen[target.alias] = target.path
+            if (target.alias in declared) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.WARNING,
+                    message = "Alias '${target.alias}' on field '${target.path.value}' is also a declared " +
+                            "field name; the declared field wins, so the alias can never be used on its own",
+                    suggestion = "Rename the alias to something no field declares",
+                )
             }
         }
     }
@@ -438,13 +447,13 @@ object Validator {
         val scalarPaths = FieldPathResolver.scalarPaths(schema = schema)
         return buildList {
             addAll(scalarPaths.keys.map { it.value })
-            // The author may have written the alias rather than the declared name, so offer that spelling too.
-            for ((fieldId, definition) in scalarPaths) {
-                val alias = definition.alias ?: continue
-                add(aliasPath(path = fieldId.value, alias = alias))
-            }
             addAll(schema.fields.keys.map { it.value })
-            addAll(schema.fields.mapNotNull { it.value.alias })
+            for (target in schema.aliasTargets) {
+                // Both spellings an author may write: the alias on its own, and the alias in the position
+                // of the segment it renames.
+                add(target.alias)
+                add(aliasPath(path = target.path.value, alias = target.alias))
+            }
         }
     }
 

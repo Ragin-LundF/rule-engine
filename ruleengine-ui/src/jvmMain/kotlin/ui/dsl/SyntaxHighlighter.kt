@@ -6,6 +6,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
@@ -64,9 +65,16 @@ fun annotateRule(
     if (text.isEmpty()) return AnnotatedString(text)
 
     val known = KnownNames(
-        fields = schema?.fields?.flatMap { (id, field) ->
-            listOf(id.value, field.alias).filter { it != null && it.isNotBlank() }
-        }?.toSet() ?: emptySet(),
+        fields = buildSet {
+            schema?.fields?.forEach { (id, field) ->
+                add(id.value)
+                field.alias?.takeIf { it.isNotBlank() }?.let { add(it) }
+            }
+            schema?.let { loaded ->
+                addAll(FieldPathResolver.scalarPaths(schema = loaded).keys.map { it.value })
+                addAll(loaded.aliasTargets.map { it.alias })
+            }
+        },
         actions = actions?.actions?.keys?.toSet() ?: emptySet(),
     )
     val commentRanges = commentRangesOf(text = text)
