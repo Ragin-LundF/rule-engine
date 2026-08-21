@@ -36,6 +36,8 @@ fun SchemaAreaContent(
     workspace: ProjectWorkspace,
     expandedDiagramRules: List<RuleAst>,
     modifier: Modifier = Modifier,
+    /** Shows one field in the right-hand Inspector; null hides the per-row button. */
+    onInspectField: ((path: String) -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         LinkedFileHeader(
@@ -68,6 +70,7 @@ fun SchemaAreaContent(
                     )
                 }
             },
+            onInspectField = onInspectField,
             yamlEditor = { value, onValueChange, editorModifier ->
                 YamlEditor(
                     value = value,

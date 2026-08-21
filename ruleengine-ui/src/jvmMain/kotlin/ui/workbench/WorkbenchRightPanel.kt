@@ -21,6 +21,9 @@ import ui.workbench.model.mode.RightPanelTab
  *
  * Simulate shares [testController] with the centre Test mode rather than owning a second one — both
  * run the same thing and have to agree about whether a run is in progress.
+ *
+ * [uiDiagnostics] arrives already scoped to the inspected rule; see `inspectorDiagnostics` in
+ * `RuleEditor`, which owns the buffer the line ranges are measured against.
  */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
@@ -33,10 +36,12 @@ internal fun WorkbenchRightPanel(
     catalogActions: List<CatalogActionInfo>,
     catalogRules: List<CatalogRule>,
     builderEditorState: BuilderEditorState,
+    ruleStates: Map<String, BuilderEditorState>,
     uiDiagnostics: List<UiDiagnostic>,
     testInputState: TestInputState,
     onTestInputStateChange: (TestInputState) -> Unit,
     testController: RuleTestController,
+    onToggleExpanded: () -> Unit,
 ) {
     RightPanelWithTabs(
         tab = tab,
@@ -48,6 +53,7 @@ internal fun WorkbenchRightPanel(
                 actions = catalogActions,
                 rules = catalogRules,
                 builderState = builderEditorState,
+                ruleStates = ruleStates,
                 diagnostics = uiDiagnostics,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -61,6 +67,8 @@ internal fun WorkbenchRightPanel(
             )
         },
         expanded = state.rightPanelExpanded.value,
-        onToggleExpanded = { state.rightPanelExpanded.value = !state.rightPanelExpanded.value },
+        // Passed in rather than flipped here: the open state is persisted, and one writer is what
+        // keeps the stored value from drifting away from the one on screen.
+        onToggleExpanded = onToggleExpanded,
     )
 }

@@ -75,6 +75,7 @@ for:
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
 | **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce, from any branch) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
+| **Inspector** | Describe what is selected, in the right-hand panel: the rule you are editing — its status, condition and action counts per branch, and the variables it publishes — or a schema field or action, with how many rules use it. Opened with **ⓘ Inspector** in the top bar |
 | **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched, else, not exists, partial, no match, or not evaluated — whose condition trace expands on click |
 
 ### Advanced conditions in the builder
@@ -136,6 +137,23 @@ The test panel reports an else result as its own **else** status, in its own fil
 "matched", because the rule's condition was false. The rule inspector shows an *Else actions* row for a
 rule that has one, and the table view prefixes the else outputs with `else` so they do not read as
 outputs the rule produces at the same time as its THEN ones.
+
+### The inspector
+
+**ⓘ Inspector** in the top bar opens the right-hand panel; the narrow strip on the right edge does the
+same, and the panel remembers whether it was open. It describes whatever is selected.
+
+For a rule that is its id, validation status, how many conditions and actions it has — with separate
+rows for the `else` and `not_exists` blocks when it declares them — the variables it publishes, and its
+own diagnostics. Which rule that is follows the selection you can already see: the rule tree, the table
+and the builder header all mean the same rule. In code mode there is no such selection on screen, so the
+**caret** is the selection — put the cursor in a rule block and the panel describes that rule.
+
+The **ⓘ** button on a field row in the Schema area, or an action row in the Actions area, inspects that
+one instead: its type, operators and normalizers, or its argument types, and how many rules use it. That
+count is over the rules currently loaded, and it counts rules rather than mentions — a rule reading a
+field twice counts once, and a rule emitting an action from both `then` and `else` counts once, because
+only one branch of a rule ever runs.
 
 ### Validating a whole project
 

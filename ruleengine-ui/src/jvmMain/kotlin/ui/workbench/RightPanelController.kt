@@ -1,0 +1,63 @@
+package ui.workbench
+
+import androidx.compose.runtime.MutableState
+import ui.workbench.model.WorkbenchAction
+import ui.workbench.model.mode.RightPanelTab
+
+/**
+ * Owns the right panel's open state and its tab, persisting every change.
+ *
+ * A controller rather than two flags edited in place, because the open state is now persisted and a
+ * second writer is how a stored value drifts away from the one on screen. Everything that opens,
+ * closes or switches the panel goes through here, so there is exactly one place that writes.
+ *
+ * Follows `BuilderRulesController`: a plain class over Compose state rather than a flow, so a click
+ * takes effect in the same frame.
+ *
+ * @param expanded  The editor state's own flag, so the panel's width still animates from one source.
+ * @param viewModel Holds the selected tab; read through it rather than copied, so the two cannot
+ *                  disagree about which tab is showing.
+ */
+class RightPanelController(
+    private val expanded: MutableState<Boolean>,
+    private val viewModel: RuleWorkbenchViewModel,
+) {
+
+    /**
+     * Whether the panel is open *on the Inspector tab*.
+     *
+     * Open on Simulate is not open here: the top bar's Inspector button reports this, and a button
+     * that looked pressed while Simulate was showing would be lying about what it opens.
+     */
+    val isInspectorOpen: Boolean
+        get() = expanded.value && viewModel.state.value.rightPanelTab == RightPanelTab.INSPECTOR
+
+    fun setExpanded(value: Boolean) {
+        expanded.value = value
+        RightPanelPersistence.saveExpanded(expanded = value)
+    }
+
+    fun selectTab(tab: RightPanelTab) {
+        viewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
+        RightPanelPersistence.saveTab(tab = tab)
+    }
+
+    /** Opens the panel *and* switches to the Inspector, so callers cannot open it on the wrong tab. */
+    fun showInspector() {
+        setExpanded(value = true)
+        selectTab(tab = RightPanelTab.INSPECTOR)
+    }
+
+    /**
+     * What the top bar's button does.
+     *
+     * Closing when the Inspector is already showing matters: without it the button is a no-op the
+     * second time it is pressed, which reads as broken.
+     */
+    fun toggleInspector() {
+        if (isInspectorOpen) setExpanded(value = false) else showInspector()
+    }
+
+    /** What the panel's own `⟨` / `⟩` icons do: open or close without changing the tab. */
+    fun toggleExpanded() = setExpanded(value = !expanded.value)
+}

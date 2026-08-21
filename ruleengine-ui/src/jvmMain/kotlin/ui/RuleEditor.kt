@@ -24,11 +24,14 @@ import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.project.ProjectWorkspace
 import ui.project.dialog.ProjectDialogHost
+import ui.project.manifest.manifestEntrySelection
 import ui.settings.SettingsController
 import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
 import ui.tester.RuleTestController
 import ui.workbench.AppAreaIconRail
+import ui.workbench.RightPanelController
+import ui.workbench.RightPanelPersistence
 import ui.workbench.RuleWorkbenchScreen
 import ui.workbench.RuleWorkbenchViewModel
 import ui.workbench.WorkbenchRightPanel
@@ -44,6 +47,7 @@ import ui.workbench.catalogActionsFrom
 import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
 import ui.workbench.diagram.ExpandedDiagramWindow
+import ui.workbench.inspectorSelectionFor
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.WorkbenchAction
 import ui.workbench.model.mode.AppArea
@@ -65,12 +69,20 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
     // Root workbench state (navigation, selection, panel tabs).
     val workbenchViewModel = remember {
-        RuleWorkbenchViewModel(initialState = RuleWorkbenchState.Empty)
+        RuleWorkbenchViewModel(
+            initialState = RuleWorkbenchState.Empty.copy(rightPanelTab = RightPanelPersistence.loadTab()),
+        )
     }
     val workbenchState by workbenchViewModel.state.collectAsState()
 
     // Centralized state container for the editor content (text, parsed schema, diagnostics).
-    val state = remember { RuleEditorState(scope = scope) }
+    // The panel's stored open state is applied here rather than in a LaunchedEffect: an effect runs
+    // after the first composition, so a restored-open panel would render collapsed for one frame.
+    val state = remember {
+        RuleEditorState(scope = scope).also { editorState ->
+            editorState.rightPanelExpanded.value = RightPanelPersistence.loadExpanded()
+        }
+    }
 
     // Owns the project on disk: open, new, save, and linking shared schema/action files.
     val workspace = remember { ProjectWorkspace(state = state) }
@@ -164,8 +176,14 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     // ── Catalog data derived from parsed schema/actions/rules ─────────────────
     // The remember keys stay here on purpose: they are what decides when each list goes stale, and
     // catalogRules deliberately does not key on the diagnostics it reads.
-    val catalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
-        catalogFieldsFrom(schema = state.ruleSchema)
+    // Keyed on the parsed rules as well as on the schema: the inspector's usage count is a fact about
+    // the rules, so it has to go stale when they change.
+    val catalogFields = remember(
+        key1 = state.parsedSchema.value,
+        key2 = state.activeScope,
+        key3 = diagramRulesForWindow,
+    ) {
+        catalogFieldsFrom(schema = state.ruleSchema, rules = diagramRulesForWindow)
     }
     val builderCatalogFields = remember(key1 = state.parsedSchema.value, key2 = state.activeScope) {
         builderCatalogFieldsFrom(schema = state.ruleSchema)
@@ -188,8 +206,8 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     val builderFieldsAndVariables = remember(key1 = builderCatalogFields, key2 = builderCatalogVariables) {
         builderCatalogFields + builderCatalogVariables
     }
-    val catalogActions = remember(key1 = state.parsedActionSchema.value) {
-        catalogActionsFrom(actions = state.parsedActionSchema.value)
+    val catalogActions = remember(key1 = state.parsedActionSchema.value, key2 = diagramRulesForWindow) {
+        catalogActionsFrom(actions = state.parsedActionSchema.value, rules = diagramRulesForWindow)
     }
     val builderCatalogActions = remember(key1 = state.parsedActionSchema.value) {
         builderCatalogActionsFrom(actions = state.parsedActionSchema.value)
@@ -221,17 +239,65 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
         )
     }
 
+    // ── What the Inspector describes ──────────────────────────────────────────
+    // Derived here rather than dispatched from each click site. Every way of choosing a rule — the
+    // rule tree, the table, the builder's own header, a rename, an added rule, a sample, a switch of
+    // manifest file — lands in `BuilderRulesController.selectedId` and shows up as
+    // `activeBuilderEditorState.ruleId`, so reading that one value cannot miss a path, and a new path
+    // cannot forget to dispatch.
+    // Keyed on the whole `TextFieldValue`, so a caret move invalidates it as surely as an edit does —
+    // in code mode the caret *is* the selection.
+    val inspectorSelection = remember(
+        workbenchState.ruleMode,
+        state.ruleValue.value,
+        catalogRules,
+        activeBuilderEditorState.ruleId,
+        uiDiagnostics,
+    ) {
+        inspectorSelectionFor(
+            ruleMode = workbenchState.ruleMode,
+            ruleText = state.ruleValue.value.text,
+            ruleIds = catalogRules.map { it.id },
+            caret = state.ruleValue.value.selection.start,
+            builderRuleId = activeBuilderEditorState.ruleId,
+            diagnostics = uiDiagnostics,
+        )
+    }
+
+    // Guarded on the area, not fired unconditionally: a field or action selected in the Schema or
+    // Actions area has to survive until the user comes back to the rules, and re-entering the Rules
+    // area is what puts the rule back. Within the Rules area a rule change deliberately does replace
+    // a selected condition — that condition belonged to the rule just left.
+    LaunchedEffect(key1 = inspectorSelection.ruleId, key2 = workbenchState.appArea) {
+        if (workbenchState.appArea == AppArea.RULES) {
+            workbenchViewModel.dispatch(
+                action = WorkbenchAction.SelectRule(ruleId = inspectorSelection.ruleId),
+            )
+        }
+    }
+
+    val rightPanel = remember {
+        RightPanelController(expanded = state.rightPanelExpanded, viewModel = workbenchViewModel)
+    }
+
     ProjectDialogHost(workspace = workspace)
 
     RuleWorkbenchScreen(
         topBar = {
             TopBarSection(
                 workspace = workspace,
+                entrySelection = manifestEntrySelection(
+                    session = workspace.session.value,
+                    parsedManifest = state.parsedManifest.value,
+                    selectedEntryId = state.selectedManifestEntry.value,
+                ),
                 onManageEntries = {
                     workbenchViewModel.dispatch(
                         action = WorkbenchAction.SelectAppArea(area = AppArea.MANIFEST),
                     )
                 },
+                inspectorOpen = rightPanel.isInspectorOpen,
+                onToggleInspector = rightPanel::toggleInspector,
             )
         },
         iconRail = {
@@ -277,6 +343,12 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
                     modifier = Modifier.fillMaxSize(),
+                    onInspectField = { fieldId ->
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectField(fieldId = fieldId),
+                        )
+                        rightPanel.showInspector()
+                    },
                 )
 
                 AppArea.ACTIONS -> ActionsAreaContent(
@@ -284,6 +356,12 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
                     modifier = Modifier.fillMaxSize(),
+                    onInspectAction = { actionName ->
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectAction(actionName = actionName),
+                        )
+                        rightPanel.showInspector()
+                    },
                 )
 
                 AppArea.MANIFEST -> ManifestAreaContent(
@@ -294,6 +372,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.SAMPLES -> SamplesAreaContent(
                     state = state,
+                    workspace = workspace,
                     scope = scope,
                     onSampleApplied = {
                         workbenchViewModel.dispatch(
@@ -321,18 +400,18 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             WorkbenchRightPanel(
                 state = state,
                 tab = workbenchState.rightPanelTab,
-                onTabChange = { tab ->
-                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
-                },
+                onTabChange = rightPanel::selectTab,
                 selectedInspectorItem = workbenchState.selectedInspectorItem,
                 catalogFields = catalogFields,
                 catalogActions = catalogActions,
                 catalogRules = catalogRules,
                 builderEditorState = activeBuilderEditorState,
-                uiDiagnostics = uiDiagnostics,
+                ruleStates = builderStateMap,
+                uiDiagnostics = inspectorSelection.diagnostics,
                 testInputState = testInputState,
                 onTestInputStateChange = { testInputState = it },
                 testController = testController,
+                onToggleExpanded = rightPanel::toggleExpanded,
             )
         },
         bottomBar = {

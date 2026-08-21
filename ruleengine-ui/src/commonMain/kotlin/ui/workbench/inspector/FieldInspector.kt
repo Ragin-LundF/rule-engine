@@ -2,18 +2,16 @@ package ui.workbench.inspector
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.builder.OperatorOptions
 import ui.components.SectionTitle
+import ui.util.Plurals
 import ui.workbench.model.catalog.CatalogField
 
 /**
@@ -43,7 +41,10 @@ fun FieldInspector(
         }
         InspectorRow(label = "Operators", value = chipSummary(items = field.operators))
         InspectorRow(label = "Normalizers", value = chipSummary(items = field.normalizers))
-        InspectorRow(label = "Usages", value = "0 rules") // TODO compute usages in later phase
+        InspectorRow(
+            label = "Usages",
+            value = "${field.usages} rule${Plurals.suffix(count = field.usages)}",
+        )
 
         Divider()
         SectionTitle(text = "EXAMPLE")
@@ -53,18 +54,6 @@ fun FieldInspector(
             style = MaterialTheme.typography.body2,
             color = MaterialTheme.colors.primary,
         )
-
-        Divider()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            OutlinedButton(
-                onClick = { /* TODO open schema editor for this field */ },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = "Edit field", style = MaterialTheme.typography.caption)
-            }
-        }
     }
 }
 

@@ -94,7 +94,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ValidationDiagnostic(...)` for the whole entry, which was unreadable the moment there was more than
   one problem. A passing run also prints its warnings, which nothing else would ever surface.
 
+- **The Inspector describes the rule you have selected, and there is now a way to open it.** The right
+  panel's Inspector tab has been in the workbench for a long time, and for a long time it showed
+  nothing but *"Select a field, action, rule, or condition to see details."* Not a regression — the
+  selection it reads was never dispatched from anywhere. `SelectRule`, `SelectField` and `SelectAction`
+  existed in the view model and had zero callers outside the tests, so four of the panel's five branches
+  were unreachable code; only a condition row in Builder mode ever filled it, and Builder is not the
+  default mode.
+
+  The selection is now derived from the one value every view already highlights —
+  `BuilderRulesController.selectedId` — rather than dispatched at each click site, so the rule tree, the
+  table, the builder's header, a rename, an added rule, a loaded sample and a switch of manifest file
+  all reach the panel through the same path, and a new path cannot forget to. Code mode has no rule
+  selection on screen, so there the **caret** is the selection: putting the cursor in a rule block
+  inspects that rule, and a caret between blocks keeps the last one rather than blanking the panel.
+
+  Two things it used to get wrong are fixed in the same pass. The counts came from the *open builder
+  rule* rather than from the rule the panel names, which in code mode meant reporting one rule's id
+  beside another rule's conditions and actions; they now come from the selected rule's own state. And
+  the diagnostics list was the whole buffer's, so every rule claimed its neighbours' errors — it is now
+  narrowed to the rule's own lines. `UiDiagnostic` carries no file, so a diagnostic from another file of
+  the entry can still land inside those line numbers: this is narrower, not exact.
+
+- **A `ⓘ Inspector` button in the top bar**, next to the theme toggle, which opens the panel on the
+  Inspector tab and closes it again when it is already showing — previously the only way in was to
+  notice the 56 dp strip on the right edge and click it. The strip itself now carries the same glyph, so
+  it says what it holds before the rotated label is read. The panel's open state and its tab are
+  persisted the way the theme choice is, so a panel left open comes back open.
+
+- **Field and action rows carry a `ⓘ` button that inspects them**, which is what makes `FieldInspector`
+  and `ActionInspector` reachable at all. A button rather than a click on the row: every cell in those
+  tables is a text field, and a row-wide click target would fight the editing it sits on top of. Offered
+  on top-level field rows only — the inspector's field catalog is built from the schema's top-level
+  entries, so a nested member's path would resolve to nothing.
+
+- **"Usages" is a real count.** `FieldInspector` and `ActionInspector` both hardcoded `"0 rules"` behind
+  a `// TODO`, which nobody could see while the panels were unreachable. Both now count the rules that
+  read the field or emit the action, over the rules currently loaded, using the same `FieldUsage`
+  analysis the field-flow diagram runs on. A rule naming a field twice counts once, a read through a
+  `set` expression counts, and a rule emitting an action from both `then` and `else` counts once —
+  only one branch of a rule ever runs.
+
+  The panel's four dead buttons — *Duplicate*, *Delete*, *Edit field*, *Edit action*, every one of them
+  an empty `onClick` — are gone rather than disabled. Nobody could reach them before; leaving them in
+  would have made this change ship four broken buttons.
+
 ### Fixed
+
+- **Loading a sample left the project it replaced behind it.** The top bar's `Entry: … ▾` picker went on
+  naming the *previous* project's entry, because the sample path wrote only `RuleEditorState` and never
+  touched `ProjectWorkspace.session` — `SamplesAreaContent` was not even given the workspace. That split
+  the two stores of "the active entry": `selectedManifestEntry` described the sample, and the session,
+  which is what the picker read, still described the project.
+
+  The picker was the visible half. The session also stayed the **save target**, and `applySample` never
+  cleared the dirty baselines the way `ProjectLoader` does — so the sample read as unsaved work against
+  the old project's baselines, and **Save Project wrote the sample's schema and actions into that
+  project's directory and rewrote its manifest.** The rule buffer escaped only incidentally, because the
+  saver skips rule writes while `showAllRules` is set, which a sample happens to leave set.
+
+  A sample now loads through `ProjectWorkspace.loadSample`, which clears the session, the dirty baselines
+  and the scratch links before applying it — a sample has no location on disk, so it has no session, and
+  `ProjectSession.root` is a real path that cannot honestly be invented. Saving one therefore asks where
+  to put it instead of silently choosing. A provenance flag backs that up: a session arriving from
+  anywhere else is not accepted as the save target for buffers that never came out of it.
+
+- **The entry picker now reads the manifest, not just the session**, so it names the entry of a loaded
+  sample rather than showing nothing. It is a read-only indicator in that state, without the `▾`: both
+  operations behind the menu — switching entries and adding one — return early without a session, so a
+  menu there would offer two controls that do nothing. Every bundled sample declares a single entry, so
+  there is nothing to switch between today.
 
 - **The outcome map ignored every branch but `then`.** The view groups rules by the value they can decide
   and labels each bucket with how many rules decide it — so a rule producing `assessment "RED"` from an

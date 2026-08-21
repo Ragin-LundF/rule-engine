@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -61,6 +62,8 @@ fun ActionSchemaTable(
     state: ActionEditorState,
     onStateChange: (ActionEditorState) -> Unit,
     modifier: Modifier = Modifier,
+    /** Shows the action in the Inspector. Null hides the button. */
+    onInspectAction: ((name: String) -> Unit)? = null,
 ) {
     val editable = !state.isReadOnly
 
@@ -85,6 +88,8 @@ fun ActionSchemaTable(
             HeaderCell("Name", Modifier.weight(2f))
             HeaderCell("Argument types", Modifier.weight(3f))
             HeaderCell("Purpose", Modifier.weight(3f))
+            // One spacer per trailing button, so the columns line up in every combination.
+            if (onInspectAction != null) Spacer(Modifier.width(36.dp))
             if (editable) Spacer(Modifier.width(36.dp))
         }
 
@@ -123,6 +128,7 @@ fun ActionSchemaTable(
                             val newActions = state.actions.toMutableList().also { it.removeAt(index) }
                             onStateChange(state.copy(actions = newActions))
                         },
+                        onInspect = onInspectAction?.let { inspect -> { inspect(action.name) } },
                     )
                 }
             }
@@ -160,6 +166,7 @@ private fun ActionRow(
     isDuplicate: Boolean,
     onActionChange: (EditableAction) -> Unit,
     onDelete: () -> Unit,
+    onInspect: (() -> Unit)? = null,
 ) {
     val fieldColors = TextFieldDefaults.outlinedTextFieldColors(
         textColor = TextPrimary,
@@ -227,6 +234,20 @@ private fun ActionRow(
                 placeholder = { Text("purpose", color = TextMuted) },
                 colors = fieldColors,
             )
+            // A button rather than a click on the row: the cells are text fields, and a row-wide click
+            // target would fight the editing it sits on top of.
+            if (onInspect != null) {
+                // Held to the 36.dp the header reserves for a trailing button. A bare `TextButton`
+                // claims 64.dp, and the width it takes comes out of the weighted columns beside it —
+                // enough to push the longest argument-type chip into one letter per line.
+                TextButton(
+                    onClick = onInspect,
+                    modifier = Modifier.width(width = 36.dp),
+                    contentPadding = PaddingValues(all = 0.dp),
+                ) {
+                    Text("ⓘ", color = PrimaryBlue)
+                }
+            }
             if (editable) {
                 TextButton(onClick = onDelete) {
                     Text("✕", color = TextMuted)

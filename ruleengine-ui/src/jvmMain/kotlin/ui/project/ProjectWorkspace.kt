@@ -79,6 +79,16 @@ class ProjectWorkspace(
     private var scratchSchemaLink: Path? = null
     private var scratchActionsLink: Path? = null
 
+    /**
+     * True while the buffers hold a sample rather than a project's own files.
+     *
+     * Provenance, not a mode: [loadSample] already clears [session], so on its own this changes
+     * nothing. It exists so that a session appearing from anywhere else cannot become the save target
+     * for buffers that never came out of it — which is precisely the bug that made loading a sample
+     * over an open project write the sample into that project's directory.
+     */
+    private var buffersFromSample: Boolean = false
+
     val isDirty: Boolean
         get() {
             revision.value // read so composition re-runs when baselines change
@@ -110,6 +120,7 @@ class ProjectWorkspace(
                 session.value = result.session
                 scratchSchemaLink = null
                 scratchActionsLink = null
+                buffersFromSample = false
                 revision.value++
                 reportOpened(session = result.session)
             }
@@ -127,8 +138,38 @@ class ProjectWorkspace(
         session.value = null
         scratchSchemaLink = null
         scratchActionsLink = null
+        buffersFromSample = false
         revision.value++
         state.setStatus(msg = "New project", kind = StatusKind.IDLE)
+    }
+
+    /**
+     * Loads a sample into the editor, as the scratch project it is.
+     *
+     * A sample has no location on disk and therefore no session: [ProjectSession.root] is a real
+     * `Path`, and inventing one would make every session-derived surface — the entry picker, the
+     * manifest area, the linked-file chips, the status bar, and above all the save target — describe a
+     * directory the sample never came from. That is what used to happen: the sample path wrote only
+     * `RuleEditorState`, so a sample loaded over an open project left the session, and the dirty
+     * baselines, describing the *previous* project. The picker named its entry, clicking that entry
+     * reloaded its files over the sample, and Save wrote the sample's schema and actions into its
+     * directory.
+     *
+     * Takes the editor write as a lambda rather than taking the sample itself: `applySample` lives in
+     * `ui.workbench.areas`, which depends on this package, so reaching for it here would invert the
+     * layering. Running it *inside* this method is what stops a caller clearing without applying, or
+     * applying without clearing.
+     *
+     * [applyToEditor] runs last so the status it sets is the one the user is left with.
+     */
+    fun loadSample(applyToEditor: () -> Unit) {
+        session.value = null
+        dirtyState.clear()
+        scratchSchemaLink = null
+        scratchActionsLink = null
+        buffersFromSample = true
+        applyToEditor()
+        revision.value++
     }
 
     fun requestClose() {
@@ -315,12 +356,12 @@ class ProjectWorkspace(
     // ── Save ──────────────────────────────────────────────────────────────────
 
     fun saveProject(): Boolean {
-        val target = session.value ?: createScratchSession() ?: return false
+        val target = saveTargetSession() ?: createScratchSession() ?: return false
         return runSave { saver.save(state = state, session = target, approvals = approvals) }
     }
 
     fun saveProjectAs(): Boolean {
-        val current = session.value ?: return saveProject()
+        val current = saveTargetSession() ?: return saveProject()
         val manifestPath = chooseManifestToSave(current.manifestFileName) ?: run {
             state.setStatus(msg = "Save As cancelled", kind = StatusKind.IDLE)
             return false
@@ -333,6 +374,18 @@ class ProjectWorkspace(
                 approvals = approvals,
             )
         }
+    }
+
+    /**
+     * The session a save may write to, or null when it must ask for a location instead.
+     *
+     * Falling through to [createScratchSession] rather than refusing: the requirement is only that
+     * sample buffers can never be written into a session's files, and an error dialog would satisfy it
+     * by leaving the user holding work with nowhere to put it. Asking where to save is the thing they
+     * were trying to do anyway, and the old project is equally untouchable either way.
+     */
+    private fun saveTargetSession(): ProjectSession? {
+        return session.value?.takeUnless { buffersFromSample }
     }
 
     private fun createScratchSession(): ProjectSession? {
@@ -363,6 +416,9 @@ class ProjectWorkspace(
                 syncManifestBuffers()
                 scratchSchemaLink = null
                 scratchActionsLink = null
+                // The files just written are where the buffers live now, so their provenance is this
+                // session rather than the sample they were loaded from.
+                buffersFromSample = false
                 approvals = ProjectSaveApprovals()
                 retrySave = null
                 revision.value++

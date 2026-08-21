@@ -17,6 +17,7 @@ fun ActionsAreaScreen(
     onActionsYamlChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     usagesContent: (@Composable () -> Unit)? = null,
+    onInspectAction: ((name: String) -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -37,6 +38,7 @@ fun ActionsAreaScreen(
         onYamlChange = onActionsYamlChange,
         modifier = modifier,
         usagesContent = usagesContent,
+        onInspectAction = onInspectAction,
         yamlEditor = yamlEditor,
     )
 }

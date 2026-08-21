@@ -14,4 +14,6 @@ data class CatalogField(
     val operators: List<String> = emptyList(),
     val normalizers: List<String> = emptyList(),
     val alias: String? = null,
+    /** How many rules read this field, counted over the rules currently loaded. */
+    val usages: Int = 0,
 )

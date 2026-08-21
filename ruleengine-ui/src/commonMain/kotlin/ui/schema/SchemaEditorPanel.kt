@@ -57,6 +57,8 @@ fun SchemaEditorPanel(
      * JVM-side; null keeps the "later phase" placeholder.
      */
     usagesContent: (@Composable () -> Unit)? = null,
+    /** Shows one field in the Inspector; null hides the per-row button. */
+    onInspectField: ((path: String) -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -101,6 +103,7 @@ fun SchemaEditorPanel(
             SchemaMode.VISUAL -> VisualSchemaEditor(
                 state = sync.state,
                 onStateChange = { sync.state = it },
+                onInspectField = onInspectField,
             )
             SchemaMode.YAML -> YamlSchemaEditor(
                 yaml = sync.yaml,
@@ -209,6 +212,7 @@ private fun SchemaEditorState.hasValidationIssues(): Boolean {
 private fun VisualSchemaEditor(
     state: SchemaEditorState,
     onStateChange: (SchemaEditorState) -> Unit,
+    onInspectField: ((path: String) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -219,6 +223,7 @@ private fun VisualSchemaEditor(
             state = state,
             onStateChange = onStateChange,
             modifier = Modifier.fillMaxWidth().weight(1f),
+            onInspectField = onInspectField,
         )
     }
 }

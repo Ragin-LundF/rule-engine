@@ -77,6 +77,46 @@ class RuleWorkbenchViewModelTest {
         assertNull(actual = state.selectedActionName)
     }
 
+    /**
+     * The branch the Inspector's rule panel hangs off. It had no production dispatcher at all until
+     * `RuleEditor` started deriving the selection, so `RuleInspector` was unreachable code — this pins
+     * the contract that makes it reachable: one dispatch sets both the id and the inspector item.
+     */
+    @Test
+    fun `SelectRule sets both the rule id and the inspector item`() = runModelTest {
+        viewModel.dispatch(action = WorkbenchAction.SelectRule(ruleId = "high-amount"))
+
+        val state = viewModel.state.value
+        assertEquals(expected = "high-amount", actual = state.selectedRuleId)
+        assertEquals(expected = InspectorItem.Rule(id = "high-amount"), actual = state.selectedInspectorItem)
+    }
+
+    /** No rule selected is a real state — an empty buffer — and has to clear the panel, not keep it. */
+    @Test
+    fun `SelectRule with null clears the rule id and the inspector item`() = runModelTest {
+        viewModel.dispatch(action = WorkbenchAction.SelectRule(ruleId = "high-amount"))
+        viewModel.dispatch(action = WorkbenchAction.SelectRule(ruleId = null))
+
+        val state = viewModel.state.value
+        assertNull(actual = state.selectedRuleId)
+        assertNull(actual = state.selectedInspectorItem)
+    }
+
+    /**
+     * Selecting a rule replaces a selected condition, deliberately: the condition belonged to the
+     * rule just left, and leaving it on screen would describe a row that is no longer visible.
+     */
+    @Test
+    fun `SelectRule replaces a previously selected condition`() = runModelTest {
+        viewModel.dispatch(action = WorkbenchAction.SelectCondition(conditionId = "c1"))
+        viewModel.dispatch(action = WorkbenchAction.SelectRule(ruleId = "other"))
+
+        assertEquals(
+            expected = InspectorItem.Rule(id = "other"),
+            actual = viewModel.state.value.selectedInspectorItem,
+        )
+    }
+
     @Test
     fun `SelectRightPanelTab switches right panel tab`() = runModelTest {
         viewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = RightPanelTab.SIMULATE))

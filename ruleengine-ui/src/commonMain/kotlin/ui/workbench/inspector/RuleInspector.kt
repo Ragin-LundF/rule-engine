@@ -5,10 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.ButtonDefaults
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.OutlinedButton
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -27,10 +25,6 @@ import ui.workbench.model.catalog.CatalogRuleStatus
 /**
  * Inspector for a selected parsed rule.
  */
-// 71 lines against a threshold of 60. A single Column of labelled rows describing one rule; the
-// length is the number of facts shown, not nesting. Every candidate split here would be "the first
-// half" and "the second half", which names nothing.
-@Suppress("LongMethod")
 @Composable
 fun RuleInspector(
     rule: CatalogRule,
@@ -42,6 +36,11 @@ fun RuleInspector(
     notExistsActionCount: Int = 0,
     /** Names of the variables this rule publishes with `set`, without the `$` prefix. */
     variableNames: List<String> = emptyList(),
+    /**
+     * Diagnostics belonging to *this* rule, already filtered by the caller — the panel has no way to
+     * tell one rule's line from another's, and an unfiltered list made every rule report the whole
+     * buffer's errors as its own.
+     */
     diagnostics: List<UiDiagnostic> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
@@ -99,42 +98,32 @@ fun RuleInspector(
             )
         }
 
-        if (diagnostics.isNotEmpty()) {
-            Divider()
-            SectionTitle(text = "DIAGNOSTICS")
-            diagnostics.take(n = 3).forEach { diagnostic ->
-                Text(
-                    text = "• ${diagnostic.message}",
-                    style = MaterialTheme.typography.caption,
-                    color = when (diagnostic.severity) {
-                        Severity.ERROR -> AccentRed
-                        Severity.WARNING -> AccentOrange
-                        Severity.INFO -> TextSecondary
-                    },
-                )
-            }
-        }
+        RuleDiagnostics(diagnostics = diagnostics)
+    }
+}
 
-        Divider()
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedButton(
-                onClick = { /* TODO duplicate rule */ },
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = "Duplicate", style = MaterialTheme.typography.caption)
-            }
-            OutlinedButton(
-                onClick = { /* TODO delete rule */ },
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = AccentRed,
-                ),
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(text = "Delete", style = MaterialTheme.typography.caption)
-            }
-        }
+/**
+ * The diagnostics of the inspected rule, or nothing when it has none.
+ *
+ * Capped at three: the panel is 320 dp wide and the diagnostics list at the bottom of the window is
+ * where the full set belongs. Its own composable rather than a block inside [RuleInspector] because
+ * it is the one part of that panel with a rule of its own — everything above it is a labelled row.
+ */
+@Composable
+private fun RuleDiagnostics(diagnostics: List<UiDiagnostic>) {
+    if (diagnostics.isEmpty()) return
+
+    Divider()
+    SectionTitle(text = "DIAGNOSTICS")
+    diagnostics.take(n = 3).forEach { diagnostic ->
+        Text(
+            text = "• ${diagnostic.message}",
+            style = MaterialTheme.typography.caption,
+            color = when (diagnostic.severity) {
+                Severity.ERROR -> AccentRed
+                Severity.WARNING -> AccentOrange
+                Severity.INFO -> TextSecondary
+            },
+        )
     }
 }

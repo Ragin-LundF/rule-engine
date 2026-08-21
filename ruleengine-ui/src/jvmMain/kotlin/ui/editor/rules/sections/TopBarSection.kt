@@ -40,6 +40,7 @@ import ui.TextPrimary
 import ui.components.StatusBadge
 import ui.components.ToolbarButton
 import ui.project.ProjectWorkspace
+import ui.project.manifest.ManifestEntrySelection
 import ui.project.model.ProjectFileKind
 import ui.theme.ThemeController
 import ui.theme.ThemePersistence
@@ -50,10 +51,24 @@ import ui.theme.ThemePersistence
  * The six independent load/save buttons that used to live here have collapsed into one project
  * group. Loading a schema is no longer a toolbar action at all — it belongs next to the schema it
  * replaces, in the Schema area, where the user can see what is linked.
+ *
+ * @param inspectorOpen      Whether the right panel is open *on the Inspector tab*, which is what the
+ *                           button reports as its pressed state — open on Simulate is not open here.
+ * @param onToggleInspector  Opens the Inspector, or closes the panel when it is already showing it.
+ * @param entrySelection     What the entry picker shows, derived by the caller from the session *and*
+ *                           the parsed manifest; null hides the picker because there is no manifest at
+ *                           all. Passed in rather than read off the session here — reading only the
+ *                           session is what made the picker name the previous project after a sample
+ *                           was loaded.
  */
 @Composable
-fun TopBarSection(workspace: ProjectWorkspace, onManageEntries: () -> Unit) {
-    val session by workspace.session
+fun TopBarSection(
+    workspace: ProjectWorkspace,
+    onManageEntries: () -> Unit,
+    inspectorOpen: Boolean,
+    onToggleInspector: () -> Unit,
+    entrySelection: ManifestEntrySelection?,
+) {
     val isDirty = workspace.isDirty
 
     Row(
@@ -72,10 +87,9 @@ fun TopBarSection(workspace: ProjectWorkspace, onManageEntries: () -> Unit) {
         )
         StatusBadge(label = "WORKBENCH", color = PrimaryBlue)
 
-        session?.let { current ->
+        entrySelection?.let { selection ->
             ManifestEntryPicker(
-                entryIds = current.entries.map { it.id },
-                activeEntryId = current.activeEntryId,
+                selection = selection,
                 onSelect = { entryId -> workspace.selectEntry(entryId = entryId) },
                 onAdd = {
                     // The new entry needs naming, and the Manifest area is where its card lives.
@@ -93,6 +107,15 @@ fun TopBarSection(workspace: ProjectWorkspace, onManageEntries: () -> Unit) {
         SharedFileExports(workspace = workspace)
 
         Spacer(modifier = Modifier.width(width = 16.dp))
+
+        // The only entry point to the Inspector that does not require finding the collapsed strip on
+        // the right edge first. `primary` rather than a separate marker: the pressed look is the
+        // state, so the button cannot disagree with the panel.
+        ToolbarButton(
+            label = "ⓘ Inspector",
+            onClick = onToggleInspector,
+            primary = inspectorOpen,
+        )
 
         ToolbarButton(
             label = if (ThemeController.isDark) "☀" else "☾",
@@ -145,15 +168,24 @@ private fun SharedFileExports(workspace: ProjectWorkspace) {
  *
  * In the top bar rather than in the Manifest area because the choice governs every other area: the
  * schema, the actions and the rule files on screen all belong to the entry named here.
+ *
+ * Read-only when the manifest has no project behind it — a loaded sample. It still names the entry,
+ * because that is the question the top bar is here to answer, but it drops the `▾` and does not open:
+ * both operations behind the menu need a session, so a menu would offer two controls that do nothing.
  */
 @Composable
 private fun ManifestEntryPicker(
-    entryIds: List<String>,
-    activeEntryId: String,
+    selection: ManifestEntrySelection,
     onSelect: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(value = false) }
+    val activeEntryId = selection.activeEntryId
+
+    if (!selection.editable) {
+        ToolbarButton(label = "Entry: $activeEntryId", onClick = {}, enabled = false)
+        return
+    }
 
     Box {
         ToolbarButton(label = "Entry: $activeEntryId ▾", onClick = { expanded = true })
@@ -164,7 +196,7 @@ private fun ManifestEntryPicker(
                 .background(color = BgElevated)
                 .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
         ) {
-            entryIds.forEach { entryId ->
+            selection.entryIds.forEach { entryId ->
                 val isSelected = entryId == activeEntryId
                 DropdownMenuItem(
                     onClick = {

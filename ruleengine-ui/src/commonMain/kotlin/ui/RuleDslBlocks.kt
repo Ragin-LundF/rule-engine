@@ -58,3 +58,44 @@ internal fun findRuleBlockRange(fullText: String, ruleId: String): IntRange? {
     // Unbalanced braces: treat the rule as not found rather than corrupting the text.
     return null
 }
+
+/**
+ * The id of the rule whose `rule "<id>" { ... }` block contains [caret], or null when the caret sits
+ * between rules — in a blank line, a file-level comment, or past the last block.
+ *
+ * Blocks never overlap, so the first containing block is the only one. Locating them with
+ * [findRuleBlockRange] rather than with the parser is deliberate: this runs on every caret move, and
+ * a buffer mid-edit is routinely unparseable while its text still says plainly which rule the caret
+ * is in.
+ */
+internal fun ruleIdAtCaret(fullText: String, ruleIds: List<String>, caret: Int): String? {
+    if (fullText.isEmpty() || ruleIds.isEmpty()) return null
+    val position = caret.coerceIn(minimumValue = 0, maximumValue = fullText.length)
+    return ruleIds.firstOrNull { ruleId ->
+        val range = findRuleBlockRange(fullText = fullText, ruleId = ruleId)
+        range != null && position in range
+    }
+}
+
+/**
+ * The 1-based line range spanned by [ruleId]'s block, or null when there is no such block.
+ *
+ * Used to scope diagnostics to one rule: a `ValidationDiagnostic` carries a line, and a rule
+ * inspector that showed every diagnostic in the buffer would attribute its neighbours' errors to the
+ * rule on screen.
+ */
+internal fun ruleLineRange(fullText: String, ruleId: String): IntRange? {
+    val range = findRuleBlockRange(fullText = fullText, ruleId = ruleId) ?: return null
+    val firstLine = fullText.lineCountUpTo(offset = range.first)
+    val lastLine = firstLine + fullText.substring(range.first, range.last + 1).count { it == '\n' }
+    return firstLine..lastLine
+}
+
+/** 1-based line number of [offset]. */
+private fun String.lineCountUpTo(offset: Int): Int {
+    var lines = 1
+    for (index in 0 until offset.coerceAtMost(length)) {
+        if (this[index] == '\n') lines++
+    }
+    return lines
+}

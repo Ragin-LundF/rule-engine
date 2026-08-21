@@ -93,6 +93,67 @@ Three passes, and they are not interchangeable:
   result reports every file with lines relative to *its* file, so underlining the lot marks the wrong
   lines. The diagnostics panel shows them all and labels the ones from elsewhere.
 
+## The Inspector and the right panel
+
+Two invariants here are easy to break by adding code that looks correct in isolation.
+
+- **The Inspector's rule selection is derived, not dispatched.** There are three separate notions of
+  "selected rule": `RuleWorkbenchState.selectedRuleId` (what the Inspector reads),
+  `BuilderRulesController.selectedId` (what every view highlights) and `TestInputState.selectedRuleId`
+  (which rule to *run*, where blank means all). The live one is the second. `RuleEditor` reads it once —
+  via `inspectorSelectionFor` — and dispatches `SelectRule` from a single `LaunchedEffect`, so a new way
+  of choosing a rule cannot forget to update the panel. Do not add a `SelectRule` dispatch at a click
+  site; make the click reach `BuilderRulesController` and the panel follows.
+  The effect is guarded on `appArea == RULES` so a field or action selected in the Schema or Actions
+  area survives until the user returns to the rules.
+- **`RightPanelController` is the only writer of the panel's open state and tab**, because both are
+  persisted through `RightPanelPersistence`. Flipping `RuleEditorState.rightPanelExpanded` directly is
+  what makes the stored value drift from the one on screen.
+
+`InspectorPanel` takes `builderState` *and* `ruleStates` and they are not interchangeable: the condition
+branch needs the open builder state, because that is where the inspected row lives, while the rule branch
+needs the selected rule's own — in code mode the caret can sit in a rule the builder does not hold open,
+and reading `builderState` there reports one rule's id with another rule's counts.
+
+A row in the schema or action tables gets its inspect affordance as a **36 dp button**, not a click on
+the row: every cell is a text field, so a row-wide target fights the editing under it, and the header
+reserves exactly 36 dp per trailing button — a default-width `TextButton` takes 64 dp out of the weighted
+columns beside it, which is enough to squeeze the longest chip to one letter per line.
+
+## The project session and the manifest entry
+
+There are **three** separate notions of "the selected entry", and mixing them up has caused the same
+bug twice.
+
+| store | authoritative for |
+|---|---|
+| `ProjectSession.activeEntryId` | the project on disk: the save target, the linked-file chips, the status bar |
+| `RuleEditorState.selectedManifestEntry` | everything read from the parsed manifest: rule files, scope, diagrams, export |
+| `TestInputState.selectedRuleId` | which rule to *run* (blank means all) — unrelated, do not reuse |
+
+Nothing observes them into agreement; sync is imperative and funnels through
+`ProjectWorkspace.performSelectEntry`. So:
+
+- **Anything that replaces what is on screen must go through `ProjectWorkspace`,** not just
+  `RuleEditorState`. `applySample` writing only the editor state is what left the session — and with it
+  the save target — describing the project a sample had just replaced. `ProjectWorkspace.loadSample`
+  takes the editor write as a lambda for exactly this reason: it cannot be called without the clearing.
+- **A load that clears buffers must clear the dirty baselines too** (`ProjectLoader.load` does;
+  `applySample` did not). Dirtiness is a comparison against the last thing read from disk, so stale
+  baselines make "unsaved" a claim about the wrong files.
+- **Do not invent a `ProjectSession` for something with no location on disk.** `root` is a real `Path`;
+  a null session means scratch, and the first save asks where to put it.
+- **Read entry state through `manifestEntrySelection`**, not off the session directly — the session is
+  null for a sample, and the parsed manifest is the source that always describes what is on screen.
+
+Three further desyncs are known and not yet fixed: renaming the active entry in the Manifest area
+leaves `selectedManifestEntry` pointing at an id that no longer exists (which empties
+`currentEntryRulePaths()` and lets `loadRuleFiles` wipe `inMemoryRuleFiles` — data loss);
+`onReloadConflict` discards its `ProjectLoadResult`; and a scratch project's first save sets
+`activeEntryId` without ever setting `selectedManifestEntry`. If you touch this area, note that **no
+test asserts `session.activeEntryId == state.selectedManifestEntry`** — that gap is why all four
+survived.
+
 ## When to also read core instructions
 
 Also read `ruleengine-core.md` when a UI change touches or depends on:

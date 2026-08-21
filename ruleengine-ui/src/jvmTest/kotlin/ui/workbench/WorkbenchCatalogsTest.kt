@@ -49,6 +49,8 @@ class WorkbenchCatalogsTest {
         ),
     )
 
+    private fun rules(text: String) = Parser(input = text).parseRules()
+
     // ── fields ────────────────────────────────────────────────────────────────
 
     @Test
@@ -86,6 +88,83 @@ class WorkbenchCatalogsTest {
         assertEquals(expected = "", actual = catalogActionsFrom(actions = none).single().argType)
     }
 
+    // ── usage counts ──────────────────────────────────────────────────────────
+
+    /**
+     * The usage counts the Inspector shows. They replaced a hardcoded `"0 rules"` placeholder, so the
+     * cases that matter are the ones a naive count gets wrong: a field read only through a `set`, and
+     * a rule that names the same field or action more than once.
+     */
+    private val usageRules = rules(
+        """
+        rule "reads-amount-twice" {
+          when
+            amount equals 1 and amount equals 2
+          then
+            flag "x"
+        }
+
+        rule "reads-amount-via-set" {
+          when
+            other equals 1
+          then
+            set total = amount
+            flag "y"
+        }
+
+        rule "reads-nothing-of-interest" {
+          when
+            other equals 3
+          then
+            flag "z"
+          else
+            flag "z"
+        }
+        """.trimIndent(),
+    )
+
+    @Test
+    fun `a field counts the rules that read it, once each`() {
+        val field = catalogFieldsFrom(schema = schema, rules = usageRules).single()
+
+        assertEquals(
+            expected = 2,
+            actual = field.usages,
+            message = "the rule naming `amount` twice counts once, and a read through `set` still counts",
+        )
+    }
+
+    @Test
+    fun `a field no rule reads counts zero`() {
+        val unread = FieldSchema(
+            name = "s",
+            fields = mapOf(
+                FieldId(value = "untouched") to FieldDefinition(
+                    id = FieldId(value = "untouched"),
+                    type = FieldType.TEXT,
+                ),
+            ),
+        )
+
+        assertEquals(expected = 0, actual = catalogFieldsFrom(schema = unread, rules = usageRules).single().usages)
+    }
+
+    @Test
+    fun `an action counts every branch that emits it, once per rule`() {
+        assertEquals(
+            expected = 3,
+            actual = catalogActionsFrom(actions = actions, rules = usageRules).single().usages,
+            message = "all three rules emit `flag`; the one emitting it from then and else counts once",
+        )
+    }
+
+    /** Passing no rules is a real state — an unparseable buffer — and must read as zero, not throw. */
+    @Test
+    fun `with no rules parsed every count is zero`() {
+        assertEquals(expected = 0, actual = catalogFieldsFrom(schema = schema).single().usages)
+        assertEquals(expected = 0, actual = catalogActionsFrom(actions = actions).single().usages)
+    }
+
     // ── diagnostics ───────────────────────────────────────────────────────────
 
     @Test
@@ -102,8 +181,6 @@ class WorkbenchCatalogsTest {
     }
 
     // ── rule roster ───────────────────────────────────────────────────────────
-
-    private fun rules(text: String) = Parser(input = text).parseRules()
 
     private val oneRule = rules(
         """

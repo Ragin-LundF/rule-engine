@@ -33,6 +33,16 @@ fun InspectorPanel(
     actions: List<CatalogActionInfo>,
     rules: List<CatalogRule>,
     builderState: BuilderEditorState? = null,
+    /**
+     * One builder state per rule id, so the rule inspector describes the rule it names.
+     *
+     * Separate from [builderState] on purpose: the condition branch has to read the *open* builder
+     * state, because that is where the condition being inspected lives, while the rule branch has to
+     * read the *selected* rule's — in code mode the caret can sit in a rule the builder does not hold
+     * open, and taking the counts from [builderState] there reports one rule's id with another rule's
+     * conditions and actions.
+     */
+    ruleStates: Map<String, BuilderEditorState> = emptyMap(),
     diagnostics: List<UiDiagnostic> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
@@ -51,13 +61,14 @@ fun InspectorPanel(
             subject = rules.firstOrNull { it.id == selectedItem.id },
             modifier = modifier,
         ) { rule ->
+            val ruleState = ruleStates[rule.id]
             RuleInspector(
                 rule = rule,
-                conditionCount = builderState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
-                actionCount = builderState?.actions?.size ?: 0,
-                elseActionCount = builderState?.elseActions?.size ?: 0,
-                notExistsActionCount = builderState?.notExistsActions?.size ?: 0,
-                variableNames = builderState?.let { state ->
+                conditionCount = ruleState?.let { countLeafConditions(it.conditionNodes) } ?: 0,
+                actionCount = ruleState?.actions?.size ?: 0,
+                elseActionCount = ruleState?.elseActions?.size ?: 0,
+                notExistsActionCount = ruleState?.notExistsActions?.size ?: 0,
+                variableNames = ruleState?.let { state ->
                     (state.variables + state.elseVariables + state.notExistsVariables).map { it.name }
                 }.orEmpty(),
                 diagnostics = diagnostics,

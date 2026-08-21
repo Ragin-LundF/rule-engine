@@ -143,9 +143,13 @@ class RuleEditorState(
     /**
      * Whether the right inspector/simulate panel is expanded to its full width or collapsed to a strip.
      *
-     * Starts collapsed. Expanded, it and the rule tree together leave the center panel too little
-     * width for the Builder's rows, whose dropdowns and value boxes then overlap; the strip is one
-     * click from opening, and the layout it opens into is one the user chose.
+     * Collapsed on a first launch. Expanded, it and the rule tree together leave the center panel too
+     * little width for the Builder's rows, whose dropdowns and value boxes then overlap; the strip is
+     * one click from opening, and the layout it opens into is one the user chose.
+     *
+     * Which is why the choice is restored rather than reset: `RuleEditor` seeds this from
+     * `RightPanelPersistence` when it builds the state, and writes back through one setter. Do not
+     * flip it directly — a second writer is how the stored value and the one on screen drift apart.
      */
     val rightPanelExpanded: MutableState<Boolean> = mutableStateOf(value = false)
 
