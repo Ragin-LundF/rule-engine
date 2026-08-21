@@ -24,6 +24,12 @@ sealed interface BuilderRule {
         val stopOnThen: Boolean = false,
         /** True when the ELSE branch ends the run. */
         val stopOnElse: Boolean = false,
+        /** Actions of the NOT_EXISTS block. Empty when the rule declares no missing-data branch. */
+        val notExistsActions: List<BuilderAction> = emptyList(),
+        /** `set` rows of the NOT_EXISTS block, rendered above its actions. */
+        val notExistsVariables: List<BuilderVariable> = emptyList(),
+        /** True when the NOT_EXISTS branch ends the run. */
+        val stopOnNotExists: Boolean = false,
     ) : BuilderRule
 
     /** Rule that contains syntax the Builder cannot safely render. */

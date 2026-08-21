@@ -21,6 +21,7 @@ import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.BooleanLiteral
 import ruleengine.dsl.ast.ComparisonExpressionAst
@@ -42,17 +43,69 @@ object Validator {
     /** Keyword an action may not be named, mapped to the rename suggested in the diagnostic. */
     private val RESERVED_ACTION_NAMES = mapOf(
         "else" to "otherwise",
+        "not_exists" to "unavailable",
         "stop" to "halt",
         "add" to "append",
     )
 
-    fun validate(asts: List<RuleAst>, schema: FieldSchema, actions: ActionSchema? = null): ValidationResult {
+    /**
+     * Validates [asts] as one unit, in the order the engine will evaluate them.
+     *
+     * [inheritedVariables] names variables that rules *before* [asts] already publish, mapped to the
+     * clause that writes each one. It exists for callers that hold only part of an entry — the editor
+     * validating one open rule file of a manifest — so a `$` read whose `set` or `add` lives in an
+     * earlier file is not reported as unknown. A caller holding the whole entry passes nothing.
+     */
+    fun validate(
+        asts: List<RuleAst>,
+        schema: FieldSchema,
+        actions: ActionSchema? = null,
+        inheritedVariables: Map<String, AssignmentKindAst> = emptyMap(),
+    ): ValidationResult {
         val diagnostics = mutableListOf<ValidationDiagnostic>()
-        val ids = mutableSetOf<String>()
 
+        validateSchemas(schema = schema, actions = actions, diagnostics = diagnostics)
+        validateRuleList(
+            asts = asts,
+            schema = schema,
+            actions = actions,
+            inheritedVariables = inheritedVariables,
+            diagnostics = diagnostics,
+        )
+
+        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+    }
+
+    /**
+     * The checks that are about the schemas rather than about any rule.
+     *
+     * Split out because they must run **once** for a rule set however it is handed over.
+     * [EntryValidator] validates a manifest entry file by file, and reporting a duplicate alias once
+     * per rule file would report the same schema problem as many problems.
+     */
+    internal fun validateSchemas(
+        schema: FieldSchema,
+        actions: ActionSchema?,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
         validateAliasUniqueness(schema = schema, diagnostics = diagnostics)
         validateActionNamesAreNotKeywords(actionSchema = actions, diagnostics = diagnostics)
+    }
 
+    /**
+     * Every check that is about the rules, over one ordered list of them.
+     *
+     * The counterpart of [validateSchemas]: this is what [EntryValidator] runs per file, which is what
+     * keeps each diagnostic's line and column relative to the file it came from.
+     */
+    internal fun validateRuleList(
+        asts: List<RuleAst>,
+        schema: FieldSchema,
+        actions: ActionSchema?,
+        inheritedVariables: Map<String, AssignmentKindAst>,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
+        val ids = mutableSetOf<String>()
         for (rule in asts) {
             if (!ids.add(rule.id)) {
                 diagnostics += ValidationDiagnostic(
@@ -65,11 +118,15 @@ object Validator {
             validateRule(rule = rule, schema = schema, actions = actions, diagnostics = diagnostics)
         }
 
-        // Runs over the whole entry rather than per rule: "an earlier rule assigns it" only has a
-        // meaning once every rule of the entry is known, in evaluation order.
-        VariableScopeValidator.validate(asts = asts, schema = schema, diagnostics = diagnostics)
-
-        return ValidationResult(isValid = diagnostics.none { it.severity == Severity.ERROR }, diagnostics = diagnostics)
+        // Runs over the whole list rather than per rule: "an earlier rule assigns it" only has a
+        // meaning once every rule is known, in evaluation order.
+        VariableScopeValidator.validate(
+            asts = asts,
+            schema = schema,
+            actions = actions,
+            inheritedVariables = inheritedVariables,
+            diagnostics = diagnostics,
+        )
     }
 
     /**
@@ -154,7 +211,8 @@ object Validator {
 
         validateExpression(expr = rule.condition, schema = schema, diagnostics = diagnostics)
 
-        // Both branches carry the same kinds of clause, so both go through the same checks.
+        // Every branch carries the same kinds of clause, so each goes through the same checks. Never
+        // validate `rule.actions` alone, or the other blocks go unchecked.
         validateBranch(
             assignments = rule.assignments,
             branchActions = rule.actions,
@@ -169,9 +227,16 @@ object Validator {
             actions = actions,
             diagnostics = diagnostics
         )
+        validateBranch(
+            assignments = rule.notExistsAssignments,
+            branchActions = rule.notExistsActions,
+            schema = schema,
+            actions = actions,
+            diagnostics = diagnostics
+        )
     }
 
-    /** The `set` clauses and actions of one branch — a rule's `then` block or its `else` block. */
+    /** The `set` clauses and actions of one branch — a rule's `then`, `else` or `not_exists` block. */
     private fun validateBranch(
         assignments: List<VariableAssignmentAst>,
         branchActions: List<ActionAst>,
@@ -488,8 +553,24 @@ object Validator {
             }
             for ((idx, expectedType) in def.argTypes.withIndex()) {
                 val lit = a.arguments.getOrNull(index = idx)
-                // A variable carries whatever the assigning rule produced, so its type is only known
-                // at evaluation time; that it exists at all is checked by VariableScopeValidator.
+                if (expectedType.isVariableReference()) {
+                    // A declared variable argument is checked the other way round: the literal has to
+                    // be a reference. Which *kind* of variable it is comes from the clause that writes
+                    // it, which only VariableScopeValidator has seen.
+                    if (lit !is VariableRefLiteral) {
+                        diagnostics += ValidationDiagnostic(
+                            severity = Severity.ERROR,
+                            message = "Action '${a.name}' argument $idx expects $expectedType, " +
+                                    "so it must be written as a variable reference",
+                            suggestion = "Write a '\$name' reference, or declare the action with a " +
+                                    "literal argument type",
+                        )
+                    }
+                    continue
+                }
+                // An undeclared variable argument stays unchecked: it carries whatever the assigning
+                // rule produced, so its type is only known at evaluation time. That it exists at all
+                // is checked by VariableScopeValidator either way.
                 if (lit is VariableRefLiteral) {
                     continue
                 }
@@ -514,6 +595,9 @@ object Validator {
                     ActionArgType.STRING -> lit is StringLiteral
                     ActionArgType.INTEGER -> lit is NumberLiteral
                     ActionArgType.DECIMAL -> lit is NumberLiteral
+                    // Handled above and returned from, so these are unreachable. Listed rather than
+                    // folded into an `else` so a new arg type still fails to compile here.
+                    ActionArgType.VARIABLE_STRING, ActionArgType.VARIABLE_LIST -> false
                 }
                 if (!ok) diagnostics += ValidationDiagnostic(
                     severity = Severity.ERROR,

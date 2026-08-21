@@ -20,6 +20,9 @@ object MarkdownCatalogRenderer {
 
     private const val INDENT = "  "
 
+    /** The heading the missing-data branch is written under, in prose rather than in DSL terms. */
+    private const val MISSING_DATA_LABEL = "When the data is missing"
+
     fun render(catalog: RuleCatalog): String {
         val out = StringBuilder()
 
@@ -65,9 +68,24 @@ object MarkdownCatalogRenderer {
             )
         }
 
+        // Same again for the third branch, which makes a claim of its own: the rule produced something
+        // without its condition being true *or* false.
+        if (catalog.rules.any { rule -> rule.notExistsOutcomes.isNotEmpty() }) {
+            out.append(
+                "Some rules also say what happens when the record does not carry the data they read. " +
+                    "Those rules contribute the outcome listed under \"When the data is missing\" — " +
+                    "which is neither a match nor a non-match, but a question the record could not " +
+                    "answer.\n\n"
+            )
+        }
+
         // Only when the rule set actually uses them: a reader of a rule set without variables should
         // not have to hold a caveat that never applies to what they are reading.
-        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() }) {
+        if (catalog.rules.any { rule ->
+                rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() ||
+                    rule.notExistsPublishes.isNotEmpty()
+            }
+        ) {
             out.append(
                 "Some rules publish a named value that the rules after them read. Those rules are " +
                     "order-dependent: the value only reaches a rule listed later, and only if the " +
@@ -77,7 +95,7 @@ object MarkdownCatalogRenderer {
 
         // Placed last of the three notes because it is the strongest claim on the reader: it changes
         // whether the rules further down apply at all.
-        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse }) {
+        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse || rule.stopsOnNotExists }) {
             out.append(
                 "Some rules **end the run**. Where a rule says so, the rules listed after it are not " +
                     "evaluated at all for that record — so a rule further down does not apply, whether " +
@@ -205,7 +223,7 @@ object MarkdownCatalogRenderer {
             stops = rule.stopsOnThen,
         )
         // Written only when the rule declares an `else` block, so a reader is never told what happens
-        // "otherwise" for a rule where the answer is nothing.
+        // "otherwise" for a rule where the answer is nothing. Same for the missing-data branch.
         appendBranch(
             out = out,
             label = "Otherwise",
@@ -213,6 +231,14 @@ object MarkdownCatalogRenderer {
             outcomes = rule.elseOutcomes,
             publishes = rule.elsePublishes,
             stops = rule.stopsOnElse,
+        )
+        appendBranch(
+            out = out,
+            label = MISSING_DATA_LABEL,
+            publishesLabel = "Publishes for later rules when the data is missing",
+            outcomes = rule.notExistsOutcomes,
+            publishes = rule.notExistsPublishes,
+            stops = rule.stopsOnNotExists,
         )
 
         out.append("In the rule language: `").append(rule.technicalCondition).append("`\n\n")
@@ -242,8 +268,17 @@ object MarkdownCatalogRenderer {
         // Stated per branch, because a rule can halt on one verdict and carry on with the other. A
         // reader who misses this reads every rule below as still applying.
         if (stops) {
-            out.append("**Stops here").append(if (label == "Then") "" else " (otherwise)")
+            out.append("**Stops here").append(stopQualifier(label = label))
                 .append(":** no rule listed after this one is evaluated.\n\n")
+        }
+    }
+
+    /** Which branch a "stops here" note belongs to, when it is not the plain `then` one. */
+    private fun stopQualifier(label: String): String {
+        return when (label) {
+            "Then" -> ""
+            MISSING_DATA_LABEL -> " (when the data is missing)"
+            else -> " (otherwise)"
         }
     }
 

@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.OperatorId
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
@@ -9,8 +10,7 @@ import ruleengine.evaluator.compiled.text.TextRegexExpression
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
 import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 class TextRegexExpressionTest {
     private val schema = FieldSchema(
@@ -32,7 +32,7 @@ class TextRegexExpressionTest {
             pattern = Regex(pattern = "TXN-[0-9]+")
         )
 
-        assertTrue(actual = expression.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = expression.evaluate(context = prepared))
     }
 
     @Test
@@ -44,7 +44,7 @@ class TextRegexExpressionTest {
             pattern = Regex(pattern = "^(a+)+$")
         )
 
-        assertFalse(actual = expression.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.FALSE, actual = expression.evaluate(context = prepared))
     }
 
     private fun preparedContext(value: String): PreparedRuleContext {

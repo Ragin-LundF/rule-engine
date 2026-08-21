@@ -23,8 +23,9 @@ import ui.components.StatusBadge
 import ui.components.TinyButton
 
 // The output half of the Builder: the `set` rows, then the action rows. Rendered once per branch —
-// THEN for the rules that matched, ELSE for the rules that did not — because both blocks hold the
-// same kinds of row and differ only in when the engine reaches them.
+// THEN when the condition held, ELSE when it did not, NOT_EXISTS when the record carried no data to
+// decide it — because every block holds the same kinds of row and they differ only in when the engine
+// reaches them.
 
 @Composable
 internal fun BranchSection(
@@ -38,8 +39,8 @@ internal fun BranchSection(
     val actions = editorState.actionsOf(branch = branch)
 
     SectionHeader(
-        title = if (branch == RuleBranch.THEN) "THEN" else "ELSE",
-        subtitle = if (branch == RuleBranch.THEN) null else "Optional — output when the condition does not hold",
+        title = branchTitle(branch = branch),
+        subtitle = branchSubtitle(branch = branch),
     )
 
     Spacer(modifier = Modifier.height(height = 8.dp))
@@ -190,14 +191,31 @@ private fun BranchAddButtons(
  * A placeholder name that does not collide with one this rule already assigns.
  *
  * A blank name would generate `set  = …`, which does not parse, so the rule file would break the
- * moment the row is added rather than once the author has finished filling it in. Both branches are
+ * moment the row is added rather than once the author has finished filling it in. Every branch is
  * considered: a name is unique per rule, not per branch.
  */
 private fun nextVariableName(editorState: BuilderEditorState): String {
-    val taken = (editorState.variables + editorState.elseVariables).map { it.name }.toSet()
-    var index = editorState.variables.size + editorState.elseVariables.size + 1
+    val existing = editorState.variables + editorState.elseVariables + editorState.notExistsVariables
+    val taken = existing.map { it.name }.toSet()
+    var index = existing.size + 1
     while ("value$index" in taken) {
         index++
     }
     return "value$index"
+}
+
+private fun branchTitle(branch: RuleBranch): String {
+    return when (branch) {
+        RuleBranch.THEN -> "THEN"
+        RuleBranch.ELSE -> "ELSE"
+        RuleBranch.NOT_EXISTS -> "NOT EXISTS"
+    }
+}
+
+private fun branchSubtitle(branch: RuleBranch): String? {
+    return when (branch) {
+        RuleBranch.THEN -> null
+        RuleBranch.ELSE -> "Optional — output when the condition does not hold"
+        RuleBranch.NOT_EXISTS -> "Optional — output when the record carries no data to decide the condition"
+    }
 }

@@ -59,9 +59,19 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
 - **Updating patterns:**
     - New DSL keywords/operators must be added to the `build*Completions` functions in `ui/autocompletion/Builders.kt`.
     - New DSL keywords/operators must also be added to the relevant `DSL_NAMED_OPS`, `DSL_STRUCTURE`, or `DSL_LOGIC` sets in `SyntaxHighlighter.kt`.
-    - A new *structural* keyword (one that opens a block, like `when` / `then` / `else`) additionally needs:
-      a `DslSection` case plus its transition in `ui/dsl/DslContext.kt`, an entry in `DSL_BLOCK_KEYWORDS`
-      in `ui/editor/rules/DesktopRuleEditorItems.kt`, and a branch in `buildContextualCompletions`.
+    - A new *structural* keyword (one that opens a block, like `when` / `then` / `else` / `not_exists`)
+      additionally needs: a `DslSection` case plus its transition in `ui/dsl/DslContext.kt` (add it to
+      `BRANCH_KEYWORDS`, and to `DslSection.isBranch()` if it holds output clauses — `literal()` and
+      `closeBracket()` both dispatch on that), an entry in `DSL_BLOCK_KEYWORDS` in
+      `ui/editor/rules/DesktopRuleEditorItems.kt`, and a branch in `buildContextualCompletions` whose
+      `followingBranchKeywords` lists only the blocks the parser still accepts after it.
+    - A new **output branch** is the same plus: `RuleBranch` in `ruleengine-model` (which makes most of
+      the rest a compile error), `BuilderRule.Supported` and `BuilderEditorState` (`actionsOf`,
+      `variablesOf`, `stopOf`, `setStop`, `hasBranch`, the id counters, `fromBuilderRule`, `removeAction`,
+      `removeVariable`), an `OptionalBranch` call in `RuleBuilderView` **in the order the DSL requires**,
+      `branchTitle` / `branchSubtitle` in `BranchSectionView`, a `RuleMatchStatus` case with its filter,
+      colour, label and count in `ui/tester/RuleResultsView.kt`, and `RuleTablePanel` /
+      `InspectorPanel` so the branch is not silently missing from the overview.
     - A clause with no value to edit (`stop`) belongs in the Builder as a **removable badge with an add
       button**, not as a row: a row would offer a dropdown and a value box for choices that do not exist.
       Hold it as a `Boolean` on the branch rather than an entry in the action list — that is what keeps it
@@ -69,6 +79,19 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
     - A new clause inside a rule block must round-trip through **both** `ui/builder/RuleAstToBuilderMapper.kt`
       and `ui/builder/BuilderToRuleDsl.kt`. The Builder replaces the whole rule text on every edit, so
       anything the mapper drops is deleted from the file.
+
+## Validation in the editor
+
+Three passes, and they are not interchangeable:
+
+- **Per keystroke** — `RuleValidationRunner.run` on the open buffer, with
+  `RuleEditorState.inheritedVariablesForOpenBuffer()` supplying the variables the manifest files listed
+  *before* it publish. Without that, every cross-file `$name` reads as unknown.
+- **The Validate button** — `validateOpenEntry()`, which runs core's `EntryValidator` over the whole
+  entry and falls back to the per-buffer pass when there is no entry to validate.
+- **Underlines** — only diagnostics that pass `ValidationDiagnostic.isAbout(openFile)`. An entry-wide
+  result reports every file with lines relative to *its* file, so underlining the lot marks the wrong
+  lines. The diagnostics panel shows them all and labels the ones from elsewhere.
 
 ## When to also read core instructions
 

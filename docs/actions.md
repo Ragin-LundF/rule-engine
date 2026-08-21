@@ -63,12 +63,49 @@ an action that is just a signal.
 
 ### Argument Types
 
-| Type      | Accepted values                 |
-|-----------|---------------------------------|
-| `string`  | Any text value in double quotes |
-| `integer` | A whole number                  |
-| `decimal` | A number with decimal places    |
-| *(none)*  | `argTypes: []` — no argument    |
+| Type              | Accepted values                                        |
+|-------------------|--------------------------------------------------------|
+| `string`          | Any text value in double quotes                        |
+| `integer`         | A whole number                                         |
+| `decimal`         | A number with decimal places                           |
+| `variable_string` | A `$name` reference to a variable published with `set`  |
+| `variable_list`   | A `$name` reference to a list built with `add`          |
+| *(none)*          | `argTypes: []` — no argument                           |
+
+### Variable arguments
+
+Passing a variable to an action needs no declaration and never has: `label $why` is accepted for an
+action declared `argTypes: [string]`, and the engine does not look at what the variable holds.
+
+Declaring `variable_string` or `variable_list` states that the argument **is** a variable reference. That
+is worth doing when it is one by design, because it turns an unchecked value into a checked contract and
+gives the editor something to offer:
+
+```yaml
+actions:
+  reason:
+    argTypes: [variable_string]
+  topics:
+    argTypes: [variable_list]
+```
+
+```
+then
+  set why = "amount-too-low"
+  add "billing" to topics
+  reason $why       # ok
+  topics $topics    # ok
+  reason $topics    # error — $topics is written with `add`, not `set`
+  reason "text"     # error — a literal where a reference is declared
+```
+
+Nothing about how a rule is written changes. What changes is what the engine reports and what the
+visual editor offers: an argument declared `variable_list` is edited with a dropdown of the list
+variables in scope rather than a free-text box, and the code editor completes only the variables of the
+declared kind.
+
+A `variable_list` argument arrives at the consuming application as a list. A variable that no rule which
+ran published arrives as `null`, the same as any other unset variable argument.
 
 ---
 
@@ -142,6 +179,7 @@ The engine validates actions at load time:
 - **Unknown actions** are rejected. If a rule uses `notify` but the action schema does not define `notify`, loading fails with a clear error.
 - **Wrong argument type** is rejected. If `score` expects an `integer` but a rule says `score "high"`, that is a validation error.
 - **Wrong number of arguments** is rejected. An action declared with one `argTypes` entry must be given exactly one argument; an action declared `argTypes: []` must be given none.
+- **A declared variable argument is checked both ways.** A literal where `variable_string` or `variable_list` is declared is rejected, and so is a variable written with the other clause — `add` where `variable_string` was declared, or `set` where `variable_list` was.
 
 This means mistakes are caught before any rule runs — not silently at runtime.
 

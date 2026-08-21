@@ -103,49 +103,66 @@ fun RuleBuilderView(
             )
         }
 
-        // The ELSE card appears only once the rule has a false branch. Until then the author gets a
-        // single button, so a rule that needs no `else` never has an empty block to look past.
-        if (editorState.hasElseBranch) {
-            BuilderCard {
-                BranchSection(
-                    editorState = editorState,
-                    branch = RuleBranch.ELSE,
-                    catalogActions = catalogActions,
-                    catalogFields = catalogFields,
-                    onDslChange = onDslChange,
-                )
-            }
-        } else {
-            AddElseBranchButton(
-                editorState = editorState,
-                catalogActions = catalogActions,
-                onDslChange = onDslChange,
-            )
-        }
+        // An optional branch's card appears only once the rule has that branch. Until then the author
+        // gets a single button, so a rule that needs neither never has an empty block to look past.
+        // Order matters: the DSL requires `else` before `not_exists`, and the cards read in the same
+        // order as the text they generate.
+        OptionalBranch(
+            editorState = editorState,
+            branch = RuleBranch.ELSE,
+            addLabel = "+ Else branch",
+            catalogActions = catalogActions,
+            catalogFields = catalogFields,
+            onDslChange = onDslChange,
+        )
+        OptionalBranch(
+            editorState = editorState,
+            branch = RuleBranch.NOT_EXISTS,
+            addLabel = "+ Not-exists branch",
+            catalogActions = catalogActions,
+            catalogFields = catalogFields,
+            onDslChange = onDslChange,
+        )
     }
 }
 
 /**
- * Creates the ELSE block by adding its first action.
+ * One optional branch: its card when it exists, otherwise the button that creates it.
  *
- * There is no separate "has an else block" flag: the block exists exactly while it holds something,
- * which is also the only state the DSL can express — an empty `else` does not parse. Removing the last
- * else row therefore drops the branch, and this button comes back.
+ * There is no separate "has this block" flag: a block exists exactly while it holds something, which is
+ * also the only state the DSL can express — an empty `else` or `not_exists` does not parse. Removing the
+ * last row of a branch therefore drops it, and the button comes back.
  */
 @Composable
-private fun AddElseBranchButton(
+private fun OptionalBranch(
     editorState: BuilderEditorState,
+    branch: RuleBranch,
+    addLabel: String,
     catalogActions: List<CatalogActionInfo>,
+    catalogFields: List<CatalogFieldInfo>,
     onDslChange: (String) -> Unit,
 ) {
+    if (editorState.hasBranch(branch = branch)) {
+        BuilderCard {
+            BranchSection(
+                editorState = editorState,
+                branch = branch,
+                catalogActions = catalogActions,
+                catalogFields = catalogFields,
+                onDslChange = onDslChange,
+            )
+        }
+        return
+    }
+
     AddButton(
-        label = "+ Else branch",
+        label = addLabel,
         onClick = {
             val defaultAction = catalogActions.firstOrNull()
             editorState.addAction(
                 defaultName = defaultAction?.name ?: "",
                 defaultArgCount = if (defaultAction?.argType == "none") 0 else 1,
-                branch = RuleBranch.ELSE,
+                branch = branch,
             )
             emitDslChange(editorState = editorState, onDslChange = onDslChange)
         },

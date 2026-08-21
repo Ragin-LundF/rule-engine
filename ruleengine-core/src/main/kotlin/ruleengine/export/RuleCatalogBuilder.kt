@@ -231,8 +231,11 @@ object RuleCatalogBuilder {
             publishes = rule.assignments.map { assignment -> assignment.name },
             elseOutcomes = rule.elseActions.map { action -> outcome(action = action) },
             elsePublishes = rule.elseAssignments.map { assignment -> assignment.name },
+            notExistsOutcomes = rule.notExistsActions.map { action -> outcome(action = action) },
+            notExistsPublishes = rule.notExistsAssignments.map { assignment -> assignment.name },
             stopsOnThen = rule.stopOnThen,
             stopsOnElse = rule.stopOnElse,
+            stopsOnNotExists = rule.stopOnNotExists,
         )
     }
 

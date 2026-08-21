@@ -259,7 +259,8 @@ class JvmRuleSimulationService : RuleSimulationService {
                 notEvaluated = stoppedAt >= 0 && index > stoppedAt,
                 ruleId = id,
                 // A rule in `matches` produced output, which is not the same as its condition having
-                // held: an `else` branch produces output precisely when it did not.
+                // held: an `else` branch produces output precisely when it did not, and a `not_exists`
+                // branch when it could not be decided at all.
                 matched = match?.branch == RuleBranch.THEN,
                 branch = match?.branch,
                 actions = match?.actions?.map { action -> formatAction(action = action) }.orEmpty(),
@@ -306,6 +307,8 @@ class JvmRuleSimulationService : RuleSimulationService {
             label = buildLabel(node = node),
             result = node.result,
             actual = node.actual?.toString(),
+            verdict = node.verdict,
+            branch = node.branch,
             children = node.children.map { child -> toTraceNode(node = child) },
         )
     }
@@ -331,7 +334,14 @@ class JvmRuleSimulationService : RuleSimulationService {
      */
     private fun conditionRows(node: TraceNode): List<TraceRow> {
         if (node.type == NodeType.CONDITION) {
-            return listOf(TraceRow(label = node.label, result = node.result, actual = node.actual))
+            return listOf(
+                TraceRow(
+                    label = node.label,
+                    result = node.result,
+                    verdict = node.verdict,
+                    actual = node.actual,
+                )
+            )
         }
         return node.children.flatMap { child -> conditionRows(node = child) }
     }

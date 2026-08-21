@@ -160,6 +160,12 @@ fail with `reads unknown variable '$orderTotal'`.
 Variables are scoped to a single entry and a single evaluation. Two entries never see each other's
 variables, and nothing carries over from one input record to the next.
 
+The visual editor follows the same list. With a manifest open it validates the file you are editing
+against the variables every file **listed before it** publishes, so a final rule file whose whole job is
+to read what the earlier files accumulated validates in the editor exactly as it does at load time. A
+file's own forward reference is still reported: a `set` in a file listed *after* the open one is not in
+scope there either.
+
 A `stop` makes the order load-bearing in a second way: the rules listed after the rule that stops are not
 evaluated at all. Move a guard rule down and it silently stops guarding the rules that were above it.
 Comment the intent, the same way as for a variable:
@@ -254,6 +260,18 @@ When the engine loads a manifest, it performs the following checks:
 - Every `$variable` a rule reads is assigned by a `set` clause in an earlier rule of the same entry.
 
 If any check fails, the engine reports detailed errors and does not start.
+
+You can run the same checks without starting anything, with `ValidatorCli` in manifest mode:
+
+```bash
+java -cp "<runtime classpath>" ruleengine.cli.ValidatorCli \
+  --manifest rules/manifest.yaml [--entry <id>] [--format json]
+```
+
+It validates the entry file by file in manifest order, so each diagnostic names the rule file it came
+from and every variable resolves exactly as it will at load time. Prefer it over `--schema` + `--rules`
+for anything that has a manifest: the directory mode cannot know the file order, and checks action names
+only when you also pass `--actions`.
 
 ---
 

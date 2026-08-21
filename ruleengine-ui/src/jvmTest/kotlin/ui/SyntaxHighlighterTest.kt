@@ -101,6 +101,24 @@ class SyntaxHighlighterTest {
         )
     }
 
+    /**
+     * `not_exists` starts with `not`, which is a logic word — so this checks it is read as one token and
+     * coloured as the structure keyword it is, not as a negation followed by an identifier.
+     */
+    @Test
+    fun `not_exists is coloured as structure, not as the logic word not`() {
+        val result = annotate(
+            text = "rule \"r\" {\n  when\n    purpose contains \"rent\"\n" +
+                    "  then\n    label \"x\"\n  not_exists\n    label \"y\"\n}",
+        )
+
+        assertEquals(
+            expected = colorOf(annotated = result, token = "then"),
+            actual = colorOf(annotated = result, token = "not_exists"),
+            message = "not_exists is structure, like then",
+        )
+    }
+
     @Test
     fun `named operators and logic words are distinguished from plain identifiers`() {
         val result = annotate(

@@ -1,5 +1,6 @@
 package ruleengine.evaluator
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.core.domain.dto.RuleMatch
@@ -53,13 +54,13 @@ class RuleEngine(
         val matchedRuleIds = mutableListOf<String>()
         var stoppedBy: String? = null
         for (rule in compiledRules) {
-            val matched = evaluateRule(rule = rule, prepared = prepared, collector = collector, matches = matches)
-            if (matched) {
+            val branch = evaluateRule(rule = rule, prepared = prepared, collector = collector, matches = matches)
+            if (branch == RuleBranch.THEN) {
                 matchedRuleIds += rule.id
             }
             // Checked after the rule's own output has been collected: `stop` halts what comes after it,
             // not the branch it sits in.
-            if (if (matched) rule.stopOnThen else rule.stopOnElse) {
+            if (stopsAfter(rule = rule, branch = branch)) {
                 stoppedBy = rule.id
                 break
             }
@@ -77,23 +78,24 @@ class RuleEngine(
     /**
      * Evaluates one rule and records whatever the selected branch produced.
      *
-     * The verdict picks the branch, not whether there is one: a false condition resolves the `else`
-     * block, which is the [RuleBranch.ELSE] counterpart of the `then` block and is empty for a rule
-     * that declares none. Returns the condition's verdict, which is what the caller reports as a
-     * match — an `else` branch producing output does not make the condition true.
+     * The verdict picks the branch, not whether there is one: a block the rule does not declare is
+     * simply empty and produces nothing. Returns the branch, which is what the caller reports as a
+     * match — only [RuleBranch.THEN] means the condition held, so neither an `else` nor a `not_exists`
+     * block producing output makes the rule a match.
      */
     private fun evaluateRule(
         rule: CompiledRule,
         prepared: PreparedRuleContext,
         collector: TraceCollector,
         matches: MutableList<RuleMatch>
-    ): Boolean {
+    ): RuleBranch {
         collector.enter(meta = NodeMeta(type = NodeType.RULE, ruleId = rule.id))
-        val matched = rule.expression.evaluate(context = prepared, trace = collector)
-        collector.exit(result = matched)
+        val verdict = rule.expression.evaluate(context = prepared, trace = collector)
+        val branch = branchFor(rule = rule, verdict = verdict)
+        collector.exit(verdict = verdict, branch = branch)
 
-        val actions = if (matched) rule.actions else rule.elseActions
-        val assignments = if (matched) rule.assignments else rule.elseAssignments
+        val actions = actionsOf(rule = rule, branch = branch)
+        val assignments = assignmentsOf(rule = rule, branch = branch)
         if (actions.isNotEmpty() || assignments.isNotEmpty()) {
             matches += RuleMatch(
                 ruleId = rule.id,
@@ -101,10 +103,49 @@ class RuleEngine(
                 // read a variable this rule just published.
                 assignments = applyAssignments(assignments = assignments, prepared = prepared),
                 actions = actions.map { action -> action.resolve(context = prepared) },
-                branch = if (matched) RuleBranch.THEN else RuleBranch.ELSE
+                branch = branch
             )
         }
-        return matched
+        return branch
+    }
+
+    /**
+     * The block [verdict] selects.
+     *
+     * [ConditionVerdict.UNKNOWN] reaches `not_exists` only when the rule declares it. Otherwise it
+     * collapses to false and the rule takes `else`, which is what every rule did before the branch
+     * existed and is why adding the branch to the engine changed no existing rule set.
+     */
+    private fun branchFor(rule: CompiledRule, verdict: ConditionVerdict): RuleBranch {
+        return when (verdict) {
+            ConditionVerdict.TRUE -> RuleBranch.THEN
+            ConditionVerdict.FALSE -> RuleBranch.ELSE
+            ConditionVerdict.UNKNOWN -> if (rule.hasNotExistsBranch) RuleBranch.NOT_EXISTS else RuleBranch.ELSE
+        }
+    }
+
+    private fun actionsOf(rule: CompiledRule, branch: RuleBranch): List<CompiledAction> {
+        return when (branch) {
+            RuleBranch.THEN -> rule.actions
+            RuleBranch.ELSE -> rule.elseActions
+            RuleBranch.NOT_EXISTS -> rule.notExistsActions
+        }
+    }
+
+    private fun assignmentsOf(rule: CompiledRule, branch: RuleBranch): List<CompiledAssignment> {
+        return when (branch) {
+            RuleBranch.THEN -> rule.assignments
+            RuleBranch.ELSE -> rule.elseAssignments
+            RuleBranch.NOT_EXISTS -> rule.notExistsAssignments
+        }
+    }
+
+    private fun stopsAfter(rule: CompiledRule, branch: RuleBranch): Boolean {
+        return when (branch) {
+            RuleBranch.THEN -> rule.stopOnThen
+            RuleBranch.ELSE -> rule.stopOnElse
+            RuleBranch.NOT_EXISTS -> rule.stopOnNotExists
+        }
     }
 
     private fun applyAssignments(

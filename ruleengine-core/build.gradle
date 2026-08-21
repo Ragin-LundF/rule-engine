@@ -15,3 +15,42 @@ dependencies {
     testImplementation libs.kotlin.test
 }
 
+// The two CLI entry points, runnable from this repository.
+//
+// There is deliberately no launcher script and no executable jar: they are ordinary `main` classes on
+// this module's runtime classpath, which is how a consuming project invokes them too (see the CLI
+// section of README.md). These tasks are that same invocation, with the classpath Gradle already knows —
+// `./gradlew run -PmainClass=...` never worked, because the only module applying the `application`
+// plugin is ruleengine-ui, so it started the desktop app and ignored the property.
+//
+// Pass arguments with --args, which JavaExec accepts on the command line:
+//   ./gradlew :ruleengine-core:validateRules --args="--manifest rules/manifest.yaml"
+def cliTasks = [
+        validateRules: [
+                "ruleengine.cli.ValidatorCli",
+                "Validates rules. --manifest <file> [--entry <id>], or --schema <file> --rules <dir>.",
+        ],
+        evaluateRules: [
+                "ruleengine.cli.EvaluateCli",
+                "Evaluates one input record against a rule set and prints the matches.",
+        ],
+]
+
+cliTasks.each { taskName, spec ->
+    tasks.register(taskName, JavaExec) {
+        group = "rule engine"
+        description = spec[1]
+        classpath = sourceSets.main.runtimeClasspath
+        mainClass = spec[0]
+        // The repository root, not this module's directory, which is what JavaExec would default to.
+        // Every path in --args is one the caller typed at the prompt, so it has to resolve from where
+        // they were standing — otherwise `--manifest rules/manifest.yaml` silently means
+        // `ruleengine-core/rules/manifest.yaml`.
+        workingDir = rootDir
+        // The CLIs report every failure as an exit code, which is the contract their tests assert. Left
+        // to Gradle they would also surface as a build failure, so a rule set that does not validate
+        // would print its diagnostics and then bury them under a stack trace.
+        ignoreExitValue = true
+    }
+}
+

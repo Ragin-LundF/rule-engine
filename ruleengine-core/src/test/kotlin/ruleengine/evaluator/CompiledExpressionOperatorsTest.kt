@@ -1,5 +1,6 @@
 package ruleengine.evaluator
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.OperatorId
 import ruleengine.core.domain.dto.field.FieldDefinition
@@ -16,8 +17,7 @@ import ruleengine.evaluator.compiled.text.TextStartsWithExpression
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
 import kotlin.test.Test
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertEquals
 
 class CompiledExpressionOperatorsTest {
     private val schema = FieldSchema(
@@ -53,9 +53,9 @@ class CompiledExpressionOperatorsTest {
         val starts = TextStartsWithExpression(field = FieldId(value = "purpose"), expectedNormalized = "hello")
         val ends = TextEndsWithExpression(field = FieldId(value = "purpose"), expectedNormalized = "world")
 
-        assertTrue(actual = contains.evaluate(context = prepared))
-        assertTrue(actual = starts.evaluate(context = prepared))
-        assertTrue(actual = ends.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = contains.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = starts.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = ends.evaluate(context = prepared))
     }
 
     @Test
@@ -79,9 +79,9 @@ class CompiledExpressionOperatorsTest {
             op = IntegerComparisonOperator.LT
         )
 
-        assertTrue(actual = gt.evaluate(context = prepared))
-        assertTrue(actual = eq.evaluate(context = prepared))
-        assertTrue(actual = lt.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = gt.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = eq.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = lt.evaluate(context = prepared))
     }
 
     @Test
@@ -95,10 +95,9 @@ class CompiledExpressionOperatorsTest {
             expectedNormalized = setOf("risk", "recurring")
         )
 
-        assertTrue(actual = any.evaluate(context = prepared))
-        assertTrue(actual = all.evaluate(context = prepared))
-        assertFalse(
-            actual = StringSetContainsAllExpression(
+        assertEquals(expected = ConditionVerdict.TRUE, actual = any.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = all.evaluate(context = prepared))
+        assertEquals(expected = ConditionVerdict.FALSE, actual = StringSetContainsAllExpression(
                 field = FieldId(value = "labels"),
                 expectedNormalized = setOf("risk", "other")
             ).evaluate(context = prepared)

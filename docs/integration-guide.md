@@ -409,6 +409,12 @@ The returned `ActionSchema` contains:
 `argTypes` holds one entry for an action that takes a value, and is **empty** for an action that takes
 none (declared as `argTypes: []` and written in a rule as the bare action name).
 
+`ActionArgType` is `STRING`, `INTEGER`, `DECIMAL`, `VARIABLE_STRING` or `VARIABLE_LIST`. The last two
+declare that the argument is a `$name` reference rather than a literal — see
+[actions.md](actions.md#variable-arguments). They affect load-time validation and what the editor offers;
+the value a `VARIABLE_LIST` argument delivers arrives in `RuleAction.arguments` as a `List<Any?>`, and as
+`null` when no rule that ran published the variable.
+
 ### 4.4 Parsing Rules
 
 Parse one or more rule files into ASTs:
@@ -469,6 +475,31 @@ The `ValidationResult` contains:
 - `diagnostics: List<ValidationDiagnostic>` — each with `severity`, `message`, and optional `suggestion`
 
 Severity levels: `ERROR` (blocks loading), `WARNING` (informational).
+
+`Validator.validate` answers "is this list of rules valid", which is what the engine needs — it flattens
+an entry's files before compiling. A tool that has to *show* the problem needs the file as well, since a
+line number without one cannot be pointed at. `EntryValidator` is that variant:
+
+```kotlin
+import ruleengine.compiler.EntryValidator
+import ruleengine.compiler.RuleFileAsts
+
+val result = EntryValidator.validate(
+    files = listOf(
+        RuleFileAsts(path = "rules/totals.rule", asts = totalsAsts),
+        RuleFileAsts(path = "rules/tiers.rule", asts = tiersAsts),
+    ),
+    schema = schema,
+    actions = actions,
+)
+result.diagnostics.forEach { diagnostic -> println("${diagnostic.file}:${diagnostic.line} ${diagnostic.message}") }
+```
+
+`files` must be in manifest order. Each file is validated with the variables the files before it publish,
+so a `$name` read in the last one resolves against the earlier ones; every diagnostic carries
+`ValidationDiagnostic.file`, with `line` and `column` relative to that file; the schema-level checks run
+once for the entry; and a rule id repeated across two files is reported naming both. `ValidatorCli
+--manifest` is this same path from the command line.
 
 The validator checks:
 - All field names referenced in rules exist in the schema
@@ -608,9 +639,13 @@ import ruleengine.core.domain.dto.RuleAction
 
 val result: EvaluationResult = engine.evaluate(prepared = prepared)
 
-// result.matches is a List<RuleMatch> — every rule that produced output, either branch
+// result.matches is a List<RuleMatch> — every rule that produced output, whichever branch ran
 for (match: RuleMatch in result.matches) {
-    val branch = if (match.branch == RuleBranch.THEN) "matched" else "did not match (else)"
+    val branch = when (match.branch) {
+        RuleBranch.THEN -> "matched"
+        RuleBranch.ELSE -> "did not match (else)"
+        RuleBranch.NOT_EXISTS -> "could not be decided (not_exists)"
+    }
     println("Rule ${match.ruleId}: $branch")
 
     for (action: RuleAction in match.actions) {
@@ -621,13 +656,13 @@ for (match: RuleMatch in result.matches) {
 
 `EvaluationResult`:
 - `matches: List<RuleMatch>` — every rule that produced output, in the order they were declared. A rule appears here when
-  its condition held, **or** when the condition was false and the rule declares an `else` branch;
-  `RuleMatch.branch` says which. For the rules whose condition actually held, filter on
-  `RuleBranch.THEN`:
+  its condition held, when the condition was false and the rule declares an `else` branch, or when the
+  condition could not be decided and the rule declares a `not_exists` branch; `RuleMatch.branch` says
+  which. For the rules whose condition actually held, filter on `RuleBranch.THEN`:
   ```kotlin
   val conditionHeld = result.matches.filter { match -> match.branch == RuleBranch.THEN }
   ```
-  A rule without an `else` block can only ever report `RuleBranch.THEN`, so this list means exactly what
+  A rule with only a `then` block can only ever report `RuleBranch.THEN`, so this list means exactly what
   it did before for a rule set that uses no branches.
 - `trace: Any?` — a `DecisionTree` if tracing was enabled (see section 5), otherwise `null`
 - `variables: Map<String, Any?>` — the final value of every variable a matching rule published with a
@@ -638,8 +673,11 @@ for (match: RuleMatch in result.matches) {
 - `actions: List<RuleAction>` — the actions the branch that ran declared
 - `assignments: Map<String, Any?>` — the variables **this** rule published, in assignment order
 - `branch: RuleBranch` — `THEN` when the rule's condition held, `ELSE` when it did not and the rule
-  declares an `else` block (see [rules.md](rules.md)). Defaults to `THEN`, which is the only value a
-  rule without an `else` block can report — so existing code that ignores this field keeps its meaning.
+  declares an `else` block, `NOT_EXISTS` when the record carried no data to decide it and the rule
+  declares a `not_exists` block (see [rules.md](rules.md#missing-data--the-not_exists-branch)).
+  Defaults to `THEN`, which is the only value a rule with just a `then` block can report — so existing
+  code that ignores this field keeps its meaning. A rule that declares no `not_exists` block still
+  reports `ELSE` for missing data, exactly as before.
   **A match is not by itself proof that the condition was true.**
 
 `RuleAction`:
@@ -787,9 +825,10 @@ Example JSON output:
 
 `DecisionTree`:
 - `root: DecisionNode?` — the root node of the evaluation tree
-- `matchedRules: List<String>` — IDs of the rules whose condition held. A rule whose `else` branch fired
-  is **not** listed here: the trace answers "did the condition hold", which the `result` flag on that
-  rule's own node also reports. Read `EvaluationResult.matches` for what the run produced.
+- `matchedRules: List<String>` — IDs of the rules whose condition held. A rule whose `else` or
+  `not_exists` branch fired is **not** listed here: the trace answers "did the condition hold", which the
+  `result` flag on that rule's own node also reports. Read `EvaluationResult.matches` for what the run
+  produced.
 
 `DecisionNode`:
 - `id` — unique node identifier within the trace
@@ -801,6 +840,10 @@ Example JSON output:
 - `actual: Any?` — the value actually found. Present on aggregate, arithmetic and field-to-field
   conditions; omitted from the JSON on nodes that do not report one
 - `result: Boolean` — whether this node evaluated to `true`
+- `verdict: ConditionVerdict` — what the node answered: `TRUE`, `FALSE`, or `UNKNOWN` when the record
+  carried no data to decide it. `result` is `verdict == TRUE`, so it keeps its old meaning; read
+  `verdict` to tell "did not hold" from "could not be decided"
+- `branch: RuleBranch?` — on a `RULE` node, the block the verdict selected. Null on every other node
 - `evaluationTimeMs: Long?` — how long this node took to evaluate
 - `ruleId: String?` — present on `RULE` nodes
 - `children: List<DecisionNode>` — child nodes

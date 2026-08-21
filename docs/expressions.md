@@ -152,6 +152,7 @@ These transform values rather than reducing a collection.
 |---|---|---|
 | `abs(value)` | Magnitude of a number; zero and positives unchanged | missing |
 | `daysBetween(from, to)` | Signed whole calendar days from `from` to `to` | missing |
+| `isAvailable(value)` | Whether the record carries the value at all | `false` — never missing |
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable, and preserves integer
 and decimal precision:
@@ -170,6 +171,21 @@ comparisons.
 daysBetween(customer.registeredAt, application.submittedAt) >= 90
 daysBetween(registeredAt, "2024-04-01") / 30 >= 3
 ```
+
+`isAvailable` is the one function that consumes a missing value instead of passing it on. Everything
+else here answers "missing" for a missing input, which is what leaves a comparison over it undecided;
+`isAvailable` answers a plain boolean, so it can guard a condition that would otherwise be undecided:
+
+```
+isAvailable(reports.balances)
+not isAvailable($turnover)
+isAvailable(amount) and amount >= 1000
+```
+
+It accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable. An
+**empty** collection is not available: an absent collection and an empty one reduce to the same nothing,
+so use `count(path) == 0` to test for emptiness. Missing data and the `not_exists` branch are covered in
+[rules.md](rules.md#missing-data--the-not_exists-branch).
 
 ## 5b. Slicing — `take` and `takeLast`
 
@@ -400,7 +416,9 @@ rule "majority-risk" {
 | `any` | — | **`false`** — no element succeeds |
 | `sumByKey` | no keys | `count(...) == 0`; `min`/`max` are missing |
 
-A missing value on either side of a comparison always produces `false`.
+A missing value on either side of a comparison leaves the comparison **undecided**. For a rule with no
+`not_exists` branch that reads as `false`, exactly as it always did; a rule that declares the branch
+takes it instead. See [Missing data](rules.md#missing-data--the-not_exists-branch).
 
 `every` and `any` are the deliberate exceptions: they answer about the elements, and an empty
 collection has none to fail or to satisfy the condition.

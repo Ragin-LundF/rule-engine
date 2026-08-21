@@ -78,7 +78,10 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 - **Nested data** — `collection` and `object` field types describe lists of records and nested records to any depth
 - **Action schema** — defines what outcomes a rule can produce
 - **Aggregate functions** — `sum`, `count`, `avg`, `median`, `max`, `min`, `subtract` over nested lists
-- **Value functions** — `abs`, `daysBetween` for magnitudes and calendar-day arithmetic
+- **Value functions** — `abs`, `daysBetween` for magnitudes and calendar-day arithmetic, `isAvailable`
+  to ask whether a record carries a value at all
+- **Missing data as an outcome** — a rule may declare a `not_exists` branch for the case where the
+  record carries no data to decide its condition, instead of silently reading it as "false"
 - **Collection tools** — `take` / `takeLast` slicing, `in` membership filters, `every` / `any`
   predicates, and `sumByKey` joins across collections
 - **Per-member evaluation** — a manifest entry may declare `scope: <collection>` to run its rules
@@ -119,20 +122,48 @@ Every rule example in it is executed by an automated test, so the spec cannot dr
 
 ## Quick Start (CLI)
 
-Validate rules:
+`ruleengine-core` ships two command-line entry points. They are ordinary `main` classes on the library's
+own classpath — there is no separate launcher — so run them from a project that has the dependency
+([Maven Central](https://mvnrepository.com/artifact/io.github.ragin-lundf/ruleengine-core)):
+
+```kotlin
+// build.gradle.kts
+dependencies { implementation("io.github.ragin-lundf:ruleengine-core:1.9.0") }
+
+tasks.register<JavaExec>("validateRules") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "ruleengine.cli.ValidatorCli"
+    args("--manifest", "rules/manifest.yaml")
+}
+```
+
+Validate a whole manifest entry — schema, actions, rule files and the variables that cross them:
 
 ```bash
-./gradlew run -PmainClass=ruleengine.cli.ValidatorCli \
-  --args="--schema src/test/resources/sample-schema.yaml --rules src/test/resources/rules"
+./gradlew validateRules
+# or, with a classpath you already have:
+java -cp "<runtime classpath>" ruleengine.cli.ValidatorCli --manifest rules/manifest.yaml
+```
+
+In a checkout of this repository the same two tasks are already defined:
+
+```bash
+./gradlew :ruleengine-core:validateRules --args="--manifest rules/manifest.yaml"
+./gradlew :ruleengine-core:evaluateRules --args="--manifest rules/manifest.yaml --input-file record.json --trace"
 ```
 
 Evaluate an input file and print a trace:
 
 ```bash
-./gradlew run -PmainClass=ruleengine.cli.EvaluateCli \
-  --args="--schema src/test/resources/sample-schema.yaml --rules src/test/resources/rules \
-          --input-file src/test/resources/sample-input.json --trace --format pretty-json"
+java -cp "<runtime classpath>" ruleengine.cli.EvaluateCli \
+  --manifest rules/manifest.yaml --input-file record.json --trace --format pretty-json
 ```
+
+Both also accept `--schema <file> --rules <dir>` instead of `--manifest`, for a rule set that has no
+manifest. Exit codes: `0` valid, `1` invalid, `2` usage, `3` anything thrown.
+
+> The runtime classpath needs `kotlin-reflect` as well as Jackson; both come transitively with the
+> dependency, so a `JavaExec` task or `mvn exec:java` has them already.
 
 ---
 

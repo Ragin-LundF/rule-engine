@@ -21,6 +21,7 @@ object DiagnosticMapper {
      * @param suggestion An optional suggestion for resolving the diagnostic, or null if not available.
      * @param line The 1-based line number where the diagnostic occurred, or null if not applicable.
      * @param column The 1-based column number where the diagnostic occurred, or null if not applicable.
+     * @param file The rule file the diagnostic is about, when that is not the file on screen.
      * @return A [UiDiagnosticWithFix] object encapsulating the diagnostic message, quick fix, and optional hint.
      */
     fun map(
@@ -29,6 +30,7 @@ object DiagnosticMapper {
         suggestion: String?,
         line: Int?,
         column: Int?,
+        file: String? = null,
     ): UiDiagnosticWithFix {
         val quickFix = buildQuickFix(message = message, suggestion = suggestion)
         val hint = buildHint(message = message, suggestion = suggestion)
@@ -39,6 +41,7 @@ object DiagnosticMapper {
             line = line,
             column = column,
             quickFix = quickFix,
+            file = file,
         )
     }
 

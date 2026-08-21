@@ -1,6 +1,8 @@
 package ruleengine.builder
 
+import ruleengine.builder.RuleEngineBuilder.loadRuleAsts
 import ruleengine.compiler.Compiler
+import ruleengine.compiler.RuleFileAsts
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldId
@@ -141,6 +143,39 @@ object RuleEngineBuilder {
             entryId = entryId,
             normalizerRegistry = normalizerRegistry,
         ).getValue(entryId)
+    }
+
+    /**
+     * Loads and parses one entry's inputs without validating or compiling them.
+     *
+     * The same load phase every other entry point runs, stopped one step earlier and keeping the rules
+     * grouped by file. `ValidatorCli` needs exactly that: the builder reports a validation failure by
+     * throwing, which is right for something that returns a ready engine and useless to something whose
+     * whole output is the list of diagnostics.
+     *
+     * @param location a filesystem path or a `classpath:` resource name, as [ManifestSource] reads it
+     * @param entryId the entry to load, or null for the manifest's first
+     * @throws ruleengine.core.errors.RuleEngineBuildException if the manifest, the entry or any file it
+     *   references cannot be read or parsed
+     */
+    internal fun loadEntryInputs(location: String, entryId: String? = null): EntryInputs {
+        val source = ManifestSource.of(location = location)
+        val manifest = readManifest(location = source.location, entryId = entryId) { source.readManifest() }
+        val entry = selectEntries(
+            manifestPath = source.location,
+            entries = manifest.entries,
+            entryId = entryId,
+        ).first()
+
+        val schema = loadSchema(manifestPath = source.location, resolver = source.resolver, entry = entry)
+        return EntryInputs(
+            entryId = entry.id,
+            // A scoped entry's rules name the member's fields, so that is what they must be validated
+            // against — the same substitution `buildEntry` makes before validating.
+            schema = scopedSchema(manifestPath = source.location, entry = entry, schema = schema),
+            actions = loadActions(manifestPath = source.location, resolver = source.resolver, entry = entry),
+            files = loadRuleFiles(manifestPath = source.location, resolver = source.resolver, entry = entry),
+        )
     }
 
     /**
@@ -374,6 +409,41 @@ object RuleEngineBuilder {
                 label = "rules",
             )
             parseRuleFile(manifestPath = manifestPath, entry = entry, relativePath = relativePath, file = file)
+        }
+    }
+
+    /**
+     * The same files [loadRuleAsts] reads, kept grouped by the path the manifest lists them under.
+     *
+     * [loadRuleAsts] flattens them because the engine evaluates one ordered list. Anything that reports
+     * on an entry needs the grouping, because a line number without its file cannot be pointed at.
+     */
+    private fun loadRuleFiles(
+        manifestPath: Path,
+        resolver: ManifestFileResolver,
+        entry: ManifestEntry,
+    ): List<RuleFileAsts> {
+        if (entry.rules.isEmpty()) {
+            fail(manifestPath = manifestPath, entryId = entry.id, details = "entry declares no rule files")
+        }
+
+        return entry.rules.map { relativePath ->
+            val file = resolveExisting(
+                manifestPath = manifestPath,
+                resolver = resolver,
+                entry = entry,
+                relativePath = relativePath,
+                label = "rules",
+            )
+            RuleFileAsts(
+                path = relativePath,
+                asts = parseRuleFile(
+                    manifestPath = manifestPath,
+                    entry = entry,
+                    relativePath = relativePath,
+                    file = file,
+                ),
+            )
         }
     }
 

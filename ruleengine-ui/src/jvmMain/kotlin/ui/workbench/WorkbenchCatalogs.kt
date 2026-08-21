@@ -78,7 +78,7 @@ internal fun builderCatalogVariablesFrom(
     val variables = LinkedHashMap<String, CatalogFieldInfo>()
     for (file in files) {
         for (rule in file.rules) {
-            val assignments = rule.assignments + rule.elseAssignments
+            val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
             if (rule.id == uptoRuleId) {
                 assignments.filter { assignment -> assignment.kind == AssignmentKindAst.ADD }
                     .forEach { assignment -> variables.putVariable(assignment = assignment) }

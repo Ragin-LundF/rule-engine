@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled.value
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.dsl.ast.ComparisonOperatorAst
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
@@ -32,7 +33,7 @@ class ComparisonCompiledExpression(
     override val cost: EvaluationCost,
     private val label: String = ""
 ) : CompiledExpression {
-    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
+    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
         val leftValue = left.evaluate(context = context)
         val rightValue = right.evaluate(context = context)
 
@@ -47,9 +48,25 @@ class ComparisonCompiledExpression(
                 actual = plainValue(value = leftValue)
             )
         )
-        val result = compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
-        trace?.exit(result = result)
-        return result
+        val verdict = verdictFor(leftValue = leftValue, rightValue = rightValue)
+        trace?.exit(verdict = verdict)
+        return verdict
+    }
+
+    /**
+     * The comparison's answer, or [ConditionVerdict.UNKNOWN] when an operand is not there to compare.
+     *
+     * This is one of the two places an unknown is born. An absent field, an aggregate that reduced to
+     * nothing (`avg` over an empty collection) and a variable no rule has published all arrive here as
+     * [MissingExpressionValue], and none of them is a reason to answer "no".
+     */
+    private fun verdictFor(leftValue: ExpressionValue, rightValue: ExpressionValue): ConditionVerdict {
+        if (leftValue is MissingExpressionValue || rightValue is MissingExpressionValue) {
+            return ConditionVerdict.UNKNOWN
+        }
+        return ConditionVerdict.of(
+            value = compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
+        )
     }
 
     /**
@@ -74,9 +91,6 @@ class ComparisonCompiledExpression(
         operator: ComparisonOperatorAst,
         rightValue: ExpressionValue
     ): Boolean {
-        if (leftValue is MissingExpressionValue || rightValue is MissingExpressionValue) {
-            return false
-        }
         if (operator == ComparisonOperatorAst.CONTAINS) {
             return containsValue(leftValue = leftValue, rightValue = rightValue)
         }
@@ -135,8 +149,8 @@ class ComparisonCompiledExpression(
      * a scalar, so without this `invoices[customerId in priorityCustomerIds]` would stop matching as
      * soon as the document happened to carry a single priority customer.
      *
-     * A missing source is already false at the call site, which is what makes an empty membership
-     * source select nothing.
+     * A missing source never reaches here — [verdictFor] answers unknown for it — which is what makes
+     * an empty membership source select nothing without claiming the answer was decided.
      */
     private fun memberOf(element: ExpressionValue, source: ExpressionValue): Boolean {
         return when (source) {
@@ -179,7 +193,8 @@ class ComparisonCompiledExpression(
      * in the engine, so `purpose contains "rent"` and `$purposeCopy contains "rent"` agree — which is
      * what a reader assumes. Membership is the natural reading of the same word over a list.
      *
-     * A missing left operand is already `false` at the call site, which is what lets
+     * A missing left operand never reaches here: [verdictFor] answers unknown for it, and a rule that
+     * declares no `not_exists` branch reads that as false — which is what still lets
      * `not $topics contains "billing"` pass before anything has been added.
      */
     private fun containsValue(leftValue: ExpressionValue, rightValue: ExpressionValue): Boolean {

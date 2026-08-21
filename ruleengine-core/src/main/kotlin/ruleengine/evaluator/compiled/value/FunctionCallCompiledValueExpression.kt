@@ -3,6 +3,7 @@ package ruleengine.evaluator.compiled.value
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
+import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
@@ -41,11 +42,26 @@ class FunctionCallCompiledValueExpression(
                 first = argumentAt(index = 0, context = context),
                 second = argumentAt(index = 1, context = context)
             )
+
+            AggregateFunctionName.IS_AVAILABLE -> evaluateIsAvailable(
+                argValue = argumentAt(index = 0, context = context)
+            )
         }
     }
 
     private fun argumentAt(index: Int, context: PreparedRuleContext): ExpressionValue {
         return arguments.getOrNull(index = index)?.evaluate(context = context) ?: MissingExpressionValue
+    }
+
+    /**
+     * The one function that consumes a missing value instead of propagating it.
+     *
+     * Everything else here answers `MissingExpressionValue` when its input is missing, which is what
+     * makes a comparison over it undecidable. This answers `false` — a real boolean — which is exactly
+     * why it can guard a rule whose other conditions would otherwise be undecidable.
+     */
+    private fun evaluateIsAvailable(argValue: ExpressionValue): ExpressionValue {
+        return BooleanExpressionValue(value = argValue !is MissingExpressionValue)
     }
 
     /**

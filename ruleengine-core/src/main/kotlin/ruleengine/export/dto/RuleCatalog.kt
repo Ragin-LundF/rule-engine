@@ -38,7 +38,7 @@ data class RuleCatalog(
     fun rulesByOutcome(): Map<CatalogOutcome, List<CatalogRule>> {
         val grouped = linkedMapOf<CatalogOutcome, MutableList<CatalogRule>>()
         rules.forEach { rule ->
-            (rule.outcomes + rule.elseOutcomes).distinct().forEach { outcome ->
+            (rule.outcomes + rule.elseOutcomes + rule.notExistsOutcomes).distinct().forEach { outcome ->
                 grouped.getOrPut(key = outcome) { mutableListOf() }.add(element = rule)
             }
         }

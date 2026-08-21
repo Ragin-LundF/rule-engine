@@ -62,9 +62,10 @@ data class RuleResult(
             // reading a trace it does not have.
             notEvaluated -> RuleMatchStatus.NOT_EVALUATED
             matched -> RuleMatchStatus.MATCHED
-            // Checked before PARTIAL: a rule whose else branch fired has a definite answer, and
-            // "some conditions held" would report the near miss instead of the output it produced.
+            // Checked before PARTIAL: a rule whose else or not_exists branch fired has produced
+            // output, and "some conditions held" would report the near miss instead.
             branch == RuleBranch.ELSE -> RuleMatchStatus.ELSE_MATCHED
+            branch == RuleBranch.NOT_EXISTS -> RuleMatchStatus.NOT_EXISTS_MATCHED
             traceRows.any { row -> row.result } -> RuleMatchStatus.PARTIAL
             else -> RuleMatchStatus.NO_MATCH
         }

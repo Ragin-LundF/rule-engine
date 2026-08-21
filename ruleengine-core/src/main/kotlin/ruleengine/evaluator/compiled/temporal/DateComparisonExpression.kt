@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled.temporal
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
@@ -17,7 +18,7 @@ class DateComparisonExpression(
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.VERY_CHEAP
 
-    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
+    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
         trace?.enter(
             meta = NodeMeta(
                 type = NodeType.CONDITION,
@@ -29,8 +30,9 @@ class DateComparisonExpression(
 
         val value = context.get(field) as? PreparedTemporal<*>
         if (value == null) {
-            trace?.exit(result = false)
-            return false
+            // Absent from the record, or present in a shape this test cannot read: not decidable.
+            trace?.exit(verdict = ConditionVerdict.UNKNOWN)
+            return ConditionVerdict.UNKNOWN
         }
 
         val cmp = value.compareWith(other = expected)
@@ -42,7 +44,10 @@ class DateComparisonExpression(
             DateComparisonOperator.LTE -> cmp <= 0
         }
 
-        trace?.exit(result = result)
-        return result
+        val verdict = ConditionVerdict.of(value = result)
+
+        trace?.exit(verdict = verdict)
+
+        return verdict
     }
 }

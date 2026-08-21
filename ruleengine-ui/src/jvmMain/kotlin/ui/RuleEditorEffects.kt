@@ -7,6 +7,7 @@ import ui.dsl.analyzeDslContext
 import ui.editor.CodeEditing
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.RuleValidationRunner
+import ui.editor.rules.inheritedVariablesForOpenBuffer
 import ui.editor.rules.model.RuleValidationOutcome
 import ui.editor.rules.model.StatusKind
 import ui.util.Words
@@ -79,6 +80,7 @@ private fun DebouncedValidation(state: RuleEditorState) {
                 ruleText = state.ruleValue.value.text,
                 schema = schema,
                 actions = state.parsedActionSchema.value,
+                inheritedVariables = state.inheritedVariablesForOpenBuffer(),
             )
         ) {
             is RuleValidationOutcome.Completed -> {

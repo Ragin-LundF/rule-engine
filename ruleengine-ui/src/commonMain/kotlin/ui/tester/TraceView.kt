@@ -20,7 +20,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import ruleengine.core.domain.dto.ConditionVerdict
 import ui.AccentGreen
+import ui.AccentOrange
 import ui.AccentRed
 import ui.Bg
 import ui.TextMuted
@@ -57,9 +59,14 @@ fun TraceView(
             modifier = Modifier.padding(bottom = 4.dp),
         )
         rows.forEach { row ->
-            // A literal true/false read. Whether a false condition here is expected or a problem is
-            // said by the rule row above, which is green, yellow or red for the rule as a whole.
-            val dotColor = if (row.result) AccentGreen else AccentRed
+            // A literal true/false/undecided read. Whether a false condition here is expected or a
+            // problem is said by the rule row above, which is green, yellow or red for the rule as a
+            // whole. Orange is neither: the condition had no data to answer with.
+            val dotColor = when (row.verdict) {
+                ConditionVerdict.TRUE -> AccentGreen
+                ConditionVerdict.FALSE -> AccentRed
+                ConditionVerdict.UNKNOWN -> AccentOrange
+            }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier

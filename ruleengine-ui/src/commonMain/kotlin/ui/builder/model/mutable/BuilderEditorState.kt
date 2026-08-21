@@ -40,8 +40,13 @@ class BuilderEditorState private constructor(
     val elseActions: SnapshotStateList<MutableBuilderAction>,
     /** `set` rows of the `else` block. */
     val elseVariables: SnapshotStateList<MutableBuilderVariable>,
+    /** Actions of the `not_exists` block. Empty when the rule declares no missing-data branch. */
+    val notExistsActions: SnapshotStateList<MutableBuilderAction>,
+    /** `set` rows of the `not_exists` block. */
+    val notExistsVariables: SnapshotStateList<MutableBuilderVariable>,
     stopOnThen: Boolean,
     stopOnElse: Boolean,
+    stopOnNotExists: Boolean,
     val isLocked: Boolean,
     val lockReason: String,
     val lockKind: BuilderLockKind = BuilderLockKind.NONE,
@@ -61,34 +66,49 @@ class BuilderEditorState private constructor(
     /** Whether the ELSE branch ends the run. The [stopOnThen] counterpart for the false branch. */
     var stopOnElse by mutableStateOf(value = stopOnElse)
 
+    /** Whether the NOT_EXISTS branch ends the run. The [stopOnThen] counterpart for that branch. */
+    var stopOnNotExists by mutableStateOf(value = stopOnNotExists)
+
     private var nextConditionId = conditionNodes.size + 1
 
-    // One counter per kind across both branches: a row id has to be unique within the rule, because
-    // the views key on it and a duplicate would make a removal in one branch hit the other.
-    private var nextActionId = actions.size + elseActions.size + 1
-    private var nextVariableId = variables.size + elseVariables.size + 1
+    // One counter per kind across every branch: a row id has to be unique within the rule, because
+    // the views key on it and a duplicate would make a removal in one branch hit another.
+    private var nextActionId = actions.size + elseActions.size + notExistsActions.size + 1
+    private var nextVariableId = variables.size + elseVariables.size + notExistsVariables.size + 1
 
-    /** The action rows of [branch], so a caller can drive either branch through the same code. */
+    /** The action rows of [branch], so a caller can drive any branch through the same code. */
     fun actionsOf(branch: RuleBranch): SnapshotStateList<MutableBuilderAction> {
-        return if (branch == RuleBranch.THEN) actions else elseActions
+        return when (branch) {
+            RuleBranch.THEN -> actions
+            RuleBranch.ELSE -> elseActions
+            RuleBranch.NOT_EXISTS -> notExistsActions
+        }
     }
 
     /** The `set` and `add` rows of [branch]. */
     fun variablesOf(branch: RuleBranch): SnapshotStateList<MutableBuilderVariable> {
-        return if (branch == RuleBranch.THEN) variables else elseVariables
+        return when (branch) {
+            RuleBranch.THEN -> variables
+            RuleBranch.ELSE -> elseVariables
+            RuleBranch.NOT_EXISTS -> notExistsVariables
+        }
     }
 
     /** Whether [branch] ends the run. */
     fun stopOf(branch: RuleBranch): Boolean {
-        return if (branch == RuleBranch.THEN) stopOnThen else stopOnElse
+        return when (branch) {
+            RuleBranch.THEN -> stopOnThen
+            RuleBranch.ELSE -> stopOnElse
+            RuleBranch.NOT_EXISTS -> stopOnNotExists
+        }
     }
 
     /** Adds or removes the `stop` on [branch]. */
     fun setStop(branch: RuleBranch, stop: Boolean) {
-        if (branch == RuleBranch.THEN) {
-            stopOnThen = stop
-        } else {
-            stopOnElse = stop
+        when (branch) {
+            RuleBranch.THEN -> stopOnThen = stop
+            RuleBranch.ELSE -> stopOnElse = stop
+            RuleBranch.NOT_EXISTS -> stopOnNotExists = stop
         }
     }
 
@@ -101,6 +121,19 @@ class BuilderEditorState private constructor(
     val hasElseBranch: Boolean
         get() = elseActions.isNotEmpty() || elseVariables.isNotEmpty() || stopOnElse
 
+    /** True when the rule declares a `not_exists` block that produces something. */
+    val hasNotExistsBranch: Boolean
+        get() = notExistsActions.isNotEmpty() || notExistsVariables.isNotEmpty() || stopOnNotExists
+
+    /** True when [branch] is declared at all — the `then` block always is. */
+    fun hasBranch(branch: RuleBranch): Boolean {
+        return when (branch) {
+            RuleBranch.THEN -> true
+            RuleBranch.ELSE -> hasElseBranch
+            RuleBranch.NOT_EXISTS -> hasNotExistsBranch
+        }
+    }
+
     companion object {
         fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
             is BuilderRule.Supported -> BuilderEditorState(
@@ -111,8 +144,11 @@ class BuilderEditorState private constructor(
                 variables = rule.variables.toMutableVariables(),
                 elseActions = rule.elseActions.toMutableActions(),
                 elseVariables = rule.elseVariables.toMutableVariables(),
+                notExistsActions = rule.notExistsActions.toMutableActions(),
+                notExistsVariables = rule.notExistsVariables.toMutableVariables(),
                 stopOnThen = rule.stopOnThen,
                 stopOnElse = rule.stopOnElse,
+                stopOnNotExists = rule.stopOnNotExists,
                 isLocked = false,
                 lockReason = "",
                 lockKind = BuilderLockKind.NONE,
@@ -126,8 +162,11 @@ class BuilderEditorState private constructor(
                 variables = mutableStateListOf(),
                 elseActions = mutableStateListOf(),
                 elseVariables = mutableStateListOf(),
+                notExistsActions = mutableStateListOf(),
+                notExistsVariables = mutableStateListOf(),
                 stopOnThen = false,
                 stopOnElse = false,
+                stopOnNotExists = false,
                 isLocked = true,
                 lockReason = rule.reason,
                 lockKind = BuilderLockKind.UNSUPPORTED_SYNTAX,
@@ -141,8 +180,11 @@ class BuilderEditorState private constructor(
                 variables = mutableStateListOf(),
                 elseActions = mutableStateListOf(),
                 elseVariables = mutableStateListOf(),
+                notExistsActions = mutableStateListOf(),
+                notExistsVariables = mutableStateListOf(),
                 stopOnThen = false,
                 stopOnElse = false,
+                stopOnNotExists = false,
                 isLocked = true,
                 lockReason = "No rule selected.",
                 lockKind = BuilderLockKind.NO_RULE_SELECTED,
@@ -427,6 +469,7 @@ class BuilderEditorState private constructor(
     fun removeAction(id: String) {
         actions.removeAll { it.id == id }
         elseActions.removeAll { it.id == id }
+        notExistsActions.removeAll { it.id == id }
     }
 
     /**
@@ -455,5 +498,6 @@ class BuilderEditorState private constructor(
     fun removeVariable(id: String) {
         variables.removeAll { it.id == id }
         elseVariables.removeAll { it.id == id }
+        notExistsVariables.removeAll { it.id == id }
     }
 }

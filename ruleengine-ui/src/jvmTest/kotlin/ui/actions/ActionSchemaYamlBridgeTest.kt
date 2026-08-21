@@ -45,6 +45,34 @@ class ActionSchemaYamlBridgeTest {
         assertEquals(listOf("decimal"), reloaded.actions[1].argTypes)
     }
 
+    /**
+     * The chips the schema editor offers come from `ActionArgType.entries`, so a new engine arg type
+     * appears there without a UI change — this is what says it also survives the YAML round trip.
+     */
+    @Test
+    fun `round-trip the variable argument types`() {
+        val state = ActionEditorState(
+            actions = listOf(
+                EditableAction(name = "reason", argTypes = listOf("variable_string")),
+                EditableAction(name = "topics", argTypes = listOf("variable_list")),
+            ),
+        )
+        val yaml = ActionSchemaYamlBridge.toYaml(state = state)
+        val reloaded = ActionSchemaYamlBridge.fromYaml(yaml = yaml)
+
+        assertFalse(reloaded.isReadOnly, "unexpected: $yaml")
+        assertEquals(listOf("variable_string"), reloaded.actions[0].argTypes)
+        assertEquals(listOf("variable_list"), reloaded.actions[1].argTypes)
+    }
+
+    @Test
+    fun `the editor offers every engine argument type as a chip`() {
+        assertEquals(
+            expected = listOf("string", "integer", "decimal", "variable_string", "variable_list"),
+            actual = KnownActionArgTypes,
+        )
+    }
+
     @Test
     fun `invalid yaml is marked read-only`() {
         val state = ActionSchemaYamlBridge.fromYaml(yaml = "not: [[[valid")

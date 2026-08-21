@@ -19,6 +19,15 @@ enum class RuleMatchStatus {
      */
     ELSE_MATCHED,
 
+    /**
+     * The rule's condition could not be decided, and it declares a `not_exists` block, so it emitted
+     * that instead.
+     *
+     * Distinct from [ELSE_MATCHED] because the condition was not false — the record carried no data to
+     * answer it — and distinct from [NO_MATCH] because the rule still produced output.
+     */
+    NOT_EXISTS_MATCHED,
+
     /** The rule did not fire, but at least one of its conditions held. */
     PARTIAL,
 

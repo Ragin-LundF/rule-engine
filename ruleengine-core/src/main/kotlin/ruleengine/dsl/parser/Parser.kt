@@ -55,15 +55,18 @@ class Parser(private val input: String) {
         }
 
     private companion object {
+        /** The `not_exists` block keyword, matched by text like every other structural word. */
+        const val NOT_EXISTS = "not_exists"
+
         /**
          * Identifiers that must never be read as the start of an implicitly `and`-joined condition:
          * `then` closes the `when` block, and the rest are infix keywords with their own handling.
          *
-         * `else` is listed even though it can only legally follow `then`: without it, a misplaced
-         * `else` inside the condition would be read as a field named `else` and reported as an unknown
-         * field, instead of as the block ordering mistake it is.
+         * `else` and `not_exists` are listed even though they can only legally follow `then`: without
+         * them, a misplaced one inside the condition would be read as a field of that name and reported
+         * as an unknown field, instead of as the block ordering mistake it is.
          */
-        val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "else", "and", "or", "ignoreCase")
+        val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "else", NOT_EXISTS, "and", "or", "ignoreCase")
 
         /**
          * The slice functions, recognised here rather than through the function registry: they never
@@ -134,7 +137,9 @@ class Parser(private val input: String) {
 
         advance()
         val thenBlock = thenBlockParser.parse()
-        val elseBlock = parseOptionalElseBlock()
+        val elseBlock = parseOptionalBranchBlock(keyword = "else")
+        val notExistsBlock = parseOptionalBranchBlock(keyword = NOT_EXISTS)
+        requireBranchOrder()
 
         expect(type = TokenType.RBRACE)
         return RuleAst(
@@ -147,26 +152,52 @@ class Parser(private val input: String) {
             elseAssignments = elseBlock?.assignments.orEmpty(),
             stopOnThen = thenBlock.stop,
             stopOnElse = elseBlock?.stop == true,
+            notExistsActions = notExistsBlock?.actions.orEmpty(),
+            notExistsAssignments = notExistsBlock?.assignments.orEmpty(),
+            stopOnNotExists = notExistsBlock?.stop == true,
             line = first.line,
             column = first.col,
         )
     }
 
     /**
-     * Consumes the optional `else` block that may follow the `then` block.
+     * Rejects an `else` written after `not_exists`.
      *
-     * Both branches have the same grammar, so this reuses [ThenBlockParser] rather than restating it.
-     * A repeated clause is rejected rather than merged: two `else` blocks on one rule is an authoring
-     * mistake, and silently concatenating them would hide it.
+     * Both branch blocks are optional and read in a fixed order, so anything left at this point is out
+     * of place. Reported as the ordering mistake it is rather than as the "expected }" the brace check
+     * would give, because the author wrote a legal keyword in an illegal position.
+     */
+    private fun requireBranchOrder() {
+        val next = current()
+        if (next.type != TokenType.IDENT) {
+            return
+        }
+        if (next.text == "else" || next.text == NOT_EXISTS) {
+            throw ParseException(
+                line = next.line,
+                column = next.col,
+                messageText = "'${next.text}' is out of place: a rule's blocks are written " +
+                        "'then', then 'else', then '$NOT_EXISTS', each at most once"
+            )
+        }
+    }
+
+    /**
+     * Consumes the optional block [keyword] opens, if it is the next token.
      *
-     * An empty block is rejected too. It would evaluate as a no-op, indistinguishable from having no
-     * `else` at all, so accepting it would silently keep a half-written rule. A block holding only
-     * `stop` is not empty: it means "halt the run when this condition does not hold".
+     * Every branch has the same grammar, so this reuses [ThenBlockParser] rather than restating it, and
+     * one function serves `else` and `not_exists` for the same reason. A repeated block is rejected
+     * rather than merged: two of the same block on one rule is an authoring mistake, and silently
+     * concatenating them would hide it.
+     *
+     * An empty block is rejected too. It would evaluate as a no-op, indistinguishable from not
+     * declaring the block at all, so accepting it would silently keep a half-written rule. A block
+     * holding only `stop` is not empty: it means "halt the run when this branch is the one taken".
      */
     @Suppress("ThrowsCount")
-    private fun parseOptionalElseBlock(): ThenBlock? {
+    private fun parseOptionalBranchBlock(keyword: String): ThenBlock? {
         val tok = current()
-        if (tok.type != TokenType.IDENT || tok.text != "else") {
+        if (tok.type != TokenType.IDENT || tok.text != keyword) {
             return null
         }
 
@@ -176,17 +207,17 @@ class Parser(private val input: String) {
             throw ParseException(
                 line = tok.line,
                 column = tok.col,
-                messageText = "Empty 'else' block: declare at least one action, 'set' or 'add' " +
-                        "clause, or 'stop', or drop the 'else' keyword"
+                messageText = "Empty '$keyword' block: declare at least one action, 'set' or 'add' " +
+                        "clause, or 'stop', or drop the '$keyword' keyword"
             )
         }
 
         val next = current()
-        if (next.type == TokenType.IDENT && next.text == "else") {
+        if (next.type == TokenType.IDENT && next.text == keyword) {
             throw ParseException(
                 line = next.line,
                 column = next.col,
-                messageText = "Duplicate 'else' block"
+                messageText = "Duplicate '$keyword' block"
             )
         }
 

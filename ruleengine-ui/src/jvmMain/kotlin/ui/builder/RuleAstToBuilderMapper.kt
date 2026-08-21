@@ -55,6 +55,8 @@ object RuleAstToBuilderMapper {
             ?: return BuilderRule.Unsupported(id = rule.id, reason = unsupportedAssignmentReason(rule = rule))
         val elseVariables = mapVariables(assignments = rule.elseAssignments)
             ?: return BuilderRule.Unsupported(id = rule.id, reason = unsupportedAssignmentReason(rule = rule))
+        val notExistsVariables = mapVariables(assignments = rule.notExistsAssignments)
+            ?: return BuilderRule.Unsupported(id = rule.id, reason = unsupportedAssignmentReason(rule = rule))
 
         return BuilderRule.Supported(
             id = rule.id,
@@ -66,6 +68,9 @@ object RuleAstToBuilderMapper {
             elseVariables = elseVariables,
             stopOnThen = rule.stopOnThen,
             stopOnElse = rule.stopOnElse,
+            notExistsActions = rule.notExistsActions.map { mapAction(action = it) },
+            notExistsVariables = notExistsVariables,
+            stopOnNotExists = rule.stopOnNotExists,
         )
     }
 
@@ -89,7 +94,7 @@ object RuleAstToBuilderMapper {
     }
 
     private fun unsupportedAssignmentReason(rule: RuleAst): String {
-        val assignments = rule.assignments + rule.elseAssignments
+        val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
         val name = assignments.firstOrNull { assignment ->
             mapValueExpression(expr = assignment.expression) == null
         }?.name

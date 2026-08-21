@@ -38,6 +38,8 @@ fun RuleInspector(
     actionCount: Int = 0,
     /** Actions in the rule's `else` block. Zero when it declares none, which hides the row. */
     elseActionCount: Int = 0,
+    /** How many actions the rule's `not_exists` block declares. Zero when it declares no such block. */
+    notExistsActionCount: Int = 0,
     /** Names of the variables this rule publishes with `set`, without the `$` prefix. */
     variableNames: List<String> = emptyList(),
     diagnostics: List<UiDiagnostic> = emptyList(),
@@ -82,6 +84,10 @@ fun RuleInspector(
         // that it has zero of something it cannot have.
         if (elseActionCount > 0) {
             InspectorRow(label = "Else actions", value = elseActionCount.toString())
+        }
+
+        if (notExistsActionCount > 0) {
+            InspectorRow(label = "Not-exists actions", value = notExistsActionCount.toString())
         }
 
         // Listed by name rather than counted: which variables a rule publishes is what decides what

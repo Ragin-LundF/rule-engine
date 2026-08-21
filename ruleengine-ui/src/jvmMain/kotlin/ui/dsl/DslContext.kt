@@ -95,36 +95,31 @@ private class DslScan {
     }
 
     private fun identifier(word: String) {
-        // `when`/`then`/`else` are section markers only at the rule's own depth — nested inside a
-        // bracket expression they are ordinary words.
+        // `when` and the branch keywords are section markers only at the rule's own depth — nested
+        // inside a bracket expression they are ordinary words.
         if (braceDepth == 1 && word == "when") {
             section = DslSection.WHEN
             precedingField = null
             precedingOperator = null
             return
         }
-        if (braceDepth == 1 && word == "then") {
-            section = DslSection.THEN
+        val branch = BRANCH_KEYWORDS[word]
+        if (braceDepth == 1 && branch != null) {
+            section = branch
             afterAction = null
             expectsListName = false
             return
         }
-        if (braceDepth == 1 && word == "else") {
-            section = DslSection.ELSE
-            afterAction = null
-            expectsListName = false
-            return
-        }
-        when (section) {
-            DslSection.WHEN -> whenIdentifier(word = word)
-            // Both branches take the same clauses, so the last word read is tracked the same way.
-            DslSection.THEN, DslSection.ELSE -> branchIdentifier(word = word)
+        when {
+            section == DslSection.WHEN -> whenIdentifier(word = word)
+            // Every branch takes the same clauses, so the last word read is tracked the same way.
+            section.isBranch() -> branchIdentifier(word = word)
             else -> Unit
         }
     }
 
     /**
-     * A word in a `then` or `else` block.
+     * A word in a `then`, `else` or `not_exists` block.
      *
      * `set`, `add` and `to` are clause structure, not action names — treating them as actions would
      * offer the argument completions of an action called `add`. After the `to` of an `add` clause the
@@ -169,15 +164,21 @@ private class DslScan {
         }
     }
 
-    /** A literal completes a comparison, or the argument of an action. */
+    /**
+     * A literal completes a comparison, or the argument of an action.
+     *
+     * Every branch is covered, not just `then`: an argument in an `else` or `not_exists` block ends
+     * its action the same way, and treating only `then` left the other branches offering argument
+     * completions for an action that already had one.
+     */
     private fun literal() {
-        when (section) {
-            DslSection.WHEN -> if (precedingOperator != null) {
+        when {
+            section == DslSection.WHEN -> if (precedingOperator != null) {
                 precedingField = null
                 precedingOperator = null
             }
 
-            DslSection.THEN -> {
+            section.isBranch() -> {
                 afterAction = null
                 expectsListName = false
             }
@@ -188,14 +189,23 @@ private class DslScan {
 
     /** The end of a bracket expression leaves no partial comparison behind. */
     private fun closeBracket() {
-        when (section) {
-            DslSection.WHEN -> {
+        when {
+            section == DslSection.WHEN -> {
                 precedingField = null
                 precedingOperator = null
             }
 
-            DslSection.THEN -> afterAction = null
+            section.isBranch() -> afterAction = null
             else -> Unit
         }
+    }
+
+    private companion object {
+        /** The keyword that opens each output branch, and the section it puts the cursor in. */
+        val BRANCH_KEYWORDS = mapOf(
+            "then" to DslSection.THEN,
+            "else" to DslSection.ELSE,
+            "not_exists" to DslSection.NOT_EXISTS,
+        )
     }
 }

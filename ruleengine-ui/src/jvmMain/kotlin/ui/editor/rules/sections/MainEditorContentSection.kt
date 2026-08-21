@@ -59,6 +59,7 @@ import ui.editor.rules.RuleEditorState
 import ui.editor.rules.autoClosingBraceDedent
 import ui.editor.rules.drawTopLine
 import ui.editor.rules.dslLineOpensBlock
+import ui.editor.rules.isAbout
 import ui.settings.SettingsController
 import ui.theme.ThemeController
 import ui.workbench.diagram.DiagramModeHost
@@ -103,18 +104,25 @@ fun ColumnScope.MainEditorContentSection(
     // and a snapshot read inside a remember block does not invalidate that block. Without the key
     // the spans keep the palette that was active when the text last changed, so switching theme
     // left dark-mode token colours on a light background.
+    // Only what belongs to the file on screen. An entry-wide validation reports every file, and each
+    // diagnostic's line is relative to its own — so underlining them all would mark lines of this file
+    // for problems in another.
+    val openFile = state.selectedManifestRuleFile.value
+    val underlined = remember(diagnosticsList, openFile) {
+        diagnosticsList.filter { diagnostic -> diagnostic.isAbout(openFile = openFile) }
+    }
     val annotatedRule = remember(
         ruleValue.text,
         parsedSchema,
         parsedActionSchema,
-        diagnosticsList,
+        underlined,
         ThemeController.isDark,
     ) {
         annotateRule(
             text = ruleValue.text,
             schema = parsedSchema,
             actions = parsedActionSchema,
-            diagnostics = diagnosticsList
+            diagnostics = underlined
         )
     }
     val highlightedValue = TextFieldValue(
@@ -123,21 +131,27 @@ fun ColumnScope.MainEditorContentSection(
         composition = ruleValue.composition,
     )
 
-    // Variables the open buffer publishes. Derived from the text rather than from the saved entry so
-    // a `set` clause is offered as soon as it is typed, before the file is written to disk.
-    val variableNames = remember(ruleValue.text) {
+    // Variables the open buffer publishes, with the clause that writes each one. Derived from the text
+    // rather than from the saved entry so a `set` clause is offered as soon as it is typed, before the
+    // file is written to disk. The kind is what lets an action declaring `variable_list` be offered only
+    // the accumulators.
+    val variableKinds = remember(ruleValue.text) {
         runCatching {
-            Parser(input = ruleValue.text).parseRules().flatMap { rule -> VariableUsage.writesOf(rule = rule) }
-        }.getOrDefault(defaultValue = emptyList()).distinct()
+            Parser(input = ruleValue.text).parseRules()
+                .flatMap { rule -> VariableUsage.writeKindsOf(rule = rule).entries }
+                .associate { entry -> entry.key to entry.value }
+        }.getOrDefault(defaultValue = emptyMap())
     }
+    val variableNames = remember(variableKinds) { variableKinds.keys.toList() }
 
     // ── Context-aware autocomplete suggestions ────────────────────────────────
-    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema, variableNames) {
+    val filteredSuggestions = remember(autoCompleteWord, dslContext, parsedSchema, parsedActionSchema, variableKinds) {
         val candidates = buildContextualCompletions(
             context = dslContext,
             schema = parsedSchema,
             actionSchema = parsedActionSchema,
             variableNames = variableNames,
+            variableKinds = variableKinds,
         )
         CodeEditing.filterSuggestions(
             candidates = candidates,

@@ -44,7 +44,7 @@ object FieldUsage {
     fun fieldsOf(rule: RuleAst): Set<String> {
         val fields = mutableSetOf<String>()
         collectFromExpression(expr = rule.condition, prefix = "", into = fields)
-        val assignments = rule.assignments + rule.elseAssignments
+        val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
         assignments.forEach { assignment ->
             collectFromValue(expr = assignment.expression, prefix = "", into = fields)
         }

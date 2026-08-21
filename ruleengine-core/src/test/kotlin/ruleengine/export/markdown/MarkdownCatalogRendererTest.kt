@@ -272,6 +272,42 @@ class MarkdownCatalogRendererTest {
         assertFalse(actual = oneRule(condition = "weightKg >= 1").contains(other = "**Otherwise:**"))
     }
 
+    // ── not_exists branch ─────────────────────────────────────────────────────
+
+    @Test
+    fun `a not_exists branch is rendered as its own prose section`() {
+        val markdown = renderRules(rules = THREE_BRANCH_RULE)
+
+        assertTrue(actual = markdown.contains(other = "**Then:** `label high`"), message = markdown)
+        assertTrue(actual = markdown.contains(other = "**Otherwise:** `label low`"), message = markdown)
+        assertTrue(
+            actual = markdown.contains(other = "**When the data is missing:** `label unknown`"),
+            message = markdown,
+        )
+    }
+
+    @Test
+    fun `the missing-data note is only written for a rule set that has such a branch`() {
+        assertTrue(
+            actual = renderRules(rules = THREE_BRANCH_RULE).contains(other = "does not carry the data"),
+            message = "expected the caveat for a rule set that uses the branch",
+        )
+        assertFalse(actual = renderRules(rules = TIERED_RULE).contains(other = "does not carry the data"))
+    }
+
+    @Test
+    fun `a rule without a not_exists branch gets no missing-data section`() {
+        assertFalse(actual = renderRules(rules = TIERED_RULE).contains(other = "**When the data is missing:**"))
+    }
+
+    @Test
+    fun `a not_exists outcome appears in the outcome summary`() {
+        val outcomes = renderRules(rules = THREE_BRANCH_RULE)
+            .substringAfter(delimiter = "## Outcomes this rule set can produce")
+
+        assertTrue(actual = outcomes.contains(other = "unknown"), message = outcomes)
+    }
+
     @Test
     fun `an entry with no rules says so instead of rendering an empty table`() {
         val catalog = RuleCatalog(
@@ -287,6 +323,20 @@ class MarkdownCatalogRendererTest {
     }
 
     private companion object {
+        val THREE_BRANCH_RULE: String = """
+            rule "tier" {
+              description "A heavy shipment is high tier, a light one low, an unweighed one neither."
+              when
+                weightKg >= 1000
+              then
+                label "high"
+              else
+                label "low"
+              not_exists
+                label "unknown"
+            }
+        """.trimIndent()
+
         val TIERED_RULE: String = """
             rule "tier" {
               description "A heavy shipment is high tier, anything else is low tier."

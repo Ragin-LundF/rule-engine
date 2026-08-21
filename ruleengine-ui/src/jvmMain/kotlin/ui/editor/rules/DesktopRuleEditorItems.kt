@@ -26,7 +26,7 @@ import ui.dsl.model.DslCursorContext
 import ui.dsl.model.DslSection
 import ui.editor.rules.model.ViewMode
 
-private val DSL_BLOCK_KEYWORDS = setOf("when", "then", "else")
+private val DSL_BLOCK_KEYWORDS = setOf("when", "then", "else", "not_exists")
 
 fun dslLineOpensBlock(trimmedLine: String): Boolean {
     return trimmedLine.endsWith(char = '{') || trimmedLine in DSL_BLOCK_KEYWORDS
@@ -48,8 +48,7 @@ fun autoClosingBraceDedent(text: String, bracePos: Int): Pair<String, Int> {
 fun isContextuallyImmediate(context: DslCursorContext): Boolean {
     val expectsOperator = context.section == DslSection.WHEN &&
             context.precedingField != null && context.precedingOperator == null
-    val inBranch = context.section == DslSection.THEN || context.section == DslSection.ELSE
-    val expectsAction = inBranch && context.afterAction == null
+    val expectsAction = context.section.isBranch() && context.afterAction == null
     return expectsOperator || expectsAction
 }
 

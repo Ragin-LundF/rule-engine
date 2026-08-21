@@ -33,6 +33,9 @@ object DocxCatalogWriter {
      */
     private const val FIXED_ENTRY_TIME = 315_532_800_000L
 
+    /** The heading the missing-data branch is written under, in prose rather than in DSL terms. */
+    private const val MISSING_DATA_LABEL = "When the data is missing"
+
     private val INDEX_HEADERS = listOf("Rule", "What it does", "Outcome")
 
     /** Column widths as percentages of the page. The description column carries the most text. */
@@ -93,7 +96,7 @@ object DocxCatalogWriter {
     }
 
     /**
-     * The three things that stop the document reading as a flat list of independent checks.
+     * The things that stop the document reading as a flat list of independent checks.
      *
      * Each is written only for a rule set it applies to: a reader of a rule set with no branches, no
      * variables and no `stop` should not have to hold caveats that never come up. Ordered by how much
@@ -111,7 +114,22 @@ object DocxCatalogWriter {
                 )
             )
         }
-        if (catalog.rules.any { rule -> rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() }) {
+        if (catalog.rules.any { rule -> rule.notExistsOutcomes.isNotEmpty() }) {
+            out.append(
+                DocxXml.paragraph(
+                    style = "Normal",
+                    text = "Some rules also say what happens when the record does not carry the data " +
+                        "they read. Those rules contribute the outcome listed under \"When the data is " +
+                        "missing\" — which is neither a match nor a non-match, but a question the " +
+                        "record could not answer.",
+                )
+            )
+        }
+        if (catalog.rules.any { rule ->
+                rule.publishes.isNotEmpty() || rule.elsePublishes.isNotEmpty() ||
+                    rule.notExistsPublishes.isNotEmpty()
+            }
+        ) {
             out.append(
                 DocxXml.paragraph(
                     style = "Normal",
@@ -121,7 +139,7 @@ object DocxCatalogWriter {
                 )
             )
         }
-        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse }) {
+        if (catalog.rules.any { rule -> rule.stopsOnThen || rule.stopsOnElse || rule.stopsOnNotExists }) {
             out.append(
                 DocxXml.paragraph(
                     style = "Normal",
@@ -204,12 +222,15 @@ object DocxCatalogWriter {
      * `label:high` would read as two outcomes the rule produces together instead of one or the other.
      */
     private fun outcomeSummary(rule: CatalogRule): String {
-        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty()) {
+        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty() && rule.notExistsOutcomes.isEmpty()) {
             return "—"
         }
 
         val lines = rule.outcomes.map { outcome -> CatalogText.label(outcome = outcome) } +
-                rule.elseOutcomes.map { outcome -> "otherwise ${CatalogText.label(outcome = outcome)}" }
+                rule.elseOutcomes.map { outcome -> "otherwise ${CatalogText.label(outcome = outcome)}" } +
+                rule.notExistsOutcomes.map { outcome ->
+                    "when missing ${CatalogText.label(outcome = outcome)}"
+                }
         return lines.joinToString(separator = "\n")
     }
 
@@ -281,7 +302,7 @@ object DocxCatalogWriter {
             stops = rule.stopsOnThen,
         )
         // Written only when the rule declares an `else` block, so a reader is never told what happens
-        // "otherwise" for a rule where the answer is nothing.
+        // "otherwise" for a rule where the answer is nothing. Same for the missing-data branch.
         appendBranch(
             out = out,
             label = "Otherwise",
@@ -289,6 +310,14 @@ object DocxCatalogWriter {
             outcomes = rule.elseOutcomes,
             publishes = rule.elsePublishes,
             stops = rule.stopsOnElse,
+        )
+        appendBranch(
+            out = out,
+            label = MISSING_DATA_LABEL,
+            publishesLabel = "Publishes for later rules when the data is missing",
+            outcomes = rule.notExistsOutcomes,
+            publishes = rule.notExistsPublishes,
+            stops = rule.stopsOnNotExists,
         )
 
         out.append(DocxXml.paragraph(style = "FieldLabel", text = "In the rule language"))
@@ -321,7 +350,11 @@ object DocxCatalogWriter {
         // Stated per branch, because a rule can halt on one verdict and carry on with the other. A
         // reader who misses this reads every rule below as still applying.
         if (stops) {
-            val suffix = if (label == "Then") "" else " (otherwise)"
+            val suffix = when (label) {
+                "Then" -> ""
+                MISSING_DATA_LABEL -> " (when the data is missing)"
+                else -> " (otherwise)"
+            }
             out.append(DocxXml.paragraph(style = "FieldLabel", text = "Stops here$suffix"))
             out.append(
                 DocxXml.paragraph(style = "Normal", text = "No rule listed after this one is evaluated.")
