@@ -90,16 +90,21 @@ internal class ThenBlockParser(
     /**
      * True for a token that terminates the block rather than starting another clause.
      *
-     * `else` ends a `then` block the way `}` does. It cannot be mistaken for an action name: this check
-     * runs before the action branch, and a zero-argument action immediately before it does not swallow
-     * it either, because [LiteralParser.startsLiteral] rejects a bare identifier.
+     * A following branch keyword ends the block the way `}` does. Neither can be mistaken for an action
+     * name: this check runs before the action branch, and a zero-argument action immediately before it
+     * does not swallow it either, because [LiteralParser.startsLiteral] rejects a bare identifier.
      */
     private fun endsBlock(token: Token): Boolean {
         return when (token.type) {
             TokenType.RBRACE, TokenType.EOF -> true
-            TokenType.IDENT -> token.text == "else"
+            TokenType.IDENT -> token.text in BLOCK_TERMINATORS
             else -> false
         }
+    }
+
+    private companion object {
+        /** The keywords that open a branch after the one being parsed, and therefore close it. */
+        val BLOCK_TERMINATORS = setOf("else", "not_exists")
     }
 
     private fun parseAction(nameToken: Token): ActionAst {

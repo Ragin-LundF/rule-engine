@@ -45,6 +45,7 @@ import ui.tester.model.rowKey
 private const val FILTER_ALL = "All"
 private const val FILTER_MATCHED = "Matched"
 private const val FILTER_ELSE = "Else"
+private const val FILTER_NOT_EXISTS = "Not exists"
 private const val FILTER_PARTIAL = "Partial"
 private const val FILTER_NO_MATCH = "No match"
 private const val FILTER_NOT_EVALUATED = "Not evaluated"
@@ -115,6 +116,7 @@ private fun matchesFilter(result: RuleResult, filter: String): Boolean {
     return when (filter) {
         FILTER_MATCHED -> result.status == RuleMatchStatus.MATCHED
         FILTER_ELSE -> result.status == RuleMatchStatus.ELSE_MATCHED
+        FILTER_NOT_EXISTS -> result.status == RuleMatchStatus.NOT_EXISTS_MATCHED
         FILTER_PARTIAL -> result.status == RuleMatchStatus.PARTIAL
         FILTER_NO_MATCH -> result.status == RuleMatchStatus.NO_MATCH
         FILTER_NOT_EVALUATED -> result.status == RuleMatchStatus.NOT_EVALUATED
@@ -132,6 +134,9 @@ private fun statusColor(status: RuleMatchStatus): Color {
         // Green like a match: the rule decided and produced output. It is a different decision, not a
         // worse one, which the label is what distinguishes.
         RuleMatchStatus.ELSE_MATCHED -> AccentGreen
+        // Orange, not green: the rule produced output, but it did so without deciding — the record
+        // carried no data to answer its condition, which is worth a second look.
+        RuleMatchStatus.NOT_EXISTS_MATCHED -> AccentOrange
         RuleMatchStatus.PARTIAL -> AccentOrange
         RuleMatchStatus.NO_MATCH -> AccentRed
         // Muted, not red: the rule did not fail, it was never asked.
@@ -143,6 +148,7 @@ private fun statusLabel(status: RuleMatchStatus): String {
     return when (status) {
         RuleMatchStatus.MATCHED -> "matched"
         RuleMatchStatus.ELSE_MATCHED -> "else"
+        RuleMatchStatus.NOT_EXISTS_MATCHED -> "not exists"
         RuleMatchStatus.PARTIAL -> "partial"
         RuleMatchStatus.NO_MATCH -> "no match"
         RuleMatchStatus.NOT_EVALUATED -> "not evaluated"
@@ -155,6 +161,7 @@ private fun SummaryLine(results: List<RuleResult>) {
     val byStatus = results.groupingBy { result -> result.status }.eachCount()
     val matched = byStatus[RuleMatchStatus.MATCHED] ?: 0
     val elseMatched = byStatus[RuleMatchStatus.ELSE_MATCHED] ?: 0
+    val notExistsMatched = byStatus[RuleMatchStatus.NOT_EXISTS_MATCHED] ?: 0
     val partial = byStatus[RuleMatchStatus.PARTIAL] ?: 0
     val noMatch = byStatus[RuleMatchStatus.NO_MATCH] ?: 0
     val notEvaluated = byStatus[RuleMatchStatus.NOT_EVALUATED] ?: 0
@@ -169,10 +176,11 @@ private fun SummaryLine(results: List<RuleResult>) {
     // Each optional count is shown only when the run produced one, so a rule set that uses neither
     // branches nor `stop` keeps the headline it had.
     val elsePart = if (elseMatched > 0) "$elseMatched else · " else ""
+    val notExistsPart = if (notExistsMatched > 0) "$notExistsMatched not exists · " else ""
     val stoppedPart = if (notEvaluated > 0) " · $notEvaluated not evaluated" else ""
     Text(
-        text = "$matched matched · $elsePart$partial partial · $noMatch no match$stoppedPart · " +
-                "$actions action(s)",
+        text = "$matched matched · $elsePart$notExistsPart$partial partial · " +
+                "$noMatch no match$stoppedPart · $actions action(s)",
         style = MaterialTheme.typography.subtitle1,
         color = color,
     )
@@ -279,8 +287,8 @@ private fun RulesHeaderRow(filter: String, onFilterChange: (String) -> Unit) {
         DropdownSelector(
             selected = filter,
             options = listOf(
-                FILTER_ALL, FILTER_MATCHED, FILTER_ELSE, FILTER_PARTIAL, FILTER_NO_MATCH,
-                FILTER_NOT_EVALUATED,
+                FILTER_ALL, FILTER_MATCHED, FILTER_ELSE, FILTER_NOT_EXISTS, FILTER_PARTIAL,
+                FILTER_NO_MATCH, FILTER_NOT_EVALUATED,
             ),
             onSelected = onFilterChange,
             modifier = Modifier.width(width = 160.dp),

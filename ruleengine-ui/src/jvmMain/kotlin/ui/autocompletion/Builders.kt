@@ -1,7 +1,9 @@
 package ui.autocompletion
 
+import ruleengine.core.domain.dto.action.ActionArgType
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.dsl.ast.AssignmentKindAst
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
 import ui.dsl.model.DslCursorContext
@@ -25,6 +27,7 @@ public fun buildContextualCompletions(
     schema: FieldSchema?,
     actionSchema: ActionSchema?,
     variableNames: List<String> = emptyList(),
+    variableKinds: Map<String, AssignmentKindAst> = emptyMap(),
 ): List<CompletionItem> {
     return when (context.section) {
         DslSection.TOP_LEVEL -> buildTopLevelCompletions()
@@ -33,22 +36,55 @@ public fun buildContextualCompletions(
             context = context,
             schema = schema
         ) + buildVariableCompletions(variableNames = variableNames)
-        // Both branches take the same clauses, so both get the same completions — except that only a
-        // `then` block can be followed by an `else`.
-        DslSection.THEN -> buildThenCompletions(
+        // Every branch takes the same clauses, so all get the same completions — they differ only in
+        // which branch keyword may still follow, since the blocks are written in a fixed order.
+        DslSection.THEN -> buildBranchCompletions(
             context = context,
             actionSchema = actionSchema,
             variableNames = variableNames,
-            offerElseKeyword = true,
+            variableKinds = variableKinds,
+            followingBranchKeywords = listOf(ELSE_KEYWORD_COMPLETION, NOT_EXISTS_KEYWORD_COMPLETION),
         )
 
-        DslSection.ELSE -> buildThenCompletions(
+        DslSection.ELSE -> buildBranchCompletions(
             context = context,
             actionSchema = actionSchema,
             variableNames = variableNames,
-            offerElseKeyword = false,
+            variableKinds = variableKinds,
+            followingBranchKeywords = listOf(NOT_EXISTS_KEYWORD_COMPLETION),
+        )
+
+        DslSection.NOT_EXISTS -> buildBranchCompletions(
+            context = context,
+            actionSchema = actionSchema,
+            variableNames = variableNames,
+            variableKinds = variableKinds,
+            followingBranchKeywords = emptyList(),
         )
     }
+}
+
+/**
+ * The variables worth offering as this action's argument.
+ *
+ * Narrowed only when the action *declares* a variable type and the kinds are known: `variable_list`
+ * takes a name written with `add`, `variable_string` one written with `set`, and offering the other kind
+ * would complete straight into a validation error. Everything else offers every variable, which is what
+ * it has always done — an action declaring `string` still accepts one, unchecked.
+ */
+private fun variablesFittingArgument(
+    actionName: String,
+    actionSchema: ActionSchema?,
+    variableNames: List<String>,
+    variableKinds: Map<String, AssignmentKindAst>,
+): List<String> {
+    val declared = declaredVariableArgType(actionName = actionName, actionSchema = actionSchema)
+        ?: return variableNames
+    if (variableKinds.isEmpty()) {
+        return variableNames
+    }
+    val wanted = if (declared == ActionArgType.VARIABLE_LIST) AssignmentKindAst.ADD else AssignmentKindAst.SET
+    return variableNames.filter { name -> variableKinds[name] == wanted }
 }
 
 /** A `$name` entry per known variable, offered wherever a value can stand. */
@@ -133,11 +169,19 @@ private fun buildWhenCompletions(
     }
 }
 
-private fun buildThenCompletions(
+/**
+ * The completions of one output branch.
+ *
+ * [followingBranchKeywords] is what the section is still allowed to be followed by: a `then` block may
+ * open an `else` or a `not_exists`, an `else` block only a `not_exists`, and a `not_exists` block
+ * nothing — offering a keyword the parser would reject at that position is worse than offering none.
+ */
+private fun buildBranchCompletions(
     context: DslCursorContext,
     actionSchema: ActionSchema?,
     variableNames: List<String>,
-    offerElseKeyword: Boolean,
+    variableKinds: Map<String, AssignmentKindAst>,
+    followingBranchKeywords: List<CompletionItem>,
 ): List<CompletionItem> {
     // The target of an `add` is written bare, without the `$`, so neither an action argument nor a
     // `$name` reference is what belongs here.
@@ -149,17 +193,21 @@ private fun buildThenCompletions(
         return buildActionArgCompletions(
             actionName = context.afterAction,
             actionSchema = actionSchema
-        ) + buildVariableCompletions(variableNames = variableNames)
+        ) + buildVariableCompletions(
+            variableNames = variablesFittingArgument(
+                actionName = context.afterAction,
+                actionSchema = actionSchema,
+                variableNames = variableNames,
+                variableKinds = variableKinds,
+            )
+        )
     }
 
-    val keywords = buildList {
-        add(SET_KEYWORD_COMPLETION)
-        add(ADD_KEYWORD_COMPLETION)
-        add(STOP_KEYWORD_COMPLETION)
-        if (offerElseKeyword) {
-            add(ELSE_KEYWORD_COMPLETION)
-        }
-    }
+    val keywords = listOf(
+        SET_KEYWORD_COMPLETION,
+        ADD_KEYWORD_COMPLETION,
+        STOP_KEYWORD_COMPLETION,
+    ) + followingBranchKeywords
     return buildActionNameCompletions(actionSchema = actionSchema) + keywords
 }
 
@@ -182,6 +230,13 @@ private val ELSE_KEYWORD_COMPLETION = CompletionItem(
     insertText = "else",
     kind = CompletionKind.KEYWORD,
     hint = "output when the condition does not hold"
+)
+
+private val NOT_EXISTS_KEYWORD_COMPLETION = CompletionItem(
+    label = "not_exists",
+    insertText = "not_exists",
+    kind = CompletionKind.KEYWORD,
+    hint = "output when the record carries no data to decide the condition"
 )
 
 private val STOP_KEYWORD_COMPLETION = CompletionItem(

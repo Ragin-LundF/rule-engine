@@ -3,6 +3,7 @@ package ruleengine.core.analysis
 import ruleengine.dsl.ast.ActionAst
 import ruleengine.dsl.ast.AndAst
 import ruleengine.dsl.ast.ArithmeticValueAst
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.ast.ComparisonExpressionAst
 import ruleengine.dsl.ast.ConditionAst
 import ruleengine.dsl.ast.ExpressionAst
@@ -35,15 +36,15 @@ object VariableUsage {
     /**
      * Variables [rule] reads — in its condition, in its `set` expressions and in its action arguments.
      *
-     * Covers both branches: only one of them runs for a given record, but a variable either branch
-     * can read is one the rule depends on.
+     * Covers every branch: only one of them runs for a given record, but a variable any branch can
+     * read is one the rule depends on.
      */
     fun readsOf(rule: RuleAst): Set<String> {
         val names = linkedSetOf<String>()
         collectFromExpression(expr = rule.condition, into = names)
-        val assignments = rule.assignments + rule.elseAssignments
+        val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
         assignments.forEach { assignment -> collectFromValue(expr = assignment.expression, into = names) }
-        val actions = rule.actions + rule.elseActions
+        val actions = rule.actions + rule.elseActions + rule.notExistsActions
         actions.forEach { action ->
             action.arguments.forEach { argument -> collectFromLiteral(literal = argument, into = names) }
         }
@@ -81,11 +82,27 @@ object VariableUsage {
     /**
      * Variables [rule] publishes through its `set` clauses, in source order, `then` branch first.
      *
-     * A name set by both branches appears once: whichever branch runs, the variable is published.
+     * A name set by more than one branch appears once: whichever branch runs, the variable is published.
      */
     fun writesOf(rule: RuleAst): Set<String> {
-        val assignments = rule.assignments + rule.elseAssignments
+        val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
         return assignments.mapTo(destination = linkedSetOf()) { assignment -> assignment.name }
+    }
+
+    /**
+     * Variables [rule] publishes, mapped to the clause that writes each one.
+     *
+     * The kind is what tells a plain value from an accumulator, and a caller that has to hand the scope
+     * of one part of an entry to the validator needs it: without it a `set`/`add` clash across two
+     * files could not be reported. The first write of a name wins, matching how the validator records
+     * the kind it checks later writes against.
+     */
+    fun writeKindsOf(rule: RuleAst): Map<String, AssignmentKindAst> {
+        val kinds = LinkedHashMap<String, AssignmentKindAst>()
+        for (assignment in rule.assignments + rule.elseAssignments + rule.notExistsAssignments) {
+            kinds.putIfAbsent(assignment.name, assignment.kind)
+        }
+        return kinds
     }
 
     private fun collectFromExpression(expr: ExpressionAst, into: MutableSet<String>) {

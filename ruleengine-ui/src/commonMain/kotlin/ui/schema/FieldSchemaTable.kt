@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -67,6 +68,14 @@ fun FieldSchemaTable(
     state: SchemaEditorState,
     onStateChange: (SchemaEditorState) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Shows the field in the Inspector. Null hides the button, which is what every caller that has no
+     * inspector to show it in gets.
+     *
+     * Offered on top-level rows only: the inspector's field catalog is built from the schema's
+     * top-level entries, so a nested member's path would resolve to nothing.
+     */
+    onInspectField: ((path: String) -> Unit)? = null,
 ) {
     val editable = !state.isReadOnly
 
@@ -95,6 +104,9 @@ fun FieldSchemaTable(
             HeaderCell(text = "Type", modifier = Modifier.weight(weight = 1.5f))
             HeaderCell(text = "Normalizers", modifier = Modifier.weight(weight = 3f))
             HeaderCell(text = "Operators", modifier = Modifier.weight(weight = 3f))
+            // One spacer per trailing button, so the columns stay lined up whether the row carries an
+            // inspect button, a delete button, both, or neither.
+            if (onInspectField != null) Spacer(modifier = Modifier.width(width = 36.dp))
             if (editable) Spacer(modifier = Modifier.width(width = 36.dp))
         }
 
@@ -133,6 +145,7 @@ fun FieldSchemaTable(
                             val newFields = state.fields.toMutableList().also { it.removeAt(index) }
                             onStateChange(state.copy(fields = newFields))
                         },
+                        onInspect = onInspectField?.let { inspect -> { inspect(field.path) } },
                     )
                 }
             }
@@ -201,6 +214,7 @@ private fun FieldRow(
     isDuplicate: Boolean,
     onFieldChange: (EditableField) -> Unit,
     onDelete: () -> Unit,
+    onInspect: (() -> Unit)? = null,
 ) {
     val fieldColors = TextFieldDefaults.outlinedTextFieldColors(
         textColor = TextPrimary,
@@ -254,6 +268,20 @@ private fun FieldRow(
                 onSelect = { onFieldChange(field.copy(type = it, format = if (it.isTemporal) field.format else "")) },
                 modifier = Modifier.weight(weight = 1.5f),
             )
+            // A button rather than a click on the row: every cell here is a text field, and a row-wide
+            // click target would fight the editing it sits on top of.
+            if (onInspect != null) {
+                // Held to the 36.dp the header reserves for a trailing button. A bare `TextButton`
+                // claims 64.dp, and the width it takes comes out of the weighted columns beside it —
+                // enough to push the longest argument-type chip into one letter per line.
+                TextButton(
+                    onClick = onInspect,
+                    modifier = Modifier.width(width = 36.dp),
+                    contentPadding = PaddingValues(all = 0.dp),
+                ) {
+                    Text("ⓘ", color = PrimaryBlue)
+                }
+            }
             if (editable) {
                 TextButton(onClick = onDelete) {
                     Text("✕", color = TextMuted)

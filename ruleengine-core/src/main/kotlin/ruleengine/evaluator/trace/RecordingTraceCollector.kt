@@ -1,5 +1,7 @@
 package ruleengine.evaluator.trace
 
+import ruleengine.core.domain.dto.ConditionVerdict
+import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.evaluator.trace.dto.DecisionNode
 import ruleengine.evaluator.trace.dto.NodeMeta
 import ruleengine.evaluator.trace.dto.NodeType
@@ -32,9 +34,10 @@ class RecordingTraceCollector : TraceCollector {
     }
 
     @Suppress("MagicNumber")
-    override fun exit(result: Boolean) {
+    override fun exit(verdict: ConditionVerdict, branch: RuleBranch?) {
         val node = stack.removeLastOrNull() ?: return
-        node.result = result
+        node.verdict = verdict
+        node.branch = branch
         val start = node.startNs
         if (start != null) node.elapsedMs = (System.nanoTime() - start) / 1_000_000
     }

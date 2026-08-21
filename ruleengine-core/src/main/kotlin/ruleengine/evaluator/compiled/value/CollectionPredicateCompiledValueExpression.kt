@@ -34,9 +34,11 @@ class CollectionPredicateCompiledValueExpression(
     private fun computeValue(context: PreparedRuleContext): ExpressionValue {
         for (element in source.resolveRawList(context = context)) {
             // An element that is not a structure has no members for the predicate to read, so it
-            // cannot satisfy it — the same answer the filter segments give.
+            // cannot satisfy it — the same answer the filter segments give. A predicate that could not
+            // be decided does not satisfy it either: `every` and `any` answer about the elements, and
+            // an element the predicate could not read is not one that passed it.
             val satisfied = element is Map<*, *> &&
-                predicate.evaluate(context = context.child(element = element), trace = null)
+                predicate.evaluate(context = context.child(element = element), trace = null).isTrue()
             if (satisfied != requireAll) {
                 return BooleanExpressionValue(value = satisfied)
             }

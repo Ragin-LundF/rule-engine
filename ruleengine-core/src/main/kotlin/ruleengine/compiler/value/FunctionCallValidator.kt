@@ -253,6 +253,10 @@ internal object FunctionCallValidator {
                 diagnostics = diagnostics
             )
 
+            // Deliberately unchecked: the question is whether the argument arrived, which is worth
+            // asking of a text field, a whole structure or a variable alike.
+            AggregateFunctionName.IS_AVAILABLE -> Unit
+
             else -> rejectKind(
                 actual = argKinds.firstOrNull(),
                 rejected = ValueKind.TEXT,

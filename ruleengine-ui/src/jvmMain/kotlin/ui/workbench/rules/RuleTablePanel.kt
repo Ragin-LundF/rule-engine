@@ -238,7 +238,7 @@ private fun RowScope.RuleActionsCell(rule: BuilderRule) {
     ) {
         when (rule) {
             is BuilderRule.Supported -> {
-                if (rule.actions.isEmpty() && rule.elseActions.isEmpty()) {
+                if (rule.actions.isEmpty() && rule.elseActions.isEmpty() && rule.notExistsActions.isEmpty()) {
                     Text(text = "—", style = MaterialTheme.typography.body2, color = TextMuted)
                 } else {
                     rule.actions.forEach { action ->
@@ -253,6 +253,13 @@ private fun RowScope.RuleActionsCell(rule: BuilderRule) {
                     rule.elseActions.forEach { action ->
                         Text(
                             text = "else ${action.toDisplaySummary()}",
+                            style = MaterialTheme.typography.body2,
+                            color = TextMuted,
+                        )
+                    }
+                    rule.notExistsActions.forEach { action ->
+                        Text(
+                            text = "not_exists ${action.toDisplaySummary()}",
                             style = MaterialTheme.typography.body2,
                             color = TextMuted,
                         )

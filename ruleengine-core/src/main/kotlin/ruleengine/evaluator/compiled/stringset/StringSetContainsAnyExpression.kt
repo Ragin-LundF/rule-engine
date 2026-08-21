@@ -1,6 +1,7 @@
 package ruleengine.evaluator.compiled.stringset
 
 import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
@@ -22,7 +23,7 @@ class StringSetContainsAnyExpression(
         expectedNormalized
     }
 
-    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
+    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
         trace?.enter(
             meta = NodeMeta(
                 type = NodeType.CONDITION,
@@ -34,16 +35,18 @@ class StringSetContainsAnyExpression(
 
         val v = context.get(field) as? PreparedStringSet
         if (v == null) {
-            trace?.exit(result = false)
-            return false
+            // Absent from the record, or present in a shape this test cannot read: not decidable.
+            trace?.exit(verdict = ConditionVerdict.UNKNOWN)
+            return ConditionVerdict.UNKNOWN
         }
 
         val checkSet = if (ignoreCase) v.normalized.mapTo(destination = HashSet()) {
             it.lowercase()
         } else v.normalized
         val res = checkSet.any { it in matchSet }
-        trace?.exit(result = res)
-        return res
+        val verdict = ConditionVerdict.of(value = res)
+        trace?.exit(verdict = verdict)
+        return verdict
     }
 }
 

@@ -129,6 +129,7 @@ class FieldAccessCompiledValueExpression(
             is CompiledFilterSegment -> current.filter { element ->
                 element is Map<*, *> &&
                     segment.expression.evaluate(context = context.child(element = element), trace = null)
+                        .isTrue()
             }
             // `take`/`takeLast` on the raw list, before conversion: a collection shorter than the
             // slice simply yields what it has, which is what makes the empty case need no guard.

@@ -27,6 +27,9 @@ private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
     // differently and are absent from the Builder's aggregate picker.
     Triple("abs", "abs(sum(transactions.amount))", "function"),
     Triple("daysBetween", "daysBetween(registeredAt, submittedAt)", "function"),
+    // Hinted as a check rather than a function: what it inserts is a whole condition, not an operand
+    // waiting for a comparison.
+    Triple("isAvailable", "isAvailable(amount)", "check"),
     Triple("take", "take(orders, 3)", "slice"),
     Triple("takeLast", "takeLast(orders, 3)", "slice"),
     Triple("every", "every(orders[total > 0])", "predicate"),

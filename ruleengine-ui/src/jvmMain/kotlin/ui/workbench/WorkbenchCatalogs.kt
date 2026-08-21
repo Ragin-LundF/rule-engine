@@ -1,5 +1,6 @@
 package ui.workbench
 
+import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
@@ -35,8 +36,18 @@ import ui.workbench.model.catalog.CatalogRuleStatus
  * site, because that is where staleness is decided.
  */
 
-/** Schema fields as the inspector shows them: normalizers and alias included. */
-internal fun catalogFieldsFrom(schema: FieldSchema?): List<CatalogField> {
+/**
+ * Schema fields as the inspector shows them: normalizers, alias and a usage count included.
+ *
+ * [rules] is what turns "Usages" into a fact rather than a placeholder. It defaults to empty because
+ * a caller with no rules parsed — an unparseable buffer — should still get the field list; the count
+ * then reads zero for every field, which is what "no rules loaded" means.
+ */
+internal fun catalogFieldsFrom(
+    schema: FieldSchema?,
+    rules: List<RuleAst> = emptyList(),
+): List<CatalogField> {
+    val readers = fieldReaderCounts(rules = rules)
     return schema?.fields?.values?.map { def ->
         CatalogField(
             id = def.id.value,
@@ -44,8 +55,23 @@ internal fun catalogFieldsFrom(schema: FieldSchema?): List<CatalogField> {
             operators = def.operators.map { it.value },
             normalizers = def.normalizers.map { it.value },
             alias = def.alias,
+            usages = readers[def.id.value] ?: 0,
         )
     } ?: emptyList()
+}
+
+/**
+ * How many rules read each field path.
+ *
+ * `FieldUsage.fieldsOf` returns a set per rule, so flattening and counting gives rules-per-path
+ * rather than reads-per-path: a rule naming the same field in three conditions still counts once,
+ * which is what "2 rules" has to mean to be worth showing. Counted once for the whole catalog rather
+ * than once per field, so the cost is one walk of the rule set instead of one per field.
+ */
+private fun fieldReaderCounts(rules: List<RuleAst>): Map<String, Int> {
+    return rules.flatMap { rule -> FieldUsage.fieldsOf(rule = rule) }
+        .groupingBy { path -> path }
+        .eachCount()
 }
 
 /** Schema fields as the builder's path picker needs them: recursive, with a format hint. */
@@ -78,7 +104,7 @@ internal fun builderCatalogVariablesFrom(
     val variables = LinkedHashMap<String, CatalogFieldInfo>()
     for (file in files) {
         for (rule in file.rules) {
-            val assignments = rule.assignments + rule.elseAssignments
+            val assignments = rule.assignments + rule.elseAssignments + rule.notExistsAssignments
             if (rule.id == uptoRuleId) {
                 assignments.filter { assignment -> assignment.kind == AssignmentKindAst.ADD }
                     .forEach { assignment -> variables.putVariable(assignment = assignment) }
@@ -139,13 +165,32 @@ private fun inferredVariableType(expr: ValueExpressionAst): String = when (expr)
  * Deliberately different from [builderCatalogActionsFrom], which shows only the first. The inspector
  * is describing the action; the builder is filling in one argument.
  */
-internal fun catalogActionsFrom(actions: ActionSchema?): List<CatalogActionInfo> {
+internal fun catalogActionsFrom(
+    actions: ActionSchema?,
+    rules: List<RuleAst> = emptyList(),
+): List<CatalogActionInfo> {
+    val emitters = actionEmitterCounts(rules = rules)
     return actions?.actions?.values?.map { def ->
         CatalogActionInfo(
             name = def.name,
             argType = def.argTypes.joinToString { it.name.lowercase() },
+            usages = emitters[def.name] ?: 0,
         )
     } ?: emptyList()
+}
+
+/**
+ * How many rules emit each action name.
+ *
+ * All three branches count, and a rule emitting the same action from two of them counts once: only
+ * one branch of a rule ever runs, so "2 rules emit this" is a claim about rules, not about clauses.
+ */
+private fun actionEmitterCounts(rules: List<RuleAst>): Map<String, Int> {
+    return rules.flatMap { rule ->
+        (rule.actions + rule.elseActions + rule.notExistsActions).map { it.name }.distinct()
+    }
+        .groupingBy { name -> name }
+        .eachCount()
 }
 
 /** Actions for the builder: the first argument type only, defaulting to `string`. */

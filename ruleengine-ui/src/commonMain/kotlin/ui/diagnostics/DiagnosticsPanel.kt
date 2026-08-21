@@ -131,7 +131,12 @@ private fun DiagnosticRow(
         Severity.WARNING -> AccentOrange
         Severity.INFO -> PrimaryBlue
     }
-    val lineLabel = diagnostic.line?.let { "L$it${diagnostic.column?.let { c -> ":$c" } ?: ""}" }
+    // The file comes first when there is one: it is what makes the line number mean something, and a
+    // reader scanning the list needs to know which file they are being sent to before they read where.
+    val position = diagnostic.line?.let { "L$it${diagnostic.column?.let { c -> ":$c" } ?: ""}" }
+    val lineLabel = listOfNotNull(diagnostic.file?.substringAfterLast(delimiter = '/'), position)
+        .joinToString(separator = " ")
+        .takeIf { label -> label.isNotEmpty() }
 
     Column(
         modifier = Modifier

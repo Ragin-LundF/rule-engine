@@ -10,6 +10,7 @@ import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
+import ui.project.ProjectWorkspace
 import ui.samples.SampleGalleryScreen
 import ui.samples.loadSample
 import ui.samples.model.LoadedSample
@@ -17,11 +18,17 @@ import ui.samples.model.SampleDescriptor
 
 /**
  * The Samples gallery. Picking a sample replaces the whole editor and jumps to the Rules area.
+ *
+ * The load goes through [ProjectWorkspace.loadSample] rather than straight into [applySample]: a
+ * sample replaces the *project* as well as the buffers, and the workspace owns the session and the
+ * dirty baselines that say so. Writing only the buffers is what used to leave the top bar naming the
+ * previously opened project's entry — and its save target pointing at that project's files.
  */
 @Suppress("FunctionNaming")
 @Composable
 fun SamplesAreaContent(
     state: RuleEditorState,
+    workspace: ProjectWorkspace,
     scope: CoroutineScope,
     onSampleApplied: () -> Unit,
     modifier: Modifier = Modifier,
@@ -29,7 +36,10 @@ fun SamplesAreaContent(
     SampleGalleryScreen(
         onSampleSelected = { descriptor ->
             scope.launch {
-                state.applySample(descriptor = descriptor, loaded = loadSample(descriptor))
+                // Read before the workspace call so a failed resource read leaves the editor alone
+                // rather than clearing the project first and then throwing.
+                val loaded = loadSample(descriptor)
+                workspace.loadSample { state.applySample(descriptor = descriptor, loaded = loaded) }
                 onSampleApplied()
             }
         },

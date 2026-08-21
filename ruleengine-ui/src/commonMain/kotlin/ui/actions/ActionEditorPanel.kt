@@ -54,6 +54,8 @@ fun ActionEditorPanel(
      * JVM-side; null keeps the "later phase" placeholder.
      */
     usagesContent: (@Composable () -> Unit)? = null,
+    /** Shows one action in the Inspector; null hides the per-row button. */
+    onInspectAction: ((name: String) -> Unit)? = null,
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -98,6 +100,7 @@ fun ActionEditorPanel(
             ActionMode.VISUAL -> VisualActionEditor(
                 state = sync.state,
                 onStateChange = { sync.state = it },
+                onInspectAction = onInspectAction,
             )
             ActionMode.YAML -> YamlActionEditor(
                 yaml = sync.yaml,
@@ -185,6 +188,7 @@ private fun ActionEditorState.hasValidationIssues(): Boolean {
 private fun VisualActionEditor(
     state: ActionEditorState,
     onStateChange: (ActionEditorState) -> Unit,
+    onInspectAction: ((name: String) -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -195,6 +199,7 @@ private fun VisualActionEditor(
             state = state,
             onStateChange = onStateChange,
             modifier = Modifier.fillMaxWidth().weight(1f),
+            onInspectAction = onInspectAction,
         )
     }
 }

@@ -37,7 +37,28 @@ enum class AggregateFunctionName(
     ABS(dslName = "abs", arity = 1..1, isAggregate = false),
 
     /** Signed calendar days from the first argument to the second. */
-    DAYS_BETWEEN(dslName = "daysBetween", arity = 2..2, isAggregate = false);
+    DAYS_BETWEEN(dslName = "daysBetween", arity = 2..2, isAggregate = false),
+
+    /**
+     * Whether its argument has a value at all — the explicit form of the check a `not_exists` branch
+     * answers implicitly.
+     *
+     * Not an aggregate, and the one function whose answer is *about* the data arriving rather than
+     * about what it says. That is what makes it usable as a guard: it returns a real boolean, never
+     * [ruleengine.core.domain.dto.ConditionVerdict.UNKNOWN], so a rule can test availability without
+     * the test itself becoming undecidable.
+     *
+     * It accepts any argument, including a bare `collection` or `object` path, which no other function
+     * does. A path that yields no value is not available: an absent field, a `null`, and an **empty**
+     * collection are alike here, because a value expression reduces all three to the same missing
+     * value.
+     */
+    IS_AVAILABLE(
+        dslName = "isAvailable",
+        arity = 1..1,
+        isAggregate = false,
+        resultKind = FunctionResultKind.BOOLEAN,
+    );
 
     companion object {
 

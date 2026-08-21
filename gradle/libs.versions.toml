@@ -3,7 +3,7 @@ kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 # Jackson 3 series - prefer the latest compatible 3.x release. You can update this to a newer patch version if available.
 jackson2 = "2.22"
-jackson3 = "3.2.1"
+jackson3 = "3.2.2"
 
 [libraries]
 # Kotlin test libraries
@@ -35,5 +35,5 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 kotlin-dokka = "org.jetbrains.dokka:2.2.0"
 jetbrains-compose = "org.jetbrains.compose:1.11.1"
 jetbrains-compose-kotlin-plugin = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-detekt = "dev.detekt:2.0.0-alpha.5"
-version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.0"
+detekt = "dev.detekt:2.0.0-alpha.6"
+version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.1"

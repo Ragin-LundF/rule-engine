@@ -52,10 +52,12 @@ import ui.diagrams.model.DiagramViewKind
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.RuleValidationRunner
 import ui.editor.rules.ViewModeToggle
+import ui.editor.rules.inheritedVariablesForOpenBuffer
 import ui.editor.rules.model.RuleValidationOutcome
 import ui.editor.rules.model.StatusKind
 import ui.editor.rules.model.ViewMode
 import ui.editor.rules.sections.MainEditorContentSection
+import ui.editor.rules.validateOpenEntry
 import ui.pickRuleFile
 import ui.saveDiagramAsPng
 import ui.workbench.export.ExportOverviewButton
@@ -416,13 +418,16 @@ private fun RuleEditorState.validateNow(ruleText: String) {
         return
     }
 
-    when (
-        val outcome = RuleValidationRunner.run(
-            ruleText = ruleText,
-            schema = schema,
-            actions = parsedActionSchema.value,
-        )
-    ) {
+    // The whole entry when a project is open, so the click reports what the engine would at load time —
+    // including the files the editor is not showing. One open file falls back to validating just that.
+    val outcome = validateOpenEntry() ?: RuleValidationRunner.run(
+        ruleText = ruleText,
+        schema = schema,
+        actions = parsedActionSchema.value,
+        inheritedVariables = inheritedVariablesForOpenBuffer(),
+    )
+
+    when (outcome) {
         is RuleValidationOutcome.Completed -> if (outcome.isValid) {
             setStatus(msg = "Validation passed", kind = StatusKind.SUCCESS)
             diagnosticsText.value = "No issues found"

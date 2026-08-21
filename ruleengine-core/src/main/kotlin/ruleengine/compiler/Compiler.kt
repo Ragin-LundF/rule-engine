@@ -99,7 +99,11 @@ object Compiler {
             expr = ast.condition,
             schema = schema,
             normalizerRegistry = normalizerRegistry,
-            ruleId = ast.id
+            ruleId = ast.id,
+            // Only a rule that declares the branch asks its condition to distinguish "no" from
+            // "cannot say". Without it every `not` keeps reading missing data as false, which is what
+            // every rule written before the branch existed depends on.
+            unknownAware = ast.hasNotExistsBranch,
         )
         return CompiledRule(
             id = ast.id,
@@ -108,8 +112,15 @@ object Compiler {
             assignments = compileAssignments(assignments = ast.assignments, schema = schema, ruleId = ast.id),
             elseActions = compileActions(actions = ast.elseActions, schema = schema, ruleId = ast.id),
             elseAssignments = compileAssignments(assignments = ast.elseAssignments, schema = schema, ruleId = ast.id),
+            notExistsActions = compileActions(actions = ast.notExistsActions, schema = schema, ruleId = ast.id),
+            notExistsAssignments = compileAssignments(
+                assignments = ast.notExistsAssignments,
+                schema = schema,
+                ruleId = ast.id,
+            ),
             stopOnThen = ast.stopOnThen,
-            stopOnElse = ast.stopOnElse
+            stopOnElse = ast.stopOnElse,
+            stopOnNotExists = ast.stopOnNotExists,
         )
     }
 
@@ -230,11 +241,18 @@ object Compiler {
         }
     }
 
+    /**
+     * @param unknownAware whether this condition's `not` nodes propagate an undecided child instead of
+     *   reading it as false. True only for a rule that declares a `not_exists` block — see
+     *   [ruleengine.evaluator.compiled.logic.NotExpression]. A filter predicate is always false here:
+     *   its verdict is collapsed to a boolean by the segment that selects elements with it.
+     */
     private fun compileExpression(
         expr: ExpressionAst,
         schema: FieldSchema,
         normalizerRegistry: NormalizerRegistry,
-        ruleId: String?
+        ruleId: String?,
+        unknownAware: Boolean = false,
     ): CompiledExpression {
         return when (expr) {
             is AndAst -> AndExpression(children = expr.children.map {
@@ -242,7 +260,8 @@ object Compiler {
                     expr = it,
                     schema = schema,
                     normalizerRegistry = normalizerRegistry,
-                    ruleId = ruleId
+                    ruleId = ruleId,
+                    unknownAware = unknownAware,
                 )
             })
 
@@ -251,7 +270,8 @@ object Compiler {
                     expr = it,
                     schema = schema,
                     normalizerRegistry = normalizerRegistry,
-                    ruleId = ruleId
+                    ruleId = ruleId,
+                    unknownAware = unknownAware,
                 )
             })
 
@@ -260,8 +280,10 @@ object Compiler {
                     expr = expr.child,
                     schema = schema,
                     normalizerRegistry = normalizerRegistry,
-                    ruleId = ruleId
-                )
+                    ruleId = ruleId,
+                    unknownAware = unknownAware,
+                ),
+                unknownAware = unknownAware,
             )
 
             is ConditionAst -> compileCondition(

@@ -38,6 +38,8 @@ import ui.diagnostics.DiagnosticsPanel
 import ui.diagnostics.QuickFixes
 import ui.diagnostics.model.QuickFix
 import ui.editor.rules.RuleEditorState
+import ui.editor.rules.model.RuleValidationOutcome
+import ui.editor.rules.validateOpenEntry
 import ui.util.Plurals
 
 /** Diagnostics section: displays validation errors and warnings below the editor panels. */
@@ -49,8 +51,10 @@ fun DiagnosticsSection(state: RuleEditorState) {
     var ruleValue by state.ruleValue
     var expanded by state.diagnosticsExpanded
 
-    // Map raw ValidationDiagnostic list to enriched UiDiagnosticWithFix list
-    val enriched = remember(diagnosticsList) {
+    // Map raw ValidationDiagnostic list to enriched UiDiagnosticWithFix list. A diagnostic about another
+    // file of the entry carries that file, so the row can say which one and the click can go there.
+    val openFile = state.selectedManifestRuleFile.value
+    val enriched = remember(diagnosticsList, openFile) {
         diagnosticsList.map { d ->
             DiagnosticMapper.map(
                 severity = d.severity,
@@ -58,6 +62,7 @@ fun DiagnosticsSection(state: RuleEditorState) {
                 suggestion = d.suggestion,
                 line = d.line,
                 column = d.column,
+                file = d.file?.toString()?.takeIf { path -> path != openFile },
             )
         }
     }
@@ -99,6 +104,18 @@ fun DiagnosticsSection(state: RuleEditorState) {
                 if (diagnosticsText.isNotBlank()) diagnosticsText else text
             },
             onRowClick = { d ->
+                // A row for another file of the entry sends the editor there first; its line number is
+                // relative to that file, so jumping without switching would land somewhere arbitrary.
+                d.file?.let { path ->
+                    state.loadSingleManifestRuleFile(relativePath = path)
+                    // Switching a file clears the panel, which is right for an ordinary switch and wrong
+                    // here: the entry-wide result still holds, and emptying the list would strand a
+                    // reader half way through it. Re-running reproduces it against the new open file.
+                    val outcome = state.validateOpenEntry()
+                    if (outcome is RuleValidationOutcome.Completed) {
+                        state.diagnosticsList.value = outcome.diagnostics
+                    }
+                }
                 // Jump cursor to the diagnostic location in the editor
                 runCatching {
                     val line = d.line ?: return@runCatching

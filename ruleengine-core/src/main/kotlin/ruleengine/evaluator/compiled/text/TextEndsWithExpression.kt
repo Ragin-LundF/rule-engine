@@ -1,6 +1,7 @@
 package ruleengine.evaluator.compiled.text
 
 import ruleengine.core.domain.OperatorNames
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
@@ -16,7 +17,7 @@ class TextEndsWithExpression(
     private val ignoreCase: Boolean = false
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.CHEAP
-    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): Boolean {
+    override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
         trace?.enter(
             meta = NodeMeta(
                 type = NodeType.CONDITION,
@@ -28,8 +29,9 @@ class TextEndsWithExpression(
 
         val v = context.get(field) as? PreparedText
         if (v == null) {
-            trace?.exit(result = false)
-            return false
+            // Absent from the record, or present in a shape this test cannot read: not decidable.
+            trace?.exit(verdict = ConditionVerdict.UNKNOWN)
+            return ConditionVerdict.UNKNOWN
         }
 
         val res = if (ignoreCase) {
@@ -38,8 +40,11 @@ class TextEndsWithExpression(
             v.normalized.endsWith(suffix = expectedNormalized)
         }
 
-        trace?.exit(result = res)
-        return res
+        val verdict = ConditionVerdict.of(value = res)
+
+        trace?.exit(verdict = verdict)
+
+        return verdict
     }
 }
 

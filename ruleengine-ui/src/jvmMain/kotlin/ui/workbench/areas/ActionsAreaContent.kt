@@ -35,6 +35,8 @@ fun ActionsAreaContent(
     workspace: ProjectWorkspace,
     expandedDiagramRules: List<RuleAst>,
     modifier: Modifier = Modifier,
+    /** Shows one action in the right-hand Inspector; null hides the per-row button. */
+    onInspectAction: ((name: String) -> Unit)? = null,
 ) {
     Column(modifier = modifier) {
         LinkedFileHeader(
@@ -67,6 +69,7 @@ fun ActionsAreaContent(
                     OutcomeMapDiagram(rules = expandedDiagramRules)
                 }
             },
+            onInspectAction = onInspectAction,
             yamlEditor = { value, onValueChange, editorModifier ->
                 YamlEditor(
                     value = value,

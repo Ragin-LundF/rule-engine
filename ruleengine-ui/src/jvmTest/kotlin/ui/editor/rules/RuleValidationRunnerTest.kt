@@ -1,6 +1,7 @@
 package ui.editor.rules
 
 import ruleengine.core.errors.Severity
+import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.model.RuleValidationOutcome
@@ -123,6 +124,39 @@ class RuleValidationRunnerTest {
     @Test
     fun `unparseable text is returned as a failure, not thrown`() {
         assertIs<RuleValidationOutcome.Threw>(value = run(rule = "this is not a rule at all {{{"))
+    }
+
+    /**
+     * The bug this parameter exists for: a manifest's last rule file reads what the files before it
+     * accumulated, and validating it on its own used to report every one of those reads as unknown.
+     */
+    @Test
+    fun `a read of a variable an earlier file publishes is accepted`() {
+        val rule = """
+            rule "assessment" {
+              description "Reads a list an earlier file of the entry fills."
+              when
+                not ${'$'}failedChecks contains "negative"
+              then
+                label "ok"
+            }
+        """.trimIndent()
+
+        val withoutScope = assertIs<RuleValidationOutcome.Completed>(value = run(rule = rule))
+        assertTrue(
+            actual = withoutScope.diagnostics.any { "unknown variable" in it.message },
+            message = "expected the unknown-variable error without an inherited scope",
+        )
+
+        val withScope = assertIs<RuleValidationOutcome.Completed>(
+            value = RuleValidationRunner.run(
+                ruleText = rule,
+                schema = schema,
+                actions = actions,
+                inheritedVariables = mapOf("failedChecks" to AssignmentKindAst.ADD),
+            )
+        )
+        assertTrue(actual = withScope.isValid, message = "unexpected: ${withScope.diagnostics}")
     }
 
     @Test

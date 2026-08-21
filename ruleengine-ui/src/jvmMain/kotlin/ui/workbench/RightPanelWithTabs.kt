@@ -125,6 +125,14 @@ private fun CollapsedRightPanelStrip(
             onClick = onToggleExpanded,
             modifier = Modifier.padding(top = 6.dp).size(size = 28.dp),
         )
+        // The glyph carries the strip on its own: the rotated label below reads only once the eye is
+        // already there, and a bare `⟨` says "something folds out" without saying what.
+        Text(
+            text = "ⓘ",
+            style = MaterialTheme.typography.subtitle1,
+            color = PrimaryBlue,
+            modifier = Modifier.padding(top = 10.dp),
+        )
         Text(
             text = "INSPECTOR · SIMULATE",
             style = MaterialTheme.typography.caption.copy(letterSpacing = 1.5.sp),
@@ -132,7 +140,7 @@ private fun CollapsedRightPanelStrip(
             maxLines = 1,
             softWrap = false,
             modifier = Modifier
-                .padding(top = 16.dp)
+                .padding(top = 12.dp)
                 .rotateVertically(),
         )
     }

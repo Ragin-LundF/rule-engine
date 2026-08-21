@@ -1,5 +1,6 @@
 package ui.tester
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.RuleBranch
 import ruleengine.evaluator.trace.dto.NodeType
 import ui.tester.model.RuleMatchStatus
@@ -152,6 +153,25 @@ rule "after" {
     amount >= 500
   then
     label "large"
+}
+""".trimIndent()
+
+private val NOT_EXISTS_BRANCH_RULE = """
+rule "rent-or-other" {
+  when
+    amount >= 500
+  then
+    label "rent"
+  else
+    label "other"
+  not_exists
+    label "unknown"
+}
+""".trimIndent()
+
+private val NO_AMOUNT_INPUT = """
+{
+  "purpose": "Coffee shop"
 }
 """.trimIndent()
 
@@ -406,6 +426,55 @@ class JvmRuleSimulationServiceTest {
         assertEquals(expected = RuleBranch.THEN, actual = ruleResult.branch)
         assertEquals(expected = RuleMatchStatus.MATCHED, actual = ruleResult.status)
         assertEquals(expected = listOf("""label "rent""""), actual = ruleResult.actions)
+    }
+
+    @Test
+    fun `a rule whose condition has no data to decide it reports the not_exists branch`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = NOT_EXISTS_BRANCH_RULE,
+            ruleId = "",
+            inputJson = NO_AMOUNT_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        val ruleResult = outcome.ruleResults.single()
+        assertEquals(expected = false, actual = ruleResult.matched)
+        assertEquals(expected = RuleBranch.NOT_EXISTS, actual = ruleResult.branch)
+        assertEquals(expected = RuleMatchStatus.NOT_EXISTS_MATCHED, actual = ruleResult.status)
+        assertEquals(expected = listOf("label \"unknown\""), actual = ruleResult.actions)
+    }
+
+    @Test
+    fun `the same rule still reports else when the amount is there and too small`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = NOT_EXISTS_BRANCH_RULE,
+            ruleId = "",
+            inputJson = NEGATIVE_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        assertEquals(expected = RuleBranch.ELSE, actual = outcome.ruleResults.single().branch)
+    }
+
+    /** The trace has to say which of the two "not true" answers it was, or the badge cannot be explained. */
+    @Test
+    fun `the trace row of an undecided condition carries the undecided verdict`() {
+        val result = service.simulate(
+            schemaText = SCHEMA_TEXT,
+            actionsText = ACTIONS_TEXT,
+            ruleText = NOT_EXISTS_BRANCH_RULE,
+            ruleId = "",
+            inputJson = NO_AMOUNT_INPUT,
+        )
+
+        val outcome = assertIs<SimulationOutcome.Completed>(value = result.outcome)
+        val row = outcome.ruleResults.single().traceRows.single()
+        assertEquals(expected = ConditionVerdict.UNKNOWN, actual = row.verdict)
+        assertEquals(expected = false, actual = row.result)
     }
 
     /** ELSE_MATCHED wins over PARTIAL: the rule has a definite answer, not a near miss. */

@@ -314,6 +314,7 @@ object PlainLanguageRenderer {
             AggregateFunctionName.SUBTRACT -> "the difference of"
             AggregateFunctionName.ABS -> "the magnitude of"
             AggregateFunctionName.DAYS_BETWEEN -> "the days between"
+            AggregateFunctionName.IS_AVAILABLE -> "the presence of"
             null -> "the ${name.lowercase()}"
         }
 

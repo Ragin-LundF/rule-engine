@@ -69,7 +69,8 @@ object BuilderToRuleDsl {
             stop = state.stopOnThen,
         )
         // Emitted only when it has content: an empty `else` block does not parse, so a rule the author
-        // has not given a false branch must not get the keyword either.
+        // has not given a false branch must not get the keyword either. Same for `not_exists`, which
+        // also has to come after `else` — the parser reads the blocks in that order.
         if (state.hasElseBranch) {
             appendBranch(
                 sb = sb,
@@ -77,6 +78,15 @@ object BuilderToRuleDsl {
                 variables = state.elseVariables,
                 actions = state.elseActions,
                 stop = state.stopOnElse,
+            )
+        }
+        if (state.hasNotExistsBranch) {
+            appendBranch(
+                sb = sb,
+                keyword = "not_exists",
+                variables = state.notExistsVariables,
+                actions = state.notExistsActions,
+                stop = state.stopOnNotExists,
             )
         }
 

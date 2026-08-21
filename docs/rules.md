@@ -35,6 +35,10 @@ rule "rule-id" {
   else
     <action>
     ...
+
+  not_exists
+    <action>
+    ...
 }
 ```
 
@@ -45,6 +49,7 @@ rule "rule-id" {
 | `when` | ✅ | One or more conditions that must be true |
 | `then` | ✅ | One or more actions to return when the rule matches |
 | `else` | ⬜ | What to return when the condition is **false**. Same contents as `then` |
+| `not_exists` | ⬜ | What to return when the record carries no data to decide the condition. Same contents as `then`, and written after `else` |
 
 ### Minimal Example
 
@@ -557,9 +562,133 @@ rule "tier-low" {
 
 ---
 
+## Missing Data — the `not_exists` Branch
+
+A condition needs data on both sides of it. When a record does not carry that data, "the condition is
+false" is the wrong answer — the truthful one is *"the condition could not be decided"*. A rule can say
+what to produce in that case, in a `not_exists` block after `then` and `else`:
+
+```
+rule "order-tier" {
+  description "A large order is priority, a small one standard, an order with no amount neither."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+
+  else
+    label "standard"
+
+  not_exists
+    label "unknown"
+    flag "no-amount"
+}
+```
+
+- `amount: 5000` → `priority`
+- `amount: 10` → `standard`
+- no `amount` at all, or `amount: null` → `unknown` and `no-amount`
+
+The block takes exactly what a `then` block takes: actions, `extract` clauses, `set` and `add` clauses,
+and `stop`.
+
+### What counts as undecided
+
+| Read | Undecided? |
+|---|---|
+| A field the record does not carry, or carries as `null` | yes |
+| A field whose value cannot be read as its declared type | yes |
+| A variable no earlier rule published | yes |
+| `avg`, `median`, `min`, `max` over a missing or empty collection | yes — they produce no value |
+| `count` and `sum` over a missing collection | no — they produce `0` |
+| `every` over a missing collection | no — vacuously true |
+| `any` over a missing collection | no — nothing satisfied it |
+| A field that is present and simply does not match | no — that is an ordinary false |
+
+### How it combines with `and`, `or` and `not`
+
+An undecided read does not make the whole condition undecided. It only does so when nothing else
+settles the answer:
+
+```
+amount >= 1000 or country == "de"      # country is "de"    -> then       (one true side is enough)
+amount >= 1000 and country == "fr"     # country is "de"    -> else       (one false side settles it)
+amount >= 1000 and country == "de"     # country is "de"    -> not_exists
+```
+
+| Combination | Answer |
+|---|---|
+| `false and <undecided>` | false |
+| `true and <undecided>` | undecided |
+| `true or <undecided>` | true |
+| `false or <undecided>` | undecided |
+| `not <undecided>` | undecided, **in a rule that declares `not_exists`** |
+
+### `isAvailable()`
+
+`isAvailable(<value>)` asks whether the record carries something at all. It answers a plain `true` or
+`false`, never undecided, which is what makes it usable as a guard:
+
+```
+when
+  isAvailable(amount)
+  and amount >= 1000
+```
+
+That rule takes `else` for a record with no amount: the guard answered `false` and settled the `and`.
+Use `isAvailable` when the rule should treat missing data as a plain no; use `not_exists` when the
+outcome should say the data was missing.
+
+It accepts anything a value expression may hold — a field, a nested path, a whole object or collection,
+an aggregate, a variable — and can be negated:
+
+```
+isAvailable(transactions)
+isAvailable($turnover)
+not isAvailable(counterparty)
+```
+
+An **empty** collection is not "available": an absent collection and an empty one reduce to the same
+nothing, so `isAvailable(transactions)` is `false` for `transactions: []`. Ask `count(transactions) == 0`
+to test for emptiness.
+
+### Rules
+
+| Aspect | Behaviour |
+|---|---|
+| Optional | A rule without `not_exists` behaves as it always did: undecided data reads as false, so the rule takes `else`, or produces nothing when it has no `else` either. |
+| Position | After `then`, and after `else` when the rule has one. An `else` written after `not_exists` is an error. |
+| At most once | A second `not_exists` on the same rule is an error. |
+| Never empty | A `not_exists` with no action, no `set` and no `stop` is an error — drop the keyword. |
+| Exclusive | Exactly one branch produces output per record. |
+| Not a match | The condition was neither true nor false, so the rule is not reported as matched. |
+| Variables | A `set` or `add` here publishes to the following rules exactly as one in `then` does. |
+| Trace | The rule's trace node records the verdict `UNKNOWN` and the branch it selected. |
+
+`not_exists` is a keyword, so an action may not be named `not_exists`.
+
+### One interaction to know about
+
+Declaring `not_exists` changes what `not` means for missing data inside that rule. The
+[guarded accumulator](#collecting-values--the-add-clause) relies on `not $topics contains "billing"`
+being **true** while the list is still empty. In a rule that declares `not_exists`, the same condition
+is undecided and takes that branch instead — so a rule that guards on a list it fills should not
+declare `not_exists`.
+
+### When to use it
+
+Use it when "we could not tell" is a business outcome of its own: an assessment that must report
+`UNKNOWN` rather than a failure, a check that has to be recorded as skipped, a missing mandatory field
+that deserves a different flag from a wrong one. When missing data simply means the rule does not
+apply, leave the block out — that is already what happens.
+
+---
+
 ## Ending the Run — the `stop` Keyword
 
-A branch can end the run. Write `stop` as the **last** statement of a `then` or `else` block:
+A branch can end the run. Write `stop` as the **last** statement of a `then`, `else` or `not_exists` block:
 
 ```
 rule "blocked-country" {
@@ -711,6 +840,12 @@ rule "turnover-score" {
 }
 ```
 
+That needs no declaration: `score` is declared `argTypes: [integer]` and the engine does not check what
+the variable holds. An action whose argument is *meant* to be a variable can say so instead, with
+`argTypes: [variable_string]` or `[variable_list]` — see
+[the action schema](actions.md#variable-arguments). The rule is written exactly the same way; the
+declaration is what gets it checked and completed.
+
 ### Scope and Ordering
 
 | Question | Answer |
@@ -727,6 +862,11 @@ rule "turnover-score" {
 > Without variables or a `stop`, order only affects the order of the results. A rule that
 > reads `$name` depends on an earlier rule having run and matched, so moving rule files around in the
 > manifest can change the outcome.
+
+The visual editor scopes variables the same way. Editing one rule file of an open manifest, it counts
+the `set` and `add` clauses of every file listed before it — including ones you have edited but not yet
+saved — so reading a variable an earlier file publishes is accepted, while reading one a later file
+publishes is still the forward reference the engine rejects.
 
 ### Naming
 

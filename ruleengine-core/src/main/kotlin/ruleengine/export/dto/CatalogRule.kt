@@ -18,9 +18,13 @@ package ruleengine.export.dto
  *   Empty for a rule that declares no `else`, which is what a renderer checks before writing an
  *   "otherwise" section at all.
  * @param elsePublishes Names of the variables the `else` block publishes with `set`.
+ * @param notExistsOutcomes The actions the rule's `not_exists` block produces when [condition] cannot
+ *   be decided because the data it reads is missing. Empty for a rule that declares no `not_exists`.
+ * @param notExistsPublishes Names of the variables the `not_exists` block publishes with `set`.
  * @param stopsOnThen True when a match ends the run: the rules listed after this one are not evaluated.
  *   A reader of the overview has to know that, or the rules below look like they still apply.
  * @param stopsOnElse True when the `else` block ends the run.
+ * @param stopsOnNotExists True when the `not_exists` block ends the run.
  */
 data class CatalogRule(
     val id: String,
@@ -31,6 +35,9 @@ data class CatalogRule(
     val publishes: List<String> = emptyList(),
     val elseOutcomes: List<CatalogOutcome> = emptyList(),
     val elsePublishes: List<String> = emptyList(),
+    val notExistsOutcomes: List<CatalogOutcome> = emptyList(),
+    val notExistsPublishes: List<String> = emptyList(),
     val stopsOnThen: Boolean = false,
     val stopsOnElse: Boolean = false,
+    val stopsOnNotExists: Boolean = false,
 )

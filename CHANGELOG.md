@@ -5,6 +5,183 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.9.0
+
+### Added
+
+- **A rule can react to data a record does not carry, through a `not_exists` branch.** Until now a
+  condition over an absent field was simply false, so `else` had to stand for both "the amount is too
+  low" and "there is no amount" — and a rule set that needed to report the second could only leave the
+  check out:
+
+  ```
+  rule "order-tier" {
+    description "A large order is priority, a small one standard, an order with no amount neither."
+    when
+      amount >= 1000
+    then
+      label "priority"
+    else
+      label "standard"
+    not_exists
+      label "unknown"
+      flag "no-amount"
+  }
+  ```
+
+  Condition evaluation is now three-valued (`ConditionVerdict.TRUE` / `FALSE` / `UNKNOWN`) with Kleene
+  propagation, so an undecided read only decides the rule when nothing else settles it:
+  `false and unknown` is still `false`, `true or unknown` still `true`. `RuleMatch.branch` reports the
+  new `RuleBranch.NOT_EXISTS`, and the trace records both the verdict and the branch the rule took.
+
+  **Nothing existing changes.** A rule that declares no `not_exists` block reads an undecided condition
+  as false exactly as before — including inside `not`, which is the one operator where the two readings
+  differ, and which is why the documented guarded-accumulator pattern (`not $topics contains "x"` on a
+  list nothing has filled yet) still fires. `RULE-SPEC.md` §5.12 and
+  [docs/rules.md](docs/rules.md#missing-data--the-not_exists-branch) document the contract, including the
+  one case to keep apart: a rule that guards on an accumulator should not declare `not_exists`.
+
+- **The visual editor covers the new branch end to end.** A NOT EXISTS card next to THEN and ELSE, with
+  the same row editors and the same add/drop behaviour; `not_exists` in the code editor's highlighting,
+  block indentation and completions (offered after `then` and `else`, and not inside itself, matching
+  where the parser accepts it); a **not exists** status in the test panel with its own filter and count,
+  coloured orange because the rule produced output without deciding; undecided trace rows marked orange
+  so a run can be read back to the field that was missing; and a *Not-exists actions* row in the
+  inspector.
+
+- **An action schema can declare that an argument is a variable**, with the new `variable_string` and
+  `variable_list` argument types. Passing a variable to an action has always worked and is unchanged —
+  `label $why` is still accepted for an action declared `argTypes: [string]`, unchecked — so this is
+  opt-in metadata rather than a new requirement. Declaring it turns the argument into a checked
+  contract: a literal is rejected, and so is a variable written with the wrong clause (`add` where
+  `variable_string` was declared, or `set` where `variable_list` was, which the engine can tell apart
+  because a name is either a plain value or a list). The editor reads the declaration too — the visual
+  Builder edits such an argument with a dropdown of the variables of the right kind instead of a
+  free-text box, and the code editor completes only those. No compiler or evaluator change was needed:
+  a `variable_list` argument already arrived as a `List`, and an unpublished one as `null`.
+
+- **`isAvailable(value)`** answers whether a record carries something at all — `true` or `false`, never
+  undecided — so a rule can guard on availability without the guard itself becoming undecidable. It
+  accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable, and is
+  the explicit form of the question a `not_exists` branch answers implicitly. One limit worth knowing:
+  a value expression reduces an absent collection and an **empty** one to the same nothing, so
+  `isAvailable(orders)` is `false` for `orders: []` — ask `count(orders) == 0` to test for emptiness.
+
+- **`RULE-SPEC.md` now tells an assistant to validate its own output** (§10): how to add the dependency,
+  which CLI mode to use, what the exit codes and JSON diagnostics mean, and to evaluate a record before
+  handing anything over. The document has always been able to generate artifacts nobody had loaded.
+
+- **`ValidatorCli` can validate a manifest entry**, with `--manifest <file> [--entry <id>]`, and
+  directory mode gained `--actions`. Only the new mode covers what a manifest adds: the action schema,
+  the file order that decides which variables are in scope where, and rule ids repeated across files —
+  none of which the `--schema` + `--rules` mode can see. Every diagnostic names the rule file it came
+  from, with a line relative to that file. `EntryValidator` is the same thing as a library entry point,
+  for a tool that has to show a problem rather than just refuse to start.
+
+  The README's CLI Quick Start was wrong and has been rewritten: `./gradlew run -PmainClass=…` resolved
+  to `:ruleengine-ui:run` and started the desktop app instead of validating anything. The CLIs are
+  ordinary `main` classes on the library's classpath — run them from a project that has the dependency.
+
+- **The visual editor validates the whole project.** With a manifest open, **Validate** now checks every
+  rule file of the entry in manifest order rather than the file on screen. A diagnostics row names the
+  file it belongs to and opens it on click; editor underlines still come only from the open file, since
+  another file's line numbers are not this file's.
+
+- **The CLIs are runnable from this repository**, with `./gradlew :ruleengine-core:validateRules` and
+  `:evaluateRules`, both taking `--args="…"`. They run from the repository root, so a relative path in
+  the arguments means what it does at the prompt. `ValidatorCli`'s text output is now one diagnostic per
+  line — `[SEVERITY] file:line:column message → suggestion` — instead of a single line of
+  `ValidationDiagnostic(...)` for the whole entry, which was unreadable the moment there was more than
+  one problem. A passing run also prints its warnings, which nothing else would ever surface.
+
+- **The Inspector describes the rule you have selected, and there is now a way to open it.** The right
+  panel's Inspector tab has been in the workbench for a long time, and for a long time it showed
+  nothing but *"Select a field, action, rule, or condition to see details."* Not a regression — the
+  selection it reads was never dispatched from anywhere. `SelectRule`, `SelectField` and `SelectAction`
+  existed in the view model and had zero callers outside the tests, so four of the panel's five branches
+  were unreachable code; only a condition row in Builder mode ever filled it, and Builder is not the
+  default mode.
+
+  The selection is now derived from the one value every view already highlights —
+  `BuilderRulesController.selectedId` — rather than dispatched at each click site, so the rule tree, the
+  table, the builder's header, a rename, an added rule, a loaded sample and a switch of manifest file
+  all reach the panel through the same path, and a new path cannot forget to. Code mode has no rule
+  selection on screen, so there the **caret** is the selection: putting the cursor in a rule block
+  inspects that rule, and a caret between blocks keeps the last one rather than blanking the panel.
+
+  Two things it used to get wrong are fixed in the same pass. The counts came from the *open builder
+  rule* rather than from the rule the panel names, which in code mode meant reporting one rule's id
+  beside another rule's conditions and actions; they now come from the selected rule's own state. And
+  the diagnostics list was the whole buffer's, so every rule claimed its neighbours' errors — it is now
+  narrowed to the rule's own lines. `UiDiagnostic` carries no file, so a diagnostic from another file of
+  the entry can still land inside those line numbers: this is narrower, not exact.
+
+- **A `ⓘ Inspector` button in the top bar**, next to the theme toggle, which opens the panel on the
+  Inspector tab and closes it again when it is already showing — previously the only way in was to
+  notice the 56 dp strip on the right edge and click it. The strip itself now carries the same glyph, so
+  it says what it holds before the rotated label is read. The panel's open state and its tab are
+  persisted the way the theme choice is, so a panel left open comes back open.
+
+- **Field and action rows carry a `ⓘ` button that inspects them**, which is what makes `FieldInspector`
+  and `ActionInspector` reachable at all. A button rather than a click on the row: every cell in those
+  tables is a text field, and a row-wide click target would fight the editing it sits on top of. Offered
+  on top-level field rows only — the inspector's field catalog is built from the schema's top-level
+  entries, so a nested member's path would resolve to nothing.
+
+- **"Usages" is a real count.** `FieldInspector` and `ActionInspector` both hardcoded `"0 rules"` behind
+  a `// TODO`, which nobody could see while the panels were unreachable. Both now count the rules that
+  read the field or emit the action, over the rules currently loaded, using the same `FieldUsage`
+  analysis the field-flow diagram runs on. A rule naming a field twice counts once, a read through a
+  `set` expression counts, and a rule emitting an action from both `then` and `else` counts once —
+  only one branch of a rule ever runs.
+
+  The panel's four dead buttons — *Duplicate*, *Delete*, *Edit field*, *Edit action*, every one of them
+  an empty `onClick` — are gone rather than disabled. Nobody could reach them before; leaving them in
+  would have made this change ship four broken buttons.
+
+### Fixed
+
+- **Loading a sample left the project it replaced behind it.** The top bar's `Entry: … ▾` picker went on
+  naming the *previous* project's entry, because the sample path wrote only `RuleEditorState` and never
+  touched `ProjectWorkspace.session` — `SamplesAreaContent` was not even given the workspace. That split
+  the two stores of "the active entry": `selectedManifestEntry` described the sample, and the session,
+  which is what the picker read, still described the project.
+
+  The picker was the visible half. The session also stayed the **save target**, and `applySample` never
+  cleared the dirty baselines the way `ProjectLoader` does — so the sample read as unsaved work against
+  the old project's baselines, and **Save Project wrote the sample's schema and actions into that
+  project's directory and rewrote its manifest.** The rule buffer escaped only incidentally, because the
+  saver skips rule writes while `showAllRules` is set, which a sample happens to leave set.
+
+  A sample now loads through `ProjectWorkspace.loadSample`, which clears the session, the dirty baselines
+  and the scratch links before applying it — a sample has no location on disk, so it has no session, and
+  `ProjectSession.root` is a real path that cannot honestly be invented. Saving one therefore asks where
+  to put it instead of silently choosing. A provenance flag backs that up: a session arriving from
+  anywhere else is not accepted as the save target for buffers that never came out of it.
+
+- **The entry picker now reads the manifest, not just the session**, so it names the entry of a loaded
+  sample rather than showing nothing. It is a read-only indicator in that state, without the `▾`: both
+  operations behind the menu — switching entries and adding one — return early without a session, so a
+  menu there would offer two controls that do nothing. Every bundled sample declares a single entry, so
+  there is nothing to switch between today.
+
+- **The outcome map ignored every branch but `then`.** The view groups rules by the value they can decide
+  and labels each bucket with how many rules decide it — so a rule producing `assessment "RED"` from an
+  `else` was missing from that bucket, and the count next to it was wrong in exactly the case the view
+  exists to catch. All branches are now grouped, with a badge naming the non-`then` ones; a rule reaching
+  one bucket from two of its own branches still counts once, because only one branch of a rule runs.
+  The grouping is `internal` rather than private now, so a test asserts it directly — the test that
+  covered this before rebuilt the grouping by hand and therefore agreed with the bug.
+
+- **The editor validated one rule file of a manifest as if the others did not exist.** A `$name` whose
+  `set` or `add` lived in an earlier file of the same entry was reported as
+  `reads unknown variable`, so a final rule file whose whole job is to read what the files before it
+  accumulated could never be made to validate — while the very same files loaded cleanly through
+  `RuleEngineBuilder`, which validates an entry as one unit. `Validator.validate` now takes an optional
+  `inheritedVariables` map naming what earlier rules publish, and the editor fills it from the files
+  listed before the open one, unsaved edits included. A forward reference is still an error: a `set` in
+  a file listed *after* the open one is not in scope there either.
+
 ## 1.8.1
 
 ### Added

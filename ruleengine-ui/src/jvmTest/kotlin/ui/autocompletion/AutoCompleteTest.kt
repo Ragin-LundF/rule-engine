@@ -250,7 +250,54 @@ class AutoCompleteTest {
         )
     }
 
-    /** A closing brace ends the rule, so the next token starts fresh rather than staying in ELSE. */
+    @Test
+    fun `the cursor after not_exists is in the NOT_EXISTS section`() {
+        val text = "rule \"r\" {\n  when\n    amount >= 1\n  then\n    label \"x\"\n  not_exists\n    "
+
+        assertEquals(
+            expected = DslSection.NOT_EXISTS,
+            actual = analyzeDslContext(text = text, cursorPos = text.length).section,
+        )
+    }
+
+    // --- not_exists branch ---
+
+    @Test
+    fun `a then block offers the not_exists keyword`() {
+        assertTrue(
+            actual = branchCompletions(section = DslSection.THEN).map { it.label }.contains(element = "not_exists"),
+            message = "not_exists must be offered after a then block",
+        )
+    }
+
+    /** `not_exists` is written after `else`, so an else block is still allowed to open it. */
+    @Test
+    fun `an else block offers not_exists but not else`() {
+        val labels = branchCompletions(section = DslSection.ELSE).map { it.label }
+
+        assertTrue(actual = labels.contains(element = "not_exists"), message = "got: $labels")
+        assertTrue(actual = labels.none { it == "else" }, message = "got: $labels")
+    }
+
+    /** Nothing may follow it, so offering either branch keyword there would only produce a parse error. */
+    @Test
+    fun `a not_exists block offers no branch keyword at all`() {
+        val labels = branchCompletions(section = DslSection.NOT_EXISTS).map { it.label }
+
+        assertTrue(actual = labels.none { it == "else" || it == "not_exists" }, message = "got: $labels")
+    }
+
+    @Test
+    fun `a not_exists block offers the same action clauses as a then block`() {
+        val then = branchCompletions(section = DslSection.THEN)
+            .map { it.label }
+            .filter { it != "else" && it != "not_exists" }
+        val notExists = branchCompletions(section = DslSection.NOT_EXISTS).map { it.label }
+
+        assertEquals(expected = then, actual = notExists)
+    }
+
+    /** A closing brace ends the rule, so the next token starts fresh rather than staying in a branch. */
     @Test
     fun `the cursor after the rule's closing brace is back at top level`() {
         val text = "rule \"r\" {\n  when\n    amount >= 1\n  then\n    label \"x\"\n  else\n    label \"y\"\n}\n"

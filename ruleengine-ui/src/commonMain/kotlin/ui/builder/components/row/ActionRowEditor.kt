@@ -85,6 +85,9 @@ private fun ActionCallRow(
 ) {
     val argType = actions.firstOrNull { it.name == action.name }?.argType ?: "string"
     val takesArgument = argType != "none"
+    // An extraction always produces a string, so it cannot fill an argument the action declares as a
+    // variable reference — offering the button there would only build a rule the validator rejects.
+    val takesExtraction = takesArgument && argType != VARIABLE_STRING_ARG && argType != VARIABLE_LIST_ARG
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -109,6 +112,7 @@ private fun ActionCallRow(
             ActionValueEditor(
                 value = action.arguments.firstOrNull() ?: "",
                 argType = argType,
+                fields = fields,
                 onValueChange = { newValue ->
                     if (action.arguments.isEmpty()) {
                         action.arguments.add(newValue)
@@ -123,7 +127,7 @@ private fun ActionCallRow(
 
         // Offered only when the action takes an argument for the captured value to land in, and only
         // while it has no extraction — the clause above carries its own remove control.
-        if (action.extraction == null && takesArgument) {
+        if (action.extraction == null && takesExtraction) {
             TinyButton(
                 text = "⊕ extract",
                 onClick = {
@@ -219,15 +223,29 @@ private fun defaultExtraction(fields: List<CatalogFieldInfo>): BuilderExtraction
  * Typed value editor for an action argument.
  *
  * - `boolean` → dropdown with true/false options.
+ * - `variable_string` / `variable_list` → dropdown of the variables that fit, because the argument is a
+ *   reference to pick rather than a value to type. Typing one by hand into a text box is how you get a
+ *   `$name` the validator then rejects.
  * - All other types → plain text field.
  */
 @Composable
 private fun ActionValueEditor(
     value: String,
     argType: String,
+    fields: List<CatalogFieldInfo>,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (argType == VARIABLE_STRING_ARG || argType == VARIABLE_LIST_ARG) {
+        val options = variableOptions(fields = fields, wantList = argType == VARIABLE_LIST_ARG)
+        VariableArgumentEditor(
+            value = value,
+            options = options,
+            onValueChange = onValueChange,
+            modifier = modifier,
+        )
+        return
+    }
     if (argType == "boolean") {
         DropdownSelector(
             selected = value.ifBlank { "true" },
@@ -244,3 +262,50 @@ private fun ActionValueEditor(
         )
     }
 }
+
+/**
+ * The variable picker, or a text box when the rule set has no variable of the required kind yet.
+ *
+ * A dropdown with nothing in it cannot be filled, and an author writing the action before the `set`
+ * that feeds it is the normal order of work — so the text box stays available as the way out.
+ */
+@Composable
+private fun VariableArgumentEditor(
+    value: String,
+    options: List<String>,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (options.isEmpty()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            modifier = modifier.defaultMinSize(minWidth = 120.dp),
+        )
+        return
+    }
+    DropdownSelector(
+        selected = value.ifBlank { options.first() },
+        options = options,
+        onSelected = onValueChange,
+        modifier = modifier,
+    )
+}
+
+/**
+ * The `$name` references of the requested kind.
+ *
+ * A list variable is the one the catalog types as such — it is written with `add`, which is exactly the
+ * clause `variable_list` declares. Everything else with a `$` id was written with `set`.
+ */
+private fun variableOptions(fields: List<CatalogFieldInfo>, wantList: Boolean): List<String> {
+    return fields
+        .filter { field -> OperatorOptions.isVariableId(fieldId = field.id) }
+        .filter { field -> OperatorOptions.isListVariableType(fieldType = field.type) == wantList }
+        .map { field -> field.id }
+}
+
+/** The lowercased `ActionArgType` names the Builder catalog carries for a variable argument. */
+private const val VARIABLE_STRING_ARG: String = "variable_string"
+private const val VARIABLE_LIST_ARG: String = "variable_list"

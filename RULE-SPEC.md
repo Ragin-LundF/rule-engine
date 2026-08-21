@@ -13,6 +13,9 @@
 > Every rule example in this document is executed by an automated test
 > (`ruleengine-core/src/test/kotlin/ruleengine/docs/SpecExampleTest.kt`), which parses, validates and
 > compiles it against the schema examples shown here. If an example ever stops working, that test fails.
+>
+> **You can check your own output the same way.** The engine ships command-line validation, so generated
+> artifacts do not have to be handed over untested — see [§10](#10-validating-what-you-generated).
 
 ---
 
@@ -27,7 +30,8 @@
 7. [Translating Business Language to Rules](#7-translating-business-language-to-rules)
 8. [Complete End-to-End Example](#8-complete-end-to-end-example)
 9. [Validation Constraints — What the Engine Rejects](#9-validation-constraints--what-the-engine-rejects)
-10. [Quick-Reference Checklists](#10-quick-reference-checklists)
+10. [Validating What You Generated](#10-validating-what-you-generated)
+11. [Quick-Reference Checklists](#11-quick-reference-checklists)
 
 ---
 
@@ -55,6 +59,7 @@ Manifest (YAML)      ──► ties field schema + action schema + rule files to
 - Every rule is checked against the input and **all that match are returned** — one rule matching never suppresses another by itself, and there is no implicit priority.
 - **Evaluation order is fixed and load-bearing.** Rules run in manifest `rules:` file order, then in declaration order within each file, and matches come back in that same order. The engine guarantees this because two constructs depend on it: a `set` clause publishes a value only the rules after it can read (§5.6), and a branch ending in `stop` ends the run at its own position (§5.11). Reordering the manifest can therefore change the result, not just its sequence.
 - A rule may also declare an **`else` branch** — output for the case where its condition is false (§5.10). It changes what a single rule can produce, not how rules relate: a rule that does not match still produces nothing unless it says otherwise.
+- A rule may also declare a **`not_exists` branch** — output for the case where the record does not carry the data the condition reads (§5.12). Without it, missing data makes the condition false, which is what every rule did before the branch existed.
 - A branch may end in **`stop`** (§5.11), which ends the run: the rules declared after it are not evaluated at all for that record. This is the one construct that lets one rule suppress another.
 - The engine **never modifies** input data. It only reads it and returns results. A variable lives for the duration of one evaluation and is never written back into the input.
 
@@ -629,9 +634,42 @@ actions:
 | `string` | Any text in double quotes | `label "rent"` |
 | `integer` | A whole number (no quotes) | `score 10` |
 | `decimal` | A number with decimal places (no quotes) | `threshold 0.75` |
+| `variable_string` | A `$name` reference to a variable published with `set` (§5.6) | `reason $why` |
+| `variable_list` | A `$name` reference to a list variable accumulated with `add` (§5.6.1) | `topics $topics` |
 | *(none)* | `argTypes: []` — the rule writes the bare action name | `suppress` |
 
-> **Rule:** Only `string`, `integer`, and `decimal` are valid argument types. No other types exist for actions.
+> **Rule:** Only `string`, `integer`, `decimal`, `variable_string` and `variable_list` are valid argument
+> types. No other types exist for actions.
+
+#### Variable arguments
+
+Passing a variable to an action has always worked and needs no declaration: `label $why` is accepted for
+an action declared `argTypes: [string]`, and the engine does not check what the variable holds.
+
+Declaring `variable_string` or `variable_list` says that the argument **is** a variable reference, which
+turns that into something the engine checks and an editor can complete against:
+
+```yaml
+actions:
+  reason:
+    argTypes: [variable_string]   # must be a $name written with `set`
+  topics:
+    argTypes: [variable_list]     # must be a $name written with `add`
+```
+
+```
+then
+  set why = "amount-too-low"
+  add "billing" to topics
+  reason $why                     # ✅
+  topics $topics                  # ✅
+  reason $topics                  # ❌ written with `add`, not `set`
+  reason "amount-too-low"         # ❌ a literal where a reference is declared
+```
+
+The declaration changes nothing about how a rule is written — only what is checked and what the editor
+offers. A `variable_list` argument reaches the consuming application as a list; a variable no rule that
+ran published arrives as `null`.
 
 > **Rule:** The number of arguments in a rule must match `argTypes` exactly. An action declared
 > `argTypes: [string]` must be given one quoted value; an action declared `argTypes: []` must be given
@@ -704,6 +742,10 @@ rule "<rule-id>" {
     <action>
     ...
     stop                       # OPTIONAL — see §5.11
+
+  not_exists                   # OPTIONAL — see §5.12
+    <action>
+    ...
 }
 ```
 
@@ -714,7 +756,8 @@ rule "<rule-id>" {
 | `when` | ✅ | Keyword, followed by one or more conditions. |
 | `then` | ✅ | Keyword, followed by one or more actions and/or `set` clauses (§5.6). |
 | `else` | ⬜ | Keyword, followed by the output for a **false** condition. Same contents as `then`. At most once, and only after `then`. See §5.10. |
-| `stop` | ⬜ | Bare word, the **last** statement of a `then` or `else` block. Ends the run: the rules after this one are not evaluated. See §5.11. |
+| `not_exists` | ⬜ | Keyword, followed by the output for a condition the record's data could not decide. Same contents as `then`. At most once, and **after** `else` when both are present. See §5.12. |
+| `stop` | ⬜ | Bare word, the **last** statement of a `then`, `else` or `not_exists` block. Ends the run: the rules after this one are not evaluated. See §5.11. |
 
 **No other keys are valid inside a rule block.** Do not invent `priority`, `enabled`, `version`, `tags` or `salience` — the engine rejects them.
 
@@ -996,9 +1039,9 @@ Rules:
 | Visibility | Only rules **after** the assigning rule, in the same manifest entry. "After" means manifest `rules:` file order, then declaration order within the file. |
 | When it runs | Only if the rule matched — `set` sits in `then`, like an action. |
 | Own actions | Assignments are applied **before** the same rule's actions resolve, so `score $turnover` in that rule works. |
-| Never set | Reading it yields a missing value, so the condition is **false**. Evaluation never fails. |
+| Never set | Reading it yields a missing value, so the condition is **false** — or, in a rule that declares a `not_exists` branch, *undecided* and that branch is taken (§5.12). Evaluation never fails either way. |
 | Re-assignment | Allowed; the last matching rule wins. Produces a **warning**. |
-| Type | None declared — a variable carries whatever its expression produced, and the operand type check is skipped for it. |
+| Type | None declared — a variable carries whatever its expression produced, and the operand type check is skipped for it. An action *may* declare that its argument is a variable (§4.1), which checks the clause that writes it but still does not type its value. |
 | Lifetime | One evaluation of one entry. Never written back into the input; never carried to the next record. |
 
 Writing rules:
@@ -1090,6 +1133,10 @@ conditions are written in. An `or` is unaffected: it still evaluates its other b
 
 > **`add` is a keyword.** An action may not be named `add`; the engine reports it as an error and the
 > action has to be renamed.
+
+> **Do not give a guarded accumulator rule a `not_exists` branch.** The guard works because an unwritten
+> list reads as missing and `not … contains` is therefore true. A rule that declares `not_exists` asks to
+> hear about missing data instead, so the same guard becomes undecided and takes that branch (§5.12).
 
 ### 5.7 Rule ID conventions
 
@@ -1196,6 +1243,7 @@ These do not reduce a collection; they transform values.
 |---|---|
 | `abs(value)` | Magnitude of a number. Zero and positives are unchanged, negatives become positive. |
 | `daysBetween(from, to)` | Whole calendar days from `from` to `to`, **signed** — a `to` that comes first is negative. |
+| `isAvailable(value)` | Whether the record carries the value at all — `true` or `false`, never missing. Accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable. See §5.12. |
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable:
 
@@ -1534,6 +1582,9 @@ The engine reports an `else` result alongside the ordinary matches, tagged with 
 produced it, so a consumer can tell the two apart. Reading the result is covered in
 [docs/integration-guide.md](docs/integration-guide.md).
 
+`else` covers the case where the condition was **false**. For the case where the record carries no data
+to decide it at all, see the `not_exists` branch (§5.12) — without it, missing data also lands here.
+
 > **`else` is a keyword.** An action may not be named `else`. If an action schema declares one, the
 > engine reports it as an error and the action has to be renamed.
 
@@ -1635,6 +1686,132 @@ Use `stop` for a **guard**: a condition that settles the record outright, where 
 not merely overridden but inapplicable — a sanctioned counterparty, a missing mandatory field, a record
 already rejected. Do not use it to express precedence between rules that should all contribute; that is
 what separate conditions are for.
+
+---
+
+### 5.12 Missing data — the `not_exists` branch and `isAvailable()`
+
+A condition needs data on both sides. When the record does not carry it, "the condition is false" is
+the wrong answer — the truthful one is *"the condition could not be decided"*. A rule may say what to
+produce in that case:
+
+```
+rule "order-tier" {
+  description "An order of at least 1000 is priority, a smaller one standard, an order with no amount neither."
+
+  when
+    amount >= 1000
+
+  then
+    label "priority"
+
+  else
+    label "standard"
+
+  not_exists
+    label "unknown"
+    flag "no-amount"
+}
+```
+
+For a record with `amount: 5000` the rule produces `priority`, for `amount: 10` it produces `standard`,
+and for a record with no `amount` at all — absent, or `null` — it produces `unknown` and `no-amount`.
+
+The `not_exists` block takes **exactly what a `then` block takes**: actions, `extract` clauses (§5.5),
+`set` and `add` clauses (§5.6), and `stop` (§5.11).
+
+#### What makes a condition undecided
+
+Two things, and only two:
+
+| Source | Undecided? |
+|---|---|
+| A field the record does not carry, or carries as `null` | ✅ |
+| A field whose value cannot be read as its declared type | ✅ |
+| A variable no earlier rule published | ✅ |
+| `avg` / `median` / `min` / `max` over a collection that is missing or empty | ✅ — they produce no value |
+| `count(path)` / `sum(path)` over a missing collection | ⬜ — they produce `0`, a real number |
+| `every(...)` over a missing collection | ⬜ — vacuously `true` |
+| `any(...)` over a missing collection | ⬜ — `false`, no element satisfied it |
+| A field that is present but simply does not match | ⬜ — that is an ordinary `false` |
+
+#### How it combines
+
+`and`, `or` and `not` answer "undecided" only when they have to. A condition reaches `not_exists` only
+when its **own** answer is undecided:
+
+```
+amount >= 1000 or country == "de"      # country is "de"     -> then      (one true side is enough)
+amount >= 1000 and country == "fr"     # country is "de"     -> else      (one false side settles it)
+amount >= 1000 and country == "de"     # country is "de"     -> not_exists
+not isAvailable(amount)                # amount absent       -> then
+```
+
+| Combination | Answer |
+|---|---|
+| `false and <undecided>` | `false` — nothing the missing side could say would change it |
+| `true and <undecided>` | undecided |
+| `true or <undecided>` | `true` — for the same reason |
+| `false or <undecided>` | undecided |
+| `not <undecided>` | undecided **in a rule that declares `not_exists`** |
+
+#### `isAvailable()`
+
+`isAvailable(<value>)` asks whether the record carries something, and answers a plain `true` or
+`false` — never undecided. That is what makes it usable as a guard, on its own or negated with `not`:
+
+```
+when
+  isAvailable(amount)
+  and amount >= 1000
+```
+
+That rule takes `else` for a record with no balance, because the guard answered `false` and settled the
+`and`. Use `isAvailable` when the *rule* should treat missing data as a plain no; use `not_exists` when
+the **outcome** should say so.
+
+It accepts anything a value expression may hold — a field, a nested path, a whole `object` or
+`collection`, an aggregate, a variable:
+
+```
+isAvailable(transactions)
+isAvailable($turnover)
+not isAvailable(counterparty)
+```
+
+> **An empty collection is not "available".** A value expression reduces an absent collection and an
+> empty one to the same nothing, so `isAvailable(transactions)` is `false` for `transactions: []`. Use
+> `count(transactions) == 0` to ask whether a collection is empty.
+
+#### Rules
+
+| Aspect | Behaviour |
+|---|---|
+| Optional | A rule without `not_exists` behaves exactly as it always did: undecided data reads as `false`, so the rule takes `else`, or produces nothing when it has no `else` either. |
+| Position | After `then`, and after `else` when the rule declares one. Writing `else` after `not_exists` is an error. |
+| At most once | A second `not_exists` on the same rule is an error. |
+| Never empty | `not_exists` with no action, no `set` and no `stop` is an error — drop the keyword instead. |
+| Exclusive | Exactly one branch produces output per record. Never two, never none. |
+| Not a match | The rule's condition was neither true nor false. `not_exists` says what to output, not that the rule matched. |
+| Variables | A `set` or `add` in `not_exists` publishes to the following rules exactly as one in `then` does (§5.6). |
+| Trace | The rule's trace node records the verdict (`UNKNOWN`) and the branch it selected, so a run can be explained. |
+
+> **`not_exists` is a keyword.** An action may not be named `not_exists`. If an action schema declares
+> one, the engine reports it as an error and the action has to be renamed.
+
+#### One interaction to know about
+
+Declaring `not_exists` changes what `not` means for missing data **inside that rule**. The guarded
+accumulator of §5.6.1 relies on `not $topics contains "billing"` being *true* while the list is still
+empty; in a rule that declares `not_exists`, the same condition is undecided and the rule takes that
+branch instead. Keep the two apart: a guard rule that fills a list should not declare `not_exists`.
+
+#### When to use it
+
+Use `not_exists` when "we could not tell" is a business outcome in its own right — an assessment that
+must report `UNKNOWN` rather than `RED`, a check that has to be skipped and recorded as skipped, a
+missing mandatory field that should raise a different flag from a wrong one. When missing data simply
+means the rule does not apply, leave the branch out; the default already does that.
 
 ---
 
@@ -2070,7 +2247,9 @@ The engine validates everything at load time and rejects the following. Never ge
 
 | Constraint | Example of invalid usage |
 |---|---|
-| Unknown argument type | `argTypes: [bool]` (use `string`, `integer`, or `decimal`) |
+| Unknown argument type | `argTypes: [bool]` (use `string`, `integer`, `decimal`, `variable_string` or `variable_list`) |
+| A literal where a variable argument is declared | `reason "x"` when `reason` is declared `argTypes: [variable_string]` |
+| The wrong clause behind a declared variable argument | `topics $why` when `$why` is written with `set` and `topics` is declared `argTypes: [variable_list]` |
 | More than one argument type | `argTypes: [string, integer]` (at most one is allowed) |
 | Argument count mismatch in a rule | `suppress "x"` when `suppress` is declared `argTypes: []`, or a bare `label` when `label` expects a string |
 
@@ -2101,7 +2280,10 @@ The engine validates everything at load time and rejects the following. Never ge
 | An empty `else` block | `else` followed straight by `}` — drop the keyword instead |
 | A second `else` on one rule | two `else` blocks in the same rule |
 | `else` before `then` | the false branch is written after the true one |
-| An action named `else` or `stop` in the action schema | `else:` or `stop:` declared under `actions:` — both are rule keywords |
+| An empty `not_exists` block | `not_exists` followed straight by `}` — drop the keyword instead |
+| A second `not_exists` on one rule | two `not_exists` blocks in the same rule |
+| `else` after `not_exists` | the blocks are written `then`, `else`, `not_exists`, in that order |
+| An action named `else`, `not_exists` or `stop` in the action schema | `else:`, `not_exists:` or `stop:` declared under `actions:` — all three are rule keywords |
 | Anything written after `stop` in the same block | `stop` followed by another action or a `set` clause |
 
 > **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
@@ -2124,7 +2306,96 @@ The engine validates everything at load time and rejects the following. Never ge
 
 ---
 
-## 10. Quick-Reference Checklists
+## 10. Validating What You Generated
+
+**Do not hand over rule artifacts you have not validated.** The engine checks everything at load time,
+and you can run those same checks yourself from the command line. A generated project that has never
+been loaded is a guess; one the validator accepts is not.
+
+### Getting the engine
+
+Add `ruleengine-core` as a dependency —
+[mvnrepository.com/artifact/io.github.ragin-lundf/ruleengine-core](https://mvnrepository.com/artifact/io.github.ragin-lundf/ruleengine-core)
+— or use a local build if the repository is checked out.
+
+```kotlin
+// Gradle (Kotlin DSL)
+dependencies { implementation("io.github.ragin-lundf:ruleengine-core:<version>") }
+
+tasks.register<JavaExec>("validateRules") {
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "ruleengine.cli.ValidatorCli"
+    args("--manifest", "rules/manifest.yaml")
+}
+```
+
+```xml
+<!-- Maven -->
+<dependency>
+  <groupId>io.github.ragin-lundf</groupId>
+  <artifactId>ruleengine-core</artifactId>
+  <version><!-- latest --></version>
+</dependency>
+```
+
+The two CLIs are ordinary `main` classes on that dependency's runtime classpath — there is no separate
+launcher and no executable jar. Run them through a build tool (`JavaExec` above, or `mvn exec:java`), or
+with `java -cp` if you already have a classpath. The classpath needs Jackson **and `kotlin-reflect`**;
+both arrive transitively with the dependency. In a checkout of the engine's own repository the tasks
+already exist: `./gradlew :ruleengine-core:validateRules --args="--manifest rules/manifest.yaml"`.
+
+### Validate the four artifacts together
+
+```bash
+java -cp "<runtime classpath>" ruleengine.cli.ValidatorCli \
+  --manifest rules/manifest.yaml [--entry <entry-id>] [--format json]
+```
+
+Use manifest mode, not `--schema` + `--rules`. It is the only mode that checks what a manifest adds: the
+action schema, the rule-file order that decides which variables are in scope where, and rule ids repeated
+across files. Every diagnostic names the rule file it came from and the line within that file.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Valid. Warnings may still be reported — read them. |
+| `1` | Invalid. Fix every `ERROR` and run it again. |
+| `2` | Wrong arguments, or a path that is not usable. |
+| `3` | Something was thrown — usually a file that does not exist, or a rule file that does not parse. |
+
+`--format json` prints `{"diagnostics": [...], "ok": <bool>, "exitCode": <int>}`, where each diagnostic
+carries `severity`, `message`, and — where the engine knows them — `file`, `line`, `column` and
+`suggestion`. A `suggestion` is usually the exact fix: `Unknown field 'purpse'` with
+`suggestion: "purpose"` means you mistyped a field name.
+
+### Then check a record actually produces what you intended
+
+Validation says the rules load. It does not say they decide correctly. Write a small input JSON and
+evaluate it:
+
+```bash
+java -cp "<runtime classpath>" ruleengine.cli.EvaluateCli \
+  --manifest rules/manifest.yaml [--entry <entry-id>] \
+  --input-file record.json --trace --format pretty-json
+```
+
+Each entry of `matches` carries `ruleId`, `actions` and `branch` — `then`, `else` or `not_exists` — so
+you can see not only *that* a rule produced something but which branch did. `--trace` adds the decision
+tree, where every node reports its `verdict` (`TRUE`, `FALSE`, `UNKNOWN`) and the condition it tested,
+which is how you find out *why* a rule did not fire.
+
+### What to do with the results
+
+1. Run the validator. Fix every `ERROR`; read every `WARNING` and decide deliberately whether it is
+   intended (a missing `description` and a re-assigned variable are the common ones).
+2. Re-run until it is clean. A diagnostic naming a field or action is almost always a typo — take the
+   `suggestion`.
+3. Evaluate at least one record you know the expected outcome of, and check the branch each rule took.
+   Add a record with a field deliberately missing if any rule declares `not_exists` (§5.12).
+4. Only then hand the artifacts over, and say which records you evaluated.
+
+---
+
+## 11. Quick-Reference Checklists
 
 ### Checklist: Field Schema
 
@@ -2162,19 +2433,26 @@ The engine validates everything at load time and rejects the following. Never ge
       declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise.
 - [ ] `in` / `containsAny` / `containsAll` use a JSON-style list: `["a", "b"]`.
 - [ ] Filters inside `[...]` use only `==`, `!=`, `>`, `>=`, `<`, `<=` and contain no `and` / `or`.
-- [ ] Every action in every `then` and `else` block is defined in the action schema, with a matching argument count.
+- [ ] Every action in every `then`, `else` and `not_exists` block is defined in the action schema, with a matching argument count.
 - [ ] An `else` block is used only where one condition has exactly two outcomes; three or more bands are
       separate rules with no `else`.
 - [ ] No `else` block is empty, duplicated, or written before its `then`.
+- [ ] A `not_exists` block is used only where "the data was not there" is an outcome of its own; where
+      missing data just means the rule does not apply, the block is left out.
+- [ ] No `not_exists` block is empty or duplicated, and none is followed by an `else`.
+- [ ] No rule that guards on an accumulator with `not … contains` also declares a `not_exists` block.
 - [ ] `stop` is the last statement of its block, and is used only for a guard that genuinely makes every
       following rule inapplicable.
 - [ ] When any rule uses `stop`, the manifest `rules:` list carries a comment saying the order matters.
 - [ ] String action arguments are in double quotes; numeric arguments have no quotes; zero-argument
       actions are written bare.
+- [ ] An action declared `variable_string` is given a `$name` written with `set`, and one declared
+      `variable_list` a `$name` written with `add`.
 - [ ] Parentheses are used wherever AND/OR grouping could be ambiguous.
 - [ ] `and` is written explicitly rather than relying on the implicit line-break AND.
 - [ ] Related rules are grouped in thematic files.
 - [ ] Each file has a comment header explaining its purpose.
+- [ ] The whole entry has been run through `ValidatorCli --manifest` and reports no `ERROR` (§10).
 
 ### Checklist: Manifest
 

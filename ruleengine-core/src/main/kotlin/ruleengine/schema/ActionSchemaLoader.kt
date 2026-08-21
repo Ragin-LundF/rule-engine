@@ -56,11 +56,19 @@ object ActionSchemaLoader {
         return JacksonUtil.readYaml(content = content, type = RawActionSchema::class.java)
     }
 
+    /**
+     * The YAML spelling of an arg type, plus the aliases older schemas use.
+     *
+     * The input is lowercased first, so a camelCase spelling arrives with its capitals gone — which is
+     * why `variablestring` is listed next to `variable_string` rather than being a separate concern.
+     */
     private fun parseArgType(s: String): ActionArgType {
         return when (s.lowercase()) {
             "string" -> ActionArgType.STRING
             "integer", "int" -> ActionArgType.INTEGER
             "decimal", "number" -> ActionArgType.DECIMAL
+            "variable_string", "variablestring" -> ActionArgType.VARIABLE_STRING
+            "variable_list", "variablelist" -> ActionArgType.VARIABLE_LIST
             else -> throw IllegalArgumentException("Unknown action arg type: $s")
         }
     }

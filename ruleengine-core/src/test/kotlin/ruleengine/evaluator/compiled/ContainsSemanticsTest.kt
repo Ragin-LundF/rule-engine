@@ -1,5 +1,6 @@
 package ruleengine.evaluator.compiled
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.dsl.ast.ComparisonOperatorAst
@@ -43,7 +44,7 @@ class ContainsSemanticsTest {
     private fun list(vararg values: ExpressionValue) = ArrayExpressionValue(values = values.toList())
 
     private fun contains(left: ExpressionValue, right: ExpressionValue): Boolean =
-        comparison(left = left, right = right).evaluate(context = context, trace = null)
+        comparison(left = left, right = right).evaluate(context = context, trace = null).isTrue()
 
     private fun comparison(left: ExpressionValue, right: ExpressionValue) = ComparisonCompiledExpression(
         left = LiteralCompiledValueExpression(value = left),
@@ -114,13 +115,31 @@ class ContainsSemanticsTest {
 
     // ── everything else is false ──────────────────────────────────────────────
 
-    /** The row the whole feature rests on: an unset accumulator makes the guard pass. */
+    /**
+     * The row the whole feature rests on: an unset accumulator makes the guard pass.
+     *
+     * The comparison itself answers [ConditionVerdict.UNKNOWN] — there is no list to look in — and the
+     * `not` above it is what turns that into the `true` the first rule of a guarded set needs. A rule
+     * that declares a `not_exists` block asks for the undecided answer instead, which is the one place
+     * the two readings differ.
+     */
     @Test
-    fun `a missing left operand does not match, so its negation does`() {
+    fun `a missing left operand cannot be decided, and its negation passes the guard`() {
         val expression = comparison(left = MissingExpressionValue, right = text("billing"))
 
-        assertFalse(actual = expression.evaluate(context = context, trace = null))
-        assertTrue(actual = NotExpression(child = expression).evaluate(context = context, trace = null))
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = expression.evaluate(context = context, trace = null),
+        )
+        assertEquals(
+            expected = ConditionVerdict.TRUE,
+            actual = NotExpression(child = expression).evaluate(context = context, trace = null),
+        )
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = NotExpression(child = expression, unknownAware = true)
+                .evaluate(context = context, trace = null),
+        )
     }
 
     @Test
@@ -186,9 +205,9 @@ class ContainsSemanticsTest {
         override fun evaluate(
             context: PreparedRuleContext,
             trace: TraceCollector?,
-        ): Boolean {
+        ): ConditionVerdict {
             order += name
-            return true
+            return ConditionVerdict.TRUE
         }
     }
 }
