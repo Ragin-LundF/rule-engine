@@ -9,6 +9,7 @@ import ruleengine.dsl.ast.FunctionCallValueAst
 import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.VariableRefAst
@@ -64,7 +65,7 @@ internal fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? =
 
 /**
  * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step, and each
- * filter or slice after it is appended to that step's decorations in the order it was written.
+ * filter, slice or sort after it is appended to that step's decorations in the order it was written.
  *
  * The order is kept rather than normalised because it is the meaning:
  * `take(orders, 3)[paid == true]` selects paid orders among the first three, while
@@ -89,6 +90,16 @@ internal fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
                     decorations = target.decorations + BuilderPathDecoration.Slice(
                         fromEnd = segment.fromEnd,
                         count = segment.count,
+                    )
+                )
+            }
+
+            is SortSegmentAst -> {
+                val target = steps.lastOrNull() ?: return null
+                steps[steps.lastIndex] = target.copy(
+                    decorations = target.decorations + BuilderPathDecoration.Sort(
+                        member = segment.member,
+                        descending = segment.descending,
                     )
                 )
             }

@@ -42,9 +42,11 @@ import ui.builder.model.filter
 import ui.builder.model.filters
 import ui.builder.model.namesAField
 import ui.builder.model.slice
+import ui.builder.model.sort
 import ui.builder.model.withFilters
 import ui.builder.model.withSegmentName
 import ui.builder.model.withSlice
+import ui.builder.model.withSort
 import ui.builder.model.withoutSegment
 import ui.components.TinyButton
 
@@ -97,6 +99,7 @@ fun PathBreadcrumb(
                     options = optionsPerDepth[depth],
                     filterCount = step.filters.count { filter -> filter.namesAField },
                     sliced = step.slice != null,
+                    ordered = step.sort != null,
                     selected = selectedDepth == depth,
                     onNameSelected = { name ->
                         if (name != step.name) {
@@ -138,6 +141,7 @@ fun PathBreadcrumb(
                 step = step,
                 fieldOptions = OperandRules.filterFieldOptions(fields = fields, path = path, depth = depth),
                 filterFields = OperandRules.filterCatalog(fields = fields, path = path, depth = depth),
+                orderable = OperandRules.canSort(fields = fields, path = path, depth = depth),
                 onStepChanged = { updated ->
                     onPathChanged(path.toMutableList().also { it[depth] = updated })
                 },
@@ -184,10 +188,13 @@ private fun WhereDrawer(
     step: BuilderPathStep,
     fieldOptions: List<CatalogFieldInfo>,
     filterFields: List<CatalogFieldInfo>,
+    orderable: Boolean,
     onStepChanged: (BuilderPathStep) -> Unit,
 ) {
-    // Nothing to show for a scalar segment that carries nothing of its own.
-    if (fieldOptions.isEmpty() && step.decorations.isEmpty()) return
+    // Nothing to show for a scalar segment that carries nothing of its own. An orderable segment
+    // always has something: a `string_set` declares no members to filter on, and ordering its
+    // values is the whole reason the drawer opens on one.
+    if (fieldOptions.isEmpty() && step.decorations.isEmpty() && !orderable) return
 
     Column(
         modifier = Modifier
@@ -206,28 +213,12 @@ private fun WhereDrawer(
             modifier = Modifier.padding(bottom = 2.dp),
         )
 
-        step.filters.forEachIndexed { index, filter ->
-            if (index > 0) {
-                Text(
-                    text = "and",
-                    style = MaterialTheme.typography.caption,
-                    color = PrimaryBlueLight,
-                )
-            }
-            FilterConditionRow(
-                filter = filter,
-                fieldOptions = fieldOptions,
-                fields = filterFields,
-                onFilterChanged = { updated ->
-                    onStepChanged(
-                        step.withFilters(filters = step.filters.toMutableList().also { it[index] = updated })
-                    )
-                },
-                onRemove = {
-                    onStepChanged(step.withFilters(filters = step.filters.filterIndexed { i, _ -> i != index }))
-                },
-            )
-        }
+        FilterRows(
+            step = step,
+            fieldOptions = fieldOptions,
+            filterFields = filterFields,
+            onStepChanged = onStepChanged,
+        )
 
         // A restriction names a member of the element, so it needs declared members to name.
         if (fieldOptions.isNotEmpty()) {
@@ -247,9 +238,113 @@ private fun WhereDrawer(
             )
         }
 
+        if (orderable) {
+            SortRow(step = step, memberOptions = fieldOptions, onStepChanged = onStepChanged)
+        }
+
         SliceRow(step = step, onStepChanged = onStepChanged)
     }
 }
+
+/** The segment's restrictions, `and`-joined in the order they were written. */
+@Composable
+private fun FilterRows(
+    step: BuilderPathStep,
+    fieldOptions: List<CatalogFieldInfo>,
+    filterFields: List<CatalogFieldInfo>,
+    onStepChanged: (BuilderPathStep) -> Unit,
+) {
+    step.filters.forEachIndexed { index, filter ->
+        if (index > 0) {
+            Text(
+                text = "and",
+                style = MaterialTheme.typography.caption,
+                color = PrimaryBlueLight,
+            )
+        }
+        FilterConditionRow(
+            filter = filter,
+            fieldOptions = fieldOptions,
+            fields = filterFields,
+            onFilterChanged = { updated ->
+                onStepChanged(
+                    step.withFilters(filters = step.filters.toMutableList().also { it[index] = updated })
+                )
+            },
+            onRemove = {
+                onStepChanged(step.withFilters(filters = step.filters.filterIndexed { i, _ -> i != index }))
+            },
+        )
+    }
+}
+
+/**
+ * Which order to read this segment's elements in, and by which member.
+ *
+ * Shown above the slice because that is where it takes effect and where an author almost always
+ * wants it: ordering first and keeping three gives the three largest, while keeping three first
+ * puts an arbitrary three in order. [BuilderPathStep.withSort] is what pins it there.
+ *
+ * The member dropdown is absent when the elements are values that order by themselves — a
+ * `string_set`, or a collection whose members the schema does not describe — which is the same
+ * distinction `sortBy`'s two- and three-argument forms draw.
+ */
+@Composable
+private fun SortRow(
+    step: BuilderPathStep,
+    memberOptions: List<CatalogFieldInfo>,
+    onStepChanged: (BuilderPathStep) -> Unit,
+) {
+    val sort = step.sort
+    if (sort == null) {
+        TinyButton(
+            text = "⊕ order by",
+            onClick = {
+                onStepChanged(
+                    step.withSort(
+                        sort = BuilderPathDecoration.Sort(
+                            member = memberOptions.firstOrNull()?.id,
+                            descending = false,
+                        )
+                    )
+                )
+            },
+        )
+        return
+    }
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "order by",
+            style = MaterialTheme.typography.caption,
+            color = TextSecondary,
+        )
+        if (memberOptions.isNotEmpty()) {
+            DropdownSelector(
+                selected = sort.member.orEmpty(),
+                options = memberOptions.map { member -> member.id },
+                onSelected = { member -> onStepChanged(step.withSort(sort = sort.copy(member = member))) },
+                modifier = Modifier.width(width = 150.dp),
+            )
+        }
+        DropdownSelector(
+            selected = if (sort.descending) DESCENDING_LABEL else ASCENDING_LABEL,
+            options = listOf(ASCENDING_LABEL, DESCENDING_LABEL),
+            onSelected = { choice ->
+                onStepChanged(step.withSort(sort = sort.copy(descending = choice == DESCENDING_LABEL)))
+            },
+            modifier = Modifier.width(width = 130.dp),
+        )
+        TinyButton(text = "×", onClick = { onStepChanged(step.withSort(sort = null)) })
+    }
+}
+
+/** Spelled out rather than as `asc` / `desc`: the row is prose, and the DSL echo shows the call. */
+private const val ASCENDING_LABEL: String = "ascending"
+private const val DESCENDING_LABEL: String = "descending"
 
 /**
  * How many elements of this segment to keep, and from which end.

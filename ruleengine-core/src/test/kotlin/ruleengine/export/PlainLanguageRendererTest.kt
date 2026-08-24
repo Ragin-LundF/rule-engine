@@ -377,6 +377,22 @@ class PlainLanguageRendererTest {
         )
     }
 
+    /**
+     * A dropped ordering would be the same kind of overclaim as a dropped slice: "the total of the
+     * first 3 orders" says nothing about which three the rule actually looked at.
+     */
+    @Test
+    fun `an ordering is named in the sentence`() {
+        assertEquals(
+            expected = "the total Amount of the first 3 orders by highest amount is more than 100",
+            actual = prose(condition = """sum(take(sortBy(orders, "amount", desc), 3).amount) > 100"""),
+        )
+        assertEquals(
+            expected = "the total Amount of orders by lowest amount is more than 100",
+            actual = prose(condition = """sum(sortBy(orders, "amount", asc).amount) > 100"""),
+        )
+    }
+
     /** A bare predicate is desugared to `== true`; spelling that out adds nothing. */
     @Test
     fun `a collection predicate reads as a sentence`() {

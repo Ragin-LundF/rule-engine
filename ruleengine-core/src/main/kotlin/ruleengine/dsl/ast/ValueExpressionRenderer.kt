@@ -72,6 +72,17 @@ object ValueExpressionRenderer {
                     builder.setLength(0)
                     builder.append(call).append('(').append(inner).append(", ").append(segment.count).append(')')
                 }
+                // A sort wraps what came before it for the same reason a slice does. The member
+                // is quoted and the direction is not, matching exactly what `Parser.parseSort`
+                // reads back — this text is what the Builder round-trips through.
+                is SortSegmentAst -> {
+                    val inner = builder.toString()
+                    val member = segment.member?.let { name -> "\"$name\", " }.orEmpty()
+                    val direction = if (segment.descending) "desc" else "asc"
+                    builder.setLength(0)
+                    builder.append("sortBy(").append(inner).append(", ").append(member)
+                        .append(direction).append(')')
+                }
             }
         }
         return builder.toString()

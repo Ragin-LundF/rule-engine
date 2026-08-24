@@ -32,3 +32,15 @@ rule "tracking-gap" {
     assessment "tracking:gap"
     reason "a-checkpoint-was-not-scanned"
 }
+
+# Ordering by a member, ascending. `take(..., 1)` after an ordering is how a rule reads the single
+# best or worst element of a collection — there is no `first`/`last` function, and none is needed.
+rule "worst-checkpoint-delay" {
+  description "The most delayed checkpoint on the route held the shipment up by more than two hours."
+  when
+    sum(take(sortBy(checkpoints, "delayMinutes", desc), 1).delayMinutes) > 120
+
+  then
+    assessment "route:severely-delayed"
+    reason "worst-checkpoint-delayed-by-more-than-two-hours"
+}

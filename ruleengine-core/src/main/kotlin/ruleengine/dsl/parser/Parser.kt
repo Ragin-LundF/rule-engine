@@ -22,6 +22,7 @@ import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
@@ -74,6 +75,17 @@ class Parser(private val input: String) {
          */
         const val TAKE = "take"
         const val TAKE_LAST = "takeLast"
+
+        /**
+         * The ordering function, recognised here for the same reason as [TAKE]: it becomes a path
+         * segment rather than a compiled function call.
+         *
+         * [ASC] and [DESC] are read positionally inside the parentheses, so they are not reserved
+         * words: a schema field named `asc` stays usable everywhere else in a rule.
+         */
+        const val SORT_BY = "sortBy"
+        const val ASC = "asc"
+        const val DESC = "desc"
     }
 
     private fun current(): Token = cursor.current()
@@ -418,8 +430,12 @@ class Parser(private val input: String) {
             // A legacy ConditionAst names its left side by a plain field string and cannot hold a
             // variable, so any comparison touching one must take the modern path.
             is VariableRefAst -> true
-            // A filter or a slice makes the path multi-valued, which only the value path can read.
-            is FieldAccessAst -> expr.path.any { it is FilterSegmentAst || it is SliceSegmentAst }
+            // A filter, a slice or a sort makes the path multi-valued, which only the value path can
+            // read. Omitting the sort would send `sortBy(tags, asc) contains "x"` down the legacy
+            // path, where the whole call is read as a field name.
+            is FieldAccessAst -> expr.path.any {
+                it is FilterSegmentAst || it is SliceSegmentAst || it is SortSegmentAst
+            }
             is LiteralValueAst -> false
         }
     }
@@ -557,6 +573,9 @@ class Parser(private val input: String) {
         if (isSliceFunction(name = nameTok.text)) {
             return parseSlice(nameTok = nameTok)
         }
+        if (nameTok.text.equals(other = SORT_BY, ignoreCase = true)) {
+            return parseSort(nameTok = nameTok)
+        }
         advance()
         val args = mutableListOf<ValueExpressionAst>()
         while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
@@ -607,6 +626,76 @@ class Parser(private val input: String) {
             count = countTok.text
         )
         return parsePathContinuation(segments = segments)
+    }
+
+    /**
+     * Reads `sortBy(path, asc|desc)` / `sortBy(path, "member", asc|desc)` and appends the ordering
+     * to the path it rearranges.
+     *
+     * Written as a call for the same reason `take` is, and no more of one: the result is the
+     * [FieldAccessAst] the path would have produced with one extra segment, which is what lets
+     * `sortBy(orders, "total", desc).total` continue into `.total` and `take(sortBy(...), 3)` wrap
+     * it without either construct knowing about the other.
+     *
+     * The direction is required, and that is what keeps the two forms apart: the argument after the
+     * path is a member name when it is written as a string, and the direction otherwise.
+     */
+    private fun parseSort(nameTok: Token): ValueExpressionAst {
+        val start = current()
+        advance()
+        val target = parseValueExpression()
+        if (target !is FieldAccessAst) {
+            throw ParseException(
+                line = start.line,
+                column = start.col,
+                messageText = "${nameTok.text}() expects a collection path as its first argument"
+            )
+        }
+        expect(type = TokenType.COMMA)
+        val member = readSortMember()
+        val descending = readSortDirection(nameTok = nameTok)
+        expect(type = TokenType.RPAREN)
+        val segments = target.path.toMutableList()
+        segments += SortSegmentAst(member = member, descending = descending)
+        return parsePathContinuation(segments = segments)
+    }
+
+    /**
+     * The member to order by, when one is written, consuming the comma that separates it from the
+     * direction. A member is always a string literal, which is what makes the argument after the
+     * path unambiguous.
+     */
+    private fun readSortMember(): String? {
+        if (current().type != TokenType.STRING) {
+            return null
+        }
+        val memberTok = current()
+        advance()
+        expect(type = TokenType.COMMA)
+        return memberTok.text
+    }
+
+    /**
+     * `asc` or `desc`, the argument every form of the call ends with.
+     *
+     * The message names the quoting rule too, because an unquoted member — `sortBy(orders, total,
+     * desc)` — arrives here as the direction and is the mistake this is most likely to catch.
+     */
+    private fun readSortDirection(nameTok: Token): Boolean {
+        val directionTok = current()
+        val descending = directionTok.text.equals(other = DESC, ignoreCase = true)
+        val ascending = directionTok.text.equals(other = ASC, ignoreCase = true)
+        if (directionTok.type != TokenType.IDENT || !(descending || ascending)) {
+            throw ParseException(
+                line = directionTok.line,
+                column = directionTok.col,
+                messageText = "${nameTok.text}() expects $ASC or $DESC as its last argument, but found " +
+                        "'${directionTok.text}'; a member name must be quoted, such as " +
+                        "${nameTok.text}(orders, \"total\", $DESC)"
+            )
+        }
+        advance()
+        return descending
     }
 
     /**

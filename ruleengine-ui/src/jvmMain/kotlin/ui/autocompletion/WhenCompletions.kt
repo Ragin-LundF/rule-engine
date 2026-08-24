@@ -32,6 +32,9 @@ private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
     Triple("isAvailable", "isAvailable(amount)", "check"),
     Triple("take", "take(orders, 3)", "slice"),
     Triple("takeLast", "takeLast(orders, 3)", "slice"),
+    // The three-argument form is the one worth inserting: ordering a collection of objects is what
+    // it is reached for, and deleting the member is a smaller edit than remembering to quote one.
+    Triple("sortBy", "sortBy(orders, \"total\", desc)", "ordering"),
     Triple("every", "every(orders[total > 0])", "predicate"),
     Triple("any", "any(orders[total > 1000])", "predicate"),
     Triple("sumByKey", "sumByKey(\"month\", sales.amount, refunds.amount)", "join"),

@@ -71,6 +71,73 @@ object ExpressionValues {
         }
     }
 
+    /**
+     * Order of two scalars, the counterpart to [equalsByValue] and what `sortBy` orders elements by.
+     *
+     * Total, so a list holding more than one kind of value still comes out in a defined order rather
+     * than an arbitrary one: values of different kinds are separated by kind — numbers, then dates,
+     * then text, then booleans — and ordered naturally within a kind. A date matched against ISO
+     * text compares as a date, the same exception [equalsByValue] makes and for the same reason.
+     *
+     * Only meaningful for values [isOrderable] accepts; anything else compares equal here, and the
+     * caller decides where to put it.
+     *
+     * `ComparisonCompiledExpression` still carries its own comparison for `<` and `>`. The two agree
+     * on every pair either of them accepts, and could converge — but that is a change to how
+     * comparisons behave, not to how sorting does.
+     */
+    fun compareByValue(left: ExpressionValue, right: ExpressionValue): Int {
+        if (left is DateExpressionValue || right is DateExpressionValue) {
+            val leftDate = asDate(value = left)
+            val rightDate = asDate(value = right)
+            if (leftDate != null && rightDate != null) {
+                return leftDate.compareTo(rightDate)
+            }
+        }
+        val byKind = orderRank(value = left).compareTo(orderRank(value = right))
+        if (byKind != 0) {
+            return byKind
+        }
+        return when {
+            left is NumberExpressionValue && right is NumberExpressionValue -> left.value.compareTo(right.value)
+            left is TextExpressionValue && right is TextExpressionValue -> left.value.compareTo(right.value)
+            left is BooleanExpressionValue && right is BooleanExpressionValue -> left.value.compareTo(right.value)
+            else -> 0
+        }
+    }
+
+    /**
+     * True when [value] has an order of its own.
+     *
+     * A missing value, a structure and a list do not: there is no answer to "which of these two
+     * comes first" that would not be invented. `sortBy` puts them last rather than guessing.
+     */
+    fun isOrderable(value: ExpressionValue): Boolean {
+        return value is NumberExpressionValue ||
+            value is DateExpressionValue ||
+            value is TextExpressionValue ||
+            value is BooleanExpressionValue
+    }
+
+    private const val RANK_NUMBER: Int = 0
+    private const val RANK_DATE: Int = 1
+    private const val RANK_TEXT: Int = 2
+    private const val RANK_BOOLEAN: Int = 3
+
+    /** Everything with no order of its own shares the last bucket — see [isOrderable]. */
+    private const val RANK_UNORDERABLE: Int = 4
+
+    /** Which kind bucket a value sorts into, and the order those buckets take. */
+    private fun orderRank(value: ExpressionValue): Int {
+        return when (value) {
+            is NumberExpressionValue -> RANK_NUMBER
+            is DateExpressionValue -> RANK_DATE
+            is TextExpressionValue -> RANK_TEXT
+            is BooleanExpressionValue -> RANK_BOOLEAN
+            else -> RANK_UNORDERABLE
+        }
+    }
+
     /** True when [container] already holds a value equal to [element] under [equalsByValue]. */
     fun arrayContains(container: ArrayExpressionValue, element: ExpressionValue): Boolean {
         // ponytail: linear scan. The list holds what one record actually accumulated — a handful of

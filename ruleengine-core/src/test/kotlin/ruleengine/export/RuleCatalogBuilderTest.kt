@@ -71,9 +71,11 @@ class RuleCatalogBuilderTest {
                 "two-person-lift",
                 "fragile-load",
                 "consolidate-at-hamburg-hub",
+                "top-heavy-load",
                 "route-on-time",
                 "route-delayed",
                 "tracking-gap",
+                "worst-checkpoint-delay",
             ),
             actual = catalog().rules.map { rule -> rule.id },
         )

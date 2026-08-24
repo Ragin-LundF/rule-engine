@@ -207,7 +207,52 @@ count(takeLast(loginEvents, 10)[successful == false]) >= 3
 | `takeLast(events, 10)[failed == true]` | failures **among the last ten events** |
 | `takeLast(events[failed == true], 10)` | **the last ten failures** |
 
-## 5c. Membership — `in`
+## 5c. Ordering — `sortBy`
+
+`sortBy` puts a collection in order, so a rule can ask for *the largest*, *the most recent* or
+*the first alphabetically* instead of *whatever arrived first*.
+
+```
+sortBy(path, asc|desc)                 # a set of values, or a collection of values
+sortBy(path, "member", asc|desc)       # a collection of objects, ordered by one member
+```
+
+The direction is required, and a member name is always quoted. Like a slice, an ordering is part of
+the path, so projection, filtering and aggregation continue from it:
+
+```
+sum(take(sortBy(orders, "total", desc), 3).total) > 5000
+count(sortBy(loginEvents, "at", desc)) > 0
+sortBy(tags, asc) contains "billing"
+```
+
+**What it orders by.** The member named, or the elements themselves in the two-argument form.
+Numbers compare numerically, dates chronologically, text alphabetically, and `false` before `true`.
+A collection holding more than one kind of value is still ordered predictably: values group by kind —
+numbers, then dates, then text, then booleans — rather than coming out in an arbitrary order.
+
+**Ties keep their source order**, which is what makes a `take` after an ordering deterministic.
+
+**Elements with nothing to order by go last, in both directions.** An absent member, a `null`, a
+nested object and a nested list all mean "no value" rather than "the smallest value" — so
+`take(sortBy(orders, "total", desc), 3)` gives the three largest orders, never three orders that
+never carried a total.
+
+**Order matters.** Ordering happens where it is written:
+
+| Expression | Means |
+|---|---|
+| `take(sortBy(orders, "total", desc), 3)` | **the three largest** orders |
+| `sortBy(take(orders, 3), "total", desc)` | **the first three** orders, put in order |
+| `sortBy(orders[status == "paid"], "total", desc)` | paid orders, largest first |
+| `sortBy(orders, "total", desc)[status == "paid"]` | the same set — a filter after an ordering does not reorder it |
+
+**What it accepts.** A `collection` or a `string_set`. A collection whose elements are objects needs
+the member name; a `string_set` and a collection of plain values must not be given one. Ordering a
+single value, an `object`, or a member that is itself a collection or object is rejected at
+validation.
+
+## 5d. Membership — `in`
 
 `element in source` is true when the source holds a value equal to the element. The source may be a
 `string_set` field, a projection across a collection, or a list variable.
@@ -223,7 +268,7 @@ count(events[eventType in $importantEventTypes]) > 0
 - A literal list — `country in ["de", "at"]` — is a plain field comparison, not a value expression,
   and keeps enforcing the field's declared `operators:` list.
 
-## 5d. Collection Predicates — `every` and `any`
+## 5e. Collection Predicates — `every` and `any`
 
 `every(collection[condition])` holds when every element satisfies the condition; `any(...)` when at
 least one does. Both stop as soon as the answer is decided.
@@ -242,7 +287,7 @@ any(alerts[severity == "high"])
 Both are boolean conditions, so they combine with `and`, `or` and `not`, and work over raw,
 filtered, sliced and joined collections.
 
-## 5e. Keyed Joins — `sumByKey`
+## 5f. Keyed Joins — `sumByKey`
 
 `sumByKey(key, source, source, ...)` aligns two or more collections on a shared member and returns
 one total per key. The first argument is the key member's name as a string literal; each source is
@@ -412,6 +457,7 @@ rule "majority-risk" {
 | `abs` | missing input → missing | Always `false` |
 | `daysBetween` | missing operand → missing | Always `false` |
 | `take` / `takeLast` | empty slice | Aggregates over it behave as for any empty collection |
+| `sortBy` | empty result | Aggregates over it behave as for any empty collection |
 | `every` | — | **`true`** — no element fails |
 | `any` | — | **`false`** — no element succeeds |
 | `sumByKey` | no keys | `count(...) == 0`; `min`/`max` are missing |

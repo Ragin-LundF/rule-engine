@@ -132,6 +132,22 @@ object OperatorOptions {
     /** True when [fieldType] is a collection or object, i.e. navigable rather than comparable. */
     fun isStructureType(fieldType: String): Boolean = fieldType.lowercase() in STRUCTURE_TYPES
 
+    /** Field types that hold more than one element, so `sortBy` has something to put in order. */
+    private val ORDERABLE_TYPES: Set<String> = setOf(
+        FieldType.COLLECTION.name.lowercase(),
+        FieldType.STRING_SET.name.lowercase(),
+    )
+
+    /**
+     * True when [fieldType] can be ordered by `sortBy`.
+     *
+     * Wider than [isStructureType] on purpose, and narrower in the other direction: a `string_set`
+     * is ordered by its own values, and an `object` holds one thing and has no order. This mirrors
+     * what `ValueExpressionValidator.validateSort` accepts, so the Builder cannot offer an ordering
+     * the engine then rejects.
+     */
+    fun isOrderableType(fieldType: String): Boolean = fieldType.lowercase() in ORDERABLE_TYPES
+
     /**
      * True when [fieldType] holds text.
      *

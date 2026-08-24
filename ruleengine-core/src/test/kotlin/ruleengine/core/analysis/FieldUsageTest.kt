@@ -138,6 +138,44 @@ class FieldUsageTest {
 
     @Test
     fun `the fixture bundle parses to the full rule set`() {
-        assertEquals(expected = 14, actual = rules.size)
+        assertEquals(expected = 16, actual = rules.size)
+    }
+
+    /**
+     * An ordering names a member, and reading it is a dependency like any other — a rule that only
+     * ever mentions `weightKg` inside a `sortBy` still stops working when that field disappears.
+     */
+    @Test
+    fun `an ordering reports the member it orders by`() {
+        // The bare collection comes along the way every other intermediate path does — see the
+        // class comment. What matters here is that the member is not lost.
+        assertEquals(
+            expected = setOf("parcels", "parcels.weightKg"),
+            actual = FieldUsage.fieldsOf(
+                rule = inlineRule(condition = """count(sortBy(parcels, "weightKg", desc)) > 0"""),
+            ),
+        )
+    }
+
+    @Test
+    fun `an ordering over values reports only the collection`() {
+        assertEquals(
+            expected = setOf("topics"),
+            actual = FieldUsage.fieldsOf(rule = inlineRule(condition = "count(sortBy(topics, asc)) > 0")),
+        )
+    }
+
+    private fun inlineRule(condition: String): RuleAst {
+        return Parser(
+            input = """
+                rule "inline" {
+                  description "d"
+                  when
+                    $condition
+                  then
+                    flag "ok"
+                }
+            """.trimIndent()
+        ).parseRules().single()
     }
 }

@@ -5,6 +5,66 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 1.10.0
+
+### Added
+
+- **A collection can be put in order, with `sortBy`.** Until now element order was whatever the input
+  happened to iterate in, which left the two order-sensitive constructs the language already had —
+  `take` and `takeLast` — usable only against data the caller had pre-sorted. So the question rules are
+  most often asked to answer could not be written at all: *the three largest orders* was only ever
+  *the first three that arrived*.
+
+  ```
+  rule "large-order-concentration" {
+    description "The three largest orders account for more than half the total."
+    when
+      sum(take(sortBy(orders, "total", desc), 3).total) > sum(orders.total) * 0.5
+    then
+      flag "concentrated"
+  }
+  ```
+
+  `sortBy(path, asc|desc)` orders a collection of values or a `string_set` by the values themselves;
+  `sortBy(path, "member", asc|desc)` orders a collection of objects by one of their members. The
+  direction is required and a member name is always quoted, which is what keeps the two forms apart.
+
+  Like `take`, it is written as a call but is **part of the path**, so projection, filtering, slicing
+  and aggregation continue from it and the position is the meaning:
+  `take(sortBy(orders, "total", desc), 3)` is the three largest orders, while
+  `sortBy(take(orders, 3), "total", desc)` is the first three, put in order.
+
+  Numbers order numerically, dates chronologically, text alphabetically, `false` before `true`; values
+  of different kinds group by kind rather than ordering arbitrarily. The sort is stable, so ties keep
+  their source order and a `take` after one is deterministic. Elements with nothing to order by — an
+  absent member, a `null`, a nested structure — go **last in both directions**, so a descending order
+  cannot promote a row that carries no value.
+
+  Validation rejects what cannot work at load time: ordering something that is not a `collection` or a
+  `string_set`, a member name given for a collection of plain values, a member omitted for a collection
+  of objects, and a member the collection does not declare (with a "did you mean" suggestion) or that is
+  itself a structure. `RULE-SPEC.md` §5.9 and
+  [docs/expressions.md](docs/expressions.md#5c-ordering--sortby) document the contract.
+
+- **The visual editor covers `sortBy` end to end.** An **order by** control in the path segment's
+  drawer, with a member dropdown fed from the schema and an ascending/descending selector, pinned above
+  the first/last bound because that is the composition an author almost always means; an ordering badge
+  on the segment pill so it stays visible while the drawer is closed; highlighting and a completion in
+  the code editor; and a round trip through the Builder's mapper and renderer, so editing a rule that
+  contains an ordering no longer risks losing it when the rule text is regenerated.
+
+### Fixed
+
+- **Editing a path segment's filters no longer drops what sits beside them.** `BuilderPathStep.withFilters`
+  rebuilt the decoration list by locating a slice by index, so any other decoration on the same segment
+  was silently discarded. It now walks the list and substitutes only the filters, which is what lets an
+  ordering and a bound coexist on one segment.
+
+- **A path carrying only an ordering now takes the value-expression path.** `Parser.isModernExpression`
+  recognised a filter and a slice as making a path multi-valued but not a sort, so
+  `sortBy(tags, asc) contains "billing"` would have fallen back to the legacy named-operator path and
+  been reported as an unknown field.
+
 ## 1.9.0
 
 ### Added

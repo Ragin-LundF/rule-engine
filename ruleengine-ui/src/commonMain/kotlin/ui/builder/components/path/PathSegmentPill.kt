@@ -55,6 +55,7 @@ fun PathSegmentPill(
     options: List<String>,
     filterCount: Int,
     sliced: Boolean,
+    ordered: Boolean,
     selected: Boolean,
     onNameSelected: (String) -> Unit,
     onSelected: () -> Unit,
@@ -97,32 +98,7 @@ fun PathSegmentPill(
                 color = if (declared) TextPrimary else AccentOrange,
             )
 
-            // Keeps a slice visible while its drawer is closed. Silent truncation is exactly the
-            // kind of thing a reader must not have to open a drawer to discover.
-            if (sliced) {
-                Text(
-                    text = "⋯",
-                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
-                    color = PrimaryBlueLight,
-                    modifier = Modifier
-                        .clip(shape = PillShape)
-                        .background(color = PrimaryBlue.copy(alpha = 0.16f))
-                        .padding(horizontal = 7.dp),
-                )
-            }
-
-            // Keeps a restriction visible while its drawer is closed.
-            if (filterCount > 0) {
-                Text(
-                    text = filterCount.toString(),
-                    style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
-                    color = PrimaryBlueLight,
-                    modifier = Modifier
-                        .clip(shape = PillShape)
-                        .background(color = PrimaryBlue.copy(alpha = 0.16f))
-                        .padding(horizontal = 7.dp),
-                )
-            }
+            DecorationMarkers(ordered = ordered, sliced = sliced, filterCount = filterCount)
 
             if (!declared) {
                 Text(
@@ -161,4 +137,31 @@ fun PathSegmentPill(
             onDismiss = { menuOpen = false },
         )
     }
+}
+
+/**
+ * What the segment carries, shown while its drawer is closed.
+ *
+ * Silent truncation — or a silent reordering that decides which elements the truncation then keeps
+ * — is exactly what a reader must not have to open a drawer to discover.
+ */
+@Composable
+private fun DecorationMarkers(ordered: Boolean, sliced: Boolean, filterCount: Int) {
+    if (ordered) MarkerBadge(text = "\u2195")
+    if (sliced) MarkerBadge(text = "⋯")
+    if (filterCount > 0) MarkerBadge(text = filterCount.toString())
+}
+
+/** One decoration marker on a pill: the three differ only in what they say. */
+@Composable
+private fun MarkerBadge(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
+        color = PrimaryBlueLight,
+        modifier = Modifier
+            .clip(shape = PillShape)
+            .background(color = PrimaryBlue.copy(alpha = 0.16f))
+            .padding(horizontal = 7.dp),
+    )
 }

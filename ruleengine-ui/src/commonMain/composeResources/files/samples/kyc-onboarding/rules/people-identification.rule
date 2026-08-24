@@ -83,3 +83,21 @@ rule "transparency-register-checked" {
     message "We could not find your company in the German transparency register (Transparenzregister). Please make sure your beneficial owners are registered there."
     requirement "transparency-register-checked"
 }
+
+# Ordering a collection — `sortBy` reaches the *largest* holder rather than the first declared one.
+#
+# `take(sortBy(beneficialOwners, "ownershipPercent", desc), 1)` narrows the ordered list to one
+# element, which is how a rule reads a single extreme of a collection; there is no `first` function.
+# The ordering is part of the path, so slicing the other way round —
+# `sortBy(take(beneficialOwners, 1), "ownershipPercent", desc)` — would order whichever holder the
+# portal happened to send first, which is exactly the pre-filtering this file warns about above.
+#
+# Publishes a variable and emits no action of its own: risk-and-completeness.rule owns the verdict.
+rule "largest-beneficial-owner" {
+  description "Derives the largest single holding, which is what decides whether one person controls the company."
+  when
+    count(beneficialOwners) > 0
+
+  then
+    set largestHoldingPercent = sum(take(sortBy(beneficialOwners, "ownershipPercent", desc), 1).ownershipPercent)
+}

@@ -3,6 +3,7 @@ package ruleengine.compiler.value
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.compiler.support.FieldPathMessages
 import ruleengine.compiler.support.Suggestions
+import ruleengine.compiler.value.ValueExpressionValidator.validateSlice
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
@@ -30,6 +31,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
@@ -275,6 +277,13 @@ internal object ValueExpressionValidator {
                     diagnostics = diagnostics
                 )
 
+                is SortSegmentAst -> validateSort(
+                    segment = segment,
+                    scope = current,
+                    path = expr.path,
+                    diagnostics = diagnostics
+                )
+
                 is FieldSegmentAst -> {
                     val step = resolveMember(
                         parent = current,
@@ -318,6 +327,110 @@ internal object ValueExpressionValidator {
                         scope.type.name.lowercase()
             )
         }
+    }
+
+    /**
+     * A sort must rearrange something that has elements, and must name a member exactly when the
+     * elements need one.
+     *
+     * Unlike [validateSlice] a `string_set` is accepted here, deliberately: ordering a set of values
+     * is what the two-argument form exists for, and rejecting it would leave `sortBy(tags, asc)`
+     * unwritable. The two checks look alike but answer different questions — do not collapse them.
+     *
+     * A collection that declares no members stays permissive, the way every other path check does.
+     */
+    private fun validateSort(
+        segment: SortSegmentAst,
+        scope: FieldDefinition?,
+        path: List<PathSegmentAst>,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        if (scope == null) {
+            return
+        }
+        // Everything after the sort resolves against the ordered collection, so only what comes
+        // before it names the thing being ordered.
+        val sourcePath = path.takeWhile { candidate -> candidate !== segment }
+        if (scope.type != FieldType.COLLECTION && scope.type != FieldType.STRING_SET) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "sortBy() expects a collection or a set of values, but " +
+                        "'${pathText(path = sourcePath)}' is ${scope.type.name.lowercase()}"
+            )
+            return
+        }
+        if (scope.type == FieldType.STRING_SET) {
+            validateValueSort(segment = segment, path = sourcePath, diagnostics = diagnostics)
+            return
+        }
+        val members = scope.fields
+        if (members.isEmpty()) {
+            return
+        }
+        validateMemberSort(segment = segment, members = members, path = sourcePath, diagnostics = diagnostics)
+    }
+
+    /** Elements that order by themselves take no member name. */
+    private fun validateValueSort(
+        segment: SortSegmentAst,
+        path: List<PathSegmentAst>,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        if (segment.member == null) {
+            return
+        }
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "sortBy() orders '${pathText(path = path)}' by its values, which take no " +
+                    "member name",
+            suggestion = "Write sortBy(${pathText(path = path)}, ${directionText(segment = segment)})"
+        )
+    }
+
+    /**
+     * A collection whose elements are structures orders by one of their members, so the name is
+     * required and has to be one the element declares — and one that has an order of its own.
+     */
+    private fun validateMemberSort(
+        segment: SortSegmentAst,
+        members: Map<FieldId, FieldDefinition>,
+        path: List<PathSegmentAst>,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        val memberNames = members.keys.map { id -> id.value }
+        val member = segment.member
+        if (member == null) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "sortBy() over '${pathText(path = path)}' needs the member to order by",
+                suggestion = "One of: ${memberNames.joinToString()}"
+            )
+            return
+        }
+        val declared = members[FieldId(value = FieldPathResolver.resolveName(identifier = member, fields = members))]
+        if (declared == null) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "sortBy() orders by '$member', which '${pathText(path = path)}' does not declare",
+                suggestion = Suggestions.suggestClosest(input = member, candidates = memberNames)
+            )
+            return
+        }
+        if (declared.type.isStructure) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "sortBy() orders by '$member', which is declared " +
+                        "${declared.type.name.lowercase()} and has no order of its own"
+            )
+        }
+    }
+
+    /** The direction as the author would write it, for a diagnostic that shows the fixed call. */
+    private fun directionText(segment: SortSegmentAst): String {
+        if (segment.descending) {
+            return "desc"
+        }
+        return "asc"
     }
 
     /** Outcome of descending one path segment. */

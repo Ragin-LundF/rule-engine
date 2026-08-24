@@ -79,6 +79,14 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
     - A new clause inside a rule block must round-trip through **both** `ui/builder/RuleAstToBuilderMapper.kt`
       and `ui/builder/BuilderToRuleDsl.kt`. The Builder replaces the whole rule text on every edit, so
       anything the mapper drops is deleted from the file.
+    - A new **path segment** (`take` / `takeLast` / `sortBy` are all one) needs: a
+      `BuilderPathDecoration` variant plus its accessor and `withXxx` in `ui/builder/model/BuilderPathStep.kt`,
+      a branch in `OperandText.pathToDsl` **and** `pathToLabel`, a branch in
+      `ui/builder/ValueExpressionMapper.kt`'s `mapPath`, a control in
+      `ui/builder/components/path/PathBreadcrumb.kt`, and a marker in `PathSegmentPill`. Check
+      `BuilderPathStep.withFilters` keeps the new decoration — it rebuilds the list, and what it does
+      not know it drops. Only `ui/autocompletion/WhenCompletions.kt` needs the completion by hand;
+      highlighting and the aggregate lists derive from `DslFunctions`.
 
 ## Validation in the editor
 

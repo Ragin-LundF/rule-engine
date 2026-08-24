@@ -86,11 +86,12 @@ fun FunctionCallEditor(
 /**
  * The functions offered here.
  *
- * `take` and `takeLast` are absent on purpose: they narrow a path rather than compute a value, and
- * the breadcrumb's own slice control is where they are edited.
+ * `take`, `takeLast` and `sortBy` are absent on purpose: they rearrange a path rather than compute a
+ * value, and the breadcrumb's own slice and sort controls are where they are edited. Offering one
+ * here would produce text the parser reads as a path segment, not as the call this panel edits.
  */
 private val FUNCTION_OPTIONS: List<String> =
-    DslFunctions.allNames().filterNot { name -> name in DslFunctions.SLICE_NAMES }
+    DslFunctions.allNames().filterNot { name -> name in DslFunctions.pathFunctionNames() }
 
 /** One argument: its operand chip, the inline literal editor, and the expander for a nested panel. */
 @Suppress("LongParameterList")

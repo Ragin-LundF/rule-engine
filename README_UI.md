@@ -95,12 +95,16 @@ Computed operands are numeric, so those kinds are offered only when the comparis
 a text field will not let you build a sum against it. Rows carrying a computed operand are marked
 with an accent stripe and show the DSL they generate underneath.
 
-**Path segments** carry two things beyond their name, both edited in the segment's drawer and both
+**Path segments** carry three things beyond their name, all edited in the segment's drawer and all
 badged on the pill so they are visible while it is closed:
 
 - a **where** filter, `and`-joined when there is more than one. `in` takes either a written-out list
   (`paid, sent`) or the name of another field or list variable (`priorityCustomerIds`) — a bare name
   is emitted unquoted, so it stays a membership test rather than becoming a text comparison.
+- an **order by** control, which is what `sortBy` generates: a member to order by (absent for a
+  `string_set`, which orders by its own values) and a direction. It sits above the bound below,
+  because that is almost always what is meant — ordering first and keeping three gives the three
+  largest, while keeping three first puts an arbitrary three in order.
 - a **first / last n** bound, which is what `take` and `takeLast` generate. It applies where it sits
   relative to the filters above it, because the order is the meaning: `take(orders, 3)[paid == true]`
   selects paid orders among the first three, while `take(orders[paid == true], 3)` selects the first

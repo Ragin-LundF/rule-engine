@@ -59,7 +59,7 @@ class MarkdownCatalogRendererTest {
 
         assertTrue(actual = markdown.startsWith(prefix = "# Rule overview — warehouse-shipments"))
         assertTrue(
-            actual = markdown.contains(other = "_Entry `shipment-assessment` · 14 rules · 4 rule files"),
+            actual = markdown.contains(other = "_Entry `shipment-assessment` · 16 rules · 4 rule files"),
             message = markdown.lines().take(n = 5).joinToString(separator = "\n"),
         )
     }

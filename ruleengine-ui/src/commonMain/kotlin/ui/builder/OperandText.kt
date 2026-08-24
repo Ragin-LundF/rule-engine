@@ -8,6 +8,7 @@ import ui.builder.model.BuilderPathStep
 import ui.builder.model.filters
 import ui.builder.model.namesAField
 import ui.builder.model.slice
+import ui.builder.model.sort
 
 /**
  * Renders [BuilderOperand] trees as text.
@@ -93,6 +94,19 @@ object OperandText {
                         builder.setLength(0)
                         builder.append(call).append('(').append(inner).append(", ").append(decoration.count).append(')')
                     }
+
+                    // Wraps what came before it, exactly as a slice does. Byte-for-byte what
+                    // `Parser.parseSort` reads back — the member quoted, the direction not — because
+                    // this text is re-parsed on every edit and anything it loses is lost from the file.
+                    is BuilderPathDecoration.Sort -> {
+                        val inner = builder.toString()
+                        val member = decoration.member?.takeIf { name -> name.isNotBlank() }
+                        val direction = if (decoration.descending) "desc" else "asc"
+                        builder.setLength(0)
+                        builder.append("sortBy(").append(inner).append(", ")
+                        member?.let { name -> builder.append('"').append(name).append("\", ") }
+                        builder.append(direction).append(')')
+                    }
                 }
             }
         }
@@ -134,14 +148,19 @@ object OperandText {
 
     /**
      * Names of the path segments, with the middle elided once the path grows past
-     * [LABEL_MAX_SEGMENTS] so a deep path still fits on one row. Filters are indicated by a marker
-     * rather than spelled out — the full text is always available in the row's DSL echo line.
+     * [LABEL_MAX_SEGMENTS] so a deep path still fits on one row. Filters, orderings and slices are
+     * indicated by a marker rather than spelled out — the full text is always available in the row's
+     * DSL echo line.
      */
     private fun pathToLabel(path: List<BuilderPathStep>): String {
         val names = path.map { step ->
             val restricted = step.filters.any { filter -> filter.namesAField }
             val sliced = step.slice != null
-            step.name + (if (restricted) "*" else "") + (if (sliced) "⋯" else "")
+            val ordered = step.sort != null
+            step.name +
+                (if (restricted) "*" else "") +
+                (if (ordered) "↕" else "") +
+                (if (sliced) "⋯" else "")
         }
         val shown = if (names.size <= LABEL_MAX_SEGMENTS) {
             names
