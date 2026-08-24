@@ -14,6 +14,7 @@ import ruleengine.dsl.ast.NotAst
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
 
@@ -103,6 +104,12 @@ object FieldUsage {
                 // A slice narrows the collection without naming a field, so the dependency is
                 // unchanged: `take(orders, 3).total` still reads `orders.total`.
                 is SliceSegmentAst -> Unit
+                // A sort does name one, and reads it: `sortBy(orders, "total", desc)` depends on
+                // `orders.total` even when nothing else in the rule mentions it. Recorded beside
+                // the path rather than descending into it, because the sort stays on the collection.
+                is SortSegmentAst -> segment.member?.let { member ->
+                    into += join(prefix = current, segment = member)
+                }
             }
         }
         if (current.isNotEmpty()) {

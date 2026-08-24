@@ -43,7 +43,14 @@ class SubscriptionBillingIntegrationTest {
     @Test
     fun `the established account matches exposure, tenure and the sanity check`() {
         assertEquals(
-            expected = listOf("priority-exposure", "established-account", "line-item-sanity"),
+            expected = listOf(
+                "priority-exposure",
+                // Two of its invoices carry more than half the balance — visible only once the
+                // invoices are ordered by amount.
+                "invoice-concentration",
+                "established-account",
+                "line-item-sanity",
+            ),
             actual = matchedRules(member = "acc-established"),
             message = "12000 owed by priority customers, registered in January, and nothing wrong"
         )

@@ -35,3 +35,17 @@ rule "collateral-basis" {
   then
     set loanToValueRatio = requestedAmount / propertyValue
 }
+
+# Ordering a collection — the largest existing commitment, which is what an underwriter reads first.
+#
+# `take(sortBy(existingLoans, "monthlyPayment", desc), 1)` is how a rule reaches the single largest
+# element: the ordering is part of the path, so the slice narrows the *ordered* list. There is no
+# `first` function and none is needed.
+rule "largest-commitment" {
+  description "Derives the applicant's single largest existing monthly commitment."
+  when
+    count(existingLoans) > 0
+
+  then
+    set largestLoanPayment = sum(take(sortBy(existingLoans, "monthlyPayment", desc), 1).monthlyPayment)
+}

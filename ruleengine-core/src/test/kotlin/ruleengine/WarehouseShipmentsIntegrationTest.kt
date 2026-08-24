@@ -81,6 +81,10 @@ class WarehouseShipmentsIntegrationTest {
                 "handling:two-person-lift",
                 "handling:fragile-load",
                 "consolidation:hub-ham",
+                // The load is both unbalanced and badly delayed, which only an ordering can see:
+                // the three heaviest parcels and the single worst checkpoint.
+                "handling:top-heavy",
+                "route:severely-delayed",
                 "route:delayed",
                 "tracking:gap"
             ),

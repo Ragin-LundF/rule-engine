@@ -55,3 +55,23 @@ rule "consolidate-at-hamburg-hub" {
     assessment "consolidation:hub-ham"
     reason "two-or-more-parcels-originate-in-hamburg"
 }
+
+# Ordering a collection — `sortBy` puts the parcels in an order the rule can then read a bound off.
+#
+# `sortBy(parcels, "weightKg", desc)` is part of the path, not a call around it, so `take(..., 3)`
+# narrows the *ordered* list and `.weightKg` projects off what is left. Written the other way round —
+# `sortBy(take(parcels, 3), "weightKg", desc)` — it would order whichever three parcels happened to
+# arrive first, which is a different question and almost never the intended one.
+#
+# The `count(parcels) > 3` guard is not decoration: with three parcels or fewer the three
+# heaviest *are* the whole shipment, so the comparison would be true of every small load.
+rule "top-heavy-load" {
+  description "The three heaviest parcels carry more than half the shipment's weight, so the load is unbalanced."
+  when
+    count(parcels) > 3
+    and sum(take(sortBy(parcels, "weightKg", desc), 3).weightKg) > $totalWeightKg * 0.5
+
+  then
+    assessment "handling:top-heavy"
+    reason "three-heaviest-parcels-exceed-half-the-weight"
+}

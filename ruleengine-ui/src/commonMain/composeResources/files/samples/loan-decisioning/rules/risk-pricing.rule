@@ -60,3 +60,17 @@ rule "price-large-existing-exposure" {
     marginBps 25
     reason "large-existing-exposure"
 }
+
+# Reads the ordering published above. A single commitment that dominates the debt load is a
+# different risk from the same total spread across several lenders.
+rule "concentrated-debt-load" {
+  description "One existing loan makes up more than two thirds of the applicant's monthly debt, concentrating the risk on a single lender."
+  when
+    count(existingLoans) > 1
+    and $monthlyDebtLoad > 0
+    and $largestLoanPayment > $monthlyDebtLoad * 0.67
+
+  then
+    riskGrade "C"
+    reason "debt-load-concentrated-in-one-commitment"
+}

@@ -213,6 +213,17 @@ object OperandRules {
     }
 
     /**
+     * True when the segment at [depth] holds elements that can be put in order.
+     *
+     * Read off the segment's own declared type rather than off whether it has members, because a
+     * `string_set` has none and is exactly the case the two-argument `sortBy` exists for.
+     */
+    fun canSort(fields: List<CatalogFieldInfo>, path: List<BuilderPathStep>, depth: Int): Boolean {
+        val segment = fields.fieldAtPath(segments = path.take(n = depth + 1).names) ?: return false
+        return OperatorOptions.isOrderableType(fieldType = segment.type)
+    }
+
+    /**
      * Members available to a filter on the segment at [depth].
      *
      * A member reachable through a nested object is offered by its dotted path, because the engine

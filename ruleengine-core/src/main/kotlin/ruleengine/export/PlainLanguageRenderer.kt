@@ -29,6 +29,7 @@ import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.OrAst
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
@@ -263,6 +264,7 @@ object PlainLanguageRenderer {
             segments = split.containerSegments,
             filters = split.filters,
             slice = split.slice,
+            sort = split.sort,
         )
 
         return "${aggregatePhrase(function = function, name = call.name, measure = measure)} of $container"
@@ -293,6 +295,7 @@ object PlainLanguageRenderer {
             segments = split.containerSegments,
             filters = split.filters,
             slice = split.slice,
+            sort = split.sort,
         )
         val lead = if (function == CollectionFunctionName.EVERY) "every one of" else "at least one of"
         return "$lead $container"
@@ -343,6 +346,8 @@ object PlainLanguageRenderer {
         val filters: List<ExpressionAst>,
         /** The bound the path applies, or null when it keeps every element. */
         val slice: SliceSegmentAst? = null,
+        /** The ordering the path applies, or null when it keeps source order. */
+        val sort: SortSegmentAst? = null,
     )
 
     /**
@@ -357,6 +362,9 @@ object PlainLanguageRenderer {
         // Dropping this would make the prose claim more than the rule does: "the number of login
         // events that failed" instead of "…of the last 10 login events".
         val slice = path.filterIsInstance<SliceSegmentAst>().firstOrNull()
+        // Same reason as the slice: without it the prose claims "the total of order totals" for a
+        // rule that only ever looks at the largest three.
+        val sort = path.filterIsInstance<SortSegmentAst>().firstOrNull()
         val lastFilterIndex = path.indexOfLast { segment -> segment is FilterSegmentAst }
 
         if (lastFilterIndex >= 0) {
@@ -367,12 +375,19 @@ object PlainLanguageRenderer {
                 measure = measure.ifEmpty { null },
                 filters = filters,
                 slice = slice,
+                sort = sort,
             )
         }
 
         val names = path.fieldNames()
         if (names.size < 2) {
-            return AggregatePath(containerSegments = names, measure = null, filters = filters, slice = slice)
+            return AggregatePath(
+                containerSegments = names,
+                measure = null,
+                filters = filters,
+                slice = slice,
+                sort = sort,
+            )
         }
 
         return AggregatePath(
@@ -380,7 +395,20 @@ object PlainLanguageRenderer {
             measure = listOf(names.last()),
             filters = filters,
             slice = slice,
+            sort = sort,
         )
+    }
+
+    /** The collection named with the ordering it is read in, or unchanged when it keeps source order. */
+    private fun describeOrder(plain: String, sort: SortSegmentAst?): String {
+        if (sort == null) {
+            return plain
+        }
+        val member = sort.member
+        if (member == null) {
+            return if (sort.descending) "$plain in descending order" else "$plain in ascending order"
+        }
+        return if (sort.descending) "$plain by highest $member" else "$plain by lowest $member"
     }
 
     /**
@@ -391,15 +419,19 @@ object PlainLanguageRenderer {
     private fun describeContainer(
         segments: List<String>,
         filters: List<ExpressionAst>,
-        slice: SliceSegmentAst? = null
+        slice: SliceSegmentAst? = null,
+        sort: SortSegmentAst? = null
     ): String {
         // Left as written rather than title-cased: the container reads as a noun mid-sentence
         // ("of parcels where …"), where "of Parcels" would look like a proper name.
         val plain = segments.joinToString(separator = ".").ifEmpty { "the collection" }
+        // The ordering goes inside the bound, so a sorted-then-sliced collection reads as "the first
+        // 3 orders by highest total" — which is the order the two are almost always written in.
+        val ordered = describeOrder(plain = plain, sort = sort)
         val name = when {
-            slice == null -> plain
-            slice.fromEnd -> "the last ${slice.count} $plain"
-            else -> "the first ${slice.count} $plain"
+            slice == null -> ordered
+            slice.fromEnd -> "the last ${slice.count} $ordered"
+            else -> "the first ${slice.count} $ordered"
         }
         if (filters.isEmpty()) {
             return name

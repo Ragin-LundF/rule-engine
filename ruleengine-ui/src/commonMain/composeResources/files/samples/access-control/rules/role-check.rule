@@ -29,3 +29,15 @@ rule "service-account-api" {
     allow "internal-api"
     rateLimit 1000
 }
+
+# Ordering a set of values — a `string_set` declares no members, so the two-argument form of
+# `sortBy` orders the values themselves. Publishing them in a fixed order is what makes an audit
+# line comparable between two requests that carry the same tags in a different order.
+rule "audit-tags-in-order" {
+  description "Publishes the request's tags alphabetically, so audit output is stable between requests."
+  when
+    count(tags) > 0
+
+  then
+    set orderedTags = sortBy(tags, asc)
+}

@@ -8,6 +8,7 @@ import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.compiled.AggregateFunctionName
+import ruleengine.evaluator.compiled.DslFunctions
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
@@ -17,6 +18,8 @@ import ui.builder.model.filters
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.names
 import ui.builder.model.pathOperand
+import ui.builder.model.sort
+import ui.builder.model.withFilters
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -544,6 +547,64 @@ class AdvancedExpressionRoundTripTest {
         )
     }
 
+    // ── orderings ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `an ordering by a member round-trips`() {
+        assertRoundTrips(condition = """sum(sortBy(orders, "total", desc).total) > 100""")
+    }
+
+    @Test
+    fun `an ordering over a set of values round-trips`() {
+        assertRoundTrips(condition = """sortBy(allowedStatuses, asc) contains "paid"""")
+    }
+
+    @Test
+    fun `an ordering combined with a filter and a slice round-trips`() {
+        assertRoundTrips(
+            condition = """sum(take(sortBy(orders[status == "paid"], "total", desc), 3).total) > 100"""
+        )
+    }
+
+    /**
+     * Ordering then slicing gives the three largest; slicing then ordering gives an arbitrary three
+     * put in order. The Builder has to keep them apart, or an edit silently changes what the rule
+     * asks — the whole rule text is regenerated on every keystroke.
+     */
+    @Test
+    fun `ordering order relative to a slice is preserved in both directions`() {
+        val sortFirst = roundTrip(condition = """count(take(sortBy(orders, "total", desc), 3)) > 0""").second
+        val sliceFirst = roundTrip(condition = """count(sortBy(take(orders, 3), "total", desc)) > 0""").second
+
+        assertTrue(
+            actual = sortFirst.contains(other = """take(sortBy(orders, "total", desc), 3)"""),
+            message = sortFirst,
+        )
+        assertTrue(
+            actual = sliceFirst.contains(other = """sortBy(take(orders, 3), "total", desc)"""),
+            message = sliceFirst,
+        )
+    }
+
+    /**
+     * Editing the filters of a segment must not drop the ordering sitting beside them. The Builder
+     * replaces the whole rule text, so a decoration the model loses is deleted from the file.
+     */
+    @Test
+    fun `rewriting a segment's filters keeps its ordering`() {
+        val original = Parser(
+            input = wrap(condition = """count(sortBy(orders[status == "paid"], "total", desc)) > 0""")
+        ).parseRules().single()
+        val builderRule = RuleAstToBuilderMapper.map(rule = original) as BuilderRule.Supported
+        val comparison = builderRule.conditionNodes.single() as BuilderConditionNode.Comparison
+        val step = (comparison.left as BuilderOperand.Aggregate).path.single()
+
+        val rewritten = step.withFilters(filters = step.filters)
+
+        assertEquals(expected = step.sort, actual = rewritten.sort, message = "the ordering was dropped")
+        assertEquals(expected = step.decorations, actual = rewritten.decorations)
+    }
+
     // ── membership filters ────────────────────────────────────────────────────
 
     @Test
@@ -564,6 +625,15 @@ class AdvancedExpressionRoundTripTest {
     }
 
     // ── drift guard ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `the path functions are offered by the breadcrumb, not the call editor`() {
+        assertEquals(
+            expected = listOf("sortBy", "take", "takeLast").sorted(),
+            actual = DslFunctions.pathFunctionNames().sorted(),
+            message = "a call editor filtering on this list would start offering the new name",
+        )
+    }
 
     @Test
     fun `builder aggregate list matches the engine`() {

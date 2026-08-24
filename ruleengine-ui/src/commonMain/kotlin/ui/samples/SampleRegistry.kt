@@ -16,8 +16,9 @@ object SampleRegistry {
         SampleDescriptor(
             id = "financial-transactions",
             name = "Financial Transactions",
-            description = "Classify bank payments by purpose, detect fraud signals, " +
-                    "and identify VIP customers based on amount and tags.",
+            description = "Classify bank payments by purpose, detect fraud signals, and identify " +
+                    "VIP customers based on amount and tags, with orderings that pick out the " +
+                    "largest transactions.",
             category = SampleCategory.FINANCE,
             manifestResPath = "files/samples/financial-transactions/manifest.yaml",
             schemaResPath = "files/samples/financial-transactions/schema.yaml",
@@ -34,8 +35,9 @@ object SampleRegistry {
             id = "subscription-billing",
             name = "Subscription Billing (per account)",
             description = "One rule set evaluated once per account: membership filters over a " +
-                "priority list, a slice of recent logins, a keyed join across months, date " +
-                "arithmetic, an absolute drift and a collection-wide sanity check.",
+                "priority list, a slice of recent logins, an ordering that picks the largest " +
+                "invoices, a keyed join across months, date arithmetic, an absolute drift and a " +
+                "collection-wide sanity check.",
             category = SampleCategory.FINANCE,
             manifestResPath = "files/samples/subscription-billing/manifest.yaml",
             schemaResPath = "files/samples/subscription-billing/schema.yaml",
@@ -43,6 +45,7 @@ object SampleRegistry {
             ruleResPaths = listOf(
                 "files/samples/subscription-billing/rules/priority-exposure.rule",
                 "files/samples/subscription-billing/rules/recent-failures.rule",
+                "files/samples/subscription-billing/rules/largest-invoices.rule",
                 "files/samples/subscription-billing/rules/net-position.rule",
                 "files/samples/subscription-billing/rules/tenure-check.rule",
                 "files/samples/subscription-billing/rules/balance-drift.rule",
@@ -73,7 +76,8 @@ object SampleRegistry {
             id = "loan-decisioning",
             name = "Loan Decisioning",
             description = "Underwrite a retail loan application: rule variables derive debt-to-income, " +
-                "disposable income and loan-to-value once, and the policy and pricing rules read them back.",
+                "disposable income, loan-to-value and the largest single commitment once, and the " +
+                "policy and pricing rules read them back.",
             category = SampleCategory.FINANCE,
             manifestResPath = "files/samples/loan-decisioning/manifest.yaml",
             schemaResPath = "files/samples/loan-decisioning/schema.yaml",

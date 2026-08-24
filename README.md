@@ -82,8 +82,8 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
   to ask whether a record carries a value at all
 - **Missing data as an outcome** — a rule may declare a `not_exists` branch for the case where the
   record carries no data to decide its condition, instead of silently reading it as "false"
-- **Collection tools** — `take` / `takeLast` slicing, `in` membership filters, `every` / `any`
-  predicates, and `sumByKey` joins across collections
+- **Collection tools** — `sortBy` ordering, `take` / `takeLast` slicing, `in` membership filters,
+  `every` / `any` predicates, and `sumByKey` joins across collections
 - **Per-member evaluation** — a manifest entry may declare `scope: <collection>` to run its rules
   once per member instead of once per document
 - **Filtered array paths** — `orders[status == "paid"].items[price > 0].price` filters at every level

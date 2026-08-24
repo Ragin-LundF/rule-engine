@@ -106,6 +106,35 @@ clause in any of them touches, in order:
 enum every `when` over branches is exhaustive on, which is what turns most of the above into compile
 errors rather than omissions. See `.ai/instructions/ruleengine-ui.md` for the editor's side.
 
+## Extending a path — a new `PathSegmentAst`
+
+`take` / `takeLast` and `sortBy` are written as calls but parsed into path segments, which is what
+lets them compose with projection, filtering and each other for free. A new one touches:
+
+1. `Parser` — a name check in `parseFunctionCallOrFieldAccess` and a `parseXxx` that appends the
+   segment and hands off to `parsePathContinuation`. **Also `isModernExpression`**, or a path carrying
+   only the new segment falls back to the legacy named-operator path and the whole call is reported as
+   an unknown field.
+2. A node in `dsl/ast` and a compiled counterpart in `evaluator/compiled/value/path`. Both interfaces
+   are sealed, so `ValueExpressionCompiler`, `ValueExpressionValidator`, `ValueExpressionRenderer`,
+   `FieldUsage`, `VariableUsage` and `FieldAccessCompiledValueExpression` become compile errors.
+3. `DslFunctions` — add the spelling to `SORT_NAMES` / `SLICE_NAMES` and to `pathFunctionNames()`, or
+   the editor reads the word as an unknown identifier and the call editor starts offering it.
+4. `FieldAccessCompiledValueExpression.applySegment`, working on the **raw** element list before
+   anything becomes an `ExpressionValue` — that is what keeps `take(sortBy(x, ...), 3)` from
+   converting the whole collection.
+
+**The two that fail silently, with no compiler help:**
+
+- `export/PlainLanguageRenderer.splitAggregatePath` picks decorations out with `filterIsInstance`, so a
+  new segment simply vanishes from every Markdown and DOCX catalog export — and the prose then claims
+  more than the rule does.
+- `ui.builder.model.BuilderPathStep.withFilters` rebuilds the decoration list around the ones it knows.
+  Anything it does not know is dropped, and since the Builder replaces the whole rule text on every
+  edit, dropped means deleted from the file.
+
+Both need the UI's side too — see `.ai/instructions/ruleengine-ui.md`.
+
 ## Three-valued condition evaluation
 
 `CompiledExpression.evaluate` returns a `ConditionVerdict`, not a `Boolean`: `TRUE`, `FALSE`, or

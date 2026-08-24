@@ -49,3 +49,15 @@ rule "warning-production" {
     tag "warning-prod"
     route "monitoring-channel"
 }
+
+# Ordering a set of values. A `string_set` has no members to name, so `sortBy(tags, asc)` orders the
+# values themselves — which is what makes the tag list on an escalation stable rather than dependent
+# on the order the log shipper happened to emit them in.
+rule "escalation-tags-in-order" {
+  description "Publishes the event's tags alphabetically, so two identical events escalate identically."
+  when
+    count(tags) > 0
+
+  then
+    set orderedTags = sortBy(tags, asc)
+}

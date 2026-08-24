@@ -3,10 +3,10 @@ package ui.builder.model
 
 /**
  * One path segment plus whatever is applied to it — mirrors an engine `FieldSegmentAst` followed by
- * zero or more `FilterSegmentAst` / `SliceSegmentAst`.
+ * zero or more `FilterSegmentAst` / `SliceSegmentAst` / `SortSegmentAst`.
  *
- * Multiple filters on one step are joined with `and` in the generated DSL. A slice among them takes
- * effect where it sits, which is why [decorations] is ordered rather than split into two lists.
+ * Multiple filters on one step are joined with `and` in the generated DSL. A slice or a sort among
+ * them takes effect where it sits, which is why [decorations] is ordered rather than split apart.
  */
 data class BuilderPathStep(
     val name: String,
@@ -25,22 +25,35 @@ val BuilderPathStep.filters: List<BuilderFilter>
 val BuilderPathStep.slice: BuilderPathDecoration.Slice?
     get() = decorations.filterIsInstance<BuilderPathDecoration.Slice>().firstOrNull()
 
+/** The step's ordering, or null when it keeps source order. At most one is offered per segment. */
+val BuilderPathStep.sort: BuilderPathDecoration.Sort?
+    get() = decorations.filterIsInstance<BuilderPathDecoration.Sort>().firstOrNull()
+
 /**
- * Replaces the step's filters, leaving a slice where it sits relative to them.
+ * Replaces the step's filters, leaving everything else where it sits relative to them.
  *
- * Filters written before the slice stay before it: how many of them there are is what decides how
- * many elements the slice then sees.
+ * Filters written before a slice or a sort stay before it: how many of them there are is what
+ * decides which elements the slice then sees, and in which order. Written as a walk rather than by
+ * recomputing one decoration's index, so a second kind of decoration cannot be dropped here — which
+ * is exactly what the earlier slice-only version would have done to a sort.
  */
 fun BuilderPathStep.withFilters(filters: List<BuilderFilter>): BuilderPathStep {
-    val slicePosition = decorations.indexOfFirst { it is BuilderPathDecoration.Slice }
     val replacements = filters.map { filter -> BuilderPathDecoration.Filter(filter = filter) }
-    if (slicePosition < 0) {
-        return copy(decorations = replacements)
+    val rebuilt = mutableListOf<BuilderPathDecoration>()
+    var next = 0
+    decorations.forEach { decoration ->
+        when {
+            decoration !is BuilderPathDecoration.Filter -> rebuilt += decoration
+            next < replacements.size -> {
+                rebuilt += replacements[next]
+                next++
+            }
+            // More filters were removed than written back; the remaining slots simply close up.
+            else -> Unit
+        }
     }
-    val before = decorations.take(n = slicePosition).count { it is BuilderPathDecoration.Filter }
-    return copy(
-        decorations = replacements.take(n = before) + decorations[slicePosition] + replacements.drop(n = before)
-    )
+    rebuilt += replacements.drop(n = next)
+    return copy(decorations = rebuilt)
 }
 
 /** Adds, replaces or removes the step's slice, keeping it after the filters already written. */
@@ -50,6 +63,26 @@ fun BuilderPathStep.withSlice(slice: BuilderPathDecoration.Slice?): BuilderPathS
         return copy(decorations = withoutSlice)
     }
     return copy(decorations = withoutSlice + slice)
+}
+
+/**
+ * Adds, replaces or removes the step's ordering, keeping it **before** any slice already written.
+ *
+ * That is what the author almost always means: `take(sortBy(orders, "total", desc), 3)` is the three
+ * largest orders, where slicing first would put an arbitrary three in order.
+ */
+fun BuilderPathStep.withSort(sort: BuilderPathDecoration.Sort?): BuilderPathStep {
+    val withoutSort = decorations.filter { it !is BuilderPathDecoration.Sort }
+    if (sort == null) {
+        return copy(decorations = withoutSort)
+    }
+    val slicePosition = withoutSort.indexOfFirst { it is BuilderPathDecoration.Slice }
+    if (slicePosition < 0) {
+        return copy(decorations = withoutSort + sort)
+    }
+    return copy(
+        decorations = withoutSort.take(n = slicePosition) + sort + withoutSort.drop(n = slicePosition)
+    )
 }
 
 /** Dotted names of a path, ignoring decorations — the form used to look fields up in the catalog. */

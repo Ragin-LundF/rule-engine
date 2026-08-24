@@ -1277,6 +1277,34 @@ count(takeLast(loginEvents, 10)[successful == false]) >= 3
 Order matters. `takeLast(events, 10)[failed == true]` counts failures **among the last ten events**;
 `takeLast(events[failed == true], 10)` counts **the last ten failures**.
 
+#### Ordering a collection
+
+`sortBy(path, asc|desc)` puts a collection of values in order; `sortBy(path, "member", asc|desc)`
+orders a collection of objects by one of their members. The direction is **required**, and a member
+name is always **quoted**.
+
+An ordering is part of the path, so projection, filtering, slicing and aggregation continue from it:
+
+```
+sum(take(sortBy(orders, "total", desc), 3).total) > 5000
+count(sortBy(loginEvents, "at", desc)) > 0
+sortBy(priorityCustomerIds, asc) contains "acme"
+```
+
+Numbers order numerically, dates chronologically, text alphabetically, `false` before `true`. Values
+of different kinds group by kind — numbers, dates, text, booleans — rather than ordering arbitrarily.
+Ties keep their source order, which is what makes a `take` after an ordering deterministic.
+
+Elements with nothing to order by go **last in both directions** — an absent member, a `null`, a
+nested object or a nested list is not a value, so `take(sortBy(orders, "total", desc), 3)` gives the
+three largest orders rather than three that never carried a total.
+
+Order matters. `take(sortBy(orders, "total", desc), 3)` is **the three largest** orders;
+`sortBy(take(orders, 3), "total", desc)` is **the first three**, put in order.
+
+`sortBy` accepts a `collection` or a `string_set`. A collection of objects requires the member name;
+a `string_set` or a collection of plain values must not be given one.
+
 #### Membership — the `in` operator
 
 `element in source` is true when the source holds a value equal to the element. The source may be a
@@ -1416,6 +1444,10 @@ sum(transactions.amount) * 0.03
 - `abs` applied to a text field → error.
 - `daysBetween` given an operand that is not readable as a date → error.
 - `take` / `takeLast` with a negative or fractional size, or applied to something that is not a collection → error.
+- `sortBy` applied to something that is not a collection or a `string_set`, given a member name for a
+  collection of plain values, given none for a collection of objects, ordering by a member the
+  collection does not declare, or ordering by a member that is itself a collection or object → error.
+  A direction other than `asc` / `desc`, or an unquoted member name, is a parse error.
 - `every` / `any` without a condition, e.g. `every(orders)` → error.
 - `sumByKey` without a key literal, with fewer than two sources, joining on a member a source does not
   declare, on members whose types disagree, or summing a member that is not numeric → error.
@@ -2273,6 +2305,11 @@ The engine validates everything at load time and rejects the following. Never ge
 | `between` or a text-matching operator inside a filter | `transactions[amount between 1 5]`, `transactions[label startsWith "r"]` |
 | `ignoreCase` inside a filter | `transactions[label == "risk" ignoreCase]` — normalize the member in the schema instead |
 | Unknown member inside a filter | `transactions[bogus > 1]` when the collection declares no `bogus` |
+| `sortBy` over something that has no elements | `sortBy(customer, "name", asc)` — `customer` is an `object` |
+| `sortBy` given a member for a collection of plain values | `sortBy(tags, "total", asc)` when `tags` is a `string_set` |
+| `sortBy` given no member for a collection of objects | `sortBy(orders, desc)` when `orders` declares members |
+| `sortBy` ordering by an unknown or structural member | `sortBy(orders, "totl", desc)`, `sortBy(orders, "lines", asc)` |
+| A `sortBy` direction other than `asc` / `desc`, or an unquoted member | `sortBy(orders, "total", upwards)`, `sortBy(orders, total, desc)` — both are parse errors |
 | `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
 | Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
 | Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |

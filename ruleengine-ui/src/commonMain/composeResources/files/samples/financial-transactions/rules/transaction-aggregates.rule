@@ -45,3 +45,33 @@ rule "foreign-counterparty-volume" {
     flag "foreign-counterparty-volume"
     score 50
 }
+
+# Ordering a collection — `sortBy` decides *which* elements a following slice keeps.
+#
+# The ordering is part of the path, so `take(..., 3)` narrows the ordered list and `.amount`
+# projects off what is left. `sortBy(take(transactions, 3), "amount", desc)` would instead order
+# whichever three transactions arrived first, which answers a different question.
+#
+# The `count(transactions) > 3` guard matters: with three or fewer, the three largest are all
+# of them and the rule would fire on every small statement.
+rule "largest-transactions-dominate" {
+  description "The three largest transactions account for more than half of everything moved."
+  when
+    count(transactions) > 3
+    and sum(take(sortBy(transactions, "amount", desc), 3).amount) > sum(transactions.amount) * 0.5
+
+  then
+    flag "concentrated_volume"
+    score 40
+}
+
+# Ordering a set of values. A `string_set` has no members to name, so the two-argument form orders
+# the values themselves — which is what makes the published list stable enough to compare or report.
+rule "tags-in-order" {
+  description "Publishes the transaction's tags alphabetically, so downstream output is stable."
+  when
+    count(tags) > 0
+
+  then
+    set orderedTags = sortBy(tags, asc)
+}

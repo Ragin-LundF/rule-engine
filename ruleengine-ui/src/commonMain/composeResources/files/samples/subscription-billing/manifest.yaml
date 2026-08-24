@@ -11,6 +11,7 @@ entries:
     rules:
       - rules/priority-exposure.rule
       - rules/recent-failures.rule
+      - rules/largest-invoices.rule
       - rules/net-position.rule
       - rules/tenure-check.rule
       - rules/balance-drift.rule

@@ -34,3 +34,15 @@ rule "books-staff-pick" {
     recommend "featured-books"
     boost 85
 }
+
+# Ordering a set of values — the two-argument form, because a `string_set` orders by its own values
+# rather than by a member. A stable tag order is what lets two products with the same tags produce
+# the same recommendation payload.
+rule "facet-tags-in-order" {
+  description "Publishes the product's tags alphabetically, so recommendation payloads are stable."
+  when
+    count(tags) > 0
+
+  then
+    set orderedTags = sortBy(tags, asc)
+}

@@ -7,10 +7,12 @@ import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSliceSegment
+import ruleengine.evaluator.compiled.value.path.CompiledSortSegment
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.DateExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.compiled.value.result.ObjectExpressionValue
@@ -46,7 +48,17 @@ class FieldAccessCompiledValueExpression(
     private val segments: List<CompiledPathSegment>,
     val normalizers: List<NormalizerId> = emptyList()
 ) : CompiledValueExpression {
-    override val cost: EvaluationCost = EvaluationCost.CHEAP
+    /**
+     * Reading a path is cheap; ordering one is not. A sorting path is declared expensive so
+     * `AndExpression`'s cost-ordered evaluation leaves it until a cheaper condition has had its
+     * chance to decide the rule. Filtering stays cheap deliberately — reclassifying it would reorder
+     * conditions in rules that exist today.
+     */
+    override val cost: EvaluationCost = if (segments.any { segment -> segment is CompiledSortSegment }) {
+        EvaluationCost.EXPENSIVE
+    } else {
+        EvaluationCost.CHEAP
+    }
 
     override fun evaluate(context: PreparedRuleContext): ExpressionValue {
         // A path of plain names may name a prepared value, including a dotted one: a scalar declared
@@ -137,6 +149,58 @@ class FieldAccessCompiledValueExpression(
                 current.takeLast(n = segment.count)
             } else {
                 current.take(n = segment.count)
+            }
+            // Ordered on the raw list too, and for the same reason: `take(sortBy(orders, "total",
+            // desc), 3)` should order raw elements and convert three of them, not convert every
+            // order and discard most of the work.
+            is CompiledSortSegment -> sort(segment = segment, current = current, context = context)
+        }
+    }
+
+    /**
+     * Puts the selected elements in order, by the segment's member or by the elements themselves.
+     *
+     * The key goes through [rawToExpressionValue] rather than being compared raw, which is what
+     * applies the field's declared normalizers and reads a `LocalDate` / `Instant` as a date — so a
+     * sort orders values the same way a comparison on the same field would.
+     *
+     * Stable, so equal keys keep their source order and a following slice is deterministic.
+     * Elements with no orderable key — an absent member, a `null`, a structure, a nested list — go
+     * last in **both** directions: they are not the smallest value, they are not a value, and
+     * `take(sortBy(x, "m", desc), 3)` has to mean the three largest rather than three blanks.
+     */
+    private fun sort(
+        segment: CompiledSortSegment,
+        current: List<Any?>,
+        context: PreparedRuleContext
+    ): List<Any?> {
+        val keyed = current.map { element ->
+            val key = sortKeyOf(element = element, member = segment.member)
+            element to rawToExpressionValue(raw = key, context = context)
+        }
+        return keyed.sortedWith(comparator = sortComparator(descending = segment.descending))
+            .map { entry -> entry.first }
+    }
+
+    private fun sortKeyOf(element: Any?, member: String?): Any? {
+        if (member == null) {
+            return element
+        }
+        return (element as? Map<*, *>)?.get(member)
+    }
+
+    private fun sortComparator(descending: Boolean): Comparator<Pair<Any?, ExpressionValue>> {
+        return Comparator { left, right ->
+            val leftOrderable = ExpressionValues.isOrderable(value = left.second)
+            val rightOrderable = ExpressionValues.isOrderable(value = right.second)
+            when {
+                !leftOrderable && !rightOrderable -> 0
+                !leftOrderable -> 1
+                !rightOrderable -> -1
+                else -> {
+                    val order = ExpressionValues.compareByValue(left = left.second, right = right.second)
+                    if (descending) -order else order
+                }
             }
         }
     }

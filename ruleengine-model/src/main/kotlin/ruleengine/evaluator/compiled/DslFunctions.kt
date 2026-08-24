@@ -16,9 +16,26 @@ object DslFunctions {
      */
     val SLICE_NAMES: List<String> = listOf("take", "takeLast")
 
+    /**
+     * The ordering function, absent from every registry for the same reason as [SLICE_NAMES]: the
+     * parser turns `sortBy(orders, "total", desc)` into a path segment rather than a call.
+     */
+    val SORT_NAMES: List<String> = listOf("sortBy")
+
     /** Every function name the DSL accepts, in declaration order. */
     fun allNames(): List<String> {
-        return AggregateFunctionName.dslNames() + CollectionFunctionName.dslNames() + SLICE_NAMES
+        return AggregateFunctionName.dslNames() + CollectionFunctionName.dslNames() + pathFunctionNames()
+    }
+
+    /**
+     * The names written as a call but parsed as a path segment.
+     *
+     * A surface that edits function *calls* has to exclude these: there is no
+     * `FunctionCallValueAst` for them to edit, and offering one would produce text the parser reads
+     * as something else entirely.
+     */
+    fun pathFunctionNames(): List<String> {
+        return SLICE_NAMES + SORT_NAMES
     }
 
     /** The reductions over a collection, i.e. what an aggregate picker should offer. */

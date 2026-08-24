@@ -16,6 +16,7 @@ import ruleengine.dsl.ast.LiteralValueAst
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.dsl.ast.PathSegmentAst
 import ruleengine.dsl.ast.SliceSegmentAst
+import ruleengine.dsl.ast.SortSegmentAst
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.VariableRefAst
@@ -34,6 +35,7 @@ import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSliceSegment
+import ruleengine.evaluator.compiled.value.path.CompiledSortSegment
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.compiled.value.result.TextExpressionValue
@@ -136,6 +138,16 @@ internal object ValueExpressionCompiler {
                         )
                     compiledSegments += CompiledSliceSegment(fromEnd = segment.fromEnd, count = count)
                 }
+
+                // The member is resolved here and nowhere later: this is the last stage that still
+                // knows the collection's declared members, and the runtime reads raw input maps,
+                // which are keyed by the canonical name rather than by any alias.
+                is SortSegmentAst -> compiledSegments += CompiledSortSegment(
+                    member = segment.member?.let { name ->
+                        FieldPathResolver.resolveName(identifier = name, fields = fields)
+                    },
+                    descending = segment.descending
+                )
             }
         }
         return FieldAccessCompiledValueExpression(
