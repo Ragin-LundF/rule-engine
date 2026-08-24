@@ -15,7 +15,7 @@ plugins.withId("org.jetbrains.kotlin.jvm") {
         compilerOptions {
             jvmTarget = JvmTarget.fromTarget(java_version)
             freeCompilerArgs = [
-                    "-Xjvm-default=all"
+                    "-jvm-default"
             ]
         }
     }
@@ -32,6 +32,6 @@ plugins.withId("org.jetbrains.kotlin.multiplatform") {
 tasks.withType(KotlinCompile).configureEach {
     compilerOptions {
         jvmTarget = JvmTarget.fromTarget(java_version)
-        freeCompilerArgs.add("-Xjvm-default=all")
+        freeCompilerArgs.add("-jvm-default")
     }
 }

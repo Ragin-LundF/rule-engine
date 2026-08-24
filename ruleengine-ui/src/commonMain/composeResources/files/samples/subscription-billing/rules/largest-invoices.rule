@@ -1,0 +1,20 @@
+# Ordering a collection — which invoices matter, rather than which arrived first.
+#
+# `sortBy` is part of the path, so a following `take` narrows the *ordered* list. That is the
+# difference between "the two largest invoices" and "the first two invoices, put in order":
+#
+#   take(sortBy(invoices, "amount", desc), 2)    the two largest
+#   sortBy(take(invoices, 2), "amount", desc)    the first two, ordered
+#
+# Contrast with recent-failures.rule, which uses `takeLast(loginEvents, 10)` and so depends on the
+# order the events arrived in. An ordering says what "recent" or "largest" means instead of assuming
+# the input already knows.
+
+rule "invoice-concentration" {
+  description "The two largest invoices make up more than half of everything this account is owed."
+  when
+    count(invoices) > 2
+    and sum(take(sortBy(invoices, "amount", desc), 2).amount) > sum(invoices.amount) * 0.5
+  then
+    review "invoice-concentration"
+}
