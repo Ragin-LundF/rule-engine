@@ -171,6 +171,12 @@ The `operators` list restricts which comparison operations rule authors may use 
 | `in` | Field value matches one entry in a list | `sepaCode in ["CCRD", "DCRD"]` |
 | `regex` | Field value matches a regular expression | `iban regex "^DE[0-9]{20}$"` |
 
+> **`in` works on every scalar type**, not only on text — see the `integer`, `decimal` and `date`
+> tables below. The list items are written in the same spelling a single literal for that field would
+> use: bare numbers for a number, quoted values in the field's declared `format` for a date. A bare
+> literal is accepted as a list of one, so `sepaCode in "CCRD"` means the same as `["CCRD"]`.
+> A `string_set` is the exception: it asks membership with `containsAny` / `containsAll` instead.
+
 #### Integer field operators (`integer`)
 
 | Operator | Symbolic alias | Meaning | Example in a rule |
@@ -181,6 +187,7 @@ The `operators` list restricts which comparison operations rule authors may use 
 | `lt` | `<` | Less than | `count lt 0` |
 | `lte` | `<=` | Less than or equal | `count <= 100` |
 | `between` | — | Inclusive range | `count between 5 20` |
+| `in` | — | Matches one entry in a list | `statusCode in [401, 403]` |
 
 #### Decimal field operators (`decimal`)
 
@@ -192,6 +199,7 @@ The `operators` list restricts which comparison operations rule authors may use 
 | `lt` | `<` | Less than | `amount lt 0` |
 | `lte` | `<=` | Less than or equal | `amount <= 9999` |
 | `between` | — | Inclusive range | `amount between 100 5000` |
+| `in` | — | Matches one entry in a list | `amount in [9.99, 19.99]` |
 
 #### String set field operators (`string_set`)
 
@@ -220,7 +228,7 @@ not isActive equals true      # equivalent to `isActive equals false` for a fiel
 
 #### Date field operators (`date`, `date_time`)
 
-Both types use the same six operators. There is no separate "before" or "after" operator: **`lt` is
+Both types use the same seven operators. There is no separate "before" or "after" operator: **`lt` is
 "before" and `gt` is "after"**.
 
 Literals are always **quoted**. By default they are ISO-8601 — `"2024-01-31"` for a `date`,
@@ -238,6 +246,7 @@ exactly 09:00:00 and true one second later.
 | `gte` | `>=` | On or after | `bookingDate >= "2024-01-01"` |
 | `lt` | `<` | Before | `bookingDate lt "2020-01-01"` |
 | `lte` | `<=` | On or before | `bookingDate <= "2024-12-31"` |
+| `in` | — | Matches one entry in a list | `bookingDate in ["2024-06-15", "2024-12-24"]` |
 | `between` | — | Inclusive range | `bookingDate between "2024-01-01" "2024-12-31"` |
 
 > **Rule:** Do **not** use text operators (`contains`, `startsWith`, etc.) on numeric, boolean, or date fields. Do **not** use numeric operators on text fields. Do **not** use `between` on text fields. Do **not** use `containsAny` / `containsAll` on non-`string_set` fields. Do **not** use any operator directly on a `collection` or `object` field.
@@ -795,6 +804,17 @@ A condition compares a field from the schema to a literal value using an operato
 
 The field name must exist in the field schema. The operator must be in the field's allowed operators list.
 
+The right-hand side may also be **another field** rather than a literal, using a symbolic operator:
+
+```
+amount > fee
+shippedAt >= orderedAt
+```
+
+Both sides are read from the same record. A field-to-field comparison always takes the value-expression
+path (§5.9), so it is written with `==`, `!=`, `>`, `>=`, `<` or `<=` — the named spellings expect a
+literal on the right.
+
 #### Text condition examples
 
 ```
@@ -877,10 +897,20 @@ counterparty equals "Netflix" ignoreCase
 
 This is useful when a field does **not** have a `lowercase` or `uppercase` normalizer but you still need case-insensitive matching.
 
-> **Rule:** `ignoreCase` only applies to `text` and `string_set` conditions. On a numeric, boolean, or
-> date condition it is accepted but does nothing — do not write it there. It also cannot be combined
-> with a symbolic operator: `counterparty == "Netflix" ignoreCase` is a **parse error**. Use the named
-> operator (`equals`) when you need `ignoreCase`.
+It works after a **symbolic** comparison too, in the same position:
+
+```
+counterparty == "Netflix" ignoreCase
+$topic contains "billing" ignoreCase
+```
+
+That form is the one that matters for a computed operand. A variable and an aggregate always take the
+value-expression path, and a normalizer declared on a field cannot reach a value a rule produced — so
+`ignoreCase` is the only way to compare one without regard to case.
+
+> **Rule:** `ignoreCase` applies to text. On a numeric, boolean or date comparison it is accepted but
+> does nothing — do not write it there. It is not allowed inside a filter predicate (§5.9): normalize
+> the member in the schema instead.
 
 ### 5.4 Combining conditions
 
@@ -989,6 +1019,38 @@ then
   ```
 - A rule may have **any number of actions**.
 - All declared actions are returned when the rule matches.
+
+#### The `extract` clause
+
+An action argument is usually a literal. `extract` computes one from the record instead, by applying a
+regular-expression capture group to a **text** field:
+
+```
+extract <field> regex("<pattern>", <group>) <action> $1
+```
+
+`<group>` is the capture group to take — `1` for the first, `0` for the whole match — and `$1` stands
+for the extracted value in the action's argument list.
+
+```
+rule "tag-purpose-code" {
+  description "Labels a payment by the code embedded in its purpose text."
+
+  when
+    purpose regex "RENT-[0-9]+"
+
+  then
+    extract purpose regex("RENT-([0-9]+)", 1) label $1
+}
+```
+
+For `purpose = "RENT-98765"` the rule matches and returns `label` with the argument `"98765"`.
+
+| Aspect | Behaviour |
+|---|---|
+| Source field | Must be declared `text`. Any other type is an error. |
+| No match | The action is still produced, with the argument unresolved (`null`). |
+| Where it is allowed | Every output block — `then`, `else` and `not_exists` — since all three share one grammar. |
 
 ### 5.6 Variables — the `set` clause
 
@@ -1227,7 +1289,7 @@ Each takes exactly **one argument** — a field path that resolves to a collecti
 
 | Function | Description |
 |---|---|
-| `count(path)` | Number of elements |
+| `count(path)` | Number of elements. A path that yields a single value counts `1`; an empty collection counts `0`; a missing one has no count at all (§5.9). |
 | `sum(path)` | Sum of numeric values |
 | `subtract(path)` | First element minus all subsequent elements |
 | `avg(path)` | Arithmetic mean |
@@ -1244,6 +1306,7 @@ These do not reduce a collection; they transform values.
 | `abs(value)` | Magnitude of a number. Zero and positives are unchanged, negatives become positive. |
 | `daysBetween(from, to)` | Whole calendar days from `from` to `to`, **signed** — a `to` that comes first is negative. |
 | `isAvailable(value)` | Whether the record carries the value at all — `true` or `false`, never missing. Accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable. See §5.12. |
+| `isEmpty(collection)` | Whether the record carries the collection **and** it holds no elements — `true` or `false`, never missing. Takes a path only; a decorated one is allowed. See §5.12. |
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable:
 
@@ -1419,15 +1482,59 @@ max(transactions[label == "risk"].amount) > 500
 sum(transactions[label == "risk"].amount) > sum(transactions[amount > 0].amount) * 0.03
 ```
 
-#### Empty array behavior
+#### Empty and missing collections
 
-- `count`, `sum`, `subtract` return `0` for an empty array — comparisons work normally.
-- `avg`, `median`, `max`, `min` return a missing value for an empty array — the comparison always evaluates to `false`.
+A collection that arrived **empty** and one that did not arrive at all are not the same input, and the
+aggregates do not all treat them alike. A comparison against a missing value is undecided (§5.12).
+
+Whether the argument is the collection itself (`sum(transactions)`) or a projection off it
+(`sum(transactions.amount)`) also matters, because a projection over an empty collection selects
+nothing and there is no value left for the function to reduce:
+
+| Function | `x` empty | `x` missing |
+|---|---|---|
+| `count` | `0` | missing |
+| `sum` | `0` | missing |
+| `subtract` | `0` | missing |
+| `avg`, `median`, `max`, `min` | missing | missing |
+| `every` | `true` | missing |
+| `any` | `false` | missing |
+| `isAvailable` | `false` | `false` |
+| `isEmpty` | `true` | `false` |
+
+The empty column is the operation's identity where it has one — summing nothing is `0`, and every one
+of nothing satisfies any predicate. `avg`, `median`, `max` and `min` have no identity to fall back on,
+so an empty collection leaves them with no value.
+
+The missing column is one rule, and it holds everywhere in the language:
+
+> **A missing value propagates as undecided through every expression. `isAvailable()` and `isEmpty()`
+> are the only two that consume it and answer a plain boolean.**
+
+No function invents a value for data the record does not carry. Answering `0` for `count(transactions)`
+on a record with no `transactions` would make *counted nothing* indistinguishable from *had nothing to
+count*, and would tell a rule with a `not_exists` branch that the condition had been decided.
+
+It follows that `count(x) == 0` is a true emptiness test: it holds only for a collection the record
+carries and that holds nothing. `isEmpty(x)` says the same thing more directly, works on a `string_set`
+too, and — unlike the comparison — is still *decided* when the collection is absent, which is what lets
+it guard a rule (§5.12).
+
+Both columns read the same whether the argument is the collection itself (`sum(transactions)`) or a
+projection off it (`sum(transactions.amount)`).
 
 #### Arithmetic operators
 
 Arithmetic can be applied to any value expression: `+`, `-`, `*`, `/`.
 Standard precedence applies (`*`/`/` before `+`/`-`); use parentheses to override.
+
+Every operand must be a number. An operand that is missing or is not numeric makes the whole expression
+a missing value rather than an error, so a comparison over it is undecided (§5.12) instead of failing
+the evaluation.
+
+**Division.** Dividing by zero yields a missing value — the engine never throws and never invents an
+infinity. A division that divides evenly is exact; otherwise the result is rounded to **10 decimal
+places, half-up**, which is what keeps `sum(a) / count(a)` comparable against a written-out decimal.
 
 ```
 sum(transactions.amount) * 0.03
@@ -1761,11 +1868,17 @@ Two things, and only two:
 | A field the record does not carry, or carries as `null` | ✅ |
 | A field whose value cannot be read as its declared type | ✅ |
 | A variable no earlier rule published | ✅ |
-| `avg` / `median` / `min` / `max` over a collection that is missing or empty | ✅ — they produce no value |
-| `count(path)` / `sum(path)` over a missing collection | ⬜ — they produce `0`, a real number |
-| `every(...)` over a missing collection | ⬜ — vacuously `true` |
-| `any(...)` over a missing collection | ⬜ — `false`, no element satisfied it |
+| **Any** function over a collection the record does not carry | ✅ — a missing value propagates |
+| `avg` / `median` / `min` / `max` over a collection that arrived **empty** | ✅ — they have no identity value |
+| `count` / `sum` / `subtract` over a collection that arrived **empty** | ⬜ — `0`, the operation's identity |
+| `every(...)` over a collection that arrived **empty** | ⬜ — vacuously `true` |
+| `any(...)` over a collection that arrived **empty** | ⬜ — `false`, no element satisfied it |
+| `isAvailable(...)` or `isEmpty(...)`, whatever the record carries | ⬜ — the only two that consume a missing value |
 | A field that is present but simply does not match | ⬜ — that is an ordinary `false` |
+
+The dividing line is **absent** versus **present but empty**, not which function was called. A
+collection the record does not carry decides nothing; one that arrived holding no elements is data, and
+each function reduces it to whatever its identity is (§5.9).
 
 #### How it combines
 
@@ -1812,8 +1925,50 @@ not isAvailable(counterparty)
 ```
 
 > **An empty collection is not "available".** An absent collection and an empty one are the same answer
-> to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`. Use
-> `count(transactions) == 0` to ask whether a collection is empty.
+> to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`.
+> The same holds for any expression that evaluates to a collection — a `string_set`, a filtered path
+> that selected nothing, a `sumByKey` that joined to nothing. Use `isEmpty()` to tell the empty case
+> from the absent one.
+
+#### `isEmpty()`
+
+`isEmpty(<collection>)` asks the narrower question `isAvailable` deliberately does not: whether the
+record carries the collection **and** it holds no elements. Like `isAvailable` it answers a plain
+`true` or `false`, never undecided.
+
+> **These two are the only expressions that consume a missing value.** Everywhere else a missing value
+> propagates and the condition over it is undecided — `count`, `sum`, `every` and the rest all produce
+> no value for a collection the record does not carry. That is what makes `isAvailable` and `isEmpty`
+> usable as a guard: a rule needs somewhere to stand that cannot itself be undecidable.
+
+```
+rule "empty-statement" {
+  description "The account exists but carries no transactions."
+
+  when
+    isEmpty(transactions)
+
+  then
+    flag "review"
+}
+```
+
+Between them the two name all three states a collection can be in:
+
+| the record carries | `isAvailable` | `isEmpty` |
+|---|---|---|
+| nothing at all | `false` | `false` |
+| an empty collection | `false` | `true` |
+| one or more elements | `true` | `false` |
+
+`count(transactions) == 0` reaches the same conclusion for a collection the record carries, but it is
+*undecided* for one it does not — an aggregate propagates a missing value (§5.9), while `isEmpty`
+consumes it. Only the decided form can guard a rule.
+
+The argument must be a path — a collection or a `string_set`, read whole or reached through members.
+An aggregate, a literal or a variable is rejected, because by then the empty case and the absent one
+have already become the same value. A decorated path is accepted, so `isEmpty(orders[total > 100])`
+asks whether the filter selected nothing.
 
 #### Rules
 
@@ -2261,15 +2416,31 @@ The engine validates everything at load time and rejects the following. Never ge
 | Blank alias | `alias: ""` — omit the key instead |
 
 > **Operator names must be canonical.** Write the spelling from the operator tables in
-> [3.3](#33-operators--exhaustive-list-by-type): `startsWith`, not `starts_with` or `startswith`;
-> `regex`, not `matches`. The engine accepts those variants as aliases so older schemas keep loading,
-> but generated output should always use the canonical name. A name the engine has no implementation for
-> — `greaterThan`, `not_contains`, `isEmpty` — is rejected when the schema loads.
+> [3.3](#33-operators--exhaustive-list-by-type). The engine accepts these aliases so older schemas keep
+> loading, but generated output should always use the canonical name:
 >
-> **A declared `operators:` list is a whitelist, not a type check.** Listing an operator the field's type
-> does not support (`operators: [contains]` on an `integer`) still loads; the error surfaces on the rule
-> that uses it. Declaring only a subset restricts the field to that subset, so a rule using any other
-> operator is rejected even though the type supports it.
+> | Canonical | Also accepted |
+> |---|---|
+> | `equals` | `==`, `=`, `eq` |
+> | `gt`, `gte`, `lt`, `lte` | `>`, `>=`, `<`, `<=` |
+> | `startsWith` | `startswith`, `starts_with` |
+> | `endsWith` | `endswith`, `ends_with` |
+> | `containsAny` | `containsany` |
+> | `containsAll` | `containsall` |
+> | `regex` | `matches`, `regexp` |
+>
+> Matching is case-insensitive, so `STARTSWITH` resolves too. A name the engine has no implementation
+> for — `greaterThan`, `not_contains` — is rejected when the schema loads.
+>
+> **A declared `operators:` list narrows the type's set; it cannot widen it.** Listing an operator the
+> field's type does not support (`operators: [contains]` on an `integer`) is a validation error naming
+> the field, its type and what that type does support. Declaring a subset restricts the field to that
+> subset, so a rule using any other operator is rejected even though the type supports it — and that
+> restriction applies to the symbolic spellings too, so `operators: [contains]` also rejects
+> `field == "x"`. Declaring `equals` admits `!=` as well, since inequality is equality negated.
+>
+> `!=` is the one spelling that may be declared without appearing in any type's set: the parser routes
+> symbolic inequality through the expression engine rather than the named-operator path.
 >
 > **An alias must not collide with a declared field name.** The declared name wins and the alias becomes
 > unreachable; the engine warns rather than rejecting. **An alias inside a `collection` cannot be used on
@@ -2310,7 +2481,6 @@ The engine validates everything at load time and rejects the following. Never ge
 | `sortBy` given no member for a collection of objects | `sortBy(orders, desc)` when `orders` declares members |
 | `sortBy` ordering by an unknown or structural member | `sortBy(orders, "totl", desc)`, `sortBy(orders, "lines", asc)` |
 | A `sortBy` direction other than `asc` / `desc`, or an unquoted member | `sortBy(orders, "total", upwards)`, `sortBy(orders, total, desc)` — both are parse errors |
-| `ignoreCase` after a symbolic operator | `name == "Acme" ignoreCase` (use `equals`) |
 | Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
 | Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
 | Writing `$` on the left of `set` | `set $turnover = …` (the name is written bare after `set`) |

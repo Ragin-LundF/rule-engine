@@ -216,14 +216,77 @@ class NotExistsBranchIntegrationTest {
         assertEquals(expected = RuleBranch.NOT_EXISTS, actual = match.branch)
     }
 
+    /**
+     * The branch a missing collection selects, which is the whole point of the propagation rule.
+     *
+     * `count` used to answer `0` here, so this rule took `else` — telling the author the count had
+     * been taken and come out at zero, when the record carried no `balances` at all. It now reaches
+     * `not_exists`, which is where "the record has nothing to say about this" belongs.
+     */
     @Test
-    fun `count over a missing collection is still zero, so the condition is decided`() {
+    fun `count over a missing collection is undecided, so the rule reports no data`() {
         val match = evaluate(
             rules = branchedRule(condition = "count(balances) > 0"),
             "country" to "DE",
         ).matches.single()
 
+        assertEquals(expected = RuleBranch.NOT_EXISTS, actual = match.branch)
+    }
+
+    /** A collection that arrived empty is data, so the count is taken and the rule is decided. */
+    @Test
+    fun `count over an empty collection is decided`() {
+        val match = evaluate(
+            rules = branchedRule(condition = "count(balances) > 0"),
+            "country" to "DE",
+            "balances" to emptyList<Any>(),
+        ).matches.single()
+
         assertEquals(expected = RuleBranch.ELSE, actual = match.branch)
+    }
+
+    /**
+     * The compatibility claim behind making a missing value propagate: a rule that never asked about
+     * missing data cannot notice the change.
+     *
+     * `branchFor` sends both `FALSE` and `UNKNOWN` to `else` when the rule declares no `not_exists`,
+     * so a guard that used to fail closed on a missing collection still fails closed. Only a rule that
+     * declares the branch sees the difference — which is the whole point of declaring it.
+     */
+    @Test
+    fun `a rule without not_exists takes else for a missing collection, as it always did`() {
+        val rules = """
+            rule "unbranched" {
+              description "Has no not_exists branch."
+              when
+                count(balances) > 0
+              then
+                outcome "GREEN"
+              else
+                outcome "RED"
+            }
+        """.trimIndent()
+
+        val match = evaluate(rules = rules, "country" to "DE").matches.single()
+
+        assertEquals(expected = RuleBranch.ELSE, actual = match.branch)
+        assertEquals(expected = listOf("RED"), actual = match.actions.map { it.arguments.first() })
+    }
+
+    /** The same rule shape, over the same missing collection, for `every` and `any`. */
+    @Test
+    fun `every and any over a missing collection report no data`() {
+        for (condition in listOf("every(balances[day > 0])", "any(balances[day > 0])")) {
+            val match = evaluate(rules = branchedRule(condition = condition), "country" to "DE")
+                .matches
+                .single()
+
+            assertEquals(
+                expected = RuleBranch.NOT_EXISTS,
+                actual = match.branch,
+                message = "'$condition' quantifies over a collection that never arrived",
+            )
+        }
     }
 
     @Test

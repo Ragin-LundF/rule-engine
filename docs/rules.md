@@ -651,8 +651,23 @@ not isAvailable(counterparty)
 ```
 
 An **empty** collection is not "available": an absent collection and an empty one are the same answer
-to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`. Ask `count(transactions) == 0`
-to test for emptiness.
+to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`.
+
+### `isEmpty()`
+
+`isEmpty(<collection>)` asks the narrower question: whether the record carries the collection **and**
+it holds no elements. Between them the two name all three states:
+
+| the record carries | `isAvailable` | `isEmpty` |
+|---|---|---|
+| nothing at all | `false` | `false` |
+| an empty collection | `false` | `true` |
+| one or more elements | `true` | `false` |
+
+`count(transactions) == 0` reaches the same conclusion for a collection the record carries, but it is
+undecided for one it does not — an aggregate propagates a missing value, while `isEmpty` consumes it,
+so only `isEmpty` can guard a rule. The argument must be a path; a decorated one is allowed, so
+`isEmpty(orders[total > 100])` asks whether the filter selected nothing.
 
 ### Rules
 

@@ -10,6 +10,5 @@ package ruleengine.evaluator.compiled
 enum class FunctionResultKind {
     NUMERIC,
     BOOLEAN,
-    ARRAY,
-    DATE
+    ARRAY
 }

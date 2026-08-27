@@ -54,11 +54,13 @@ class FunctionCallCompiledValueExpression(
     }
 
     /**
-     * The one function that consumes a missing value instead of propagating it.
+     * One of the two functions that consume a missing value instead of propagating it; `isEmpty` is
+     * the other.
      *
-     * Everything else here answers `MissingExpressionValue` when its input is missing, which is what
-     * makes a comparison over it undecidable. This answers `false` — a real boolean — which is exactly
-     * why it can guard a rule whose other conditions would otherwise be undecidable.
+     * Everything else answers `MissingExpressionValue` when its input is missing, which is what makes
+     * a comparison over it undecidable. These two answer a plain boolean — which is exactly why they
+     * can guard a rule whose other conditions would otherwise be undecidable, and why they have to be
+     * the only exceptions: a rule needs somewhere to stand that is never itself undecidable.
      *
      * An empty collection is unavailable too. A projected path already reduces the empty case to
      * `MissingExpressionValue` on its own, but a whole collection read by name arrives here as an
@@ -96,10 +98,19 @@ class FunctionCallCompiledValueExpression(
         return NumberExpressionValue(value = BigDecimal.valueOf(ChronoUnit.DAYS.between(from, to)))
     }
 
+    /**
+     * How many values the argument holds.
+     *
+     * An empty collection counts `0` and a scalar counts `1`; both are values the record carries. A
+     * **missing** argument counts nothing at all — it propagates, like every other function here. It
+     * used to answer `0`, which made "counted nothing" indistinguishable from "had nothing to count"
+     * and told a rule with a `not_exists` branch that the condition was decided when the record was
+     * empty of the data it asked about.
+     */
     private fun evaluateCount(argValue: ExpressionValue): ExpressionValue {
         return when (argValue) {
             is ArrayExpressionValue -> NumberExpressionValue(value = BigDecimal(argValue.values.size))
-            is MissingExpressionValue -> NumberExpressionValue(value = BigDecimal.ZERO)
+            is MissingExpressionValue -> MissingExpressionValue
             else -> NumberExpressionValue(value = BigDecimal.ONE)
         }
     }
@@ -121,7 +132,18 @@ class FunctionCallCompiledValueExpression(
         }
     }
 
+    /**
+     * The first value less every value after it.
+     *
+     * The empty case and the missing case are answered separately, and deliberately: subtracting
+     * nothing from nothing is `0`, the identity the fold starts from, while a missing argument has no
+     * fold to run and propagates. Reading both off `toNumericList` — which flattens either to an empty
+     * list — is what used to collapse them onto `0`.
+     */
     private fun evaluateSubtract(argValue: ExpressionValue): ExpressionValue {
+        if (argValue is MissingExpressionValue) {
+            return MissingExpressionValue
+        }
         val numbers = toNumericList(argValue = argValue)
         if (numbers.isEmpty()) {
             return NumberExpressionValue(value = BigDecimal.ZERO)

@@ -140,6 +140,20 @@ class OperandRulesTest {
         assertEquals(expected = OperatorOptions.COMPARISON_NUMERIC, actual = operators)
     }
 
+
+    // ── ignoreCase ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `a text row offers ignoreCase`() {
+        assertTrue(
+            actual = OperandRules.supportsIgnoreCase(
+                left = fieldOperand(name = "unknownTextField"),
+                right = literal,
+                fields = fields,
+            )
+        )
+    }
+
     @Test
     fun `a list variable row does not offer ignoreCase`() {
         assertFalse(
@@ -151,6 +165,20 @@ class OperandRulesTest {
         )
     }
 
+    /** `every(...) == true` compares two booleans; folding case there changes nothing. */
+    @Test
+    fun `a boolean row does not offer ignoreCase`() {
+        val predicate = BuilderOperand.Call(function = "every", args = listOf(fieldOperand(name = "orders")))
+        val booleanLiteral = BuilderOperand.Literal(text = "true", numeric = false)
+
+        assertFalse(
+            actual = OperandRules.supportsIgnoreCase(
+                left = predicate,
+                right = booleanLiteral,
+                fields = fields,
+            )
+        )
+    }
 
     // ── function operands ─────────────────────────────────────────────────────
 
@@ -212,32 +240,6 @@ class OperandRulesTest {
         assertEquals(expected = listOf(previous), actual = call.args)
     }
 
-
-    /** `every(...) == true` compares two booleans; a case checkbox there changes nothing. */
-    @Test
-    fun `a boolean row does not offer ignoreCase`() {
-        val predicate = BuilderOperand.Call(function = "every", args = listOf(fieldOperand(name = "orders")))
-        val booleanLiteral = BuilderOperand.Literal(text = "true", numeric = false)
-
-        assertFalse(
-            actual = OperandRules.supportsIgnoreCase(
-                left = predicate,
-                right = booleanLiteral,
-                fields = fields,
-            )
-        )
-    }
-
-    @Test
-    fun `a text row still offers ignoreCase`() {
-        assertTrue(
-            actual = OperandRules.supportsIgnoreCase(
-                left = fieldOperand(name = "unknownTextField"),
-                right = literal,
-                fields = fields,
-            )
-        )
-    }
 
     @Test
     fun `an undeclared segment offers nothing`() {

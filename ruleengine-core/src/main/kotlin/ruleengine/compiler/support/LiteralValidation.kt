@@ -4,6 +4,7 @@ import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.NumberLiteral
 import java.math.BigDecimal
 
@@ -101,6 +102,65 @@ internal object LiteralValidation {
                 line = cond.line,
                 column = cond.column,
             )
+        }
+    }
+
+    /**
+     * The values an `in` on a numeric field tests against.
+     *
+     * A bare literal is accepted as a set of one, matching the compiler and matching how `in` already
+     * reads on a text field — the brackets are what a reader expects, not what the grammar demands.
+     * Each item is checked with the same bound helper `between` uses, so one bad entry in a long list
+     * names itself instead of failing the whole condition anonymously.
+     */
+    internal fun validateNumericMembership(
+        cond: ConditionAst,
+        diagnostics: MutableList<ValidationDiagnostic>,
+        whole: Boolean,
+    ) {
+        val kind = if (whole) "integer" else "numeric"
+        val items = when (val literal = cond.value) {
+            is ListLiteral -> literal.items
+            is NumberLiteral -> listOf(literal)
+            else -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' with 'in' expects a list of $kind literals",
+                    line = cond.line,
+                    column = cond.column,
+                )
+                return
+            }
+        }
+        for (item in items) {
+            val number = (item as? NumberLiteral)?.value
+            if (number == null) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' with 'in' expects $kind literals",
+                    line = cond.line,
+                    column = cond.column,
+                )
+                continue
+            }
+            val message = "Invalid $kind literal: $number"
+            if (whole) {
+                validateIntegerBound(
+                    value = number,
+                    diagnostics = diagnostics,
+                    message = message,
+                    line = cond.line,
+                    column = cond.column,
+                )
+            } else {
+                validateDecimalBound(
+                    value = number,
+                    diagnostics = diagnostics,
+                    message = message,
+                    line = cond.line,
+                    column = cond.column,
+                )
+            }
         }
     }
 

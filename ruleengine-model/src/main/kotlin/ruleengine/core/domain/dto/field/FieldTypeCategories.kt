@@ -16,3 +16,13 @@ val FieldType.isTemporal: Boolean
  */
 val FieldType.isNormalizable: Boolean
     get() = this == FieldType.TEXT || this == FieldType.STRING_SET
+
+/**
+ * True for the types that hold more than one value.
+ *
+ * What makes `contains` a membership test rather than a substring test. A path reaching one of these
+ * is collection-valued however many elements the record happens to carry, which is the distinction the
+ * runtime type alone cannot make: a selection of exactly one element arrives as a scalar.
+ */
+val FieldType.isMultiValued: Boolean
+    get() = this == FieldType.COLLECTION || this == FieldType.STRING_SET

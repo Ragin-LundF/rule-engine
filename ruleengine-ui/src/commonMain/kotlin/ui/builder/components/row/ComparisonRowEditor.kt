@@ -23,8 +23,8 @@ import androidx.compose.ui.unit.dp
 import ui.PrimaryBlue
 import ui.TextSecondary
 import ui.builder.OperandRules
-import ui.builder.OperandText
 import ui.builder.components.IgnoreCaseToggle
+import ui.builder.OperandText
 import ui.builder.components.OperandChip
 import ui.builder.components.dropdown.DropdownSelector
 import ui.builder.components.editor.NestedOperandEditor

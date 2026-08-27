@@ -4,6 +4,7 @@ import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.isMultiValued
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.ArithmeticValueAst
 import ruleengine.dsl.ast.BooleanLiteral
@@ -24,6 +25,7 @@ import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
+import ruleengine.evaluator.compiled.value.CollectionEmptyCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CollectionPredicateCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CompiledValueExpression
 import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
@@ -100,6 +102,10 @@ internal object ValueExpressionCompiler {
         // path ends at declares. `FieldPathResolver.resolve` cannot supply either — it stops at a
         // collection by design, and a collection is the case that needs both.
         var definition: FieldDefinition? = null
+        // Set the moment the walk touches something multi-valued, because the path stays
+        // collection-valued afterwards: `orders.total` projects one member out of many elements and
+        // the member's own type says nothing about that.
+        var multiValued = false
         var fields = schema.fields
         for ((index, segment) in expr.path.withIndex()) {
             when (segment) {
@@ -112,6 +118,7 @@ internal object ValueExpressionCompiler {
                     for (name in names) {
                         compiledSegments += CompiledFieldSegment(name = name)
                         definition = fields[FieldId(value = name)]
+                        multiValued = multiValued || definition?.type?.isMultiValued == true
                         // An undeclared member ends the walk. Continuing against the outer schema would
                         // let a top-level field of the same name lend its normalizers to a member that
                         // declares none.
@@ -152,7 +159,12 @@ internal object ValueExpressionCompiler {
         }
         return FieldAccessCompiledValueExpression(
             segments = compiledSegments,
-            normalizers = definition?.normalizers ?: emptyList()
+            normalizers = definition?.normalizers ?: emptyList(),
+            // A filter, a slice and a sort each select from a collection, so any of them settles the
+            // question even when the walk could not resolve the declared type.
+            yieldsCollection = multiValued || compiledSegments.any { segment ->
+                segment !is CompiledFieldSegment
+            }
         )
     }
 
@@ -202,6 +214,13 @@ internal object ValueExpressionCompiler {
                 filterCompiler = filterCompiler
             )
 
+            CollectionFunctionName.IS_EMPTY -> return compileCollectionEmpty(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
             null -> Unit
         }
         val functionName = AggregateFunctionName.fromName(name = expr.name) ?: throw CompilationException(
@@ -227,6 +246,33 @@ internal object ValueExpressionCompiler {
      * unchanged over a sliced or already-filtered collection, since anything before the last filter
      * simply stays part of the source.
      */
+    /**
+     * `isEmpty(orders)` — the argument is a plain path, with no trailing filter.
+     *
+     * That is what separates it from [compileCollectionPredicate]: `every` and `any` need a condition
+     * to run per element, while this one asks only whether there are elements at all. A filter is
+     * still allowed anywhere in the path, so `isEmpty(orders[paid == true])` asks whether the filter
+     * selected nothing.
+     */
+    private fun compileCollectionEmpty(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        ruleId: String?,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression {
+        val argument = expr.arguments.singleOrNull() as? FieldAccessAst ?: throw CompilationException(
+            ruleId = ruleId,
+            details = "isEmpty() expects a collection, such as isEmpty(orders)"
+        )
+        val source = compileFieldAccess(
+            expr = argument,
+            schema = schema,
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
+        ) as FieldAccessCompiledValueExpression
+        return CollectionEmptyCompiledValueExpression(source = source)
+    }
+
     private fun compileCollectionPredicate(
         function: CollectionFunctionName,
         expr: FunctionCallValueAst,

@@ -122,15 +122,15 @@ sum(transactions[label == "risk"].amount) != 0
 
 All aggregate functions take exactly **one argument**, which must be a field path that resolves to a collection.
 
-| Function | Description | Empty array result |
-|---|---|---|
-| `count(path)` | Number of elements in the collection | `0` (comparison evaluates to `false` unless `== 0`) |
-| `sum(path)` | Sum of all numeric values | `0` |
-| `subtract(path)` | First element minus all subsequent elements | `0` |
-| `avg(path)` | Arithmetic mean of all numeric values | missing (comparison evaluates to `false`) |
-| `median(path)` | Median value | missing (comparison evaluates to `false`) |
-| `max(path)` | Maximum value | missing (comparison evaluates to `false`) |
-| `min(path)` | Minimum value | missing (comparison evaluates to `false`) |
+| Function | Description | Empty collection | Missing collection |
+|---|---|---|---|
+| `count(path)` | Number of elements in the collection | `0` | missing |
+| `sum(path)` | Sum of all numeric values | `0` | missing |
+| `subtract(path)` | First element minus all subsequent elements | `0` | missing |
+| `avg(path)` | Arithmetic mean of all numeric values | missing | missing |
+| `median(path)` | Median value | missing | missing |
+| `max(path)` | Maximum value | missing | missing |
+| `min(path)` | Minimum value | missing | missing |
 
 Non-numeric elements in the collection are silently skipped during numeric aggregation.
 
@@ -153,6 +153,7 @@ These transform values rather than reducing a collection.
 | `abs(value)` | Magnitude of a number; zero and positives unchanged | missing |
 | `daysBetween(from, to)` | Signed whole calendar days from `from` to `to` | missing |
 | `isAvailable(value)` | Whether the record carries the value at all | `false` — never missing |
+| `isEmpty(collection)` | Whether the record carries the collection and it holds no elements | `false` — never missing |
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable, and preserves integer
 and decimal precision:
@@ -443,23 +444,35 @@ rule "majority-risk" {
 
 ---
 
-## 9. Empty Array Behavior
+## 9. Empty and Missing Collections
 
-| Function | Empty array result | Comparison result |
+A collection the record **does not carry** and one it carries **holding no elements** are different
+inputs, and the functions answer them differently.
+
+| Function | `x` empty | `x` missing |
 |---|---|---|
-| `count` | `0` | Compares normally (`count(...) > 0` → `false`) |
-| `sum` | `0` | Compares normally |
-| `subtract` | `0` | Compares normally |
-| `avg` | missing | Always `false` |
-| `median` | missing | Always `false` |
-| `max` | missing | Always `false` |
-| `min` | missing | Always `false` |
-| `abs` | missing input → missing | Always `false` |
-| `daysBetween` | missing operand → missing | Always `false` |
-| `take` / `takeLast` | empty slice | Aggregates over it behave as for any empty collection |
-| `sortBy` | empty result | Aggregates over it behave as for any empty collection |
-| `every` | — | **`true`** — no element fails |
-| `any` | — | **`false`** — no element succeeds |
+| `count` | `0` | missing |
+| `sum` | `0` | missing |
+| `subtract` | `0` | missing |
+| `avg`, `median`, `max`, `min` | missing | missing |
+| `every` | `true` — no element fails | missing |
+| `any` | `false` — no element succeeds | missing |
+| `isAvailable` | `false` | `false` |
+| `isEmpty` | `true` | `false` |
+| `take` / `takeLast` | empty slice | missing |
+| `sortBy` | empty result | missing |
+
+The empty column is the operation's identity where it has one. `avg`, `median`, `max` and `min` have
+none, so they produce no value.
+
+The missing column is one rule:
+
+> A missing value propagates as undecided through every expression. `isAvailable()` and `isEmpty()`
+> are the only two that consume it and answer a plain boolean.
+
+A comparison with a missing operand is undecided, so the rule takes its `not_exists` branch if it
+declares one and its `else` branch otherwise — which is what a `false` did, so a rule set that never
+used `not_exists` is unaffected.
 | `sumByKey` | no keys | `count(...) == 0`; `min`/`max` are missing |
 
 A missing value on either side of a comparison leaves the comparison **undecided**. For a rule with no

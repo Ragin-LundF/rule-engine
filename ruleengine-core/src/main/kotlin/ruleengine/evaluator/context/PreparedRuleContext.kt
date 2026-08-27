@@ -143,7 +143,9 @@ class PreparedRuleContext(
                     registry = registry
                 )
 
-                else -> {
+                // Named rather than left to an `else`, so a new FieldType is a compile error here
+                // instead of a field that silently prepares nothing and reads as undecided forever.
+                FieldType.COLLECTION, FieldType.OBJECT -> {
                     // Structure types carry no value of their own; their members are prepared instead.
                 }
             }

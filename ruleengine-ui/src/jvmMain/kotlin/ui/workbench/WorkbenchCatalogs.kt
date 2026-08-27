@@ -144,7 +144,6 @@ private fun inferredVariableType(expr: ValueExpressionAst): String = when (expr)
     is FunctionCallValueAst -> when (DslFunctions.resultKindOf(name = expr.name)) {
         FunctionResultKind.BOOLEAN -> "boolean"
         FunctionResultKind.ARRAY -> OperatorOptions.LIST_VARIABLE_TYPE
-        FunctionResultKind.DATE -> "date"
         else -> "decimal"
     }
 

@@ -8,11 +8,13 @@ import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.temporal.DateBetweenExpression
 import ruleengine.evaluator.compiled.temporal.DateComparisonExpression
 import ruleengine.evaluator.compiled.temporal.DateComparisonOperator
+import ruleengine.evaluator.compiled.temporal.DateInExpression
 import ruleengine.evaluator.context.dto.PreparedDate
 import ruleengine.evaluator.context.dto.PreparedDateTime
 import ruleengine.evaluator.context.dto.PreparedTemporal
@@ -34,11 +36,44 @@ object DateOperator {
         def: FieldDefinition,
         op: String,
     ): CompiledExpression {
-        return if (op == OperatorNames.BETWEEN) {
-            compileBetween(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def)
-        } else {
-            compileComparison(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def, op = op)
+        return when (op) {
+            OperatorNames.BETWEEN -> compileBetween(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def)
+            OperatorNames.IN -> compileMembership(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def)
+            else -> compileComparison(ruleId = ruleId, cond = cond, fieldId = fieldId, def = def, op = op)
         }
+    }
+
+    /**
+     * `field in ["2024-01-01", "2024-07-01"]`.
+     *
+     * Every item goes through the same [parseLiteral] the other branches use, so the list is read
+     * under the field's declared `format` and a bad item names itself the way a bad bound does. A bare
+     * literal counts as a set of one, matching how `TextInOperator` reads `status in "paid"`.
+     */
+    private fun compileMembership(
+        ruleId: String?,
+        cond: ConditionAst,
+        fieldId: FieldId,
+        def: FieldDefinition,
+    ): CompiledExpression {
+        val items = when (val literal = cond.value) {
+            is ListLiteral -> literal.items
+            is StringLiteral -> listOf(literal)
+            else -> throw CompilationException(
+                ruleId = ruleId,
+                details = "Operator 'in' expects a list of quoted values in " +
+                    "${expectedFormatText(def = def)} for ${typeName(def = def)} field '${cond.field}'"
+            )
+        }
+        val expected = items.mapTo(mutableSetOf()) { item ->
+            val text = (item as? StringLiteral)?.value ?: throw CompilationException(
+                ruleId = ruleId,
+                details = "Operator 'in' expects quoted values in ${expectedFormatText(def = def)} " +
+                    "for ${typeName(def = def)} field '${cond.field}'"
+            )
+            parseLiteral(ruleId = ruleId, field = cond.field, def = def, text = text, label = "date")
+        }
+        return DateInExpression(field = fieldId, expected = expected)
     }
 
     private fun compileBetween(

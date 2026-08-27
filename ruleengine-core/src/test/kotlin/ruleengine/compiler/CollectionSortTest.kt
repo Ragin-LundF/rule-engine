@@ -394,13 +394,18 @@ class CollectionSortTest {
      * Text rather than the values themselves: a number leaves the engine as a `BigDecimal`, and an
      * assertion written against `listOf(300, 100)` would compare `Int` against `BigDecimal` and fail
      * for a reason that has nothing to do with the ordering under test.
+     *
+     * The guard is `isAvailable`, because only `isAvailable` and `isEmpty` are decided whatever the
+     * record carries. It used to be `count(orders) >= 0`, which read as unconditionally true only
+     * while `count` invented a `0` for a collection the record did not carry — so a case passing just
+     * `tags` published nothing and the cast below failed.
      */
     private fun variable(expression: String, vararg fields: Pair<String, Any?>): List<String> {
         val text = """
             rule "sort-output" {
               description "publishes the ordered collection"
               when
-                count(orders) >= 0
+                isAvailable(orders) or isAvailable(tags)
               then
                 set ordered = $expression
             }

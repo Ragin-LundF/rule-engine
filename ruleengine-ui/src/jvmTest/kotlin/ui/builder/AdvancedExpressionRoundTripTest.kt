@@ -305,6 +305,50 @@ class AdvancedExpressionRoundTripTest {
         assertRoundTrips(condition = """purpose contains "rent" ignoreCase""")
     }
 
+    /**
+     * `ignoreCase` on a comparison row survives the round trip.
+     *
+     * The Builder offered the toggle before the parser could read the word back, so ticking the box
+     * produced a rule file that would not reopen. Both halves exist now, and this is the assertion
+     * that keeps them in step: the AST comparison is only equal if the modifier came back too.
+     */
+    @Test
+    fun `ignoreCase on a comparison round-trips`() {
+        assertRoundTrips(condition = """purpose == "RENT" ignoreCase""")
+    }
+
+    @Test
+    fun `a comparison without ignoreCase does not gain one`() {
+        val (_, generated) = roundTrip(condition = """sum(orders.total) > 100""")
+
+        assertTrue(
+            actual = !generated.contains(other = "ignoreCase"),
+            message = "the modifier must not be invented where it was not written:\n$generated",
+        )
+    }
+
+    // ── membership over the non-text scalars ──────────────────────────────────
+
+    /**
+     * `in` reaches numeric and temporal fields now, so the Builder has to carry a typed list through
+     * the round trip — the items must come back unquoted, or the re-parsed rule compares a number
+     * against text and no longer validates.
+     */
+    @Test
+    fun `a numeric membership list round-trips`() {
+        assertRoundTrips(condition = "amount in [1.5, 2.5]")
+    }
+
+    @Test
+    fun `a date membership list round-trips`() {
+        assertRoundTrips(condition = """registeredAt in ["2024-01-01", "2024-07-01"]""")
+    }
+
+    @Test
+    fun `a text membership list still round-trips`() {
+        assertRoundTrips(condition = """purpose in ["rent", "salary"]""")
+    }
+
     // ── combinations ──────────────────────────────────────────────────────────
 
     @Test
