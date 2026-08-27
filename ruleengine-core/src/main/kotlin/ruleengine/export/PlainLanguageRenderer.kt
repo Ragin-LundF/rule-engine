@@ -263,8 +263,7 @@ object PlainLanguageRenderer {
         val container = describeContainer(
             segments = split.containerSegments,
             filters = split.filters,
-            slice = split.slice,
-            sort = split.sort,
+            decorations = split.decorations,
         )
 
         return "${aggregatePhrase(function = function, name = call.name, measure = measure)} of $container"
@@ -294,8 +293,7 @@ object PlainLanguageRenderer {
         val container = describeContainer(
             segments = split.containerSegments,
             filters = split.filters,
-            slice = split.slice,
-            sort = split.sort,
+            decorations = split.decorations,
         )
         val lead = if (function == CollectionFunctionName.EVERY) "every one of" else "at least one of"
         return "$lead $container"
@@ -344,10 +342,14 @@ object PlainLanguageRenderer {
         val containerSegments: List<String>,
         val measure: List<String>?,
         val filters: List<ExpressionAst>,
-        /** The bound the path applies, or null when it keeps every element. */
-        val slice: SliceSegmentAst? = null,
-        /** The ordering the path applies, or null when it keeps source order. */
-        val sort: SortSegmentAst? = null,
+        /**
+         * Every slice and sort the path applies, in the order they were written.
+         *
+         * A list rather than one of each: `sortBy(take(sortBy(orders, "total", desc), 3), "date", asc)`
+         * is writable and compiles to two sorts, and keeping only the first made the prose claim more
+         * than the rule does — the very thing including them at all was meant to prevent.
+         */
+        val decorations: List<PathSegmentAst> = emptyList(),
     )
 
     /**
@@ -359,12 +361,12 @@ object PlainLanguageRenderer {
      */
     private fun splitAggregatePath(path: List<PathSegmentAst>): AggregatePath {
         val filters = path.filterIsInstance<FilterSegmentAst>().map { segment -> segment.expression }
-        // Dropping this would make the prose claim more than the rule does: "the number of login
-        // events that failed" instead of "…of the last 10 login events".
-        val slice = path.filterIsInstance<SliceSegmentAst>().firstOrNull()
-        // Same reason as the slice: without it the prose claims "the total of order totals" for a
-        // rule that only ever looks at the largest three.
-        val sort = path.filterIsInstance<SortSegmentAst>().firstOrNull()
+        // Dropping these would make the prose claim more than the rule does: "the number of login
+        // events that failed" instead of "…of the last 10 login events", or "the total of order
+        // totals" for a rule that only ever looks at the largest three.
+        val decorations = path.filter { segment ->
+            segment is SliceSegmentAst || segment is SortSegmentAst
+        }
         val lastFilterIndex = path.indexOfLast { segment -> segment is FilterSegmentAst }
 
         if (lastFilterIndex >= 0) {
@@ -374,8 +376,7 @@ object PlainLanguageRenderer {
                 containerSegments = container,
                 measure = measure.ifEmpty { null },
                 filters = filters,
-                slice = slice,
-                sort = sort,
+                decorations = decorations,
             )
         }
 
@@ -385,8 +386,7 @@ object PlainLanguageRenderer {
                 containerSegments = names,
                 measure = null,
                 filters = filters,
-                slice = slice,
-                sort = sort,
+                decorations = decorations,
             )
         }
 
@@ -394,16 +394,12 @@ object PlainLanguageRenderer {
             containerSegments = names.dropLast(n = 1),
             measure = listOf(names.last()),
             filters = filters,
-            slice = slice,
-            sort = sort,
+            decorations = decorations,
         )
     }
 
-    /** The collection named with the ordering it is read in, or unchanged when it keeps source order. */
-    private fun describeOrder(plain: String, sort: SortSegmentAst?): String {
-        if (sort == null) {
-            return plain
-        }
+    /** The collection named with the ordering it is read in. */
+    private fun describeOrder(plain: String, sort: SortSegmentAst): String {
         val member = sort.member
         if (member == null) {
             return if (sort.descending) "$plain in descending order" else "$plain in ascending order"
@@ -419,19 +415,26 @@ object PlainLanguageRenderer {
     private fun describeContainer(
         segments: List<String>,
         filters: List<ExpressionAst>,
-        slice: SliceSegmentAst? = null,
-        sort: SortSegmentAst? = null
+        decorations: List<PathSegmentAst> = emptyList()
     ): String {
         // Left as written rather than title-cased: the container reads as a noun mid-sentence
         // ("of parcels where …"), where "of Parcels" would look like a proper name.
         val plain = segments.joinToString(separator = ".").ifEmpty { "the collection" }
-        // The ordering goes inside the bound, so a sorted-then-sliced collection reads as "the first
-        // 3 orders by highest total" — which is the order the two are almost always written in.
-        val ordered = describeOrder(plain = plain, sort = sort)
-        val name = when {
-            slice == null -> ordered
-            slice.fromEnd -> "the last ${slice.count} $ordered"
-            else -> "the first ${slice.count} $ordered"
+        // Folded in written order, so each decoration wraps what the ones before it produced: a
+        // sort then a slice reads as "the first 3 orders by highest total", which is both the order
+        // the two are almost always written in and what the engine actually does.
+        val name = decorations.fold(initial = plain) { described, decoration ->
+            when (decoration) {
+                is SortSegmentAst -> describeOrder(plain = described, sort = decoration)
+                is SliceSegmentAst ->
+                    if (decoration.fromEnd) {
+                        "the last ${decoration.count} $described"
+                    } else {
+                        "the first ${decoration.count} $described"
+                    }
+
+                else -> described
+            }
         }
         if (filters.isEmpty()) {
             return name

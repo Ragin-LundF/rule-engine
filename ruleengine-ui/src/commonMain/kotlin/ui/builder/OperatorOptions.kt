@@ -49,14 +49,13 @@ object OperatorOptions {
 
     val TEXT: List<String> = listOf(EQUALS, CONTAINS, STARTS_WITH, ENDS_WITH, IN, REGEX, SYMBOL_NOT_EQUALS)
 
-    // No `in`: the engine allows it on text fields only (`Validator.supportedOperatorsFor`).
     val INTEGER: List<String> =
-        listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN, SYMBOL_NOT_EQUALS)
+        listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN, IN, SYMBOL_NOT_EQUALS)
 
     val DECIMAL: List<String> = INTEGER
     val BOOLEAN: List<String> = listOf(EQUALS)
     val STRING_SET: List<String> = listOf(CONTAINS_ANY, CONTAINS_ALL)
-    val DATE: List<String> = listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN)
+    val DATE: List<String> = listOf(EQUALS, SYMBOL_GT, SYMBOL_GTE, SYMBOL_LT, SYMBOL_LTE, BETWEEN, IN)
 
     /**
      * Operators allowed once either side of a comparison is a computed value. The engine's parser

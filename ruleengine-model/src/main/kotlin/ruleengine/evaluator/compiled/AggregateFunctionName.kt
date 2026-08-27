@@ -49,9 +49,9 @@ enum class AggregateFunctionName(
      * the test itself becoming undecidable.
      *
      * It accepts any argument, including a bare `collection` or `object` path, which no other function
-     * does. A path that yields no value is not available: an absent field, a `null`, and an **empty**
-     * collection are alike here, because a value expression reduces all three to the same missing
-     * value.
+     * does. A path that yields no value is not available, and an absent field, a `null` and an **empty**
+     * collection are alike here: the question is whether the record carries the value at all, and an
+     * empty list is no more an answer to it than an absent one.
      */
     IS_AVAILABLE(
         dslName = "isAvailable",

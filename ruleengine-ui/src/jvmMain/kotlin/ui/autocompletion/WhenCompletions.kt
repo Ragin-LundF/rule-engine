@@ -30,6 +30,9 @@ private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
     // Hinted as a check rather than a function: what it inserts is a whole condition, not an operand
     // waiting for a comparison.
     Triple("isAvailable", "isAvailable(amount)", "check"),
+    // The complement of isAvailable, not its negation: it answers true only for a collection that
+    // arrived carrying no elements, and false for one that did not arrive at all.
+    Triple("isEmpty", "isEmpty(orders)", "check"),
     Triple("take", "take(orders, 3)", "slice"),
     Triple("takeLast", "takeLast(orders, 3)", "slice"),
     // The three-argument form is the one worth inserting: ordering a collection of objects is what

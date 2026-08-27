@@ -2,8 +2,8 @@ package ruleengine.compiler.value
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.compiler.support.FieldPathMessages
+import ruleengine.compiler.support.OperatorSupport
 import ruleengine.compiler.support.Suggestions
-import ruleengine.compiler.value.ValueExpressionValidator.validateSlice
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
@@ -75,6 +75,8 @@ internal object ValueExpressionValidator {
         val leftKind = validateValueExpression(expr = expr.left, schema = schema, diagnostics = diagnostics)
         val rightKind = validateValueExpression(expr = expr.right, schema = schema, diagnostics = diagnostics)
 
+        validateDeclaredOperator(expr = expr, schema = schema, diagnostics = diagnostics)
+
         if (leftKind == ValueKind.UNKNOWN || rightKind == ValueKind.UNKNOWN) {
             return
         }
@@ -92,7 +94,7 @@ internal object ValueExpressionValidator {
         }
 
         if (expr.operator == ComparisonOperatorAst.IN) {
-            validateMembership(expr = expr, leftKind = leftKind, rightKind = rightKind, diagnostics = diagnostics)
+            validateMembership(leftKind = leftKind, rightKind = rightKind, diagnostics = diagnostics)
             return
         }
 
@@ -125,7 +127,6 @@ internal object ValueExpressionValidator {
      * A projection off an undeclared member types as NUMERIC, the permissive default, so it passes.
      */
     private fun validateMembership(
-        expr: ComparisonExpressionAst,
         leftKind: ValueKind,
         rightKind: ValueKind,
         diagnostics: MutableList<ValidationDiagnostic>
@@ -157,13 +158,6 @@ internal object ValueExpressionValidator {
                         "which can never match"
             )
         }
-        if (expr.ignoreCase) {
-            diagnostics += ValidationDiagnostic(
-                severity = Severity.ERROR,
-                message = "'ignoreCase' is not supported for 'in' against a named source; " +
-                        "declare a normalizer on the field instead"
-            )
-        }
     }
 
     /**
@@ -193,6 +187,80 @@ internal object ValueExpressionValidator {
      * the right-hand side of a `set` clause. Only the operand itself is checked; there is no second
      * operand to be type-compatible with.
      */
+    /**
+     * Honours a field's declared `operators:` list on the symbolic path too.
+     *
+     * `Parser.requiresModernPath` routes every `==` and `!=` through a [ComparisonExpressionAst], and
+     * the whitelist check lives in `Validator.validateCondition`, which only ever sees a
+     * `ConditionAst`. A field declaring `operators: [contains]` therefore still accepted
+     * `status == "x"`.
+     *
+     * Only a field that **declares** a list is checked. Applying the type defaults here would reject
+     * symbolic comparisons that have always been legal, since no type's default set names a symbol.
+     */
+    private fun validateDeclaredOperator(
+        expr: ComparisonExpressionAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        val operator = canonicalNameOf(operator = expr.operator) ?: return
+        listOf(expr.left, expr.right)
+            .mapNotNull { operand -> declaredFieldOf(expr = operand, schema = schema) }
+            .map { def -> def to OperatorSupport.declaredOperatorsFor(def = def) }
+            .filterNot { (_, declared) -> admits(declared = declared, operator = expr.operator) }
+            .forEach { (def, declared) ->
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Operator '$operator' is not allowed for field '${def.id.value}'. " +
+                            "Allowed: ${declared.sorted()}",
+                    suggestion = Suggestions.suggestClosest(input = operator, candidates = declared.sorted()),
+                )
+            }
+    }
+
+    /**
+     * Whether a field's declared list admits [operator].
+     *
+     * An empty list is no restriction. `!=` is admitted by a declared `equals` as well as by itself:
+     * inequality is equality negated, and requiring a schema to name both would reject
+     * `status != "x"` on every field that only ever meant to allow equality.
+     */
+    private fun admits(declared: Set<String>, operator: ComparisonOperatorAst): Boolean {
+        if (declared.isEmpty()) {
+            return true
+        }
+        val name = canonicalNameOf(operator = operator)
+        return name in declared ||
+            (operator == ComparisonOperatorAst.NEQ && OperatorNames.EQUALS in declared)
+    }
+
+    /** The canonical operator name a symbolic comparison stands for, or null when it has none. */
+    private fun canonicalNameOf(operator: ComparisonOperatorAst): String? {
+        return when (operator) {
+            ComparisonOperatorAst.EQ -> OperatorNames.EQUALS
+            ComparisonOperatorAst.NEQ -> OperatorNames.SYMBOL_NOT_EQUALS
+            ComparisonOperatorAst.GT -> OperatorNames.GT
+            ComparisonOperatorAst.GTE -> OperatorNames.GTE
+            ComparisonOperatorAst.LT -> OperatorNames.LT
+            ComparisonOperatorAst.LTE -> OperatorNames.LTE
+            ComparisonOperatorAst.IN -> OperatorNames.IN
+            ComparisonOperatorAst.CONTAINS -> OperatorNames.CONTAINS
+        }
+    }
+
+    /**
+     * The declared top-level field an operand reads, or null when it reads anything else.
+     *
+     * Deliberately single-segment: a longer path ends at a member, and a member's `operators:` list
+     * describes how that member is compared inside a filter, not how a projection off it behaves.
+     */
+    private fun declaredFieldOf(expr: ValueExpressionAst, schema: FieldSchema): FieldDefinition? {
+        val path = (expr as? FieldAccessAst)?.path?.singleOrNull() as? FieldSegmentAst ?: return null
+        val names = FieldPathResolver.expandRoot(name = path.name, schema = schema)
+        val name = names.singleOrNull() ?: return null
+        return schema.fields[FieldId(value = name)]
+    }
+
     fun validateValue(
         expr: ValueExpressionAst,
         schema: FieldSchema,
@@ -634,7 +702,6 @@ internal object ValueExpressionValidator {
         FunctionResultKind.NUMERIC -> ValueKind.NUMERIC
         FunctionResultKind.BOOLEAN -> ValueKind.BOOLEAN
         FunctionResultKind.ARRAY -> ValueKind.ARRAY
-        FunctionResultKind.DATE -> ValueKind.DATE
     }
 
     fun arityText(arity: IntRange): String {

@@ -89,7 +89,38 @@ object Validator {
         diagnostics: MutableList<ValidationDiagnostic>,
     ) {
         validateAliasUniqueness(schema = schema, diagnostics = diagnostics)
+        validateDeclaredOperators(schema = schema, diagnostics = diagnostics)
         validateActionNamesAreNotKeywords(actionSchema = actions, diagnostics = diagnostics)
+    }
+
+    /**
+     * Reports a declared `operators:` entry the field's type cannot compile.
+     *
+     * Reported against the schema rather than against every rule that writes the operator: the
+     * declaration is the mistake, and a field with one bad entry would otherwise produce a diagnostic
+     * per condition — or, before the list was intersected in [OperatorSupport.allowedOperatorsFor], a
+     * `CompilationException` at load time with no diagnostic at all.
+     */
+    private fun validateDeclaredOperators(schema: FieldSchema, diagnostics: MutableList<ValidationDiagnostic>) {
+        for (def in allDefinitions(fields = schema.fields)) {
+            val unsupported = OperatorSupport.unsupportedOperatorsFor(def = def).sorted()
+            if (unsupported.isEmpty()) {
+                continue
+            }
+            val supported = OperatorSupport.supportedOperatorsFor(type = def.type).sorted()
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Field '${def.id.value}' declares $unsupported, which a " +
+                        "${def.type.name.lowercase()} field does not support. Supported: $supported",
+                suggestion = Suggestions.suggestClosest(input = unsupported.first(), candidates = supported)
+                    ?: "Remove $unsupported from the field's 'operators' list",
+            )
+        }
+    }
+
+    /** Every field in the schema, nested members included, so a member's declaration is checked too. */
+    private fun allDefinitions(fields: Map<FieldId, FieldDefinition>): List<FieldDefinition> {
+        return fields.values.flatMap { def -> listOf(def) + allDefinitions(fields = def.fields) }
     }
 
     /**
@@ -412,11 +443,23 @@ object Validator {
 
             FieldType.DECIMAL -> when (op) {
                 OperatorNames.BETWEEN -> LiteralValidation.validateDecimalBounds(cond = cond, diagnostics = diagnostics)
+                OperatorNames.IN -> LiteralValidation.validateNumericMembership(
+                    cond = cond,
+                    diagnostics = diagnostics,
+                    whole = false,
+                )
+
                 else -> LiteralValidation.validateDecimalLiteral(cond = cond, diagnostics = diagnostics)
             }
 
             FieldType.INTEGER -> when (op) {
                 OperatorNames.BETWEEN -> LiteralValidation.validateIntegerBounds(cond = cond, diagnostics = diagnostics)
+                OperatorNames.IN -> LiteralValidation.validateNumericMembership(
+                    cond = cond,
+                    diagnostics = diagnostics,
+                    whole = true,
+                )
+
                 else -> LiteralValidation.validateIntegerLiteral(cond = cond, diagnostics = diagnostics)
             }
 
@@ -451,6 +494,54 @@ object Validator {
      * Date literals are quoted: ISO-8601 by default, or the field's declared `format` when it has one.
      * `between` needs two of them.
      */
+    /**
+     * The values an `in` on a temporal field tests against.
+     *
+     * Each item is read under the field's declared `format`, exactly as a single literal and a
+     * `between` bound are — so a schema that declares `dd.MM.yyyy` may write its list that way too.
+     * A bare literal counts as a set of one, matching the compiler.
+     */
+    private fun validateDateMembership(
+        cond: ConditionAst,
+        def: FieldDefinition,
+        expected: String,
+        diagnostics: MutableList<ValidationDiagnostic>,
+    ) {
+        val items = when (val literal = cond.value) {
+            is ListLiteral -> literal.items
+            is StringLiteral -> listOf(literal)
+            else -> {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' with 'in' expects a list of quoted values in $expected",
+                    line = cond.line,
+                    column = cond.column,
+                )
+                return
+            }
+        }
+        for (item in items) {
+            val text = (item as? StringLiteral)?.value
+            if (text == null) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Field '${cond.field}' with 'in' expects quoted values in $expected",
+                    line = cond.line,
+                    column = cond.column,
+                )
+                continue
+            }
+            if (!DateOperator.isValidLiteral(text = text, def = def)) {
+                diagnostics += ValidationDiagnostic(
+                    severity = Severity.ERROR,
+                    message = "Invalid date '$text' for field '${cond.field}'; expected $expected",
+                    line = cond.line,
+                    column = cond.column,
+                )
+            }
+        }
+    }
+
     private fun validateDateLiteral(
         cond: ConditionAst,
         def: FieldDefinition,
@@ -479,6 +570,11 @@ object Validator {
                         column = cond.column,
                     )
                 }
+            return
+        }
+
+        if (op == OperatorNames.IN) {
+            validateDateMembership(cond = cond, def = def, expected = expected, diagnostics = diagnostics)
             return
         }
 

@@ -5,6 +5,129 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 1.11.0
+
+### Added
+- **`isAvailable` now answers `false` for a collection that arrived empty.** It asked only whether the
+  value was missing, and a whole collection or string set read by name arrives as an empty list rather
+  than as nothing — so `isAvailable(transactions)` was `true` for `transactions: []`, while the same
+  question asked of a nested path, `isAvailable(account.transactions)`, was `false`. Both now agree, and
+  both match what the language reference has always promised: an absent field, a `null` and an empty
+  collection are the same answer to *does the record carry this at all*.
+
+- **`isEmpty` asks the narrower question.** With `isAvailable` answering `false` to both, nothing could
+  tell a collection that arrived empty from one that did not arrive. `isEmpty` is `true` only for a
+  collection the record actually carries and that holds no elements, so the two together name all three
+  states:
+
+  | the record carries | `isAvailable` | `isEmpty` |
+  |---|---|---|
+  | nothing at all | `false` | `false` |
+  | an empty collection | `false` | `true` |
+  | one or more elements | `true` | `false` |
+
+  ```
+  rule "no-transactions-on-file" {
+    description "The account exists but carries no transactions."
+    when
+      isEmpty(transactions)
+    then
+      flag "empty-statement"
+  }
+  ```
+
+  It accepts a decorated path too, so `isEmpty(orders[total > 100])` asks whether the filter selected
+  nothing. Unlike `count(orders) == 0` it is *decided* for a collection the record does not carry,
+  which is what lets it guard a rule — see the propagation rule under **Changed**.
+
+- **`ignoreCase` can be written on a symbolic comparison.** It was readable only after a named
+  operator, so `purpose contains "rent" ignoreCase` worked while `$topic == "Billing" ignoreCase` was a
+  parse error. The gap mattered: a variable and an aggregate *always* take the value-expression path,
+  and a normalizer declared on a field cannot reach a value a rule computed — so there was no way to
+  compare one case-insensitively at all.
+
+  Both operands are folded once before any operator reads them, so `==`, `!=`, `contains` — as a
+  substring test and as a membership test — and `in` all honour it. Non-text operands are untouched.
+  The Builder offers the toggle on a comparison row again; it used to emit the word into text the
+  parser then rejected, which produced a rule file that would not reopen.
+
+- **`in` works on every scalar type, not only on text.** `statusCode in [401, 403]` — the obvious way
+  to write a set-membership test against a number — was rejected by the validator and threw in the
+  compiler; `integer`, `decimal`, `date` and `date_time` now accept it alongside the comparisons they
+  already shared. List items are written in the same spelling a single literal for that field would
+  use, so a date list is read under the field's declared `format`, and a decimal matches by value:
+  `amount in [1, 2]` finds `2.0`.
+
+  ```
+  rule "auth-failure" {
+    description "The request was rejected for an authentication reason."
+    when
+      statusCode in [401, 403]
+    then
+      flag "auth-failure"
+  }
+  ```
+
+  The editor offers it wherever the engine allows it, and its completion snippet is now typed like the
+  field — it used to insert `["a", "b"]` on a numeric field, which the validator then rejected.
+
+### Changed
+- **A missing value now propagates as undecided through every expression.** `count` answered `0` for a
+  collection the record did not carry, `subtract` answered `0`, `every` was vacuously `true` and `any`
+  was `false` — each inventing an answer for data that never arrived, so a rule could not tell
+  *counted nothing* from *had nothing to count*. One rule now holds throughout the language:
+
+  > A missing value propagates as undecided through every expression. `isAvailable()` and `isEmpty()`
+  > are the only two that consume it and answer a plain boolean.
+
+  A collection that arrived **empty** is unaffected — it is data, and each function still reduces it to
+  its identity: `count`, `sum` and `subtract` answer `0`, `every` is vacuously true, `any` is false,
+  and `avg` / `median` / `min` / `max` have no identity so they stay undecided.
+
+  **What this changes for existing rules.** A rule that declares **no** `not_exists` branch behaves
+  exactly as before: an undecided condition takes `else`, which is where a false one already went. A
+  rule that **does** declare one now routes an aggregate over a missing collection to `not_exists`
+  instead of `else` — it reports "no data" rather than "no match", which is what the branch is for.
+  Inside such a rule, `not count(x) > 0` becomes undecided rather than true.
+
+  Two idioms need attention. An unconditional guard written as `count(x) >= 0` is no longer
+  unconditionally true — use `isAvailable(x)` or `isEmpty(x)`, the two that are always decided. And
+  `count(x) == 0` is now a *correct* emptiness test rather than one that also matched a record with no
+  collection at all.
+
+- **`sum` over an empty collection is `0` however the path is spelled.** `sum(transactions)` answered
+  `0` while `sum(transactions.amount)` was undecided, because a projection over zero elements selected
+  nothing and collapsed to the same value an absent field produces. The two spellings now agree.
+
+### Fixed
+- **A comparison that cannot be read is now undecided rather than false.** Two operands that are both
+  present and still not comparable — a number against a text, two lists, an ordering over text — used
+  to answer `false`. For `!=` that was the wrong way round: `count(orders) != "abc"` claimed the two
+  were equal. Each is now undecided, the same answer a missing operand already gave, so a rule with a
+  `not_exists` branch can see it. `contains` and `in` are unchanged: "not among these values" is a
+  decided answer.
+
+- **`contains` no longer changes meaning with the size of a collection.** A path that selects exactly
+  one element collapses to a scalar, and `contains` read that as text — so
+  `orders[paid == true].tag contains "prem"` was a membership test for a record with two matching
+  orders and a *substring* test for a record with one, matching `"premium"` only in the second. The
+  compiled path now carries its declared shape, and a collection-valued operand always means
+  membership.
+
+- **A field's declared `operators:` list now narrows the type's defaults instead of replacing them.**
+  A schema could name an operator its type has no compile branch for, and the failure arrived as a
+  `CompilationException` at load time instead of a diagnostic. Two cases reached evaluation instead: a
+  `boolean` field compiled every declared operator to equality, and a `string_set` compiled
+  `containsAll "x"` as `containsAny`. Declaring an unsupported operator is now a validation error
+  naming the field, the type and what the type does support. `!=` stays legal to declare — the parser
+  routes symbolic inequality through the expression engine, so no type's set names it.
+
+- **`==` and `!=` now honour a field's declared `operators:` list.** Both are always routed through the
+  expression path, where the whitelist was never applied — so a field declaring `operators: [contains]`
+  still accepted `status == "x"`. Declaring `equals` continues to admit `!=`, since inequality is
+  equality negated.
+
+
 ## Release 1.10.0
 
 ### Added

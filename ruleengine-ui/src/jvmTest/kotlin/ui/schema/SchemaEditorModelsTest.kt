@@ -1,11 +1,14 @@
 package ui.schema
 
 import ruleengine.compiler.Validator
+import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isNormalizable
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
 import ruleengine.schema.FieldSchemaLoader
+import ui.autocompletion.defaultOperatorsForType
+import ui.builder.OperatorOptions
 import ui.schema.model.EditableField
 import ui.schema.model.SchemaEditorState
 import kotlin.test.Test
@@ -99,6 +102,44 @@ class SchemaEditorModelsTest {
         }
     }
 
+    /**
+     * The same parity check, widened to the **other two** operator tables the UI keeps.
+     *
+     * `SchemaEditorModels.operatorsFor` above is only one of three: the Builder has
+     * `OperatorOptions.forField` and the editor has `defaultOperatorsForType`, and all three are
+     * deliberately allowed to be *narrower* than the engine. Being **wider** is always a bug — a
+     * bundled sample offered `in` on an `integer` field and the rule using it could not compile — and
+     * nothing checked those two until now.
+     *
+     * `!=` is exempt: no type's operator set names it, because the parser routes symbolic inequality
+     * through the expression engine rather than the named-operator path.
+     */
+    @Test
+    fun `every operator the builder and the editor offer is accepted by the engine`() {
+        val failures = mutableListOf<String>()
+
+        FieldType.entries.forEach { type ->
+            val offered = OperatorOptions.forField(fieldType = type.yamlValue) +
+                defaultOperatorsForType(fieldType = type)
+
+            offered.distinct()
+                .filterNot { operator -> OperatorUtils.normalizeOperator(op = operator) == "!=" }
+                .forEach { operator ->
+                    val condition = conditionFor(type = type, operator = operator)
+                        ?: error("no sample condition for $type $operator — extend the test, not the list")
+                    // Declared empty, so the field keeps its type defaults: this asks what the *type*
+                    // allows, not what one schema narrowed it to.
+                    val errors = validate(type = type, operators = emptyList(), condition = condition)
+                    if (errors.isNotEmpty()) {
+                        failures += "'$condition' on a ${type.yamlValue} field is offered by the UI " +
+                            "but rejected by the engine: $errors"
+                    }
+                }
+        }
+
+        assertTrue(actual = failures.isEmpty(), message = failures.joinToString(separator = "\n"))
+    }
+
     @Test
     fun `structure types offer no operators`() {
         assertEquals(expected = emptyList(), actual = operatorsFor(type = FieldType.COLLECTION))
@@ -175,7 +216,10 @@ class SchemaEditorModelsTest {
         val single = singleLiteralFor(type = type) ?: return null
         return when (operator) {
             "between" -> "value between ${rangeLiteralFor(type = type)}"
-            "in" -> """value in ["a", "b"]"""
+            // The Builder's tables spell the comparisons symbolically; the engine reads either.
+            "==", "!=", ">", ">=", "<", "<=" -> "value $operator $single"
+            // `in` reaches every scalar type now, so the sample list has to be typed like the field.
+            "in" -> "value in [$single, $single]"
             "containsAny", "containsAll" -> """value $operator ["a", "b"]"""
             "regex" -> """value regex "^a""""
             else -> "value $operator $single"

@@ -39,15 +39,20 @@ internal object FunctionCallValidator {
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
         CollectionFunctionName.fromName(name = expr.name)?.let { collectionFunction ->
-            if (collectionFunction == CollectionFunctionName.SUM_BY_KEY) {
-                return validateKeyedSum(expr = expr, schema = schema, diagnostics = diagnostics)
+            return when (collectionFunction) {
+                CollectionFunctionName.SUM_BY_KEY ->
+                    validateKeyedSum(expr = expr, schema = schema, diagnostics = diagnostics)
+
+                CollectionFunctionName.IS_EMPTY ->
+                    validateCollectionEmpty(expr = expr, schema = schema, diagnostics = diagnostics)
+
+                CollectionFunctionName.EVERY, CollectionFunctionName.ANY -> validateCollectionPredicate(
+                    function = collectionFunction,
+                    expr = expr,
+                    schema = schema,
+                    diagnostics = diagnostics
+                )
             }
-            return validateCollectionPredicate(
-                function = collectionFunction,
-                expr = expr,
-                schema = schema,
-                diagnostics = diagnostics
-            )
         }
         val function = AggregateFunctionName.fromName(name = expr.name)
         if (function == null) {
@@ -111,6 +116,39 @@ internal object FunctionCallValidator {
         }
         ValueExpressionValidator.validateFieldAccess(expr = argument, schema = schema, diagnostics = diagnostics)
         return ValueExpressionValidator.valueKindOf(resultKind = function.resultKind)
+    }
+
+    /**
+     * `isEmpty` takes a plain collection path — no trailing filter, unlike `every` and `any`.
+     *
+     * The argument has to be a path: the question is whether the record *carries* elements, and only
+     * a path can be walked back to the raw input to tell an empty collection from an absent one. An
+     * aggregate, a literal or a variable has already lost that distinction.
+     */
+    private fun validateCollectionEmpty(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ): ValueKind {
+        if (expr.arguments.size !in CollectionFunctionName.IS_EMPTY.arity) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Function 'isEmpty' requires " +
+                        "${ValueExpressionValidator.arityText(arity = CollectionFunctionName.IS_EMPTY.arity)}, " +
+                        "but got ${expr.arguments.size}"
+            )
+            return ValueKind.UNKNOWN
+        }
+        val argument = expr.arguments.single()
+        if (argument !is FieldAccessAst) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "isEmpty() expects a collection, such as isEmpty(orders)"
+            )
+            return ValueKind.UNKNOWN
+        }
+        ValueExpressionValidator.validateFieldAccess(expr = argument, schema = schema, diagnostics = diagnostics)
+        return ValueExpressionValidator.valueKindOf(resultKind = CollectionFunctionName.IS_EMPTY.resultKind)
     }
 
     /**

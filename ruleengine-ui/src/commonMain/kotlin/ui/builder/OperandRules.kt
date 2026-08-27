@@ -126,9 +126,8 @@ object OperandRules {
     /**
      * True when `ignoreCase` is meaningful for this row, i.e. both sides are textual.
      *
-     * A list membership test is not: `ComparisonCompiledExpression` compares elements by value, and
-     * `ignoreCase` after a variable operand does not parse. Nor is a boolean one — `every(...) ==
-     * true` compares two booleans, and a checkbox that changes nothing reads as one that does.
+     * Folding case leaves a number, a boolean and a whole list untouched, so offering the toggle there
+     * would be offering a checkbox that changes nothing — which reads as one that does.
      */
     fun supportsIgnoreCase(
         left: BuilderOperand,

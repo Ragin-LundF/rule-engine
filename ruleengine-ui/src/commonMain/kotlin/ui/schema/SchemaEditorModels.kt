@@ -25,7 +25,10 @@ val FieldType.yamlValue: String
  */
 val KnownNormalizers: List<String> = NormalizerRegistry.ids.map { id -> id.value }
 
-/** Numbers and dates are ordered, so the schema editor offers them the same comparisons. */
+/**
+ * Numbers and dates are ordered, so the schema editor offers them the same comparisons — plus `in`,
+ * which asks about membership of a written-out set rather than about order.
+ */
 private val ORDERED_OPERATORS: List<String> = listOf(
     OperatorOptions.EQUALS,
     OperatorOptions.GT,
@@ -33,6 +36,7 @@ private val ORDERED_OPERATORS: List<String> = listOf(
     OperatorOptions.LT,
     OperatorOptions.LTE,
     OperatorOptions.BETWEEN,
+    OperatorOptions.IN,
 )
 
 /**

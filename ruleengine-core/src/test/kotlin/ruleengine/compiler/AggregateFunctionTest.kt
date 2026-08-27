@@ -86,10 +86,71 @@ class AggregateFunctionTest {
         )
     }
 
+    /**
+     * A missing collection makes the condition undecided, which a rule with no `not_exists` branch
+     * reports as no match — the same outcome a false condition gives, which is why nothing that
+     * existed before the branch changed behaviour.
+     */
     @Test
     fun `count - missing field evaluates to false`() {
         val result = evaluate(rule = makeRule(condition = "count(transactions) > 0"))
         assertEquals(expected = false, actual = result)
+    }
+
+    /**
+     * A collection that arrived **empty** counts `0`; one that did not arrive counts nothing at all.
+     *
+     * Keeping the two apart is what makes `count(x) == 0` a true emptiness test: it used to answer
+     * `0` for a missing collection too, so the test was also true for a record that never carried one.
+     */
+    @Test
+    fun `count - an empty but present collection counts zero`() {
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "count(transactions) == 0"),
+                "transactions" to emptyList<Any>()
+            )
+        )
+        assertEquals(
+            expected = false,
+            actual = evaluate(rule = makeRule(condition = "count(transactions) == 0")),
+            message = "an absent collection is undecided, not a count of zero"
+        )
+    }
+
+    /**
+     * An empty collection sums to `0` however the path is spelled.
+     *
+     * The two spellings used to disagree: read whole it was an empty array and summed to `0`, but a
+     * projection selected nothing, collapsed to the same value an absent field produces, and came out
+     * undecided. `sum(x.member)` is the far commoner spelling, so the surprising answer was the one
+     * most rules got.
+     */
+    @Test
+    fun `sum - an empty collection sums to zero, read whole or projected`() {
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "sum(transactions) == 0"),
+                "transactions" to emptyList<Any>()
+            )
+        )
+        assertTrue(
+            actual = evaluate(
+                rule = makeRule(condition = "sum(transactions.amount) == 0"),
+                "transactions" to emptyList<Any>()
+            ),
+            message = "a projection over an empty collection sums to zero, like reading it whole"
+        )
+    }
+
+    /** A collection that never arrived has no sum — unlike an empty one, which sums to zero. */
+    @Test
+    fun `sum - a missing collection has no value`() {
+        assertEquals(
+            expected = false,
+            actual = evaluate(rule = makeRule(condition = "sum(transactions.amount) == 0")),
+            message = "a missing sum is undecided, which a rule without not_exists reads as false"
+        )
     }
 
     // --- sum ---
