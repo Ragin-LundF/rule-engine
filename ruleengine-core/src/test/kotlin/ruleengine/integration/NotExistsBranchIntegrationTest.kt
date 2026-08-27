@@ -57,6 +57,10 @@ class NotExistsBranchIntegrationTest {
                     ),
                 ),
             ),
+            FieldId(value = "tags") to FieldDefinition(
+                id = FieldId(value = "tags"),
+                type = FieldType.STRING_SET,
+            ),
         ),
     )
 
@@ -344,6 +348,53 @@ class NotExistsBranchIntegrationTest {
             expected = RuleBranch.ELSE,
             actual = evaluate(rules = branchedRule(condition = "isAvailable(${'$'}turnover)"), "amount" to 1)
                 .matches.single().branch,
+        )
+    }
+
+    @Test
+    fun `a collection that arrived empty is not available`() {
+        assertEquals(
+            expected = RuleBranch.ELSE,
+            actual = evaluate(
+                rules = branchedRule(condition = "isAvailable(balances)"),
+                "balances" to emptyList<Any>(),
+            ).matches.single().branch,
+        )
+        assertEquals(
+            expected = RuleBranch.THEN,
+            actual = evaluate(
+                rules = branchedRule(condition = "isAvailable(balances)"),
+                "balances" to listOf(mapOf("day" to 1)),
+            ).matches.single().branch,
+        )
+    }
+
+    @Test
+    fun `an empty collection answers the same whether it is read whole or projected`() {
+        assertEquals(
+            expected = RuleBranch.ELSE,
+            actual = evaluate(
+                rules = branchedRule(condition = "isAvailable(balances.day)"),
+                "balances" to emptyList<Any>(),
+            ).matches.single().branch,
+        )
+    }
+
+    @Test
+    fun `a string set that arrived empty is not available`() {
+        assertEquals(
+            expected = RuleBranch.ELSE,
+            actual = evaluate(
+                rules = branchedRule(condition = "isAvailable(tags)"),
+                "tags" to emptyList<String>(),
+            ).matches.single().branch,
+        )
+        assertEquals(
+            expected = RuleBranch.THEN,
+            actual = evaluate(
+                rules = branchedRule(condition = "isAvailable(tags)"),
+                "tags" to listOf("billing"),
+            ).matches.single().branch,
         )
     }
 

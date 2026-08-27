@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Release 1.11.0
+
+### Added
+- **`isAvailable` now answers `false` for a collection that arrived empty.** It asked only whether the
+  value was missing, and a whole collection or string set read by name arrives as an empty list rather
+  than as nothing — so `isAvailable(transactions)` was `true` for `transactions: []`, while the same
+  question asked of a nested path, `isAvailable(account.transactions)`, was `false`. Both now agree, and
+  both match what the language reference has always promised: an absent field, a `null` and an empty
+  collection are the same answer to *does the record carry this at all*. Ask `count(transactions) == 0`
+  to distinguish an empty collection from an absent one.
+
+
 ## Release 1.10.0
 
 ### Added

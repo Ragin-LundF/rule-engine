@@ -183,8 +183,8 @@ isAvailable(amount) and amount >= 1000
 ```
 
 It accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable. An
-**empty** collection is not available: an absent collection and an empty one reduce to the same nothing,
-so use `count(path) == 0` to test for emptiness. Missing data and the `not_exists` branch are covered in
+**empty** collection is not available: an absent collection and an empty one are the same answer to
+*does the record carry this at all*, so use `count(path) == 0` to test for emptiness. Missing data and the `not_exists` branch are covered in
 [rules.md](rules.md#missing-data--the-not_exists-branch).
 
 ## 5b. Slicing — `take` and `takeLast`

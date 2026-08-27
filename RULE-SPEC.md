@@ -1811,8 +1811,8 @@ isAvailable($turnover)
 not isAvailable(counterparty)
 ```
 
-> **An empty collection is not "available".** A value expression reduces an absent collection and an
-> empty one to the same nothing, so `isAvailable(transactions)` is `false` for `transactions: []`. Use
+> **An empty collection is not "available".** An absent collection and an empty one are the same answer
+> to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`. Use
 > `count(transactions) == 0` to ask whether a collection is empty.
 
 #### Rules

@@ -59,9 +59,19 @@ class FunctionCallCompiledValueExpression(
      * Everything else here answers `MissingExpressionValue` when its input is missing, which is what
      * makes a comparison over it undecidable. This answers `false` — a real boolean — which is exactly
      * why it can guard a rule whose other conditions would otherwise be undecidable.
+     *
+     * An empty collection is unavailable too. A projected path already reduces the empty case to
+     * `MissingExpressionValue` on its own, but a whole collection read by name arrives here as an
+     * empty [ArrayExpressionValue] — without this arm `isAvailable(transactions)` and
+     * `isAvailable(account.transactions)` would answer differently for the same absent data.
      */
     private fun evaluateIsAvailable(argValue: ExpressionValue): ExpressionValue {
-        return BooleanExpressionValue(value = argValue !is MissingExpressionValue)
+        val available = when (argValue) {
+            is MissingExpressionValue -> false
+            is ArrayExpressionValue -> argValue.values.isNotEmpty()
+            else -> true
+        }
+        return BooleanExpressionValue(value = available)
     }
 
     /**

@@ -650,8 +650,8 @@ isAvailable($turnover)
 not isAvailable(counterparty)
 ```
 
-An **empty** collection is not "available": an absent collection and an empty one reduce to the same
-nothing, so `isAvailable(transactions)` is `false` for `transactions: []`. Ask `count(transactions) == 0`
+An **empty** collection is not "available": an absent collection and an empty one are the same answer
+to *does the record carry this at all*, so `isAvailable(transactions)` is `false` for `transactions: []`. Ask `count(transactions) == 0`
 to test for emptiness.
 
 ### Rules
