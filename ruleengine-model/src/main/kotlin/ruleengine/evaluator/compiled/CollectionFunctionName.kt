@@ -26,7 +26,31 @@ enum class CollectionFunctionName(
      * One total per key, joining two or more collections on a shared member: a key literal followed
      * by the sources. Two sources is the smallest join worth writing, hence three arguments.
      */
-    SUM_BY_KEY(dslName = "sumByKey", arity = 3..Int.MAX_VALUE, resultKind = FunctionResultKind.ARRAY);
+    SUM_BY_KEY(dslName = "sumByKey", arity = 3..Int.MAX_VALUE, resultKind = FunctionResultKind.ARRAY),
+
+    /**
+     * Whether a collection arrived carrying no elements — **present but empty**, which is a different
+     * answer from absent.
+     *
+     * The complement of [AggregateFunctionName.IS_AVAILABLE] rather than its negation. Between them a
+     * rule can name all three states a collection can be in:
+     *
+     * | the record carries | `isAvailable` | `isEmpty` |
+     * |---|---|---|
+     * | nothing at all | `false` | `false` |
+     * | an empty collection | `false` | **`true`** |
+     * | one or more elements | `true` | `false` |
+     *
+     * It belongs here and not with the aggregates because it needs the argument's *shape*: by the
+     * time a path has been reduced to a value, an empty collection and an absent one are already the
+     * same [ruleengine.evaluator.compiled.value.result.MissingExpressionValue]. `count(x) == 0`
+     * cannot stand in for it for exactly that reason — `count` answers `0` for both.
+     *
+     * Like `isAvailable` it returns a real boolean, never
+     * [ruleengine.core.domain.dto.ConditionVerdict.UNKNOWN], so it can guard a rule whose other
+     * conditions would be undecidable.
+     */
+    IS_EMPTY(dslName = "isEmpty", arity = 1..1, resultKind = FunctionResultKind.BOOLEAN);
 
     companion object {
 

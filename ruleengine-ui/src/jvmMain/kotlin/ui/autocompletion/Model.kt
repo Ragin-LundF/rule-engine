@@ -7,7 +7,10 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isTemporal
 
-/** Numbers and dates are ordered, so both accept the same named comparisons. */
+/**
+ * Numbers and dates are ordered, so both accept the same named comparisons — plus `in`, which is
+ * about membership of a written-out set rather than about order.
+ */
 internal val ORDERED_OPS = listOf(
     OperatorNames.EQUALS,
     OperatorNames.GT,
@@ -15,6 +18,7 @@ internal val ORDERED_OPS = listOf(
     OperatorNames.LT,
     OperatorNames.LTE,
     OperatorNames.BETWEEN,
+    OperatorNames.IN,
 )
 
 internal val TEXT_OPS = listOf(
@@ -70,8 +74,11 @@ internal fun valuePlaceholderForOperator(op: String, def: FieldDefinition): Stri
         }
         return "0 100"
     }
+    if (OperatorUtils.normalizeOperator(op = op) == OperatorNames.IN) {
+        return membershipPlaceholder(def = def)
+    }
     return when (op.lowercase()) {
-        OperatorNames.IN, OperatorNames.CONTAINS_ANY, OperatorNames.CONTAINS_ALL -> "[\"a\", \"b\"]"
+        OperatorNames.CONTAINS_ANY, OperatorNames.CONTAINS_ALL -> "[\"a\", \"b\"]"
         else                         -> when (def.type) {
             FieldType.TEXT       -> "\"value\""
             FieldType.INTEGER    -> "0"
@@ -82,6 +89,23 @@ internal fun valuePlaceholderForOperator(op: String, def: FieldDefinition): Stri
             FieldType.COLLECTION, FieldType.OBJECT -> ""
         }
     }
+}
+
+/**
+ * The list `in` inserts, typed like the field.
+ *
+ * Type-aware for the same reason the `between` branch is: `in` reaches numeric and temporal fields
+ * now, and the one hardcoded `["a", "b"]` it used to insert would complete to a list the validator
+ * rejects on any of them.
+ */
+private fun membershipPlaceholder(def: FieldDefinition): String {
+    val sample = when (def.type) {
+        FieldType.INTEGER -> "0" to "100"
+        FieldType.DECIMAL -> "0.0" to "1.0"
+        FieldType.DATE, FieldType.DATE_TIME -> temporalSample(def = def) to temporalSample(def = def)
+        else -> "\"a\"" to "\"b\""
+    }
+    return "[${sample.first}, ${sample.second}]"
 }
 
 private fun temporalSample(def: FieldDefinition): String {

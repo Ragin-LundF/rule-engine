@@ -2,6 +2,7 @@ package ui.builder
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.evaluator.compiled.AggregateFunctionName
+import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.DslFunctions
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -58,11 +59,21 @@ class OperatorOptionsTest {
         assertEquals(OperatorOptions.DECIMAL, ops)
     }
 
+    /**
+     * `in` is offered on every scalar type, and on no structure type.
+     *
+     * It used to be text-only, which is why a bundled sample declaring it on an `integer` field could
+     * not be compiled. A `string_set` is the deliberate exception: `containsAny` and `containsAll` are
+     * how membership is asked of a set, and `in` would read as the same question backwards.
+     */
     @Test
-    fun `integer does not offer in, which the engine allows on text only`() {
-        assertTrue("in" !in OperatorOptions.INTEGER)
-        assertTrue("in" !in OperatorOptions.DECIMAL)
+    fun `in is offered on every scalar type`() {
         assertTrue("in" in OperatorOptions.TEXT)
+        assertTrue("in" in OperatorOptions.INTEGER)
+        assertTrue("in" in OperatorOptions.DECIMAL)
+        assertTrue("in" in OperatorOptions.DATE)
+        assertTrue("in" !in OperatorOptions.BOOLEAN)
+        assertTrue("in" !in OperatorOptions.STRING_SET)
     }
 
     @Test
@@ -101,6 +112,14 @@ class OperatorOptionsTest {
         assertTrue(
             actual = OperatorOptions.ALL_FUNCTIONS.containsAll(DslFunctions.SLICE_NAMES),
             message = "the slice functions are parser sugar, so only this list can carry them",
+        )
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.containsAll(DslFunctions.SORT_NAMES),
+            message = "the ordering function is parser sugar too, and was the untested half",
+        )
+        assertTrue(
+            actual = OperatorOptions.ALL_FUNCTIONS.containsAll(CollectionFunctionName.entries.map { it.dslName }),
+            message = "every collection function must be recognised by the editor",
         )
         assertTrue(
             actual = OperatorOptions.ALL_FUNCTIONS.containsAll(OperatorOptions.AGGREGATE_FUNCTIONS),

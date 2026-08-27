@@ -4,6 +4,7 @@ import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
+import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 
 /**
@@ -17,6 +18,12 @@ import ruleengine.evaluator.context.PreparedRuleContext
  * Empty collections: `every` is true and `any` is false. Both fall out of the loop without a guard,
  * and both are the conventional readings — "every one of nothing satisfies it" is vacuously true,
  * "one of nothing satisfies it" is not.
+ *
+ * A **missing** collection is a different question and gets a different answer: there is no collection
+ * to quantify over, so the result is no value at all and the condition over it is undecided. Reading
+ * the source through `resolveRawList` answered `emptyList()` for both, which made a record that never
+ * carried the collection indistinguishable from one that carried an empty one — and told a rule with a
+ * `not_exists` branch that `every(...)` had been decided.
  *
  * @param requireAll true for `every`, false for `any`.
  */
@@ -32,7 +39,8 @@ class CollectionPredicateCompiledValueExpression(
     }
 
     private fun computeValue(context: PreparedRuleContext): ExpressionValue {
-        for (element in source.resolveRawList(context = context)) {
+        val elements = source.resolveRawListOrNull(context = context) ?: return MissingExpressionValue
+        for (element in elements) {
             // An element that is not a structure has no members for the predicate to read, so it
             // cannot satisfy it — the same answer the filter segments give. A predicate that could not
             // be decided does not satisfy it either: `every` and `any` answer about the elements, and

@@ -393,6 +393,26 @@ class PlainLanguageRendererTest {
         )
     }
 
+    /**
+     * Every decoration is named, not just the first of each kind.
+     *
+     * The renderer used to pick the slice and the sort with `firstOrNull()`, so a path carrying two
+     * of either lost the rest from every Markdown and DOCX export — reintroducing exactly the
+     * overclaim that including them at all was meant to prevent.
+     */
+    @Test
+    fun `a second ordering is not dropped from the sentence`() {
+        val sentence = prose(
+            condition = """sum(sortBy(take(sortBy(orders, "amount", desc), 3), "amount", asc).amount) > 100"""
+        )
+
+        assertEquals(
+            expected = "the total Amount of the first 3 orders by highest amount by lowest amount " +
+                    "is more than 100",
+            actual = sentence,
+        )
+    }
+
     /** A bare predicate is desugared to `== true`; spelling that out adds nothing. */
     @Test
     fun `a collection predicate reads as a sentence`() {

@@ -1,5 +1,6 @@
 package ruleengine.compiler
 
+import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
@@ -75,9 +76,18 @@ class CollectionPredicateTest {
         )
     }
 
+    /**
+     * A collection the record does not carry is a different question from one it carries holding
+     * nothing, and gets a different answer: there is nothing to quantify over, so `every` produces no
+     * value and the condition is undecided. It used to answer vacuously true, which told a rule the
+     * predicate had been checked against data that never arrived.
+     */
     @Test
-    fun `every is true for a missing collection`() {
-        assertTrue(actual = evaluate(condition = "every(lineItems[quantity >= 1])"))
+    fun `every is undecided for a missing collection`() {
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = verdict(condition = "every(lineItems[quantity >= 1])"),
+        )
     }
 
     // --- any ---
@@ -110,9 +120,13 @@ class CollectionPredicateTest {
         )
     }
 
+    /** The counterpart of the `every` rule: a collection that never arrived decides nothing. */
     @Test
-    fun `any is false for a missing collection`() {
-        assertFalse(actual = evaluate(condition = """any(alerts[severity == "high"])"""))
+    fun `any is undecided for a missing collection`() {
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = verdict(condition = """any(alerts[severity == "high"])"""),
+        )
     }
 
     // --- composition ---
@@ -227,6 +241,17 @@ class CollectionPredicateTest {
         val compiled = Compiler.compileRules(asts = asts, schema = schema)
         val prepared = PreparedRuleContext.prepare(ctx = RuleContext.of(*fields), schema = schema)
         return RuleEngine(compiledRules = compiled).evaluate(prepared = prepared).matches.isNotEmpty()
+    }
+
+    /**
+     * The condition's own verdict, which [evaluate] cannot show: a rule with no `not_exists` branch
+     * reports an undecided condition as no match, exactly as it reports a false one.
+     */
+    private fun verdict(condition: String, vararg fields: Pair<String, Any?>): ConditionVerdict {
+        val asts = Parser(input = rule(condition = condition)).parseRules()
+        val compiled = Compiler.compileRules(asts = asts, schema = schema).single()
+        val prepared = PreparedRuleContext.prepare(ctx = RuleContext.of(*fields), schema = schema)
+        return compiled.expression.evaluate(context = prepared, trace = null)
     }
 
     private fun validate(condition: String) = Validator.validate(

@@ -25,6 +25,7 @@ import ruleengine.core.domain.dto.field.FieldType.INTEGER
 import ruleengine.core.domain.dto.field.FieldType.OBJECT
 import ruleengine.core.domain.dto.field.FieldType.STRING_SET
 import ruleengine.core.domain.dto.field.FieldType.TEXT
+import ruleengine.core.domain.dto.field.isMultiValued
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
 import ruleengine.dsl.ast.ActionAst
@@ -370,14 +371,16 @@ object Compiler {
         val normalizers = member.definition?.normalizers.orEmpty()
         val left = FieldAccessCompiledValueExpression(
             segments = member.segments,
-            normalizers = normalizers
+            normalizers = normalizers,
+            yieldsCollection = member.definition?.type?.isMultiValued == true
         )
         val right = compileLiteralValue(literal = cond.value, normalizers = normalizers, ruleId = ruleId)
         return ComparisonCompiledExpression(
             left = left,
             operator = comparisonOperator,
             right = right,
-            cost = EvaluationCost.CHEAP
+            cost = EvaluationCost.CHEAP,
+            leftYieldsCollection = left.yieldsCollection
         )
     }
 
@@ -493,7 +496,9 @@ object Compiler {
             cost = cost,
             // Rendered from the AST because it is the last point where the author's text can still be
             // reconstructed: the compiled operands have already rewritten path roots alias → canonical.
-            label = ValueExpressionRenderer.render(expr = expr.left)
+            label = ValueExpressionRenderer.render(expr = expr.left),
+            leftYieldsCollection = (left as? FieldAccessCompiledValueExpression)?.yieldsCollection == true,
+            ignoreCase = expr.ignoreCase
         )
     }
 
@@ -570,7 +575,7 @@ object Compiler {
                 ruleId = ruleId
             )
 
-            BOOLEAN -> compileBooleanCondition(cond = cond, fieldId = fieldId, ruleId = ruleId)
+            BOOLEAN -> compileBooleanCondition(cond = cond, fieldId = fieldId, op = op, ruleId = ruleId)
 
             DATE, DATE_TIME -> DateOperator.compile(
                 ruleId = ruleId,
@@ -617,11 +622,24 @@ object Compiler {
         }
     }
 
+    /**
+     * [op] is checked rather than assumed. A boolean accepts equality alone, and reading the operator
+     * here means a schema that declared another one is refused instead of silently compiling to
+     * equality — `Validator.validateDeclaredOperators` reports it first, so reaching this throw means
+     * the rule was compiled without being validated.
+     */
     private fun compileBooleanCondition(
         cond: ConditionAst,
         fieldId: FieldId,
+        op: String,
         ruleId: String?
     ): CompiledExpression {
+        if (op != OperatorNames.EQUALS) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "Unsupported operator '$op' for boolean field '${cond.field}'"
+            )
+        }
         val literal = cond.value as? BooleanLiteral ?: throw CompilationException(
             ruleId = ruleId,
             details = "Expected 'true' or 'false' for boolean field '${cond.field}'"
@@ -629,6 +647,14 @@ object Compiler {
         return BooleanEqualsExpression(field = fieldId, expected = literal.value)
     }
 
+    /**
+     * The operator is checked once, above the literal's shape.
+     *
+     * Both readings — a written-out list and a bare string — mean the same test over a set of one or
+     * more expected values, so they must agree on which operators they accept. The check used to sit
+     * inside the list arm alone, which let `containsAll "x"` compile as `containsAny`: harmless while
+     * a set of one makes the two identical, and a silent wrong answer the moment they diverge.
+     */
     @Suppress("ThrowsCount", "LongParameterList")
     private fun compileStringSetCondition(
         cond: ConditionAst,
@@ -638,53 +664,40 @@ object Compiler {
         normalizerRegistry: NormalizerRegistry,
         ruleId: String?
     ): CompiledExpression {
-        return when (val conditionValue = cond.value) {
-            is ListLiteral -> {
-                val stringLiteralSet = conditionValue.items.map {
-                    (it as? StringLiteral)?.value ?: throw CompilationException(
-                        ruleId = ruleId,
-                        details = "Expected string items in list"
-                    )
-                }.toSet()
-                val normalized = stringLiteralSet.map { stringLiteral ->
-                    normalizerRegistry.applyAll(value = stringLiteral, normalizers = def.normalizers)
-                }.toSet()
-
-                when (op) {
-                    OperatorNames.CONTAINS_ANY -> StringSetContainsAnyExpression(
-                        field = fieldId,
-                        expectedNormalized = normalized,
-                        ignoreCase = cond.ignoreCase
-                    )
-
-                    OperatorNames.CONTAINS_ALL -> StringSetContainsAllExpression(
-                        field = fieldId,
-                        expectedNormalized = normalized,
-                        ignoreCase = cond.ignoreCase
-                    )
-
-                    else -> throw CompilationException(
-                        ruleId = ruleId,
-                        details = "Unsupported operator '$op' for string set field"
-                    )
-                }
-            }
-
-            is StringLiteral -> {
-                val normalized = normalizerRegistry.applyAll(
-                    value = conditionValue.value,
-                    normalizers = def.normalizers,
+        val expected = when (val conditionValue = cond.value) {
+            is ListLiteral -> conditionValue.items.map {
+                (it as? StringLiteral)?.value ?: throw CompilationException(
+                    ruleId = ruleId,
+                    details = "Expected string items in list"
                 )
-                StringSetContainsAnyExpression(
-                    field = fieldId,
-                    expectedNormalized = setOf(normalized),
-                    ignoreCase = cond.ignoreCase
-                )
-            }
+            }.toSet()
+
+            is StringLiteral -> setOf(conditionValue.value)
 
             else -> throw CompilationException(
                 ruleId = ruleId,
                 details = "Expected list or string for string set field '${cond.field}'"
+            )
+        }
+        val normalized = expected.mapTo(mutableSetOf()) { stringLiteral ->
+            normalizerRegistry.applyAll(value = stringLiteral, normalizers = def.normalizers)
+        }
+        return when (op) {
+            OperatorNames.CONTAINS_ANY -> StringSetContainsAnyExpression(
+                field = fieldId,
+                expectedNormalized = normalized,
+                ignoreCase = cond.ignoreCase
+            )
+
+            OperatorNames.CONTAINS_ALL -> StringSetContainsAllExpression(
+                field = fieldId,
+                expectedNormalized = normalized,
+                ignoreCase = cond.ignoreCase
+            )
+
+            else -> throw CompilationException(
+                ruleId = ruleId,
+                details = "Unsupported operator '$op' for string set field"
             )
         }
     }

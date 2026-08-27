@@ -46,7 +46,16 @@ import java.time.ZoneOffset
  */
 class FieldAccessCompiledValueExpression(
     private val segments: List<CompiledPathSegment>,
-    val normalizers: List<NormalizerId> = emptyList()
+    val normalizers: List<NormalizerId> = emptyList(),
+    /**
+     * True when the path is collection-valued by its declared shape — it passes through a
+     * `collection`, ends at one or at a `string_set`, or carries a filter, slice or sort.
+     *
+     * Decided at compile time because the runtime answer is not trustworthy: [collapse] reduces a
+     * selection of exactly one element to a scalar, so a path that yields many values for one record
+     * and one value for the next would otherwise change what `contains` means between them.
+     */
+    val yieldsCollection: Boolean = false
 ) : CompiledValueExpression {
     /**
      * Reading a path is cheap; ordering one is not. A sorting path is declared expensive so
@@ -78,7 +87,11 @@ class FieldAccessCompiledValueExpression(
             val raw = context.rawContext.getRaw(fieldPath = listOf(single.name))
             return rawToExpressionValue(raw = raw, context = context)
         }
-        return collapse(values = resolveRawList(context = context), context = context)
+        // `resolveRawListOrNull` rather than `resolveRawList`, so that a collection the record does
+        // not carry stays distinguishable from one it carries holding nothing. Collapsing both to an
+        // empty list is what used to make `sum(orders.amount)` undecided for `orders: []`.
+        val elements = resolveRawListOrNull(context = context) ?: return MissingExpressionValue
+        return collapse(values = elements, context = context)
     }
 
     /** The dotted field id this path spells out, or null when it filters or projects on the way. */
@@ -97,8 +110,24 @@ class FieldAccessCompiledValueExpression(
      * walk is what keeps those features from each growing their own copy of path resolution.
      */
     fun resolveRawList(context: PreparedRuleContext): List<Any?> {
-        val rootName = (segments[0] as? CompiledFieldSegment)?.name ?: return emptyList()
-        val rootRaw = context.rawContext.getRaw(fieldPath = listOf(rootName)) ?: return emptyList()
+        return resolveRawListOrNull(context = context).orEmpty()
+    }
+
+    /**
+     * The same walk as [resolveRawList], but `null` when the record carries nothing at the root.
+     *
+     * [resolveRawList] answers `emptyList()` for both an absent root and a root holding no elements,
+     * which is the right reading for a caller that only wants to iterate what is there — a slice or a
+     * keyed join has nothing to work on either way.
+     *
+     * Everything that has to *answer* for the difference reads this instead: [evaluate], so an empty
+     * collection becomes an empty array rather than a missing value; `isEmpty`; and the collection
+     * predicates, which are undecided over a collection that never arrived and vacuously decided over
+     * one that arrived empty.
+     */
+    fun resolveRawListOrNull(context: PreparedRuleContext): List<Any?>? {
+        val rootName = (segments[0] as? CompiledFieldSegment)?.name ?: return null
+        val rootRaw = context.rawContext.getRaw(fieldPath = listOf(rootName)) ?: return null
         var current = asList(raw = rootRaw)
         for (index in 1 until segments.size) {
             current = applySegment(segment = segments[index], current = current, context = context)
@@ -223,15 +252,24 @@ class FieldAccessCompiledValueExpression(
     }
 
     /**
-     * Collapses the selected elements into one value: nothing selected is missing, exactly one is a
-     * scalar, and anything else is an array.
+     * Collapses the selected elements into one value: exactly one is a scalar, anything else an array.
+     *
+     * Nothing selected is an **empty array**, not a missing value — the caller has already established
+     * that the record carries the root, so this is a collection that holds nothing rather than a
+     * collection that is not there. Keeping the two apart is what lets `sum` answer `0` for an empty
+     * collection while still answering "no value" for an absent one, and what makes
+     * `orders[...].tag contains "x"` a decided `false` when the filter selected nothing.
+     *
+     * A scalar path that reads a `null` still yields missing: [rawToExpressionValue] maps it there and
+     * the element is dropped, so a one-element selection holding `null` collapses to an empty array —
+     * which for a collection-valued path is the right reading.
      */
     private fun collapse(values: List<Any?>, context: PreparedRuleContext): ExpressionValue {
         val converted = values.mapNotNull { raw ->
             rawToExpressionValue(raw = raw, context = context).takeIf { value -> value !is MissingExpressionValue }
         }
         return when (converted.size) {
-            0 -> MissingExpressionValue
+            0 -> if (yieldsCollection) ArrayExpressionValue(values = emptyList()) else MissingExpressionValue
             1 -> converted[0]
             else -> ArrayExpressionValue(values = converted)
         }

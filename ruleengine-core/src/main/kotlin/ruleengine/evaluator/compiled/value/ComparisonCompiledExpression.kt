@@ -25,17 +25,25 @@ import ruleengine.evaluator.trace.dto.NodeType
  *
  * @param label Rendered text of the left operand, used to name the condition in the trace. Empty for
  *   the per-element predicate inside a filter segment, which is evaluated with no collector at all.
+ * @param leftYieldsCollection Whether the left operand is collection-valued by its declared shape.
+ *   Only `contains` reads it, and only because the runtime type cannot answer the question: a path
+ *   selecting exactly one element arrives as a scalar, which would otherwise turn a membership test
+ *   into a substring test for that one record.
+ * @param ignoreCase The `ignoreCase` modifier. Applied by folding both operands once, before any
+ *   operator looks at them — see [foldCase].
  */
 class ComparisonCompiledExpression(
     private val left: CompiledValueExpression,
     private val operator: ComparisonOperatorAst,
     private val right: CompiledValueExpression,
     override val cost: EvaluationCost,
-    private val label: String = ""
+    private val label: String = "",
+    private val leftYieldsCollection: Boolean = false,
+    private val ignoreCase: Boolean = false
 ) : CompiledExpression {
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
-        val leftValue = left.evaluate(context = context)
-        val rightValue = right.evaluate(context = context)
+        val leftValue = foldCase(value = left.evaluate(context = context))
+        val rightValue = foldCase(value = right.evaluate(context = context))
 
         // Entered after both operands are evaluated, unlike the other leaves: the values being
         // compared are what make the node worth reading, and they are not known any earlier.
@@ -54,19 +62,51 @@ class ComparisonCompiledExpression(
     }
 
     /**
-     * The comparison's answer, or [ConditionVerdict.UNKNOWN] when an operand is not there to compare.
+     * The comparison's answer, or [ConditionVerdict.UNKNOWN] when the operands cannot be compared.
      *
-     * This is one of the two places an unknown is born. An absent field, an aggregate that reduced to
-     * nothing (`avg` over an empty collection) and a variable no rule has published all arrive here as
-     * [MissingExpressionValue], and none of them is a reason to answer "no".
+     * This is one of the two places an unknown is born, and there are two ways to reach it. An absent
+     * field, an aggregate that reduced to nothing (`avg` over an empty collection) and a variable no
+     * rule has published all arrive as [MissingExpressionValue]; none of them is a reason to answer
+     * "no".
+     *
+     * The second way is a pair of operands that are both present and still not comparable — a number
+     * against a text, two lists, an ordering over text. [compareValues] answers `null` for those, and
+     * they are undecidable for the same reason: the engine has no reading of the question, so "false"
+     * would be an answer it cannot justify. It was one, and `count(x) != "abc"` therefore claimed the
+     * two were equal.
      */
     private fun verdictFor(leftValue: ExpressionValue, rightValue: ExpressionValue): ConditionVerdict {
         if (leftValue is MissingExpressionValue || rightValue is MissingExpressionValue) {
             return ConditionVerdict.UNKNOWN
         }
-        return ConditionVerdict.of(
-            value = compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
-        )
+        val result = compareValues(leftValue = leftValue, operator = operator, rightValue = rightValue)
+            ?: return ConditionVerdict.UNKNOWN
+        return ConditionVerdict.of(value = result)
+    }
+
+    /**
+     * Lower-cases every text the value holds, when [ignoreCase] is set.
+     *
+     * Done once per operand rather than per operator, which is what makes `==`, `!=`, `contains` —
+     * both its substring and its membership reading — and `in` all honour the modifier from one place.
+     * Adding a case-insensitive arm to each of `compareValues`, `containsValue`, `memberOf` and
+     * `ExpressionValues.equalsByValue` would be four chances for them to disagree.
+     *
+     * Recursive into an array so a membership source folds element by element; every other kind is
+     * returned untouched, since case is a property of text alone.
+     */
+    private fun foldCase(value: ExpressionValue): ExpressionValue {
+        if (!ignoreCase) {
+            return value
+        }
+        return when (value) {
+            is TextExpressionValue -> TextExpressionValue(value = value.value.lowercase())
+            is ArrayExpressionValue -> ArrayExpressionValue(values = value.values.map { element ->
+                foldCase(value = element)
+            })
+
+            else -> value
+        }
     }
 
     /**
@@ -85,12 +125,18 @@ class ComparisonCompiledExpression(
         }
     }
 
+    /**
+     * The comparison's answer, or null when this pair of operands has no comparison.
+     *
+     * `contains` and `in` are membership tests and always decide: "not among these values" is an
+     * answer, not a failure to read the question.
+     */
     @Suppress("CyclomaticComplexMethod")
     private fun compareValues(
         leftValue: ExpressionValue,
         operator: ComparisonOperatorAst,
         rightValue: ExpressionValue
-    ): Boolean {
+    ): Boolean? {
         if (operator == ComparisonOperatorAst.CONTAINS) {
             return containsValue(leftValue = leftValue, rightValue = rightValue)
         }
@@ -125,7 +171,10 @@ class ComparisonCompiledExpression(
                 when (operator) {
                     ComparisonOperatorAst.EQ -> leftValue.value == rightValue.value
                     ComparisonOperatorAst.NEQ -> leftValue.value != rightValue.value
-                    else -> false
+                    // Text has no ordering here. `ExpressionValues.compareByValue` does order it for
+                    // `sortBy`, but that is a total order invented to make sorting defined, not a
+                    // claim that one string is less than another.
+                    else -> null
                 }
             }
 
@@ -134,11 +183,13 @@ class ComparisonCompiledExpression(
                     ComparisonOperatorAst.EQ -> leftValue.value == rightValue.value
                     ComparisonOperatorAst.NEQ -> leftValue.value != rightValue.value
                     // Ordering has no meaning for booleans.
-                    else -> false
+                    else -> null
                 }
             }
 
-            else -> false
+            // Mismatched kinds, two lists, a structure: present on both sides and still not a
+            // question this engine can answer.
+            else -> null
         }
     }
 
@@ -162,16 +213,16 @@ class ComparisonCompiledExpression(
     /**
      * Two calendar dates, with either side allowed to arrive as ISO-8601 text.
      *
-     * A value that is neither is not comparable to a date, so the comparison is false rather than an
-     * error — the same answer a missing operand gives.
+     * A value that is neither is not comparable to a date, so the comparison is undecided rather than
+     * an error — the same answer a missing operand gives.
      */
     private fun compareDates(
         leftValue: ExpressionValue,
         operator: ComparisonOperatorAst,
         rightValue: ExpressionValue
-    ): Boolean {
-        val left = ExpressionValues.asDate(value = leftValue) ?: return false
-        val right = ExpressionValues.asDate(value = rightValue) ?: return false
+    ): Boolean? {
+        val left = ExpressionValues.asDate(value = leftValue) ?: return null
+        val right = ExpressionValues.asDate(value = rightValue) ?: return null
         val cmp = left.compareTo(right)
         return when (operator) {
             ComparisonOperatorAst.EQ -> cmp == 0
@@ -196,8 +247,22 @@ class ComparisonCompiledExpression(
      * A missing left operand never reaches here: [verdictFor] answers unknown for it, and a rule that
      * declares no `not_exists` branch reads that as false — which is what still lets
      * `not $topics contains "billing"` pass before anything has been added.
+     *
+     * [leftYieldsCollection] decides the reading before the runtime type is consulted. A path down a
+     * collection is a membership test however many elements one record happens to carry, so
+     * `orders[...].tags contains "prem"` cannot become a substring test just because a record has a
+     * single tag.
      */
     private fun containsValue(leftValue: ExpressionValue, rightValue: ExpressionValue): Boolean {
+        if (leftYieldsCollection) {
+            return when (leftValue) {
+                is ArrayExpressionValue ->
+                    ExpressionValues.arrayContains(container = leftValue, element = rightValue)
+
+                // One element, collapsed to a scalar on the way here — a source of one.
+                else -> ExpressionValues.equalsByValue(left = leftValue, right = rightValue)
+            }
+        }
         return when {
             leftValue is ArrayExpressionValue ->
                 ExpressionValues.arrayContains(container = leftValue, element = rightValue)

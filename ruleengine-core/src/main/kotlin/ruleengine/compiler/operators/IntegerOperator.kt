@@ -5,10 +5,12 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.numeric.IntegerBetweenExpression
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonExpression
+import ruleengine.evaluator.compiled.numeric.IntegerInExpression
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonOperator
 
 object IntegerOperator {
@@ -35,6 +37,10 @@ object IntegerOperator {
             return IntegerBetweenExpression(field = fieldId, low = low, high = high)
         }
 
+        if (op == OperatorNames.IN) {
+            return IntegerInExpression(field = fieldId, expected = membershipSet(ruleId = ruleId, cond = cond))
+        }
+
         val literal = cond.value as? NumberLiteral ?: throw CompilationException(
             ruleId = ruleId,
             details = "Expected numeric literal for integer field '${cond.field}'"
@@ -52,6 +58,32 @@ object IntegerOperator {
         )
 
         return IntegerComparisonExpression(field = fieldId, expected = expected, op = comparison)
+    }
+
+    /**
+     * The values an `in` tests against.
+     *
+     * A bare literal counts as a set of one, matching how `TextInOperator` reads `status in "paid"` —
+     * the brackets are what a reader expects, not what the grammar demands.
+     */
+    private fun membershipSet(ruleId: String?, cond: ConditionAst): Set<Long> {
+        val items = when (val literal = cond.value) {
+            is ListLiteral -> literal.items
+            is NumberLiteral -> listOf(literal)
+            else -> emptyList()
+        }
+        if (items.isEmpty()) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "Operator 'in' expects a list of whole numbers for integer field '${cond.field}'"
+            )
+        }
+        return items.mapTo(mutableSetOf()) { item ->
+            (item as? NumberLiteral)?.value?.toLongOrNull() ?: throw CompilationException(
+                ruleId = ruleId,
+                details = "Operator 'in' expects whole numbers for integer field '${cond.field}'"
+            )
+        }
     }
 
     /** Keyed by canonical name only — the caller normalises every alias before it gets here. */

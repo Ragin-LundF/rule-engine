@@ -5,11 +5,13 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.dsl.ast.BetweenLiteral
 import ruleengine.dsl.ast.ConditionAst
+import ruleengine.dsl.ast.ListLiteral
 import ruleengine.dsl.ast.NumberLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.numeric.ComparisonOperator
 import ruleengine.evaluator.compiled.numeric.DecimalBetweenExpression
 import ruleengine.evaluator.compiled.numeric.DecimalComparisonExpression
+import ruleengine.evaluator.compiled.numeric.DecimalInExpression
 import java.math.BigDecimal
 
 object DecimalOperator {
@@ -36,6 +38,10 @@ object DecimalOperator {
             return DecimalBetweenExpression(field = fieldId, low = low, high = high)
         }
 
+        if (op == OperatorNames.IN) {
+            return DecimalInExpression(field = fieldId, expected = membershipSet(ruleId = ruleId, cond = cond))
+        }
+
         val literal = cond.value as? NumberLiteral ?: throw CompilationException(
             ruleId = ruleId,
             details = "Expected numeric literal for decimal field '${cond.field}'"
@@ -53,6 +59,35 @@ object DecimalOperator {
         )
 
         return DecimalComparisonExpression(field = fieldId, expected = expected, op = comparison)
+    }
+
+    /**
+     * The values an `in` tests against.
+     *
+     * A bare literal counts as a set of one, matching how `TextInOperator` reads `status in "paid"` —
+     * the brackets are what a reader expects, not what the grammar demands.
+     */
+    private fun membershipSet(ruleId: String?, cond: ConditionAst): Set<BigDecimal> {
+        val items = when (val literal = cond.value) {
+            is ListLiteral -> literal.items
+            is NumberLiteral -> listOf(literal)
+            else -> emptyList()
+        }
+        if (items.isEmpty()) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "Operator 'in' expects a list of numbers for decimal field '${cond.field}'"
+            )
+        }
+        return items.mapTo(mutableSetOf()) { item ->
+            val number = (item as? NumberLiteral)?.value
+            runCatching { BigDecimal(number) }.getOrElse {
+                throw CompilationException(
+                    ruleId = ruleId,
+                    details = "Operator 'in' expects numbers for decimal field '${cond.field}'"
+                )
+            }
+        }
     }
 
     /** Keyed by canonical name only — the caller normalises every alias before it gets here. */

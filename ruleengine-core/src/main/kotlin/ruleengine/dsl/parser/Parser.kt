@@ -70,20 +70,19 @@ class Parser(private val input: String) {
         val INFIX_AND_BLOCK_KEYWORDS = setOf("then", "else", NOT_EXISTS, "and", "or", "ignoreCase")
 
         /**
-         * The slice functions, recognised here rather than through the function registry: they never
-         * reach a compiled function call, because the parser turns them into a path segment.
-         */
-        const val TAKE = "take"
-        const val TAKE_LAST = "takeLast"
-
-        /**
-         * The ordering function, recognised here for the same reason as [TAKE]: it becomes a path
-         * segment rather than a compiled function call.
+         * The slice and ordering spellings, taken from [DslFunctions] rather than restated.
+         *
+         * They are absent from both function registries because they never reach a compiled function
+         * call — the parser turns them into a path segment — but the editor still has to highlight and
+         * complete them, so `DslFunctions` is where they are named. Reading them from there is what
+         * keeps the word the parser accepts and the word the editor offers from drifting apart.
          *
          * [ASC] and [DESC] are read positionally inside the parentheses, so they are not reserved
          * words: a schema field named `asc` stays usable everywhere else in a rule.
          */
-        const val SORT_BY = "sortBy"
+        val TAKE: String = DslFunctions.SLICE_NAMES[0]
+        val TAKE_LAST: String = DslFunctions.SLICE_NAMES[1]
+        val SORT_BY: String = DslFunctions.SORT_NAMES.single()
         const val ASC = "asc"
         const val DESC = "desc"
     }
@@ -363,11 +362,15 @@ class Parser(private val input: String) {
      * Decides between a modern symbolic comparison (producing [ComparisonExpressionAst])
      * and a legacy named-operator condition (producing [ConditionAst]).
      *
-     * Produces [ComparisonExpressionAst] only when the expression is non-trivial:
-     * the left side is a function call or arithmetic, or the right side is a function
-     * call or arithmetic. Plain `field op literal` patterns continue to produce
-     * [ConditionAst] for backward compatibility until the compiler supports the full
-     * value expression model.
+     * Produces [ComparisonExpressionAst] when either side is non-trivial — a function call,
+     * arithmetic, a variable or a decorated path — and whenever [requiresModernPath] says the
+     * operator has no legacy spelling at all, which covers every `==` and `!=`.
+     *
+     * A plain `field op literal` otherwise stays a [ConditionAst]: that is the only path enforcing
+     * the field's declared `operators:` list and normalising the literal against it. Symbolic
+     * equality is the deliberate exception — `ValueExpressionValidator.validateDeclaredOperator`
+     * applies the same whitelist on the modern side, and `Compiler.compileComparisonExpression`
+     * the same normalisation.
      */
     private fun parseComparisonOrLegacyCondition(): ExpressionAst {
         val savedPos = pos
@@ -377,7 +380,15 @@ class Parser(private val input: String) {
             if (op != null) {
                 val right = parseValueExpression()
                 if (isModernExpression(left) || isModernExpression(right) || requiresModernPath(op, right)) {
-                    ComparisonExpressionAst(left = left, operator = op, right = right)
+                    // Read after the right operand, exactly where `parseCondition` reads it for the
+                    // named-operator form — so the two spellings of a comparison take the modifier in
+                    // the same place.
+                    ComparisonExpressionAst(
+                        left = left,
+                        operator = op,
+                        right = right,
+                        ignoreCase = parseIgnoreCaseModifier(),
+                    )
                 } else {
                     // Both sides are plain field/literal with a legacy-compatible operator
                     // — keep as legacy ConditionAst
@@ -430,12 +441,12 @@ class Parser(private val input: String) {
             // A legacy ConditionAst names its left side by a plain field string and cannot hold a
             // variable, so any comparison touching one must take the modern path.
             is VariableRefAst -> true
-            // A filter, a slice or a sort makes the path multi-valued, which only the value path can
-            // read. Omitting the sort would send `sortBy(tags, asc) contains "x"` down the legacy
-            // path, where the whole call is read as a field name.
-            is FieldAccessAst -> expr.path.any {
-                it is FilterSegmentAst || it is SliceSegmentAst || it is SortSegmentAst
-            }
+            // Any segment that is not a plain field makes the path multi-valued, which only the value
+            // path can read. Omitting the sort would send `sortBy(tags, asc) contains "x"` down the
+            // legacy path, where the whole call is read as a field name — so this asks what a segment
+            // is *not*, and a new PathSegmentAst is covered the day it is added rather than silently
+            // falling back here.
+            is FieldAccessAst -> expr.path.any { segment -> segment !is FieldSegmentAst }
             is LiteralValueAst -> false
         }
     }

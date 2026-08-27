@@ -1,5 +1,6 @@
 package ui.autocompletion
 
+import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldType
@@ -188,6 +189,51 @@ class AutoCompleteTest {
     fun `between placeholder on a numeric field stays numeric`() {
         val def = FieldDefinition(id = FieldId(value = "amount"), type = FieldType.DECIMAL)
         assertEquals(expected = "0 100", actual = valuePlaceholderForOperator(op = "between", def = def))
+    }
+
+    /**
+     * `in` had the same shape of bug `between` used to: one hardcoded snippet for every type.
+     *
+     * It inserted `["a", "b"]` regardless, so completing `in` on a numeric field produced
+     * `statusCode in ["a", "b"]` — a string list the validator rejects. Now that `in` reaches every
+     * scalar, the snippet has to be typed like the field.
+     */
+    @Test
+    fun `in placeholder on a numeric field is a numeric list`() {
+        val integer = FieldDefinition(id = FieldId(value = "statusCode"), type = FieldType.INTEGER)
+        assertEquals(expected = "[0, 100]", actual = valuePlaceholderForOperator(op = "in", def = integer))
+
+        val decimal = FieldDefinition(id = FieldId(value = "amount"), type = FieldType.DECIMAL)
+        assertEquals(expected = "[0.0, 1.0]", actual = valuePlaceholderForOperator(op = "in", def = decimal))
+    }
+
+    @Test
+    fun `in placeholder on a date field is a list of quoted dates in the declared format`() {
+        val def = FieldDefinition(id = FieldId(value = "dueDate"), type = FieldType.DATE, format = "dd.MM.yyyy")
+        assertEquals(
+            expected = "[\"31.01.2024\", \"31.01.2024\"]",
+            actual = valuePlaceholderForOperator(op = "in", def = def),
+        )
+    }
+
+    @Test
+    fun `in placeholder on a text field stays a text list`() {
+        val def = FieldDefinition(id = FieldId(value = "purpose"), type = FieldType.TEXT)
+        assertEquals(
+            expected = "[\"a\", \"b\"]",
+            actual = valuePlaceholderForOperator(op = "in", def = def),
+        )
+    }
+
+    @Test
+    fun `in is offered on a numeric field`() {
+        assertTrue(
+            actual = OperatorNames.IN in defaultOperatorsForType(fieldType = FieldType.INTEGER),
+            message = "the engine allows membership on a number, so the editor must offer it",
+        )
+        assertTrue(
+            actual = OperatorNames.IN in defaultOperatorsForType(fieldType = FieldType.DATE),
+        )
     }
 
     @Test
