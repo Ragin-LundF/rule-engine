@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- **Every editor area now has the same top bar, and the application bar fits a small window.**
+  The four areas had four different headers: the Rules area put a "Rule Editor" title over a bordered,
+  icon-led mode toggle with a *second* row of buttons underneath; the Schema and Actions areas put a
+  full-width linked-file bar over a filled-pill tab strip and offered no actions at all; the Manifest
+  area had only the strip. They also named the same two modes three different ways — Builder / Code,
+  Visual / YAML, Builder / YAML.
+
+  There is now one `AreaHeader` with four slots in one order — **title · the file it is bound to ·
+  Visual / Code tabs · actions** — and the panel underneath is the only thing that differs between
+  areas. Specifically:
+  - **One vocabulary.** The model-editing tab is **Visual** and the text tab is **Code**, everywhere.
+    "Code" rather than "YAML" because the Rules area's text is the rule DSL, and a word that works for
+    three areas out of four is what produced the drift in the first place. The enum constants are
+    unchanged; only the display names moved, onto the enums themselves.
+  - **A binding chip replaces three controls.** The Rules area's unlabelled `☰` file menu, the Schema
+    and Actions areas' full-width `LinkedFileHeader`, and the Manifest area's nothing at all are one
+    chip in one position: `FILE fraud-detection.rule ▾`, with `SHARED` / `NOT FOUND` as badges and
+    link / change / unlink in its menu. Schema and Actions get a row of vertical space back.
+  - **Actions are ranked instead of squeezed.** The primary verb keeps its label at every width, the
+    secondary ones fall back to their glyphs while keeping their accessible names, and the rare ones —
+    the two rule-overview export formats, the per-area *Save … As…* — live in a `⋯` menu. The row this
+    replaces shared one line with the fixed-width tabs, so every shortfall came out of the buttons and
+    the last label wrapped one letter per line.
+  - **The Outline / Board switch moved off the canvas** into the header beside the tabs, styled as a
+    subordinate pair: every view switch in the app is now in one strip, and `subordinate` styling is
+    what keeps it from reading as a sixth mode tab. The diagram-view picker sits in the same slot in
+    Diagram mode, for the same reason.
+  - **The mode is workbench state.** `RuleWorkbenchState` already had `schemaMode`, `actionMode` and
+    `manifestMode`, but nothing read them: the real mode lived in `YamlModelSync` for two areas and in
+    a `remember` for the third, while the view model held three decoy fields. Now all four modes are
+    dispatched and read from one place, and `YamlModelSync` has no mode at all.
+  - **The application bar collapses instead of overflowing.** Eight text buttons in a fixed row — New /
+    Open / Save / Save As / Save Schema As / Save Actions As / Inspector / theme — became a `Project`
+    menu and a `Save` split button whose caret holds *Save Project As…* and the two shared-file
+    exports. Save is the one accent-coloured control in the bar, and an `UNSAVED` badge carries what
+    the `•` on its label used to. Below 1300 px the wordmark goes, below 1100 px the badge and the
+    button labels go; nothing is dropped and nothing overflows.
+  - **The bars are labelled in words, not glyphs.** At 12 sp every download / open / expand arrow in
+    the available fonts (`⤓ ↧ ⇩ ⤒ ⤢`) renders as a hairline, so the application bar now reads
+    *Project ▼ · Save ▼ · Inspector · ☀*, and a header action with no legible glyph moves into the `⋯`
+    menu when the bar is short instead of shrinking to a symbol nobody can read. Menu carets are `▼`
+    rather than the smaller `▾`, which was a smudge at this size — and the caret is the only thing
+    saying a control opens. The pictograms that stayed are the ones that survive the size: the theme
+    toggle's sun and moon, the tab marks (`⊞ { } ⬡ ▷ ▦`), `✓` and `⋯`.
+  - **A selected tab is legible in both themes.** The mode tabs drew their selected label in the theme's
+    primary text colour on a fixed accent fill, which in light mode was near-black on blue.
+
+  `ViewModeToggle`, `CanvasSwitch`, `LinkedFileHeader`, `ExportOverviewButton` and the three
+  `*ModeTabs` wrappers are gone; four copies of the dropdown-menu styling became one `HeaderMenu`.
+
 ### Added
 - **Every editor now shows the file it is about to write, under the canvas, without leaving the canvas.**
   A resizable, read-only, syntax-highlighted preview dock sits beneath the Builder's two canvases and the

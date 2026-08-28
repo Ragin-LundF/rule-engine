@@ -15,9 +15,9 @@ import ui.workbench.model.mode.SchemaMode
  */
 @Composable
 fun SchemaAreaScreen(
-    sync: YamlModelSync<SchemaEditorState, SchemaMode>,
-    toYaml: (SchemaEditorState) -> String,
-    onSchemaYamlChange: (String) -> Unit,
+    sync: YamlModelSync<SchemaEditorState>,
+    mode: SchemaMode,
+
     modifier: Modifier = Modifier,
     onInspectField: ((path: String) -> Unit)? = null,
     selectedFieldPath: String? = null,
@@ -38,8 +38,7 @@ fun SchemaAreaScreen(
 ) {
     SchemaEditorPanel(
         sync = sync,
-        toYaml = toYaml,
-        onYamlChange = onSchemaYamlChange,
+        mode = mode,
         modifier = modifier,
         onInspectField = onInspectField,
         selectedFieldPath = selectedFieldPath,

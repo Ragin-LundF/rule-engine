@@ -73,13 +73,30 @@ for:
 | **Schema editor** | Read the whole input contract as an outline — one line per field, with its type, its normalizer chain in order, its operators, and how many rules read it — then edit whatever you select in the Inspector. Nested `collection` / `object` members sit on a bracket rail. Actions read the same way, as the call a rule makes: `audit(string, integer)` |
 | **Manifest editor** | The project on one screen: each entry's files and scope on a rail, its rule files numbered in run order, each carrying what it publishes (`↑$tier`) and what it reads (`↓$tier`). A read no earlier file publishes is called out where it happens — the rule parses, runs and silently never fires, and only the file order decides it. The schema and actions paths are links into those areas; reordering and adding happen in the Inspector, because the order is the run order |
 | **Preview dock** | Under every editor: the file it is about to write, read-only and syntax-highlighted, with whatever you have selected marked inside it — the open rule and the condition row you clicked, or the selected field, action or manifest entry. Beside it, a **Checks** tab carrying the problem count on the tab, so you see it before opening — click a check to select the declaration it is about — and a **Usages** tab holding the flow diagram, so seeing which rules read a field no longer replaces the field. Drag the top edge to resize, double-click to reset; the height is remembered. Open by default in the builder, closed elsewhere |
-| **Rule builder** | Two canvases over one rule, switched on the canvas itself. The **outline** reads the whole rule top to bottom, one line per condition, with AND/OR on the gutter and groups as bracket rails. The **board** shows every rule in evaluation order along the top, then this rule as draggable condition rails and three outcome lanes side by side. Both edit through the same right-hand Inspector, and the selection survives the switch — and both share the same preview dock below |
+| **Rule builder** | Two canvases over one rule, switched in the area header beside the mode tabs. The **outline** reads the whole rule top to bottom, one line per condition, with AND/OR on the gutter and groups as bracket rails. The **board** shows every rule in evaluation order along the top, then this rule as draggable condition rails and three outcome lanes side by side. Both edit through the same right-hand Inspector, and the selection survives the switch — and both share the same preview dock below |
 | **Formula bar** | The selected condition as editable text. Type `count(invoices) > 2` and the row rebuilds; the row's own DSL appears there when you click it. Validated as you type, applied on ⏎, and nothing is applied unless it parses |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
-| **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce, from any branch) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
+| **Diagram view** | Four diagrams over the same rules, picked in the area header: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce, from any branch) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
-| **Inspector** | Describe and edit what is selected, in the right-hand panel — drag its left edge to make it wider when a deep expression needs the room: the rule you are editing — its status, condition and action counts per branch, and the variables it publishes — or a schema field or action, with how many rules use it. A manifest path can be typed or picked with **Choose…**, which writes it relative to the manifest — greyed out with the reason until the project has been saved, since there is nothing to be relative to before then. Opened with **ⓘ Inspector** in the top bar |
+| **Inspector** | Describe and edit what is selected, in the right-hand panel — drag its left edge to make it wider when a deep expression needs the room: the rule you are editing — its status, condition and action counts per branch, and the variables it publishes — or a schema field or action, with how many rules use it. A manifest path can be typed or picked with **Choose…**, which writes it relative to the manifest — greyed out with the reason until the project has been saved, since there is nothing to be relative to before then. Opened with **ⓘ Inspector** in the application bar |
 | **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched, else, not exists, partial, no match, or not evaluated — whose condition trace expands on click |
+
+### The two bars
+
+Every area is topped by the **same header**, in the same order: what this area is, the **file** it is
+bound to, the **Visual / Code** tabs, and the actions — the primary verb keeps its label at any width,
+the secondary ones fall back to their glyphs, and the rare ones live in the `⋯` menu. Rules adds
+*Diagram*, *Test* and *Table* to the same strip, and its Outline / Board switch sits beside the tabs as
+a subordinate pair, because it changes how one rule is drawn rather than what the panel is.
+
+Above them all, the **application bar** answers where you are on the left — logo, the manifest entry,
+and an `UNSAVED` marker when there is work not on disk — and what you can do on the right: a
+`Project` menu (New, Open), a `Save` split button whose caret holds *Save Project As…* and the two
+shared-file exports, then the Inspector and the ☀ / ☾ theme toggle. Its controls are **words** — at
+this text size every download, open and expand arrow the fonts offer is a hairline, so *Project ▼* and
+*Save* say what they are; the sun and moon stay, because everyone reads those. As the window narrows
+the bar gives up its identity rather than its controls: the wordmark first, then the `WORKBENCH` badge,
+then the entry chip's key. Nothing is dropped, and nothing overflows.
 
 ### Advanced conditions in the builder
 

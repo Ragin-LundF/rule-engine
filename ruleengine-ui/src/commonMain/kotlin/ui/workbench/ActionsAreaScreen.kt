@@ -13,9 +13,9 @@ import ui.workbench.model.mode.ActionMode
  */
 @Composable
 fun ActionsAreaScreen(
-    sync: YamlModelSync<ActionEditorState, ActionMode>,
-    toYaml: (ActionEditorState) -> String,
-    onActionsYamlChange: (String) -> Unit,
+    sync: YamlModelSync<ActionEditorState>,
+    mode: ActionMode,
+
     modifier: Modifier = Modifier,
     onInspectAction: ((name: String) -> Unit)? = null,
     selectedActionName: String? = null,
@@ -36,8 +36,7 @@ fun ActionsAreaScreen(
 ) {
     ActionEditorPanel(
         sync = sync,
-        toYaml = toYaml,
-        onYamlChange = onActionsYamlChange,
+        mode = mode,
         modifier = modifier,
         onInspectAction = onInspectAction,
         selectedActionName = selectedActionName,

@@ -3,7 +3,6 @@ package ui.builder.board
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -40,7 +39,6 @@ import ui.AccentRed
 import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
-import ui.PrimaryGlow
 import ui.TextPrimary
 import ui.TextSecondary
 import ui.builder.BuilderToRuleDsl
@@ -276,46 +274,6 @@ private fun BoardLockedNote(reason: String) {
         )
         Text(text = reason, style = MaterialTheme.typography.body2, color = TextSecondary)
     }
-}
-
-/**
- * The switch between the two canvases.
- *
- * On the canvas, not in the mode tabs. The tabs change what the centre panel *is* — a rule as text, as
- * a diagram, as a table — while these two are the same rule with the same selection and the same
- * Inspector, so the switch belongs next to the thing it switches.
- */
-@Suppress("FunctionNaming")
-@Composable
-fun CanvasSwitch(
-    boardActive: Boolean,
-    onChange: (boardActive: Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .clip(shape = RoundedCornerShape(size = 6.dp))
-            .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 6.dp)),
-    ) {
-        CanvasSwitchTab(label = "Outline", active = !boardActive, onClick = { onChange(false) })
-        CanvasSwitchTab(label = "Board", active = boardActive, onClick = { onChange(true) })
-    }
-}
-
-@Suppress("FunctionNaming")
-@Composable
-private fun CanvasSwitchTab(label: String, active: Boolean, onClick: () -> Unit) {
-    Text(
-        text = label,
-        style = MaterialTheme.typography.caption.copy(
-            fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-        ),
-        color = if (active) PrimaryBlue else TextSecondary,
-        modifier = Modifier
-            .background(color = if (active) PrimaryGlow else androidx.compose.ui.graphics.Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    )
 }
 
 /** The floor the rule area keeps however short the window is — see the note on [BoardCanvas]. */

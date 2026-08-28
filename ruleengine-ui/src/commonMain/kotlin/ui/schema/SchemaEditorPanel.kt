@@ -46,9 +46,11 @@ fun SchemaEditorPanel(
      * It used to be `remember`ed here, which put it out of reach of the Inspector — and the Inspector is
      * now the editing surface. One object, read and written by both.
      */
-    sync: YamlModelSync<SchemaEditorState, SchemaMode>,
-    toYaml: (SchemaEditorState) -> String,
-    onYamlChange: (String) -> Unit,
+    sync: YamlModelSync<SchemaEditorState>,
+    /** Which tab is open. Workbench state, held by the view model; the tabs themselves are in the
+     *  area header, which is the same header every other area has. */
+    mode: SchemaMode,
+
     modifier: Modifier = Modifier,
     /** Shows one field in the Inspector. The whole row is the target now, not a 36 dp button. */
     onInspectField: ((path: String) -> Unit)? = null,
@@ -75,23 +77,7 @@ fun SchemaEditorPanel(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        SchemaModeTabs(
-            current = sync.mode,
-            onSelect = { newMode ->
-                // Either direction across the text tab republishes, so the tab that is arriving shows
-                // what the schema is now rather than what it was when it was last open.
-                if (newMode != sync.mode) {
-                    sync.publish(
-                        toYaml = toYaml,
-                        hasIssues = { state -> state.hasValidationIssues() },
-                        onYamlChange = onYamlChange,
-                    )
-                }
-                sync.mode = newMode
-            },
-        )
-
-        when (sync.mode) {
+        when (mode) {
             SchemaMode.VISUAL -> SchemaCanvas(
                 state = sync.state,
                 onStateChange = { edited -> sync.state = edited },

@@ -1,15 +1,17 @@
 package ui.workbench.areas
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.dp
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.schema.FieldSchemaLoader
+import ui.components.ModeTabs
+import ui.components.header.AreaHeader
+import ui.components.header.model.ActionEmphasis
+import ui.components.header.model.BarDensity
+import ui.components.header.model.HeaderAction
 import ui.diagrams.FieldFlowDiagram
 import ui.diagrams.render.DiagramSurface
 import ui.dock.DockController
@@ -17,13 +19,16 @@ import ui.dock.model.DockSurface
 import ui.dock.schemaFieldRange
 import ui.editor.rules.RuleEditorState
 import ui.project.ProjectWorkspace
-import ui.project.dialog.LinkedFileHeader
 import ui.project.model.ProjectFileKind
 import ui.schema.FieldSchemaYamlBridge
 import ui.schema.IssueLevel
 import ui.schema.SchemaIssue
 import ui.schema.SchemaIssues
+import ui.schema.hasValidationIssues
 import ui.workbench.SchemaAreaScreen
+import ui.workbench.model.mode.SchemaMode
+import ui.workbench.model.mode.displayName
+import ui.workbench.model.mode.icon
 import ui.yaml.YamlEditor
 import ui.yaml.annotateYaml
 import ui.yaml.buildYamlCompletions
@@ -40,6 +45,9 @@ import ui.yaml.model.YamlEditorType
 fun SchemaAreaContent(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
+    /** Which tab is open, and where a click on the other one goes: the workbench view model. */
+    mode: SchemaMode,
+    onModeChange: (SchemaMode) -> Unit,
     expandedDiagramRules: List<RuleAst>,
     dock: DockController,
     /** The field the Inspector is on, whose lines the dock highlights and whose row is marked. */
@@ -75,6 +83,20 @@ fun SchemaAreaContent(
         SchemaAreaBody(
             state = state,
             workspace = workspace,
+            mode = mode,
+            // Leaving the visual editor republishes, so the text tab shows what the schema is now
+            // rather than what it was when it was last open. It lived in the tab strip's click
+            // handler until the strip moved into the shared header.
+            onSelectMode = { newMode ->
+                if (newMode != mode) {
+                    state.schemaEditor.publish(
+                        toYaml = { editorState -> FieldSchemaYamlBridge.toYaml(state = editorState) },
+                        hasIssues = { editorState -> editorState.hasValidationIssues() },
+                        onYamlChange = { newYaml -> state.applySchemaYaml(yaml = newYaml) },
+                    )
+                }
+                onModeChange(newMode)
+            },
             onInspectField = onInspectField,
             selectedFieldId = selectedFieldId,
             readBy = readBy,
@@ -89,26 +111,23 @@ fun SchemaAreaContent(
 private fun SchemaAreaBody(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
+    mode: SchemaMode,
+    onSelectMode: (SchemaMode) -> Unit,
     onInspectField: ((path: String) -> Unit)?,
     selectedFieldId: String?,
     readBy: Map<String, Int>,
     onMessage: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        LinkedFileHeader(
-            label = "SCHEMA FILE",
-            linkedPath = workspace.session.value?.schemaLink,
-            isMissing = workspace.session.value?.missing(kind = ProjectFileKind.SCHEMA) != null,
-            onLink = workspace::linkSchema,
-            onUnlink = { workspace.unlink(kind = ProjectFileKind.SCHEMA) },
+        SchemaAreaHeader(
+            state = state,
+            workspace = workspace,
+            mode = mode,
+            onSelectMode = onSelectMode,
         )
-        Spacer(modifier = Modifier.height(height = 10.dp))
         SchemaAreaScreen(
             sync = state.schemaEditor,
-            toYaml = { editorState ->
-                FieldSchemaYamlBridge.toYaml(state = editorState)
-            },
-            onSchemaYamlChange = { newYaml -> state.applySchemaYaml(yaml = newYaml) },
+            mode = mode,
             modifier = Modifier.fillMaxSize(),
             onInspectField = onInspectField,
             selectedFieldPath = selectedFieldId,
@@ -136,6 +155,55 @@ private fun SchemaAreaBody(
             },
         )
     }
+}
+
+/** The area's own export, next to the file it exports — the project's copy is in the Save menu. */
+private const val ACTION_EXPORT = "export"
+
+/** The area header: what this is, which file it edits, which tab is open, and what can be done to it. */
+@Suppress("FunctionNaming")
+@Composable
+private fun SchemaAreaHeader(
+    state: RuleEditorState,
+    workspace: ProjectWorkspace,
+    mode: SchemaMode,
+    onSelectMode: (SchemaMode) -> Unit,
+) {
+    val session = workspace.session.value
+    AreaHeader(
+        title = "Schema",
+        meta = "${state.schemaEditor.state.fields.size} fields",
+        binding = linkedFileBinding(
+            linkedPath = session?.schemaLink,
+            isMissing = session?.missing(kind = ProjectFileKind.SCHEMA) != null,
+    ),
+        onBindingItem = { id ->
+            when (id) {
+                BINDING_LINK -> workspace.linkSchema()
+                BINDING_UNLINK -> workspace.unlink(kind = ProjectFileKind.SCHEMA)
+            }
+        },
+        tabs = { density ->
+            ModeTabs(
+                modes = SchemaMode.entries,
+                current = mode,
+                label = { tabMode -> tabMode.displayName },
+                onSelect = onSelectMode,
+                icon = { tabMode -> tabMode.icon },
+                showLabels = density != BarDensity.MINIMAL,
+            )
+        },
+        actions = listOf(
+            HeaderAction(
+                id = ACTION_EXPORT,
+                label = "Save Schema As…",
+                emphasis = ActionEmphasis.OVERFLOW,
+            ),
+    ),
+        onAction = { id ->
+            if (id == ACTION_EXPORT) workspace.exportShared(kind = ProjectFileKind.SCHEMA)
+        },
+    )
 }
 
 /**

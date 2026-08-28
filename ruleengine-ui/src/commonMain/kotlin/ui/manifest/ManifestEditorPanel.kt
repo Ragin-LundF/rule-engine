@@ -47,7 +47,8 @@ fun ManifestEditorPanel(
     fromYaml: (String) -> ManifestEditorState,
     toYaml: (ManifestEditorState) -> String,
     fieldTypes: Map<String, String>? = null,
-    initialMode: ManifestMode = ManifestMode.BUILDER,
+    /** Which tab is open — see [ui.schema.SchemaEditorPanel]. */
+    mode: ManifestMode = ManifestMode.BUILDER,
     /** True while the Inspector is on the manifest itself, which the canvas marks. */
     manifestSelected: Boolean = false,
     onSelectManifest: () -> Unit = {},
@@ -79,9 +80,17 @@ fun ManifestEditorPanel(
         )
     },
 ) {
-    var mode by remember { mutableStateOf(initialMode) }
     var yamlText by remember { mutableStateOf(toYaml(state)) }
     var yamlError by remember { mutableStateOf<String?>(null) }
+
+    // Arriving on the text tab shows what the manifest is now, not what it was the last time the tab
+    // was open. Keyed on the mode rather than done in the tab's click handler, because the tabs are in
+    // the area header now and the mode can also change from somewhere else entirely.
+    LaunchedEffect(key1 = mode) {
+        if (mode != ManifestMode.YAML) return@LaunchedEffect
+        yamlText = runCatching { toYaml(state) }.getOrNull() ?: yamlText
+        yamlError = null
+    }
 
     // Typing YAML parses on a pause rather than per keystroke: half-finished YAML is unparseable
     // almost all of the time, and reporting that on every character makes the tab unusable.
@@ -101,19 +110,6 @@ fun ManifestEditorPanel(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ManifestModeTabs(
-            current = mode,
-            onSelect = { newMode ->
-                // Entering the YAML tab shows what the manifest currently is, not what it was the
-                // last time the tab was open.
-                if (newMode == ManifestMode.YAML) {
-                    yamlText = runCatching { toYaml(state) }.getOrNull() ?: yamlText
-                    yamlError = null
-                }
-                mode = newMode
-            },
-        )
-
         when (mode) {
             ManifestMode.BUILDER -> BuilderModeBody(
                 state = state,

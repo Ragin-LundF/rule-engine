@@ -4,7 +4,7 @@ package ui.editor.rules.model
 enum class ViewMode {
     BUILDER,
 
-    /** The board canvas. Has no tab in `ViewModeToggle` — see `RuleMode.BOARD`. */
+    /** The board canvas. Has no tab of its own; it is the Visual tab drawn the other way — see `RuleMode.BOARD`. */
     BOARD,
     CODE,
     DIAGRAM,

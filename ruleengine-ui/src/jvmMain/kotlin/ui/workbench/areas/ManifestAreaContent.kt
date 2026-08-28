@@ -1,11 +1,16 @@
 package ui.workbench.areas
 
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import ui.builder.board.ribbon.RibbonModel
 import ui.builder.model.BuilderRule
+import ui.components.ModeTabs
+import ui.components.header.AreaHeader
+import ui.components.header.model.BarDensity
+import ui.components.header.model.BindingSpec
 import ui.dock.DockController
 import ui.dock.manifestEntryRange
 import ui.dock.model.DockSurface
@@ -21,6 +26,9 @@ import ui.schema.IssueLevel
 import ui.schema.SchemaIssue
 import ui.workbench.ManifestAreaScreen
 import ui.workbench.model.catalog.RuleTreeFile
+import ui.workbench.model.mode.ManifestMode
+import ui.workbench.model.mode.displayName
+import ui.workbench.model.mode.icon
 import ui.yaml.YamlEditor
 import ui.yaml.annotateYaml
 import ui.yaml.buildYamlCompletions
@@ -38,6 +46,9 @@ fun ManifestAreaContent(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
     dock: DockController,
+    /** Which tab is open, and where a click on the other one goes: the workbench view model. */
+    mode: ManifestMode,
+    onModeChange: (ManifestMode) -> Unit,
     /** True while the Inspector is on the manifest itself. */
     manifestSelected: Boolean = false,
     onSelectManifest: () -> Unit = {},
@@ -93,6 +104,8 @@ fun ManifestAreaContent(
         ManifestAreaBody(
             state = state,
             workspace = workspace,
+            mode = mode,
+            onModeChange = onModeChange,
             editorState = editorState,
             activeEntryId = activeEntryId,
             manifestSelected = manifestSelected,
@@ -110,6 +123,8 @@ fun ManifestAreaContent(
 private fun ManifestAreaBody(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
+    mode: ManifestMode,
+    onModeChange: (ManifestMode) -> Unit,
     editorState: ManifestEditorState,
     activeEntryId: String?,
     manifestSelected: Boolean,
@@ -120,8 +135,28 @@ private fun ManifestAreaBody(
 ) {
     val loaded = loadedPaths(state = state, editorState = editorState)
 
+    Column(modifier = Modifier.fillMaxSize()) {
+    AreaHeader(
+        title = "Manifest",
+        meta = "${editorState.entries.size} entries",
+        // No menu: the manifest is the project's own file, so there is nothing to link, change or
+        // unlink. The chip is here anyway because the slot is the same in every area, and an area
+        // that answers "which file am I editing" with nothing at all is the gap this closes.
+        binding = BindingSpec(label = "File", value = "manifest.yaml"),
+        tabs = { density ->
+            ModeTabs(
+                modes = ManifestMode.entries,
+                current = mode,
+                label = { tabMode -> tabMode.displayName },
+                onSelect = onModeChange,
+                icon = { tabMode -> tabMode.icon },
+                showLabels = density != BarDensity.MINIMAL,
+            )
+        },
+    )
     ManifestAreaScreen(
         state = editorState,
+        mode = mode,
         onStateChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
         activeEntryId = activeEntryId,
         onSelectEntry = { entryId -> workspace.selectEntry(entryId = entryId) },
@@ -158,6 +193,7 @@ private fun ManifestAreaBody(
             )
         },
     )
+    }
 }
 
 /**

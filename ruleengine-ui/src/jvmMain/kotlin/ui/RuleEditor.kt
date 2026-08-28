@@ -317,7 +317,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     SyncModelAndYaml(
         sync = state.schemaEditor,
         yaml = state.schemaText.value,
-        isTextMode = { mode -> mode == SchemaMode.YAML },
+        textMode = workbenchState.schemaMode == SchemaMode.YAML,
         fromYaml = { yaml -> FieldSchemaYamlBridge.fromYaml(yaml = yaml) },
         toYaml = { editorState -> FieldSchemaYamlBridge.toYaml(state = editorState) },
         hasIssues = { editorState -> editorState.hasValidationIssues() },
@@ -328,7 +328,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     SyncModelAndYaml(
         sync = state.actionEditor,
         yaml = state.actionSchemaText.value,
-        isTextMode = { mode -> mode == ActionMode.YAML },
+        textMode = workbenchState.actionMode == ActionMode.YAML,
         fromYaml = { yaml -> ActionSchemaYamlBridge.fromYaml(yaml = yaml) },
         toYaml = { editorState -> ActionSchemaYamlBridge.toYaml(state = editorState) },
         hasIssues = { editorState -> editorState.hasValidationIssues() },
@@ -422,6 +422,10 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.SCHEMA -> SchemaAreaContent(
                     state = state,
+                    mode = workbenchState.schemaMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectSchemaMode(mode = mode))
+                    },
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
                     dock = dock,
@@ -441,6 +445,10 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.ACTIONS -> ActionsAreaContent(
                     state = state,
+                    mode = workbenchState.actionMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectActionMode(mode = mode))
+                    },
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
                     dock = dock,
@@ -458,6 +466,10 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.MANIFEST -> ManifestAreaContent(
                     state = state,
+                    mode = workbenchState.manifestMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectManifestMode(mode = mode))
+                    },
                     workspace = workspace,
                     dock = dock,
                     // What the board reads, for the question only the manifest can answer: whether the
@@ -558,7 +570,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
-    // Opened via the "⤢ Expand" button in diagram mode.
+    // Opened via the "Expand" action in diagram mode.
     // Shares the same diagramRules state so it updates live while editing.
     if (state.showExpandedDiagram.value) {
         ExpandedDiagramWindow(state = state, rules = expandedDiagramRules)

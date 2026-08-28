@@ -30,8 +30,6 @@ import ui.editor.rules.model.ViewMode
 import ui.editor.yaml.YamlModelSync
 import ui.schema.model.SchemaEditorState
 import ui.workbench.RightPanelPersistence
-import ui.workbench.model.mode.ActionMode
-import ui.workbench.model.mode.SchemaMode
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -201,16 +199,14 @@ class RuleEditorState(
      * canvas and the Inspector writes, and both have to be looking at one object. `RuleEditor` keeps the
      * three sync effects composed, so an Inspector edit made from another area still reaches the YAML.
      */
-    val schemaEditor: YamlModelSync<SchemaEditorState, SchemaMode> = YamlModelSync(
+    val schemaEditor: YamlModelSync<SchemaEditorState> = YamlModelSync(
         yaml = "",
-        mode = SchemaMode.VISUAL,
         state = SchemaEditorState.Empty,
     )
 
     /** The Actions area's model and text, on the same terms as [schemaEditor]. */
-    val actionEditor: YamlModelSync<ActionEditorState, ActionMode> = YamlModelSync(
+    val actionEditor: YamlModelSync<ActionEditorState> = YamlModelSync(
         yaml = "",
-        mode = ActionMode.VISUAL,
         state = ActionEditorState.Empty,
     )
 

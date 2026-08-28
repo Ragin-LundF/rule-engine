@@ -38,9 +38,10 @@ import ui.workbench.model.mode.ActionMode
 @Composable
 fun ActionEditorPanel(
     /** The model and the text, owned by the caller — see [ui.schema.SchemaEditorPanel]. */
-    sync: YamlModelSync<ActionEditorState, ActionMode>,
-    toYaml: (ActionEditorState) -> String,
-    onYamlChange: (String) -> Unit,
+    sync: YamlModelSync<ActionEditorState>,
+    /** Which tab is open — see [ui.schema.SchemaEditorPanel]. */
+    mode: ActionMode,
+
     modifier: Modifier = Modifier,
     /** Shows one action in the Inspector. The whole row is the target now. */
     onInspectAction: ((name: String) -> Unit)? = null,
@@ -66,21 +67,7 @@ fun ActionEditorPanel(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ActionModeTabs(
-            current = sync.mode,
-            onSelect = { newMode ->
-                if (newMode != sync.mode) {
-                    sync.publish(
-                        toYaml = toYaml,
-                        hasIssues = { state -> state.hasValidationIssues() },
-                        onYamlChange = onYamlChange,
-                    )
-                }
-                sync.mode = newMode
-            },
-        )
-
-        when (sync.mode) {
+        when (mode) {
             ActionMode.VISUAL -> ActionsCanvas(
                 state = sync.state,
                 onStateChange = { edited -> sync.state = edited },

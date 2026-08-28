@@ -1,17 +1,20 @@
 package ui.workbench.areas
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.unit.dp
 import ruleengine.dsl.ast.RuleAst
 import ruleengine.schema.ActionSchemaLoader
 import ui.actions.ActionIssues
 import ui.actions.ActionSchemaYamlBridge
+import ui.actions.hasValidationIssues
+import ui.components.ModeTabs
+import ui.components.header.AreaHeader
+import ui.components.header.model.ActionEmphasis
+import ui.components.header.model.BarDensity
+import ui.components.header.model.HeaderAction
 import ui.diagrams.OutcomeMapDiagram
 import ui.diagrams.render.DiagramSurface
 import ui.dock.DockController
@@ -19,11 +22,13 @@ import ui.dock.actionRange
 import ui.dock.model.DockSurface
 import ui.editor.rules.RuleEditorState
 import ui.project.ProjectWorkspace
-import ui.project.dialog.LinkedFileHeader
 import ui.project.model.ProjectFileKind
 import ui.schema.IssueLevel
 import ui.schema.SchemaIssue
 import ui.workbench.ActionsAreaScreen
+import ui.workbench.model.mode.ActionMode
+import ui.workbench.model.mode.displayName
+import ui.workbench.model.mode.icon
 import ui.yaml.YamlEditor
 import ui.yaml.annotateYaml
 import ui.yaml.buildYamlCompletions
@@ -40,6 +45,9 @@ import ui.yaml.model.YamlEditorType
 fun ActionsAreaContent(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
+    /** Which tab is open, and where a click on the other one goes: the workbench view model. */
+    mode: ActionMode,
+    onModeChange: (ActionMode) -> Unit,
     expandedDiagramRules: List<RuleAst>,
     dock: DockController,
     /** The action the Inspector is on, whose lines the dock highlights and whose row is marked. */
@@ -72,6 +80,18 @@ fun ActionsAreaContent(
         ActionsAreaBody(
             state = state,
             workspace = workspace,
+            mode = mode,
+            // Publish before leaving the visual editor — the mirror of the Schema area.
+            onSelectMode = { newMode ->
+                if (newMode != mode) {
+                    state.actionEditor.publish(
+                        toYaml = { editorState -> ActionSchemaYamlBridge.toYaml(state = editorState) },
+                        hasIssues = { editorState -> editorState.hasValidationIssues() },
+                        onYamlChange = { newYaml -> state.applyActionsYaml(yaml = newYaml) },
+                    )
+                }
+                onModeChange(newMode)
+            },
             onInspectAction = onInspectAction,
             selectedActionName = selectedActionName,
             emittedBy = emittedBy,
@@ -86,26 +106,23 @@ fun ActionsAreaContent(
 private fun ActionsAreaBody(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
+    mode: ActionMode,
+    onSelectMode: (ActionMode) -> Unit,
     onInspectAction: ((name: String) -> Unit)?,
     selectedActionName: String?,
     emittedBy: Map<String, Int>,
     onMessage: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
-        LinkedFileHeader(
-            label = "ACTIONS FILE",
-            linkedPath = workspace.session.value?.actionsLink,
-            isMissing = workspace.session.value?.missing(kind = ProjectFileKind.ACTIONS) != null,
-            onLink = workspace::linkActions,
-            onUnlink = { workspace.unlink(kind = ProjectFileKind.ACTIONS) },
+        ActionsAreaHeader(
+            state = state,
+            workspace = workspace,
+            mode = mode,
+            onSelectMode = onSelectMode,
         )
-        Spacer(modifier = Modifier.height(height = 10.dp))
         ActionsAreaScreen(
             sync = state.actionEditor,
-            toYaml = { editorState ->
-                ActionSchemaYamlBridge.toYaml(state = editorState)
-            },
-            onActionsYamlChange = { newYaml -> state.applyActionsYaml(yaml = newYaml) },
+            mode = mode,
             modifier = Modifier.fillMaxSize(),
             onInspectAction = onInspectAction,
             selectedActionName = selectedActionName,
@@ -133,6 +150,55 @@ private fun ActionsAreaBody(
             },
         )
     }
+}
+
+/** The area's own export, next to the file it exports — the project's copy is in the Save menu. */
+private const val ACTION_EXPORT = "export"
+
+/** The area header — the mirror of the Schema area's. */
+@Suppress("FunctionNaming")
+@Composable
+private fun ActionsAreaHeader(
+    state: RuleEditorState,
+    workspace: ProjectWorkspace,
+    mode: ActionMode,
+    onSelectMode: (ActionMode) -> Unit,
+) {
+    val session = workspace.session.value
+    AreaHeader(
+        title = "Actions",
+        meta = "${state.actionEditor.state.actions.size} actions",
+        binding = linkedFileBinding(
+            linkedPath = session?.actionsLink,
+            isMissing = session?.missing(kind = ProjectFileKind.ACTIONS) != null,
+    ),
+        onBindingItem = { id ->
+            when (id) {
+                BINDING_LINK -> workspace.linkActions()
+                BINDING_UNLINK -> workspace.unlink(kind = ProjectFileKind.ACTIONS)
+            }
+        },
+        tabs = { density ->
+            ModeTabs(
+                modes = ActionMode.entries,
+                current = mode,
+                label = { tabMode -> tabMode.displayName },
+                onSelect = onSelectMode,
+                icon = { tabMode -> tabMode.icon },
+                showLabels = density != BarDensity.MINIMAL,
+            )
+        },
+        actions = listOf(
+            HeaderAction(
+                id = ACTION_EXPORT,
+                label = "Save Actions As…",
+                emphasis = ActionEmphasis.OVERFLOW,
+            ),
+    ),
+        onAction = { id ->
+            if (id == ACTION_EXPORT) workspace.exportShared(kind = ProjectFileKind.ACTIONS)
+        },
+    )
 }
 
 /**

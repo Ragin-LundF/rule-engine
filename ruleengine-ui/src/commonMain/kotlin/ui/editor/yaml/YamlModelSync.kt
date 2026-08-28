@@ -18,13 +18,17 @@ import kotlinx.coroutines.delay
  * made it unreachable from the Inspector — and the Inspector is now the editing surface. Both read this
  * one object, so they cannot disagree about what the schema currently is.
  *
+ * **The mode is not here.** Which tab an area is on is workbench state, held by `RuleWorkbenchState` and
+ * changed by dispatching an action, the same as every other navigation choice. It lived here until the
+ * header work, which meant three areas each owned their own mode while the view model held three fields
+ * nobody read — two sources of truth, one of them a decoy.
+ *
  * [loaded] is the model as it was last read from YAML, and it is what distinguishes "the user changed
  * something" from "the panel merely parsed the file". Regenerating YAML is lossy — comments, blank lines
  * and quoting style are the author's and the serializer does not keep them — so without it, simply
  * opening a tab would rewrite the file on the next save.
  */
-class YamlModelSync<M, T>(yaml: String, mode: T, state: M) {
-    var mode: T by mutableStateOf(value = mode)
+class YamlModelSync<M>(yaml: String, state: M) {
     var state: M by mutableStateOf(value = state)
     var yaml: String by mutableStateOf(value = yaml)
     var error: String? by mutableStateOf(value = null)
@@ -63,10 +67,11 @@ class YamlModelSync<M, T>(yaml: String, mode: T, state: M) {
  */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
-fun <M, T> SyncModelAndYaml(
-    sync: YamlModelSync<M, T>,
+fun <M> SyncModelAndYaml(
+    sync: YamlModelSync<M>,
     yaml: String,
-    isTextMode: (T) -> Boolean,
+    /** Whether the area is showing the file's text rather than the model. */
+    textMode: Boolean,
     fromYaml: (String) -> M?,
     toYaml: (M) -> String,
     hasIssues: (M) -> Boolean,
@@ -86,8 +91,8 @@ fun <M, T> SyncModelAndYaml(
         }
     }
 
-    LaunchedEffect(key1 = sync.state, key2 = sync.mode) {
-        if (isTextMode(sync.mode)) return@LaunchedEffect
+    LaunchedEffect(key1 = sync.state, key2 = textMode) {
+        if (textMode) return@LaunchedEffect
         if (hasIssues(sync.state)) return@LaunchedEffect
         if (sync.state == sync.loaded) return@LaunchedEffect
         val generated = runCatching { toYaml(sync.state) }.getOrNull() ?: return@LaunchedEffect
@@ -97,8 +102,8 @@ fun <M, T> SyncModelAndYaml(
         }
     }
 
-    LaunchedEffect(key1 = sync.yaml, key2 = sync.mode) {
-        if (!isTextMode(sync.mode)) return@LaunchedEffect
+    LaunchedEffect(key1 = sync.yaml, key2 = textMode) {
+        if (!textMode) return@LaunchedEffect
         delay(timeMillis = YAML_PARSE_DELAY_MS)
         val parsed = runCatching { fromYaml(sync.yaml) }.getOrNull()
         if (parsed != null && !isReadOnly(parsed)) {

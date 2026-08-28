@@ -7,6 +7,7 @@ import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -26,7 +27,9 @@ import kotlin.test.assertTrue
  * does — and visits every one.
  *
  * Written against visible text rather than test tags because the app has no tags, and adding them only
- * for this would put test scaffolding in four production files.
+ * for this would put test scaffolding in four production files. The tab labels are matched as
+ * substrings: a tab reads "⊞ Visual" now, glyph included, because the icon is part of the label the
+ * shared header draws.
  *
  * It asserts that each dock is **present**, not whether it starts open: the open state is persisted, so
  * a developer who once collapsed a panel would otherwise fail this test on a clean checkout. The
@@ -49,22 +52,23 @@ class DockSurfacesTest {
             loadFirstSample()
 
             // ── the Builder's two canvases ────────────────────────────────────────────────
-            onNodeWithText(text = "Builder").performClick()
+            // "Visual" is the tab's name in every area now; the Builder is what it opens in Rules.
+            onNodeWithContentDescription(label = "Visual").performClick()
             waitForIdle()
             assertDockPresent(where = "the Builder")
             assertVisible(text = "Checks", where = "the Builder dock's tab strip")
 
             // The Board is the canvas that had no dock at all before this, and it must be the *same*
             // one rather than a second copy.
-            onNodeWithText(text = "Board").performClick()
+            onNodeWithContentDescription(label = "Board").performClick()
             waitForIdle()
             assertDockPresent(where = "the Board")
             assertVisible(text = "Checks", where = "the Board dock's tab strip")
-            onNodeWithText(text = "Outline").performClick()
+            onNodeWithContentDescription(label = "Outline").performClick()
             waitForIdle()
 
             // ── Code mode has no dock: the mode *is* the text ──────────────────────────────
-            onNodeWithText(text = "Code").performClick()
+            onNodeWithContentDescription(label = "Code").performClick()
             waitForIdle()
             assertNoDock(where = "Code mode, which needs no preview of itself")
 

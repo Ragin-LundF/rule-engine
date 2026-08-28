@@ -144,9 +144,13 @@ cannot round-trip.
 
 1. Add the value to `RuleMode`, `ViewMode` and **both** directions of `RuleModeMapping`. The exhaustive
    `when`s in `CenterEditorPanel` will then tell you what is missing.
-2. Do **not** add a tab to `ViewModeToggle` if the new canvas shows the same rule with the same
-   selection — put the switch on the canvas, as `CanvasSwitch` does. The tabs change what the centre
-   panel *is*; a canvas changes how one rule is drawn.
+2. Do **not** add a tab to the area header's `ModeTabs` if the new canvas shows the same rule with the
+   same selection. Pass it to `AreaHeader(subTabs = …)` as a **subordinate** `ModeTabs` instead, the way
+   Outline/Board is. The tabs change what the centre panel *is*; a canvas changes how one rule is drawn,
+   and `subordinate = true` is what keeps the two from looking alike — no container, and the selected
+   item is merely raised rather than accented. (This switch used to float on the canvas itself. It moved
+   so that every view switch in the app is in one strip; the rule it still has to satisfy is that it
+   never reads as a mode tab.)
 3. Read the selection, never store it. Write it with `SelectInspectorItem` and open the panel with
    `RightPanelController.showInspector()`.
 4. Render row text through `BuilderToRuleDsl.renderRow` and operands through `OperandText.toDsl`. Two
@@ -182,6 +186,31 @@ Note what *is* now known, because the older wording said otherwise: the Builder 
 the file exactly, via `findRuleBlockRange` in `ui/RuleDslBlocks.kt`. That is what the preview dock's
 highlight is built on. What is still missing is the other direction — a row to a line — and
 `rowLineRanges` only approximates it, by matching the row's generated text *inside* that block.
+
+## The area header
+
+`ui.components.header.AreaHeader` is the one header above all four editor areas, and it has four slots
+in one order: **title** (what this is), **binding chip** (the file it is bound to), **mode tabs** (how it
+is being shown), and **actions**, right-aligned. The body underneath is the only thing that differs
+between areas. A fifth layout is not an option — that is what this replaced.
+
+- **One vocabulary.** The first tab is always **Visual** and the text tab is always **Code**, in every
+  area, from `displayName` on the mode enums in `ui.workbench.model.mode`. `ModeDisplayNamesTest` fails
+  the moment an area invents a third word.
+- **The mode is workbench state.** It lives in `RuleWorkbenchState` and changes by dispatching
+  `SelectRuleMode` / `SelectSchemaMode` / `SelectActionMode` / `SelectManifestMode`. No panel owns its
+  own mode, and `YamlModelSync` deliberately does not have one.
+- **The area owns its collapse policy.** `tabs` and `subTabs` are slots that receive the measured
+  `BarDensity`, and `AreaHeader` takes `fullWidth` / `compactWidth`, because a two-tab header and the
+  five-tab Rules one do not need the same room. Measure against the **panel**, not the window: the
+  centre panel gives up a rail and usually the Inspector.
+- **Rank the actions, never squeeze them.** `ActionEmphasis.PRIMARY` keeps its label at every width and
+  never moves into the overflow; `STANDARD` falls back to its glyph and keeps its label in the semantics
+  tree; `OVERFLOW` is only ever in the `⋯` menu. The row this replaced shared one line with the tabs,
+  and the last button's label wrapped one letter per line.
+- **The binding chip is the elastic slot.** It has a ceiling per density and truncates inside it. Do not
+  give it a `weight`: a weighted chip in a full row is measured at zero width and disappears, and the
+  control naming the open file is the one thing that must not.
 
 ## The preview dock
 
