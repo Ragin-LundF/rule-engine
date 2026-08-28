@@ -4,7 +4,6 @@ import ruleengine.dsl.parser.Parser
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.catalog.scalarPaths
 import ui.builder.model.mutable.BuilderEditorState
-import ui.builder.view.defaultOperatorFor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -140,14 +139,14 @@ class VariableInConditionRowTest {
     fun `a new row on a list variable starts on contains`() {
         val start = fields.scalarPaths().first { it.id == "${'$'}topics" }
 
-        assertEquals(expected = OperatorOptions.CONTAINS, actual = defaultOperatorFor(field = start))
+        assertEquals(expected = OperatorOptions.CONTAINS, actual = OperatorOptions.defaultFor(field = start))
     }
 
     @Test
     fun `a new row on a scalar variable starts on a symbolic comparison`() {
         val start = fields.scalarPaths().first { it.id == "${'$'}tier" }
 
-        assertEquals(expected = OperatorOptions.SYMBOL_EQUALS, actual = defaultOperatorFor(field = start))
+        assertEquals(expected = OperatorOptions.SYMBOL_EQUALS, actual = OperatorOptions.defaultFor(field = start))
     }
 
     @Test
@@ -159,8 +158,8 @@ class VariableInConditionRowTest {
                 schemaOperators = field.operators,
             )
             assertTrue(
-                actual = defaultOperatorFor(field = field) in offered,
-                message = "${field.id}: default ${defaultOperatorFor(field = field)} not in $offered",
+                actual = OperatorOptions.defaultFor(field = field) in offered,
+                message = "${field.id}: default ${OperatorOptions.defaultFor(field = field)} not in $offered",
             )
         }
     }

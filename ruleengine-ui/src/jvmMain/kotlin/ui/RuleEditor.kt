@@ -12,19 +12,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
+import ui.actions.ActionSchemaYamlBridge
+import ui.actions.hasValidationIssues
 import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.model.BuilderRule
+import ui.dock.DockController
 import ui.editor.rules.RuleEditorState
+import ui.editor.rules.model.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
+import ui.editor.yaml.SyncModelAndYaml
 import ui.project.ProjectWorkspace
 import ui.project.dialog.ProjectDialogHost
 import ui.project.manifest.manifestEntrySelection
+import ui.project.manifest.toEditorState
+import ui.schema.FieldSchemaYamlBridge
+import ui.schema.hasValidationIssues
 import ui.settings.SettingsController
 import ui.settings.SettingsPersistence
 import ui.settings.SettingsScreen
@@ -40,6 +49,8 @@ import ui.workbench.areas.ManifestAreaContent
 import ui.workbench.areas.RulesAreaContent
 import ui.workbench.areas.SamplesAreaContent
 import ui.workbench.areas.SchemaAreaContent
+import ui.workbench.areas.applyActionsYaml
+import ui.workbench.areas.applySchemaYaml
 import ui.workbench.builderCatalogActionsFrom
 import ui.workbench.builderCatalogFieldsFrom
 import ui.workbench.builderCatalogVariablesFrom
@@ -48,9 +59,13 @@ import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
 import ui.workbench.diagram.ExpandedDiagramWindow
 import ui.workbench.inspectorSelectionFor
+import ui.workbench.model.CanvasSelection
+import ui.workbench.model.InspectorItem
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.WorkbenchAction
+import ui.workbench.model.mode.ActionMode
 import ui.workbench.model.mode.AppArea
+import ui.workbench.model.mode.SchemaMode
 import ui.workbench.rules.ruleTreeFilesFrom
 import ui.workbench.rules.toViewMode
 import ui.workbench.uiDiagnosticsFrom
@@ -203,8 +218,10 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             uptoRuleId = activeBuilderEditorState.ruleId.takeIf { it.isNotBlank() },
         )
     }
+    // `withVariables` rather than list concatenation: a plain `+` yields a List and would drop the
+    // bare-alias index the catalog carries.
     val builderFieldsAndVariables = remember(key1 = builderCatalogFields, key2 = builderCatalogVariables) {
-        builderCatalogFields + builderCatalogVariables
+        builderCatalogFields.withVariables(variables = builderCatalogVariables)
     }
     val catalogActions = remember(key1 = state.parsedActionSchema.value, key2 = diagramRulesForWindow) {
         catalogActionsFrom(actions = state.parsedActionSchema.value, rules = diagramRulesForWindow)
@@ -277,8 +294,48 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     }
 
     val rightPanel = remember {
-        RightPanelController(expanded = state.rightPanelExpanded, viewModel = workbenchViewModel)
+        RightPanelController(
+            expanded = state.rightPanelExpanded,
+            width = state.rightPanelWidth,
+            viewModel = workbenchViewModel,
+        )
     }
+
+    // One dock controller for every area: the height is shared, the open state is per surface, and both
+    // are persisted. Held here rather than per area so switching area cannot reset either.
+    val dock = remember {
+        DockController(
+            height = state.dockHeight,
+            expanded = state.dockExpanded,
+            tab = state.dockTab,
+        )
+    }
+
+    // Kept composed for every area, not just the one that draws the editor: the Inspector can edit a
+    // field or an action while another area is on screen, and an effect that is not composed cannot push
+    // that edit to the YAML.
+    SyncModelAndYaml(
+        sync = state.schemaEditor,
+        yaml = state.schemaText.value,
+        textMode = workbenchState.schemaMode == SchemaMode.YAML,
+        fromYaml = { yaml -> FieldSchemaYamlBridge.fromYaml(yaml = yaml) },
+        toYaml = { editorState -> FieldSchemaYamlBridge.toYaml(state = editorState) },
+        hasIssues = { editorState -> editorState.hasValidationIssues() },
+        isReadOnly = { editorState -> editorState.isReadOnly },
+        onYamlChange = { newYaml -> state.applySchemaYaml(yaml = newYaml) },
+        parseError = "Invalid YAML: could not parse field schema",
+    )
+    SyncModelAndYaml(
+        sync = state.actionEditor,
+        yaml = state.actionSchemaText.value,
+        textMode = workbenchState.actionMode == ActionMode.YAML,
+        fromYaml = { yaml -> ActionSchemaYamlBridge.fromYaml(yaml = yaml) },
+        toYaml = { editorState -> ActionSchemaYamlBridge.toYaml(state = editorState) },
+        hasIssues = { editorState -> editorState.hasValidationIssues() },
+        isReadOnly = { editorState -> editorState.isReadOnly },
+        onYamlChange = { newYaml -> state.applyActionsYaml(yaml = newYaml) },
+        parseError = "Invalid YAML: could not parse action schema",
+    )
 
     ProjectDialogHost(workspace = workspace)
 
@@ -310,6 +367,8 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             )
         },
         centerContent = {
+            val canvasSelection = CanvasSelection.of(item = workbenchState.selectedInspectorItem)
+
             when (workbenchState.appArea) {
                 AppArea.RULES -> RulesAreaContent(
                     state = state,
@@ -320,28 +379,61 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     },
                     builderRules = builderRules,
                     builderEditorState = activeBuilderEditorState,
-                    allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
-                    catalogFields = builderFieldsAndVariables,
                     catalogActions = builderCatalogActions,
                     ruleTreeFiles = ruleTreeFiles,
-                    onConditionSelected = { conditionId ->
+                    // A gesture the Builder refuses — emptying a `when`, or promoting a row whose
+                    // operator has no value-expression form — says why here rather than doing nothing.
+                    onBuilderMessage = { message ->
+                        state.setStatus(msg = message, kind = StatusKind.ERROR)
+                    },
+                    // The canvas highlights whatever the Inspector is pointed at, and moves it. Both
+                    // read the one selection the workbench already holds, so they cannot disagree.
+                    selectedNodeId = canvasSelection.nodeId,
+                    selectedStatementId = canvasSelection.statementId,
+                    selectedSteps = canvasSelection.steps,
+                    onSelectNode = { nodeId, steps ->
                         workbenchViewModel.dispatch(
-                            action = WorkbenchAction.SelectCondition(conditionId = conditionId),
+                            action = WorkbenchAction.SelectInspectorItem(
+                                item = InspectorItem.Condition(conditionId = nodeId, steps = steps),
+                            ),
                         )
+                        rightPanel.showInspector()
+                    },
+                    onSelectStatement = { branch, statementId ->
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectInspectorItem(
+                                item = InspectorItem.Statement(
+                                    branch = branch,
+                                    statementId = statementId,
+                                ),
+                            ),
+                        )
+                        rightPanel.showInspector()
                     },
                     testInputState = testInputState,
                     onTestInputStateChange = { testInputState = it },
                     testController = testController,
                     hasErrors = hasErrors,
+                    dock = dock,
                     modifier = Modifier.fillMaxSize(),
                 )
 
                 AppArea.SCHEMA -> SchemaAreaContent(
                     state = state,
+                    mode = workbenchState.schemaMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectSchemaMode(mode = mode))
+                    },
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
+                    dock = dock,
+                    selectedFieldId = canvasSelection.fieldId,
+                    // One count per dotted path, from the same catalog the Inspector reads, so the row's
+                    // tag and the delete guard cannot disagree about who reads a field.
+                    readBy = catalogFields.associate { field -> field.id to field.usages },
+                    onMessage = { message -> state.setStatus(msg = message, kind = StatusKind.ERROR) },
                     modifier = Modifier.fillMaxSize(),
                     onInspectField = { fieldId ->
                         workbenchViewModel.dispatch(
@@ -353,8 +445,16 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.ACTIONS -> ActionsAreaContent(
                     state = state,
+                    mode = workbenchState.actionMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectActionMode(mode = mode))
+                    },
                     workspace = workspace,
                     expandedDiagramRules = expandedDiagramRules,
+                    dock = dock,
+                    selectedActionName = canvasSelection.actionName,
+                    emittedBy = catalogActions.associate { action -> action.name to action.usages },
+                    onMessage = { message -> state.setStatus(msg = message, kind = StatusKind.ERROR) },
                     modifier = Modifier.fillMaxSize(),
                     onInspectAction = { actionName ->
                         workbenchViewModel.dispatch(
@@ -366,7 +466,33 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
 
                 AppArea.MANIFEST -> ManifestAreaContent(
                     state = state,
+                    mode = workbenchState.manifestMode,
+                    onModeChange = { mode ->
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectManifestMode(mode = mode))
+                    },
                     workspace = workspace,
+                    dock = dock,
+                    // What the board reads, for the question only the manifest can answer: whether the
+                    // order of these files leaves a `$variable` read with nothing before it to publish.
+                    ruleTreeFiles = ruleTreeFiles,
+                    allBuilderRules = allBuilderRules,
+                    manifestSelected = workbenchState.selectedInspectorItem is InspectorItem.Manifest,
+                    onSelectManifest = {
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectInspectorItem(
+                                item = InspectorItem.Manifest(name = state.manifestText.value),
+                            ),
+                        )
+                        rightPanel.showInspector()
+                    },
+                    // The manifest's whole job is to point at the other three files, so its paths point
+                    // back: clicking one is how you get to what it names.
+                    onOpenSchema = {
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectAppArea(area = AppArea.SCHEMA))
+                    },
+                    onOpenActions = {
+                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectAppArea(area = AppArea.ACTIONS))
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -407,6 +533,27 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                 catalogRules = catalogRules,
                 builderEditorState = activeBuilderEditorState,
                 ruleStates = builderStateMap,
+                builderFields = builderFieldsAndVariables,
+                // The Inspector edits, so it writes rule text the same way the canvas does.
+                onBuilderDslChange = { newDsl ->
+                    builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+                },
+                onBuilderMessage = { message ->
+                    state.setStatus(msg = message, kind = StatusKind.ERROR)
+                },
+                onSelectInspectorItem = { item ->
+                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
+                },
+                manifestState = workspace.session.value?.toEditorState(),
+                onManifestChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
+                activeEntryId = workspace.session.value?.activeEntryId,
+                // The document schema, not `ruleSchema`: a scope names a field of the file as written.
+                schemaFieldTypes = state.parsedSchema.value?.fields
+                    ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
+                    ?.toMap(),
+                // Relativized by the workspace, because only it knows where the manifest lives.
+                chooseManifestPath = { kind -> workspace.choosePathForManifest(kind = kind) },
+                chooseManifestPathDisabledReason = workspace.chosenPathBlockedReason,
                 uiDiagnostics = inspectorSelection.diagnostics,
                 testInputState = testInputState,
                 onTestInputStateChange = { testInputState = it },
@@ -418,13 +565,45 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             DiagnosticsSection(state = state)
             StatusBarSection(state = state, workspace = workspace)
         },
-        rightPanelWidth = if (state.rightPanelExpanded.value) 320.dp else 56.dp,
+        rightPanelWidth = rightPanelWidthOf(state = state),
+        onRightPanelResize = rightPanelResizeOf(state = state, controller = rightPanel),
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
-    // Opened via the "⤢ Expand" button in diagram mode.
+    // Opened via the "Expand" action in diagram mode.
     // Shares the same diagramRules state so it updates live while editing.
     if (state.showExpandedDiagram.value) {
         ExpandedDiagramWindow(state = state, rules = expandedDiagramRules)
     }
 }
+
+/** How wide the right panel is: the dragged width while open, the icon strip's width while closed. */
+private fun rightPanelWidthOf(state: RuleEditorState): Dp {
+    return if (state.rightPanelExpanded.value) {
+        state.rightPanelWidth.value.dp
+    } else {
+        COLLAPSED_PANEL_WIDTH
+    }
+}
+
+/**
+ * The shell's resize callback, or null when the panel should not be resizable.
+ *
+ * Null while collapsed: a collapsed panel is an icon strip with one correct width, and a handle that
+ * silently refuses to move is worse than no handle at all.
+ *
+ * Every delta goes through [RightPanelController.setWidth] rather than to the state, so the clamp that
+ * keeps the width usable is applied in one place — see `RightPanelWidthTest`.
+ */
+private fun rightPanelResizeOf(
+    state: RuleEditorState,
+    controller: RightPanelController,
+): ((Dp) -> Unit)? {
+    if (!state.rightPanelExpanded.value) {
+        return null
+    }
+    return { delta -> controller.setWidth(value = state.rightPanelWidth.value + delta.value) }
+}
+
+/** The icon strip's width when the right panel is closed — wide enough for its vertical tab labels. */
+private val COLLAPSED_PANEL_WIDTH = 56.dp

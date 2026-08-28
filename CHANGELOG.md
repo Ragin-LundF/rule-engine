@@ -5,6 +5,277 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.12.0
+
+### Changed
+- **Every editor area now has the same top bar, and the application bar fits a small window.**
+  The four areas had four different headers: the Rules area put a "Rule Editor" title over a bordered,
+  icon-led mode toggle with a *second* row of buttons underneath; the Schema and Actions areas put a
+  full-width linked-file bar over a filled-pill tab strip and offered no actions at all; the Manifest
+  area had only the strip. They also named the same two modes three different ways — Builder / Code,
+  Visual / YAML, Builder / YAML.
+
+  There is now one `AreaHeader` with four slots in one order — **title · the file it is bound to ·
+  Visual / Code tabs · actions** — and the panel underneath is the only thing that differs between
+  areas. Specifically:
+  - **One vocabulary.** The model-editing tab is **Visual** and the text tab is **Code**, everywhere.
+    "Code" rather than "YAML" because the Rules area's text is the rule DSL, and a word that works for
+    three areas out of four is what produced the drift in the first place. The enum constants are
+    unchanged; only the display names moved, onto the enums themselves.
+  - **A binding chip replaces three controls.** The Rules area's unlabelled `☰` file menu, the Schema
+    and Actions areas' full-width `LinkedFileHeader`, and the Manifest area's nothing at all are one
+    chip in one position: `FILE fraud-detection.rule ▾`, with `SHARED` / `NOT FOUND` as badges and
+    link / change / unlink in its menu. Schema and Actions get a row of vertical space back.
+  - **Actions are ranked instead of squeezed.** The primary verb keeps its label at every width, the
+    secondary ones fall back to their glyphs while keeping their accessible names, and the rare ones —
+    the two rule-overview export formats, the per-area *Save … As…* — live in a `⋯` menu. The row this
+    replaces shared one line with the fixed-width tabs, so every shortfall came out of the buttons and
+    the last label wrapped one letter per line.
+  - **The Outline / Board switch moved off the canvas** into the header beside the tabs, styled as a
+    subordinate pair: every view switch in the app is now in one strip, and `subordinate` styling is
+    what keeps it from reading as a sixth mode tab. The diagram-view picker sits in the same slot in
+    Diagram mode, for the same reason.
+  - **The mode is workbench state.** `RuleWorkbenchState` already had `schemaMode`, `actionMode` and
+    `manifestMode`, but nothing read them: the real mode lived in `YamlModelSync` for two areas and in
+    a `remember` for the third, while the view model held three decoy fields. Now all four modes are
+    dispatched and read from one place, and `YamlModelSync` has no mode at all.
+  - **The application bar collapses instead of overflowing.** Eight text buttons in a fixed row — New /
+    Open / Save / Save As / Save Schema As / Save Actions As / Inspector / theme — became a `Project`
+    menu and a `Save` split button whose caret holds *Save Project As…* and the two shared-file
+    exports. Save is the one accent-coloured control in the bar, and an `UNSAVED` badge carries what
+    the `•` on its label used to. Below 1300 px the wordmark goes, below 1100 px the badge and the
+    button labels go; nothing is dropped and nothing overflows.
+  - **The bars are labelled in words, not glyphs.** At 12 sp every download / open / expand arrow in
+    the available fonts (`⤓ ↧ ⇩ ⤒ ⤢`) renders as a hairline, so the application bar now reads
+    *Project ▼ · Save ▼ · Inspector · ☀*, and a header action with no legible glyph moves into the `⋯`
+    menu when the bar is short instead of shrinking to a symbol nobody can read. Menu carets are `▼`
+    rather than the smaller `▾`, which was a smudge at this size — and the caret is the only thing
+    saying a control opens. The pictograms that stayed are the ones that survive the size: the theme
+    toggle's sun and moon, the tab marks (`⊞ { } ⬡ ▷ ▦`), `✓` and `⋯`.
+  - **A selected tab is legible in both themes.** The mode tabs drew their selected label in the theme's
+    primary text colour on a fixed accent fill, which in light mode was near-black on blue.
+
+  `ViewModeToggle`, `CanvasSwitch`, `LinkedFileHeader`, `ExportOverviewButton` and the three
+  `*ModeTabs` wrappers are gone; four copies of the dropdown-menu styling became one `HeaderMenu`.
+
+### Added
+- **Every editor now shows the file it is about to write, under the canvas, without leaving the canvas.**
+  A resizable, read-only, syntax-highlighted preview dock sits beneath the Builder's two canvases and the
+  Schema, Actions and Manifest editors. It shows the **whole file** with the current selection
+  highlighted — the open rule as a block and the selected condition row as a line inside it, or the
+  selected field, action or manifest entry and everything under it — plus a Checks tab whose count is on
+  the tab, so a problem is visible before the panel is opened rather than after the edit is saved.
+
+  Drag its top edge to resize it, double-click to reset; the height is remembered and shared across
+  areas, while whether it is open is remembered per area. It starts open in the Builder, because seeing
+  the DSL a row generates is how the Builder teaches the language, and closed elsewhere.
+
+  Three things this replaces or fills in:
+  - the Builder's old `GENERATED DSL` strip, which showed only the generated rule, was collapsed by
+    default, was not highlighted, could not be resized, and matched the selected row by trimmed text —
+    so an identical row in another rule lit up alongside the real one. The mark is now a character range
+    scoped to the rule's own block;
+  - the **board canvas had no such panel at all**, and now shares the Builder's;
+  - the **Manifest YAML tab was the only YAML in the app shown as plain, unhighlighted text**, although
+    it is the file that decides what runs in what order. `YamlEditorType` gained `PROJECT_MANIFEST`, and
+    the highlighter now colours entry ids, file references and `scope` — which also put the `editorType`
+    its list-item styling had been ignoring to use.
+
+- **A manifest path can be chosen from a file dialog instead of typed.** `Choose…` sits beside every path
+  field in the Inspector — the two schema files and each rule file — and writes the chosen file **relative
+  to the manifest**, which is how a manifest addresses its files and what keeps a project portable when
+  it moves.
+
+  Typing stays the primary control: a path in a manifest is often one that does not exist yet (the saver
+  creates `rules/` and `schemas/`), and a dialog cannot offer a file nobody has written. Rule-file rows
+  were in fact the worse case before this — they had **no editor at all** and nothing to offer as an
+  option, so a mistyped path could only be removed and added again.
+
+  Before the project's first save the button is greyed out and says why, on hover and again under the
+  field: a manifest path is relative to the manifest file, and a project that has never been saved has no
+  manifest file for it to be relative to. Writing the absolute path instead would produce an entry that
+  resolves on one machine and nowhere else.
+
+- **The manifest now shows what its file order actually decides.** Each rule file's row carries what it
+  publishes (`↑$tier`) and what it reads (`↓$tier`), and a read no earlier file publishes is marked on
+  the row and named in Checks: *"reads `$tier` before any file publishes it, so it resolves to null on
+  every run."* This is the one property of a manifest that no single-file view can see, because it is a
+  property of the **order** — the same two files in the other order turn a working entry into one where a
+  rule parses, validates, runs, and silently never fires. It sits beside the reordering control, and is
+  computed by the same `VariableFlow` derivation the board uses, so the two cannot give different
+  answers.
+
+### Fixed
+- **Two ordered declarations were being edited as unordered sets, and the control could not express what
+  the file means.** Both are now edited in the Inspector as ordered lists, with move and remove per
+  position:
+
+  - an action's `argTypes` is a **positional parameter list** — `Validator` checks the argument count and
+    then the type at each index. Rendered as a row of tick-boxes, `audit(string, integer)` and
+    `audit(integer, string)` were indistinguishable, `audit(string, string)` was **unreachable**, and
+    unticking then re-ticking a chip silently rewrote the signature;
+  - a field's `normalizers` is a **chain** applied left to right. `NormalizerRegistry.applyAll`
+    documents the counter-example: `trim` then `lowercase` is not the same chain as the other way round
+    once `collapse_whitespace` is between them. The order was whatever order the boxes happened to be
+    clicked in, invisible and unsettable — and the compiler and `PreparedRuleContext` both apply exactly
+    that chain, so getting it wrong stops a rule matching its own data.
+
+  Both are covered by round-trip tests through the real bridges and the real loaders.
+
+- **Renaming the active manifest entry no longer empties the working copy.** The session and the editor
+  each hold their own idea of which entry is selected, and nothing kept them in step: renaming the entry
+  moved the session's but not the editor's, so the next lookup asked the manifest for an id it no longer
+  had, found no rule files, and wrote an empty map over the rules in memory. The editor now adopts the
+  session's entry whenever the manifest is applied or saved, and the invariant has a test of its own —
+  which was verified by reverting the fix and watching it fail with the empty list.
+
+- **An operator the field's type forbids now says why, and can be removed.** It used to be appended to
+  the row with a bare warning glyph and no explanation. It stays visible — it may be in the file
+  legitimately, or the type may have changed under it — and clicking it removes it, so a schema can be
+  repaired without going to the YAML tab.
+
+- **A nested schema member can be inspected.** The info button was offered on top-level rows only,
+  because the Inspector resolved a field by top-level id; it now walks the dotted path segment by
+  segment, which is also what keeps `existingLoans.lender` and `applicant.lender` apart.
+
+### Changed
+- **The Schema, Actions and Manifest editors are now outlines, not tables.** One line per declaration,
+  read rather than edited; the Inspector does the editing. `FieldSchemaTable` drew `Path / Alias / Type /
+  Normalizers / Operators` column headers and then, beneath them, a bordered **card** per field holding
+  three text fields, a dropdown and two buttons on its first line plus Format, Normalizers and Operators
+  lines under it — so the headers described columns that did not exist, a field cost three to five rows,
+  and because every cell was a live text box the schema could only be edited, never read. Twelve fields
+  used to be two screens; it is now twelve lines.
+
+  What each line says is what the file will say: the path, the alias a rule may use, the declared type,
+  the normalizer chain **as a chain** (`trim → lowercase`), and the operators. An action is shown as the
+  call a rule makes — `audit(string, integer)` — because arity and order are the declaration. A manifest
+  entry's properties sit on one rail with its rule files numbered in run order, and its two paths are
+  **links**: clicking `schema.yaml` opens the Schema area.
+
+  Nested schema members use the Builder's bracket-rail geometry, coloured per depth, so nesting is read
+  rather than counted — and **the whole row is the click target**. The 36 dp `ⓘ` button existed for a
+  stated reason, "every cell is a text field, so a row-wide target would fight the editing under it",
+  and that reason went with the text fields.
+
+  Also new on every row: how many loaded rules read a field or emit an action, with `unread` / `unused`
+  called out; and per-row issues where the declaration is made. Deleting a field a rule reads, or an
+  action a rule emits, is **refused with the reason** — the same rule the Builder already applies, for
+  the same reason: a gesture that springs back silently is indistinguishable from a broken one.
+
+  Removed with them: `NormalizerSelector`, `OperatorSelector`, `ToggleChip`, `HeaderCell` and
+  `PathListEditor`, which nothing else used. `PathListEditor` is worth naming — it is the component whose
+  inability to reorder *was* the manifest defect, and `OrderedListEditor` replaced it.
+
+- **Looking at usages no longer hides what you are working on.** `Usages` was a *mode* of the Schema and
+  Actions areas and `Checks` a mode of the Manifest, so seeing which rules read a field replaced the
+  field you were editing. All three are now tabs of the dock, beside the file preview and under the
+  canvas that stays on screen — which is what they were always for. `SchemaMode.USAGES`,
+  `ActionMode.USAGES` and `ManifestMode.CHECKS` are gone, along with the two "shown here in a later
+  phase" placeholders that stood in when the platform supplied no diagram.
+
+  A check is no longer a sentence, either: each one carries the declaration it is about, so the row is
+  clickable and selects it. The manifest's checks moved to the same shape, which is how the entry that a
+  duplicate id or an unresolved read belongs to became something you can click rather than read.
+
+- **Picking a scope moved to the Inspector**, which is where writing happens. The canvas shows the scope
+  and the engine's verdict on it; the Inspector offers the collections the schema declares, keeps an
+  off-list value visible and marked rather than silently swapping it, and says when there is no schema to
+  check a name against at all.
+
+- **The Inspector edits; the area panels no longer own their model.** `FieldInspector`,
+  `ActionInspector` and `ManifestInspector` were read-only summaries sitting beside tables where every
+  cell was a live text box — the wrong way round in both directions. The schema and action models are
+  hoisted out of their panels into one holder each, so the panel and the Inspector read the same object
+  and cannot disagree; the Inspector is now the only writer. The manifest's **rule files are reorderable
+  for the first time** — their order is the run order, and a `$variable` is visible only to the files
+  after the one that sets it, so this was the one thing in the file that changes behaviour and the one
+  thing that could not be edited as what it is.
+
+- **The visual builder no longer rewrites your operator when you build a computed condition.** The
+  "make it a computed comparison" action was a one-way door with no inverse, and it hard-coded `==` — so
+  `amount >= 300` came back as `amount == 300`. It also silently dropped `between`'s upper bound, the
+  list behind `in` / `containsAny` / `containsAll`, and `ignoreCase`. Because the builder regenerates the
+  whole rule text on every edit, that was data loss in the rule file rather than only on screen.
+
+  A row's form is now *derived* from its operands, the way the parser derives it from the text: a plain
+  field path against a literal or a list is a simple condition — the only form the named operators exist
+  in — and anything computed is a value-expression comparison. There is no action to convert between
+  them, because choosing a computed operand *is* the conversion. Where a named operator has no computed
+  spelling, the builder refuses with a reason naming the operator instead of reinterpreting the
+  condition.
+
+- **Switching one side of a condition to a different kind keeps the path it was built on.** It returned
+  the schema's first field instead, so switching `abs(sum(invoices.amount) - …)` to a plain field lost
+  `invoices.amount` and offered something unrelated. The path is now carried through from wherever it was
+  buried — an aggregate's path, a call's field argument, a calculation's first field term — so a kind
+  switch is reversible however deep the operand was.
+
+- **Renaming a rule is back on the rule's own id** in the builder, committing on Enter or on losing
+  focus.
+
+### Added
+- **The rule builder has two canvases over one rule**, switched on the canvas itself rather than in the
+  mode tabs, because both show the same rule with the same selection and the same inspector.
+
+  The **outline** reads the whole rule top to bottom at one line per condition, with `AND` / `OR` on the
+  gutter and groups as bracket rails. Every part of a row is a click target, so a sub-expression four
+  levels down is one click from being edited — and because editing happens in the inspector, the row
+  being worked on never moves or changes height. This replaces a stack of bordered cards in which a rule
+  with all three branches was five cards, so `when` scrolled out of sight while its outcome was edited.
+
+  The **board** shows every rule in evaluation order along the top, grouped by file, with what each rule
+  reads and sets and whether it halts the run; then this rule as nested condition rails and three
+  outcome lanes side by side. Conditions are grouped by dragging one row onto another, and an action or
+  assignment is moved between branches by dragging its card between lanes. A refused drop says why.
+
+- **`$variable` flow across rules.** Clicking a variable chip on the board lights up every rule that sets
+  it and every rule that reads it. Only a rule earlier in the run publishes to a later one, so a rule
+  reading a variable that nothing before it sets is called out explicitly — that rule parses, validates,
+  runs, and can never fire, and nothing in the tool could say so before.
+
+- **A formula bar over both canvases.** The selected condition appears as editable text; type
+  `count(invoices) > 2` and the row rebuilds. It is validated as you type and applied on Enter, and
+  nothing is applied unless it parses. It reuses the engine's own parser rather than a second one, so an
+  expression the bar accepts is one the engine accepts.
+
+- **The generated DSL under the outline**, collapsible, with the selected row's line highlighted, plus
+  the open file's diagnostics. Previously the only way to see what the builder was about to write was to
+  switch to the code view — by which point it was already written.
+
+- **Incomplete condition rows say what they still need**, inline, recursing into arguments and terms so a
+  hole several levels down is named. A row that is half-filled generates text that does not parse, and
+  the builder now says so while it is being written rather than after the file has been rewritten.
+
+- **The right panel can be dragged wider.** A handle sits in the gap between the centre panel and the
+  right panel; the width it is set to is remembered between launches, and clamped so neither panel can be
+  squeezed to the point where the drag handle itself is unreachable. The Inspector's default width is
+  unchanged — this is for the cases where a deep expression needs more room than the default gives it.
+
+### Changed
+- Sections are separated by a rule with real space around them, in the builder's outline, on the board,
+  and inside the inspector. At the old spacing the parts of a rule — the condition and the up-to-three
+  outcomes — read as one continuous list of boxes, which is the wrong reading: they answer different
+  questions.
+
+- The inspector's breadcrumb sits on its own labelled surface, separated from the editor below it, so
+  what moves you and what edits the rule are visually distinct. Going back up a level is now a named
+  button — "← back to comparison" — in its own fixed position rather than the leftmost of a row of
+  identical crumbs, which moved as the trail grew.
+
+- A rule's missing `else` / `not_exists` branches are offered as one compact row rather than two
+  placeholder sections, so the empty part of a rule no longer takes more room on screen than the part
+  carrying its logic.
+
+- The inspector is now the builder's single editing surface. Operands were previously edited in panels
+  that expanded underneath the row, one at a time, which pushed the row being edited off screen for a
+  deep expression and made two sub-expressions impossible to compare. Depth is now navigation — a trail
+  in the panel header, with one click back — instead of layout.
+
+- Path segments show their `where` filters, ordering and `first`/`last` bound on separate cards, all
+  visible at once, instead of behind a drawer on a pill. A silent filter, or a silent truncation that
+  decides which elements the filter then sees, is exactly what should not need a click to discover.
+
 ## Release 1.11.0
 
 ### Added

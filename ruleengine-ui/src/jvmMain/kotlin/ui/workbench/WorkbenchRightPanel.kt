@@ -3,9 +3,12 @@ package ui.workbench
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.editor.rules.RuleEditorState
+import ui.manifest.model.ManifestEditorState
+import ui.manifest.model.ManifestPathKind
 import ui.tester.RuleTestController
 import ui.tester.RuleTestPanel
 import ui.tester.model.TestInputState
@@ -37,6 +40,19 @@ internal fun WorkbenchRightPanel(
     catalogRules: List<CatalogRule>,
     builderEditorState: BuilderEditorState,
     ruleStates: Map<String, BuilderEditorState>,
+    /** The builder's own field catalog: dotted paths plus the `$name` variables in scope. */
+    builderFields: BuilderCatalog,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    onSelectInspectorItem: (InspectorItem) -> Unit,
+    /** The manifest as the session has it, and where an Inspector edit to it goes. */
+    manifestState: ManifestEditorState?,
+    onManifestChange: (ManifestEditorState) -> Unit,
+    activeEntryId: String?,
+    /** The loaded schema's top-level field types, for the scope picker. */
+    schemaFieldTypes: Map<String, String>?,
+    chooseManifestPath: ((ManifestPathKind) -> String?)?,
+    chooseManifestPathDisabledReason: String?,
     uiDiagnostics: List<UiDiagnostic>,
     testInputState: TestInputState,
     onTestInputStateChange: (TestInputState) -> Unit,
@@ -55,6 +71,22 @@ internal fun WorkbenchRightPanel(
                 builderState = builderEditorState,
                 ruleStates = ruleStates,
                 diagnostics = uiDiagnostics,
+                builderFields = builderFields,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+                onSelectItem = onSelectInspectorItem,
+                // The Inspector is the writer of all three models. It reads the same objects the area
+                // panels draw, so the two cannot disagree about what the schema currently is.
+                schemaState = state.schemaEditor.state,
+                onSchemaChange = { edited -> state.schemaEditor.state = edited },
+                actionState = state.actionEditor.state,
+                onActionChange = { edited -> state.actionEditor.state = edited },
+                manifestState = manifestState,
+                onManifestChange = onManifestChange,
+                activeEntryId = activeEntryId,
+                schemaFieldTypes = schemaFieldTypes,
+                chooseManifestPath = chooseManifestPath,
+                chooseManifestPathDisabledReason = chooseManifestPathDisabledReason,
                 modifier = Modifier.fillMaxSize(),
             )
         },

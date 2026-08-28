@@ -14,7 +14,7 @@ import ui.Bg
 import ui.editor.rules.RuleEditorState
 
 /**
- * The diagram in its own window, opened by the "⤢ Expand" button in diagram mode.
+ * The diagram in its own window, opened by the "Expand" action in the diagram header.
  *
  * Reads the same [state] as the inline canvas, so it updates live while the rules are edited.
  * [AppTheme] has to be applied again: a new window is a separate composition and does not inherit

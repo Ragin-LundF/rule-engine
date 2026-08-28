@@ -2,18 +2,15 @@ package ui.workbench
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -32,26 +29,39 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import ruleengine.core.domain.dto.RuleBranch
 import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
+import ui.builder.BuilderToRuleDsl
+import ui.builder.FormulaParser
+import ui.builder.board.BoardCanvas
+import ui.builder.formula.FormulaBar
 import ui.builder.model.BuilderRule
 import ui.builder.model.catalog.CatalogActionInfo
-import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.mutable.BuilderEditorState
-import ui.builder.view.RuleBuilderView
-import ui.components.SecondaryButton
+import ui.builder.model.mutable.replaceNodeFromFormula
+import ui.builder.model.selection.SelectionStep
+import ui.builder.outline.OutlineCanvas
+import ui.builder.selection.SelectionResolver
+import ui.components.ModeTabs
 import ui.components.ToolbarButton
+import ui.components.header.AreaHeader
+import ui.components.header.model.ActionEmphasis
+import ui.components.header.model.BarDensity
+import ui.components.header.model.BindingMenuItem
+import ui.components.header.model.BindingSpec
+import ui.components.header.model.HeaderAction
 import ui.copyToClipboard
 import ui.diagrams.model.DiagramViewKind
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.RuleValidationRunner
-import ui.editor.rules.ViewModeToggle
 import ui.editor.rules.inheritedVariablesForOpenBuffer
 import ui.editor.rules.model.RuleValidationOutcome
 import ui.editor.rules.model.StatusKind
@@ -60,88 +70,67 @@ import ui.editor.rules.sections.MainEditorContentSection
 import ui.editor.rules.validateOpenEntry
 import ui.pickRuleFile
 import ui.saveDiagramAsPng
-import ui.workbench.export.ExportOverviewButton
+import ui.workbench.export.RuleOverviewExport
+import ui.workbench.export.exportRuleOverview
 import ui.workbench.model.catalog.CatalogRule
 import ui.workbench.model.catalog.RuleTreeFile
 import ui.workbench.model.mode.RuleMode
+import ui.workbench.model.mode.displayName
+import ui.workbench.model.mode.icon
 import ui.workbench.rules.RuleTablePanel
-import ui.workbench.rules.toRuleMode
 import ui.workbench.rules.toViewMode
 
-@Suppress("FunctionNaming")
-@Composable
-private fun ManifestFilePicker(state: RuleEditorState, viewMode: ViewMode) {
-    val parsedManifest by state.parsedManifest
-    val selectedManifestEntry by state.selectedManifestEntry
-    val selectedManifestRuleFile by state.selectedManifestRuleFile
-    val showAllRules by state.showAllRules
+/**
+ * Which rule file the Rules area is bound to, as the binding chip every area now has.
+ *
+ * This was an unlabelled `☰` button in the action row — the same job as the Schema and Actions areas'
+ * full-width linked-file bar, in a control that named neither the file nor itself. The menu it opens is
+ * the one it always opened, including "All files" under the same condition: it is only meaningful where
+ * the view can show more than one file at once, and only when the entry has more than one.
+ */
+private fun ruleFileBinding(
+    ruleFiles: List<String>,
+    selectedFile: String?,
+    showAllRules: Boolean,
+    offersAllFiles: Boolean,
+): BindingSpec? {
+    if (ruleFiles.isEmpty()) return null
 
-    val currentEntryRuleFiles: List<String> = parsedManifest
-        ?.entries
-        ?.find { it.id == selectedManifestEntry }
-        ?.rules
-        .orEmpty()
-
-    // "All files" is only meaningful where the view can show more than one at once, and only when
-    // the entry actually has more than one.
-    val showAllFilesOption = currentEntryRuleFiles.size >= 2 &&
-        (viewMode == ViewMode.DIAGRAM || viewMode == ViewMode.TEST)
-
-    if (currentEntryRuleFiles.isEmpty()) return
-
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        ToolbarButton(label = "☰", onClick = { expanded = true })
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .background(color = BgElevated)
-                .border(
-                    width = 1.dp,
-                    color = BorderColor,
-                    shape = RoundedCornerShape(size = 8.dp),
+    val items = buildList {
+        if (offersAllFiles) {
+            add(
+                element = BindingMenuItem(
+                    id = ALL_RULE_FILES,
+                    label = "All files",
+                    selected = showAllRules,
+                    sectionTitle = "Rule files",
                 ),
-        ) {
-            if (showAllFilesOption) {
-                RuleFileMenuItem(label = "All files", selected = showAllRules) {
-                    state.loadAllRuleFilesForCurrentEntry()
-                    expanded = false
-                }
-                Divider(color = BorderColor, thickness = 1.dp)
-            }
-            currentEntryRuleFiles.forEach { relativePath ->
-                RuleFileMenuItem(
-                    label = relativePath.substringAfterLast('/'),
-                    selected = !showAllRules && relativePath == selectedManifestRuleFile,
-                ) {
-                    state.loadSingleManifestRuleFile(relativePath)
-                    expanded = false
-                }
-            }
+            )
+        }
+        ruleFiles.forEachIndexed { index, relativePath ->
+            add(
+                element = BindingMenuItem(
+                    id = relativePath,
+                    label = relativePath.substringAfterLast(delimiter = '/'),
+                    selected = !showAllRules && relativePath == selectedFile,
+                    separatorBefore = offersAllFiles && index == 0,
+                    sectionTitle = if (offersAllFiles || index > 0) null else "Rule files",
+                ),
+            )
         }
     }
+
+    val value = when {
+        showAllRules -> "All files"
+        selectedFile != null -> selectedFile.substringAfterLast(delimiter = '/')
+        else -> ruleFiles.first().substringAfterLast(delimiter = '/')
+    }
+
+    return BindingSpec(label = "File", value = value, items = items)
 }
 
-/** One entry in the rule-file menu; "All files" and a single file look and behave the same. */
-@Suppress("FunctionNaming")
-@Composable
-private fun RuleFileMenuItem(label: String, selected: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        onClick = onClick,
-        modifier = Modifier.background(
-            color = if (selected) BgHover else BgElevated,
-            shape = RoundedCornerShape(size = 6.dp),
-        ),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.body2,
-            color = if (selected) PrimaryBlue else TextPrimary,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-        )
-    }
-}
+/** The chip's id for "every rule file of this entry at once"; anything else is a relative path. */
+private const val ALL_RULE_FILES = "*all*"
 
 /** Center panel that dispatches to the correct mode view based on [ruleMode]. */
 @Suppress("FunctionNaming", "LongParameterList")
@@ -152,16 +141,21 @@ fun CenterEditorPanel(
     ruleMode: RuleMode,
     onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(BuilderRule.None),
-    allRuleIds: List<String> = emptyList(),
     allBuilderRules: List<BuilderRule> = emptyList(),
     catalogRules: List<CatalogRule> = emptyList(),
     onRuleSelected: (String) -> Unit = {},
     onAddRule: () -> Unit = {},
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
-    catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
-    onConditionSelected: (String) -> Unit = {},
+    /** Where a refused builder gesture explains itself; reaches the status bar. */
+    onBuilderMessage: (String) -> Unit = {},
+    /** What the canvas highlights, and what the Inspector is pointed at. */
+    selectedNodeId: String? = null,
+    selectedStatementId: String? = null,
+    selectedSteps: List<SelectionStep>? = null,
+    onSelectNode: (String, List<SelectionStep>) -> Unit = { _, _ -> },
+    onSelectStatement: (RuleBranch, String) -> Unit = { _, _ -> },
     testContent: @Composable () -> Unit = {},
     ruleTreeFiles: List<RuleTreeFile> = emptyList(),
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit = { _, _ -> },
@@ -174,35 +168,94 @@ fun CenterEditorPanel(
         modifier = modifier
             .fillMaxSize()
             .clip(shape = RoundedCornerShape(size = 8.dp))
-            .background(color = BgElevated)
-            .padding(all = 16.dp),
+            .background(color = BgElevated),
     ) {
-        CenterPanelHeader(
+        RulesAreaHeader(
             state = state,
             scope = scope,
-            viewMode = viewMode,
+            ruleMode = ruleMode,
             onRuleModeChange = onRuleModeChange,
+            ruleCount = allBuilderRules.size,
             diagramGraphicsLayer = diagramGraphicsLayer,
         )
 
-        Spacer(modifier = Modifier.height(height = 12.dp))
-        Divider(color = BorderColor, thickness = 1.dp)
-        Spacer(modifier = Modifier.height(height = 12.dp))
+        Box(modifier = Modifier.weight(weight = 1f).padding(all = 16.dp)) {
+            CenterModeContent(
+                viewMode = viewMode,
+                state = state,
+                builderEditorState = builderEditorState,
+                allBuilderRules = allBuilderRules,
+                catalogRules = catalogRules,
+                catalogActions = catalogActions,
+                ruleTreeFiles = ruleTreeFiles,
+                diagramGraphicsLayer = diagramGraphicsLayer,
+                onRuleModeChange = onRuleModeChange,
+                onRuleSelected = onRuleSelected,
+                onAddRule = onAddRule,
+                onRenameRule = onRenameRule,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+                selectedNodeId = selectedNodeId,
+                selectedStatementId = selectedStatementId,
+                selectedSteps = selectedSteps,
+                onSelectNode = onSelectNode,
+                onSelectStatement = onSelectStatement,
+                onTreeRuleSelected = onTreeRuleSelected,
+                testContent = testContent,
+            )
+        }
+    }
+}
 
-        Box(modifier = Modifier.weight(weight = 1f)) {
+/**
+ * Dispatches to the view for [viewMode].
+ *
+ * Split out of [CenterEditorPanel] so that function is only the frame — header, divider, body — and the
+ * `when` that has to grow a branch for every new view lives on its own. `BUILDER` and `BOARD` share a
+ * branch: they are two canvases over one rule, not two views of the panel.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun CenterModeContent(
+    viewMode: ViewMode,
+    state: RuleEditorState,
+    builderEditorState: BuilderEditorState,
+    allBuilderRules: List<BuilderRule>,
+    catalogRules: List<CatalogRule>,
+    catalogActions: List<CatalogActionInfo>,
+    ruleTreeFiles: List<RuleTreeFile>,
+    diagramGraphicsLayer: GraphicsLayer,
+    onRuleModeChange: (RuleMode) -> Unit,
+    onRuleSelected: (String) -> Unit,
+    onAddRule: () -> Unit,
+    onRenameRule: (oldId: String, newId: String) -> Unit,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    selectedNodeId: String?,
+    selectedStatementId: String?,
+    selectedSteps: List<SelectionStep>?,
+    onSelectNode: (String, List<SelectionStep>) -> Unit,
+    onSelectStatement: (RuleBranch, String) -> Unit,
+    onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
+    testContent: @Composable () -> Unit,
+) {
             when (viewMode) {
-                ViewMode.BUILDER -> BuilderModeContent(
+                ViewMode.BUILDER, ViewMode.BOARD -> BuilderModeContent(
+                    boardActive = viewMode == ViewMode.BOARD,
                     state = state,
                     builderEditorState = builderEditorState,
-                    allRuleIds = allRuleIds,
-                    catalogFields = catalogFields,
                     catalogActions = catalogActions,
                     ruleTreeFiles = ruleTreeFiles,
-                    onRuleSelected = onRuleSelected,
+                    allBuilderRules = allBuilderRules,
                     onAddRule = onAddRule,
                     onRenameRule = onRenameRule,
-                    onConditionSelected = onConditionSelected,
                     onBuilderDslChange = onBuilderDslChange,
+                    onBuilderMessage = onBuilderMessage,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    selectedSteps = selectedSteps,
+                    onSelectNode = onSelectNode,
+                    onSelectStatement = onSelectStatement,
                     onTreeRuleSelected = onTreeRuleSelected,
                 )
 
@@ -217,36 +270,99 @@ fun CenterEditorPanel(
                 }
 
                 ViewMode.TEST -> testContent()
-                ViewMode.TABLE -> RuleTablePanel(
+                ViewMode.TABLE -> TableModeContent(
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
                     selectedRuleId = builderEditorState.ruleId,
-                    onRuleClick = { ruleId ->
-                        onRuleSelected(ruleId)
-                        onRuleModeChange(RuleMode.BUILDER)
-                    },
-                    modifier = Modifier.fillMaxSize(),
+                    onRuleSelected = onRuleSelected,
+                    onRuleModeChange = onRuleModeChange,
                 )
             }
-        }
+}
+
+/**
+ * The strip above the canvas: the selected row as text.
+ *
+ * Above *both* canvases because neither owns it — both read and write the same selection. The canvas
+ * switch that used to share this row now sits in the area header beside the other view switches, so
+ * every switch in the app is in one place; what is left here edits the selection, which is canvas work.
+ */
+@Suppress("FunctionNaming")
+@Composable
+private fun FormulaRow(
+    builderEditorState: BuilderEditorState,
+    selectedNodeId: String?,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
+    ) {
+        FormulaBar(
+            text = selectedNodeId?.let { id ->
+                SelectionResolver.findNode(nodes = builderEditorState.conditionNodes, id = id)
+                    ?.let { node -> BuilderToRuleDsl.renderRow(node = node) }
+            },
+            parse = { text -> FormulaParser.parseCondition(text = text) },
+            onApply = { node ->
+                val id = selectedNodeId ?: return@FormulaBar
+                val replaced = builderEditorState.replaceNodeFromFormula(id = id, parsed = node)
+                if (replaced) {
+                    BuilderToRuleDsl.generate(state = builderEditorState)?.let(onBuilderDslChange)
+                } else {
+                    onBuilderMessage("That row could not be replaced.")
+                }
+            },
+            modifier = Modifier.weight(weight = 1f),
+        )
     }
+}
+
+/** Table mode: every loaded rule at a glance, with a click through to the Builder. */
+@Suppress("FunctionNaming")
+@Composable
+private fun TableModeContent(
+    allBuilderRules: List<BuilderRule>,
+    catalogRules: List<CatalogRule>,
+    selectedRuleId: String,
+    onRuleSelected: (String) -> Unit,
+    onRuleModeChange: (RuleMode) -> Unit,
+) {
+    RuleTablePanel(
+        allBuilderRules = allBuilderRules,
+        catalogRules = catalogRules,
+        selectedRuleId = selectedRuleId,
+        onRuleClick = { ruleId ->
+            onRuleSelected(ruleId)
+            onRuleModeChange(RuleMode.BUILDER)
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 /** Builder mode: the rule tree on the left, the selected rule's blocks on the right. */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
 private fun BuilderModeContent(
+    boardActive: Boolean,
     state: RuleEditorState,
     builderEditorState: BuilderEditorState,
-    allRuleIds: List<String>,
-    catalogFields: List<CatalogFieldInfo>,
     catalogActions: List<CatalogActionInfo>,
     ruleTreeFiles: List<RuleTreeFile>,
-    onRuleSelected: (String) -> Unit,
+    allBuilderRules: List<BuilderRule>,
     onAddRule: () -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit,
-    onConditionSelected: (String) -> Unit,
     onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    selectedNodeId: String?,
+    selectedStatementId: String?,
+    selectedSteps: List<SelectionStep>?,
+    onSelectNode: (String, List<SelectionStep>) -> Unit,
+    onSelectStatement: (RuleBranch, String) -> Unit,
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -262,142 +378,328 @@ private fun BuilderModeContent(
             color = BorderColor,
             modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
         )
-        RuleBuilderView(
-            editorState = builderEditorState,
-            allRuleIds = allRuleIds,
-            onRuleSelected = onRuleSelected,
-            onAddRule = onAddRule,
-            onRenameRule = onRenameRule,
-            catalogFields = catalogFields,
-            catalogActions = catalogActions,
-            onConditionSelected = onConditionSelected,
-            onDslChange = onBuilderDslChange,
-            modifier = Modifier.weight(weight = 1f).fillMaxSize(),
-        )
+        Column(modifier = Modifier.weight(weight = 1f).fillMaxSize()) {
+            FormulaRow(
+                builderEditorState = builderEditorState,
+                selectedNodeId = selectedNodeId,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+            )
+
+            if (boardActive) {
+                BoardCanvas(
+                    state = builderEditorState,
+                    files = ruleTreeFiles,
+                    rules = allBuilderRules,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    onSelectNode = { nodeId -> onSelectNode(nodeId, emptyList()) },
+                    onSelectStatement = onSelectStatement,
+                    onSelectRule = onTreeRuleSelected,
+                    onDslChange = onBuilderDslChange,
+                    onMessage = onBuilderMessage,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            } else {
+                OutlineCanvas(
+                    state = builderEditorState,
+                    catalogActions = catalogActions,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    selectedSteps = selectedSteps,
+                    onSelectNode = onSelectNode,
+                    onSelectStatement = onSelectStatement,
+                    onDslChange = onBuilderDslChange,
+                    onMessage = onBuilderMessage,
+                    onRenameRule = onRenameRule,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
     }
 }
 
 /**
- * Header that is shown above every center mode: title, mode tabs, and context actions.
+ * The area header for the Rules area — the same header the other three areas have.
  *
- * The actions sit on their own row under the tabs rather than beside them. Sharing one row makes
- * the two compete for width — the tabs are fixed, so the actions absorb every shortfall, and the
- * last button gets squeezed until its label wraps to one letter per line. Which actions there are
- * depends on the mode, so that shortfall is not a fixed amount that could simply be designed around.
+ * What it replaces: a "Rule Editor" title over a bordered icon toggle, with a *second* row of buttons
+ * underneath it. The second row existed because the tabs and the actions competed for one line and the
+ * actions absorbed every shortfall, until the last button's label wrapped one letter per line. The
+ * shared header ranks the actions instead — the primary verb keeps its label at any width, the
+ * secondary ones fall back to their icons, and the rare ones were never on the bar.
  */
-@Suppress("FunctionNaming")
+@Suppress("FunctionNaming", "LongParameterList")
 @Composable
-private fun CenterPanelHeader(
+private fun RulesAreaHeader(
     state: RuleEditorState,
     scope: CoroutineScope,
-    viewMode: ViewMode,
+    ruleMode: RuleMode,
     onRuleModeChange: (RuleMode) -> Unit,
+    ruleCount: Int,
     diagramGraphicsLayer: GraphicsLayer,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(space = 10.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Rule Editor",
-                style = MaterialTheme.typography.subtitle1,
-                color = TextPrimary,
+    val viewMode = ruleMode.toViewMode()
+    var ruleValue by state.ruleValue
+    val entryRuleFiles = entryRuleFiles(state = state)
+
+    AreaHeader(
+        title = "Rules",
+        meta = rulesMeta(ruleCount = ruleCount, fileCount = entryRuleFiles.size),
+        binding = ruleFileBinding(
+            ruleFiles = entryRuleFiles,
+            selectedFile = state.selectedManifestRuleFile.value,
+            showAllRules = state.showAllRules.value,
+            // "All files" is only meaningful where the view can show more than one at once, and only
+            // when the entry actually has more than one — unchanged from the `☰` menu this replaces.
+            offersAllFiles = entryRuleFiles.size >= 2 &&
+                (viewMode == ViewMode.DIAGRAM || viewMode == ViewMode.TEST),
+        ),
+        onBindingItem = { id ->
+            if (id == ALL_RULE_FILES) {
+                state.loadAllRuleFilesForCurrentEntry()
+            } else {
+                state.loadSingleManifestRuleFile(id)
+            }
+        },
+        tabs = { density ->
+            ModeTabs(
+                modes = RULE_TABS,
+                // The board has no tab of its own: it is the Visual tab drawn the other way, so that is
+                // the tab that has to look selected while it is showing.
+                current = if (ruleMode == RuleMode.BOARD) RuleMode.BUILDER else ruleMode,
+                label = { mode -> mode.displayName },
+                onSelect = onRuleModeChange,
+                icon = { mode -> mode.icon },
+                // Five tabs is the widest strip in the app, so it degrades in two steps rather than
+                // one: the glyphs go first and the words only after them, because "Diagram" teaches
+                // and "⬡" does not.
+                showIcons = density == BarDensity.FULL,
+                showLabels = density != BarDensity.MINIMAL,
             )
-            Spacer(Modifier.width(width = 14.dp))
-            ViewModeToggle(
-                current = viewMode,
-                onChange = { onRuleModeChange(it.toRuleMode()) },
+        },
+        subTabs = rulesSubTabs(
+            state = state,
+            viewMode = viewMode,
+            onRuleModeChange = onRuleModeChange,
+        ),
+        actions = rulesActions(state = state, viewMode = viewMode),
+        onAction = { id ->
+            runRulesAction(
+                id = id,
+                state = state,
+                scope = scope,
+                ruleValue = ruleValue,
+                onRuleValueChange = { value -> ruleValue = value },
+                diagramGraphicsLayer = diagramGraphicsLayer,
+            )
+        },
+        // The Rules strip is five tabs wide with a sub-switch beside it, so it needs a good 300 dp more
+        // than a two-tab header before it can hold every label. Measured, not guessed: below this the
+        // labels are what pushes the sub-switch off the edge.
+        fullWidth = RULES_FULL_WIDTH,
+        compactWidth = RULES_COMPACT_WIDTH,
+    )
+}
+
+/** The tabs the Rules area offers, in order. [RuleMode.BOARD] is deliberately not one of them. */
+private val RULE_TABS: List<RuleMode> = listOf(
+    RuleMode.BUILDER,
+    RuleMode.CODE,
+    RuleMode.DIAGRAM,
+    RuleMode.TEST,
+    RuleMode.TABLE,
+)
+
+/**
+ * What the Rules header needs, measured against the *panel* — not the window.
+ *
+ * The centre panel gives up a rail and, usually, the Inspector, so a 1440 px window leaves it about
+ * 1010 dp — and the widest mode, Code, wants a little more than that for five labelled tabs, the file
+ * chip, two secondary verbs and a primary one. So the labels come back at 1080 and the tabs spend the
+ * common case as glyphs, rather than the last tab being clipped at the width most windows actually
+ * are. Measured against the panel, never the window.
+ */
+private val RULES_FULL_WIDTH: Dp = 1_080.dp
+private val RULES_COMPACT_WIDTH: Dp = 800.dp
+
+/** The rule files of the entry being edited, which is what the chip's menu lists. */
+private fun entryRuleFiles(state: RuleEditorState): List<String> {
+    return state.parsedManifest.value
+        ?.entries
+        ?.find { entry -> entry.id == state.selectedManifestEntry.value }
+        ?.rules
+        .orEmpty()
+}
+
+/** "14 rules · 4 files", or as much of it as there is to say. */
+private fun rulesMeta(ruleCount: Int, fileCount: Int): String? {
+    if (ruleCount == 0) return null
+    val rules = "$ruleCount rule" + if (ruleCount == 1) "" else "s"
+    if (fileCount <= 1) return rules
+    return "$rules · $fileCount files"
+}
+
+/**
+ * The switch that lives *within* a mode rather than between modes.
+ *
+ * Outline/Board while the Visual tab is showing — it changes how one rule is drawn, not what the panel
+ * is, which is why it is styled as subordinate rather than as a sixth tab. It used to float on the
+ * canvas itself; here it is beside the other view switches, where a reader looks for it.
+ *
+ * In Diagram mode the same slot holds which diagram is drawn, which is the same kind of choice.
+ */
+private fun rulesSubTabs(
+    state: RuleEditorState,
+    viewMode: ViewMode,
+    onRuleModeChange: (RuleMode) -> Unit,
+): (@Composable (BarDensity) -> Unit)? {
+    return when (viewMode) {
+        // No icons on this pair, deliberately: two words are narrower than two words plus two glyphs,
+        // and this is the switch that has to give way first when the bar is short. Words rather than
+        // glyphs because "Board" is a thing to learn, and an unfamiliar glyph teaches nobody.
+        ViewMode.BUILDER, ViewMode.BOARD -> { _ ->
+            ModeTabs(
+                modes = CANVAS_TABS,
+                current = if (viewMode == ViewMode.BOARD) RuleMode.BOARD else RuleMode.BUILDER,
+                label = { mode -> canvasLabel(mode = mode) },
+                onSelect = onRuleModeChange,
+                subordinate = true,
             )
         }
-        CenterPanelActions(
-            state = state,
-            scope = scope,
-            viewMode = viewMode,
-            diagramGraphicsLayer = diagramGraphicsLayer,
+
+        ViewMode.DIAGRAM -> { _ -> DiagramViewPicker(state = state) }
+        ViewMode.CODE, ViewMode.TEST, ViewMode.TABLE -> null
+    }
+}
+
+private val CANVAS_TABS: List<RuleMode> = listOf(RuleMode.BUILDER, RuleMode.BOARD)
+
+private fun canvasLabel(mode: RuleMode): String {
+    return if (mode == RuleMode.BOARD) "Board" else "Outline"
+}
+
+/** The action ids the Rules header reports. */
+private const val ACTION_LOAD = "load"
+private const val ACTION_COPY = "copy"
+private const val ACTION_VALIDATE = "validate"
+private const val ACTION_EXPORT_PNG = "export-png"
+private const val ACTION_EXPAND = "expand"
+private const val ACTION_EXPORT_PREFIX = "export-overview:"
+
+/**
+ * What each mode offers, ranked.
+ *
+ * `Validate` is the primary verb wherever a rule is being written — the Builder generates the same DSL
+ * the code view holds, so "is this valid" is the same question in both. It is also the only one with a
+ * glyph: `✓` reads at 12 sp, while every download, open and expand arrow available at this size is a
+ * hairline. The rest keep their words and move into the `⋯` menu when the bar is short.
+ */
+private fun rulesActions(state: RuleEditorState, viewMode: ViewMode): List<HeaderAction> {
+    return when (viewMode) {
+        ViewMode.BUILDER, ViewMode.BOARD -> exportOverviewActions(state = state) + validateAction()
+
+        ViewMode.CODE -> listOf(
+            HeaderAction(id = ACTION_LOAD, label = "Load rule…"),
+            HeaderAction(id = ACTION_COPY, label = "Copy rule"),
+        ) + exportOverviewActions(state = state) + validateAction()
+
+        ViewMode.DIAGRAM -> listOf(
+            HeaderAction(id = ACTION_EXPORT_PNG, label = "Export PNG"),
+            HeaderAction(id = ACTION_EXPAND, label = "Expand"),
+        )
+
+        ViewMode.TEST, ViewMode.TABLE -> emptyList()
+    }
+}
+
+private fun validateAction(): List<HeaderAction> {
+    return listOf(
+        HeaderAction(
+            id = ACTION_VALIDATE,
+            label = "Validate",
+            icon = "✓",
+            emphasis = ActionEmphasis.PRIMARY,
+        ),
+    )
+}
+
+/**
+ * One overflow entry per format.
+ *
+ * Disabled rather than dropped when no entry is selected: the action exists for every project, and an
+ * entry that vanishes from a menu reads as a feature that is missing rather than one not applicable.
+ */
+private fun exportOverviewActions(state: RuleEditorState): List<HeaderAction> {
+    val hasEntry = state.selectedManifestEntry.value != null
+    return RuleOverviewExport.Format.entries.map { format ->
+        HeaderAction(
+            id = ACTION_EXPORT_PREFIX + format.name,
+            label = "Export overview — ${format.label}",
+            emphasis = ActionEmphasis.OVERFLOW,
+            enabled = hasEntry,
         )
     }
 }
 
-@Composable
-private fun CenterPanelActions(
-    state: RuleEditorState,
-    scope: CoroutineScope,
-    viewMode: ViewMode,
-    diagramGraphicsLayer: GraphicsLayer,
-) {
-    var ruleValue by state.ruleValue
-
-    // Scrollable because the number of actions depends on the mode and the window can be narrower
-    // than they need. Without it the row squeezes its last button instead, which is how "Validate"
-    // once ended up rendered as a column of letters.
-    Row(
-        modifier = Modifier.horizontalScroll(state = rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ManifestFilePicker(state = state, viewMode = viewMode)
-        when (viewMode) {
-            ViewMode.CODE -> CodeModeActions(
-                state = state,
-                scope = scope,
-                ruleValue = ruleValue,
-                onRuleValueChange = { ruleValue = it },
-            )
-
-            ViewMode.DIAGRAM -> DiagramModeActions(
-                state = state,
-                scope = scope,
-                diagramGraphicsLayer = diagramGraphicsLayer,
-            )
-
-            ViewMode.BUILDER, ViewMode.TEST, ViewMode.TABLE -> {}
-        }
-    }
-}
-
-@Composable
-private fun CodeModeActions(
+/** Runs what the header reported. Every branch is the behaviour the old button had. */
+@Suppress("LongParameterList")
+private fun runRulesAction(
+    id: String,
     state: RuleEditorState,
     scope: CoroutineScope,
     ruleValue: TextFieldValue,
     onRuleValueChange: (TextFieldValue) -> Unit,
+    diagramGraphicsLayer: GraphicsLayer,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ToolbarButton(
-            label = "Load Rule",
-            onClick = {
-                scope.launch {
-                    val c = pickRuleFile()
-                    if (c != null) {
-                        onRuleValueChange(TextFieldValue(text = c))
-                        state.setStatus(msg = "Rule loaded", kind = StatusKind.SUCCESS)
-                    } else {
-                        state.setStatus(msg = "Load cancelled", kind = StatusKind.IDLE)
-                    }
-                }
-            },
-        )
-        // No "Save Rule" here: rule files are written by Save Project along with the manifest that
-        // indexes them. A separate write also went behind the project's back, leaving it convinced
-        // the file had been changed by someone else the next time it saved.
-        ToolbarButton(
-            label = "Copy Rule",
-            onClick = {
-                if (ruleValue.text.isNotBlank()) {
-                    copyToClipboard(ruleValue.text)
-                    state.setStatus(msg = "Rule copied to clipboard", kind = StatusKind.SUCCESS)
-                } else {
-                    state.setStatus(msg = "Nothing to copy", kind = StatusKind.IDLE)
-                }
-            },
-        )
-        ExportOverviewButton(state = state, scope = scope)
-        ToolbarButton(
-            label = "Validate",
-            primary = true,
-            onClick = { scope.launch { state.validateNow(ruleText = ruleValue.text) } },
-        )
+    when {
+        id == ACTION_LOAD -> scope.launch { loadRuleFile(state = state, onRuleValueChange = onRuleValueChange) }
+        id == ACTION_COPY -> copyRule(state = state, ruleValue = ruleValue)
+        id == ACTION_VALIDATE -> scope.launch { state.validateNow(ruleText = state.ruleValue.value.text) }
+        id == ACTION_EXPORT_PNG -> scope.launch {
+            exportDiagramPng(state = state, diagramGraphicsLayer = diagramGraphicsLayer)
+        }
+
+        id == ACTION_EXPAND -> state.showExpandedDiagram.value = true
+        id.startsWith(prefix = ACTION_EXPORT_PREFIX) -> {
+            val format = RuleOverviewExport.Format.valueOf(id.removePrefix(prefix = ACTION_EXPORT_PREFIX))
+            scope.launch { exportRuleOverview(state = state, format = format) }
+        }
+    }
+}
+
+/**
+ * Loads a rule file into the buffer.
+ *
+ * There is deliberately no "Save rule" beside it: rule files are written by Save Project along with the
+ * manifest that indexes them. A separate write also went behind the project's back, leaving it convinced
+ * the file had been changed by someone else the next time it saved.
+ */
+private suspend fun loadRuleFile(state: RuleEditorState, onRuleValueChange: (TextFieldValue) -> Unit) {
+    val content = pickRuleFile()
+    if (content != null) {
+        onRuleValueChange(TextFieldValue(text = content))
+        state.setStatus(msg = "Rule loaded", kind = StatusKind.SUCCESS)
+    } else {
+        state.setStatus(msg = "Load cancelled", kind = StatusKind.IDLE)
+    }
+}
+
+private fun copyRule(state: RuleEditorState, ruleValue: TextFieldValue) {
+    if (ruleValue.text.isNotBlank()) {
+        copyToClipboard(ruleValue.text)
+        state.setStatus(msg = "Rule copied to clipboard", kind = StatusKind.SUCCESS)
+    } else {
+        state.setStatus(msg = "Nothing to copy", kind = StatusKind.IDLE)
+    }
+}
+
+private suspend fun exportDiagramPng(state: RuleEditorState, diagramGraphicsLayer: GraphicsLayer) {
+    runCatching {
+        val bitmap = diagramGraphicsLayer.toImageBitmap()
+        saveDiagramAsPng(bitmap = bitmap)
+        state.setStatus(msg = "Diagram exported as PNG", kind = StatusKind.SUCCESS)
+    }.onFailure { cause ->
+        state.setStatus(msg = "Export failed: ${cause.message}", kind = StatusKind.ERROR)
     }
 }
 
@@ -448,40 +750,6 @@ private fun RuleEditorState.validateNow(ruleText: String) {
     }
 }
 
-@Composable
-private fun DiagramModeActions(
-    state: RuleEditorState,
-    scope: CoroutineScope,
-    diagramGraphicsLayer: GraphicsLayer,
-) {
-    var showExpandedDiagram by state.showExpandedDiagram
-
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        DiagramViewPicker(state = state)
-        ToolbarButton(
-            label = "Export PNG",
-            onClick = {
-                scope.launch {
-                    runCatching {
-                        val bitmap = diagramGraphicsLayer.toImageBitmap()
-                        saveDiagramAsPng(bitmap = bitmap)
-                        state.setStatus(msg = "Diagram exported as PNG", kind = StatusKind.SUCCESS)
-                    }.onFailure {
-                        state.setStatus(msg = "Export failed: ${it.message}", kind = StatusKind.ERROR)
-                    }
-                }
-            },
-        )
-        SecondaryButton(
-            text = "Expand",
-            onClick = { showExpandedDiagram = true },
-        )
-    }
-}
-
 /**
  * Picks which diagram is drawn.
  *
@@ -498,7 +766,7 @@ private fun DiagramViewPicker(state: RuleEditorState) {
     val current by state.diagramView
 
     Box {
-        ToolbarButton(label = "▤ ${current.label()}", onClick = { expanded = true })
+        ToolbarButton(label = "View: ${current.label()} ▼", onClick = { expanded = true })
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },

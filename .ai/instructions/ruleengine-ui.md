@@ -25,7 +25,7 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
 |---|---|
 | `ui.<feature>` | Composables, controllers, services, mappers — anything with behavior. |
 | `ui.<feature>.model` | Every model and enum of that feature. See the Models and DTOs rules in `coding-guidelines.md`. |
-| `ui.<feature>.<role>` | Further behavior groups when the feature package exceeds 8 files: `ui.workbench.areas`, `ui.builder.view`, `ui.diagrams.render`, `ui.builder.components.dropdown`. |
+| `ui.<feature>.<role>` | Further behavior groups when the feature package exceeds 8 files: `ui.workbench.areas`, `ui.builder.outline`, `ui.builder.board`, `ui.builder.inspector`. |
 | `ui.<feature>.model.<group>` | Model groups when `model` itself exceeds 8 files: `ui.workbench.model.mode`, `ui.project.model.dialog`. |
 
 - A new data class or enum goes in `model`, never beside the composable that uses it.
@@ -101,6 +101,159 @@ Three passes, and they are not interchangeable:
   result reports every file with lines relative to *its* file, so underlining the lot marks the wrong
   lines. The diagnostics panel shows them all and labels the ones from elsewhere.
 
+## The Builder: two canvases, one selection
+
+The Builder is two renderings of one rule. Adding a third, or changing either, means keeping the
+invariants below — they are the reason the pair does not become two half-editors that disagree.
+
+- **`ui.builder.outline`** — the reading canvas: one line per condition, joins as pills on the gutter,
+  groups as bracket rails, and the outcome blocks in DSL order. Nothing in it expands, so the row being
+  worked on never moves.
+- **`ui.builder.board`** — the run: every rule in evaluation order along the top, then the selected rule
+  as drag-and-droppable rails and three outcome lanes.
+- **`ui.builder.inspector`** — the editing surface for **both**. There is no other one.
+
+### The selection is one value, held where it already was
+
+`InspectorItem.Condition(conditionId, steps)` and `InspectorItem.Statement(branch, statementId, steps)`
+*are* the selection store. Both carry a `List<SelectionStep>` — a positional path into the expression
+(`Left`, `Argument(2)`, `Segment(1)`, `Filter(0)`, …) — so depth is navigation, not layout.
+
+There is deliberately **no** `BuilderSelectionController`. The dispatch path already existed
+(`WorkbenchAction.SelectInspectorItem`), and a second store for node selection would be the same trap
+this file already records for rule selection. Canvases dispatch; the Inspector reads; `CanvasSelection.of`
+is the one place that decides which of the three pieces a canvas gets.
+
+### The row's DSL form is derived, never toggled
+
+`ui.builder.RowForm` decides whether a row is a *simple condition* or a *value-expression comparison*
+from its operands, the way the parser decides it from the text:
+
+- a plain field path (no filters, sort or slice, not a `$var`) against a literal or a list is a simple
+  condition — the only form the **named** operators (`contains`, `between`, `in`, `startsWith`, …) exist
+  in;
+- anything computed is a comparison, and only `== != > >= < <=` can spell it.
+
+`blockedPromotion` refuses, with a reason naming the operator, rather than converting. The button this
+replaced was a **one-way door that lost data**: it hard-coded `==`, so `amount >= 300` became
+`amount == 300`, and it dropped `valueTo`, `listItems` and `ignoreCase`. Because the Builder regenerates
+the whole rule text on every edit, that was data loss on disk. Do not add a "convert to…" action that
+cannot round-trip.
+
+### Adding a canvas — the checklist
+
+1. Add the value to `RuleMode`, `ViewMode` and **both** directions of `RuleModeMapping`. The exhaustive
+   `when`s in `CenterEditorPanel` will then tell you what is missing.
+2. Do **not** add a tab to the area header's `ModeTabs` if the new canvas shows the same rule with the
+   same selection. Pass it to `AreaHeader(subTabs = …)` as a **subordinate** `ModeTabs` instead, the way
+   Outline/Board is. The tabs change what the centre panel *is*; a canvas changes how one rule is drawn,
+   and `subordinate = true` is what keeps the two from looking alike — no container, and the selected
+   item is merely raised rather than accented. (This switch used to float on the canvas itself. It moved
+   so that every view switch in the app is in one strip; the rule it still has to satisfy is that it
+   never reads as a mode tab.)
+3. Read the selection, never store it. Write it with `SelectInspectorItem` and open the panel with
+   `RightPanelController.showInspector()`.
+4. Render row text through `BuilderToRuleDsl.renderRow` and operands through `OperandText.toDsl`. Two
+   renderers drift; one cannot.
+5. Every new model state must round-trip through **both** `RuleAstToBuilderMapper` and
+   `BuilderToRuleDsl`. Anything the mapper cannot represent is deleted from the file on the next edit.
+
+### Things that must not change
+
+- **`stop` is a `Boolean` on the branch and a badge in the UI**, never a row. A `stop` in the middle of a
+  branch does not parse, and a flag cannot drift from the end of its block.
+- **State a ribbon group's width from its item count** (`n × card + (n − 1) × arrow`), never from an
+  intrinsic measurement. The HTML prototype of that ribbon painted cards on top of each other in two of
+  three browser engines because each computed a different intrinsic width; `Row` + `horizontalScroll`
+  with intrinsic children fails the same way and just as silently.
+- **A refused gesture says why.** `blockedRemoval`, `blockedMove`, `blockedPromotion` and
+  `validateDrop` all return a reason, and it reaches the status bar. A drag that springs back silently is
+  indistinguishable from a broken drag, and a refusal is where the DSL gets taught.
+- **Only a rule earlier in the run publishes a `$variable`.** `VariableFlow` encodes this; a reader whose
+  producer runs later is an `orphanReader`, not a reader. That case — a rule that parses, validates, runs
+  and can never fire — is the board's one genuine warning, and no single-rule view can see it.
+
+### What the Builder cannot do yet, and why
+
+Core diagnostics cannot be attributed to a **row**. A `ValidationDiagnostic` carries a file and a line;
+nothing in the chain — parser AST → `RuleAstToBuilderMapper` → `BuilderRule` → `BuilderEditorState` —
+records which line a row came from. Doing it properly means carrying line provenance the whole way
+through. Until then the dock's **Checks** tab shows the open file's diagnostics, and
+`ui.builder.RowIssues` covers the incomplete-row cases the Builder has complete information about on
+its own.
+
+Note what *is* now known, because the older wording said otherwise: the Builder can locate its rule in
+the file exactly, via `findRuleBlockRange` in `ui/RuleDslBlocks.kt`. That is what the preview dock's
+highlight is built on. What is still missing is the other direction — a row to a line — and
+`rowLineRanges` only approximates it, by matching the row's generated text *inside* that block.
+
+## The area header
+
+`ui.components.header.AreaHeader` is the one header above all four editor areas, and it has four slots
+in one order: **title** (what this is), **binding chip** (the file it is bound to), **mode tabs** (how it
+is being shown), and **actions**, right-aligned. The body underneath is the only thing that differs
+between areas. A fifth layout is not an option — that is what this replaced.
+
+- **One vocabulary.** The first tab is always **Visual** and the text tab is always **Code**, in every
+  area, from `displayName` on the mode enums in `ui.workbench.model.mode`. `ModeDisplayNamesTest` fails
+  the moment an area invents a third word.
+- **The mode is workbench state.** It lives in `RuleWorkbenchState` and changes by dispatching
+  `SelectRuleMode` / `SelectSchemaMode` / `SelectActionMode` / `SelectManifestMode`. No panel owns its
+  own mode, and `YamlModelSync` deliberately does not have one.
+- **The area owns its collapse policy.** `tabs` and `subTabs` are slots that receive the measured
+  `BarDensity`, and `AreaHeader` takes `fullWidth` / `compactWidth`, because a two-tab header and the
+  five-tab Rules one do not need the same room. Measure against the **panel**, not the window: the
+  centre panel gives up a rail and usually the Inspector.
+- **Rank the actions, never squeeze them.** `ActionEmphasis.PRIMARY` keeps its label at every width and
+  never moves into the overflow; `STANDARD` falls back to its glyph and keeps its label in the semantics
+  tree; `OVERFLOW` is only ever in the `⋯` menu. The row this replaced shared one line with the tabs,
+  and the last button's label wrapped one letter per line.
+- **The binding chip is the elastic slot.** It has a ceiling per density and truncates inside it. Do not
+  give it a `weight`: a weighted chip in a full row is measured at zero width and disappears, and the
+  control naming the open file is the one thing that must not.
+
+## The preview dock
+
+`ui.dock` is one dock under five surfaces — the Builder's two canvases and the Schema, Actions and
+Manifest editors — and the reason it is one is that five previews of "the file you are about to write"
+would be five things to keep in step. It replaced `OutlineDock`, which was the Builder's alone.
+
+- **`CanvasDockScaffold` lives inside the centre panel, never in `WorkbenchShell`.** Its
+  `BoxWithConstraints` is what gives the height clamp the available height exactly; in the shell it
+  would have to be inferred by subtracting the intrinsic heights of the top bar, the diagnostics section
+  and the status bar, and getting that wrong pushes the status bar off the window.
+- **Two clamps, and only one is stored.** `DockController.setHeight` clamps to the constants and
+  persists. The scaffold caps the *rendered* height at `maxHeight - MIN_CANVAS_HEIGHT` and never writes
+  that back, so a small window borrows height instead of overwriting a preference set on a large one.
+  The right panel's `MAX_WIDTH` is an absolute constant and has the bug this avoids.
+- **`Usages` and `Checks` are tabs of the dock, never modes of an area.** They used to be
+  `SchemaMode.USAGES`, `ActionMode.USAGES` and `ManifestMode.CHECKS`, so looking at which rules read a
+  field replaced the field being edited. The mode values are deleted; do not add them back. A mode
+  replaces the canvas, and everything about the open file that is *not* the file belongs beside it.
+- **A check names its subject rather than describing it.** Every `SchemaIssue` carries the path, action
+  name or entry id it is about, which is what lets a `CheckList` row select it. A check whose text
+  describes the row in prose cannot be clicked, and that was the whole difference between reporting a
+  problem and going to it.
+- **A highlight sets `background` and nothing else.** The syntax highlighters set `color`, weight, style
+  and decoration and never `background`, which is the only reason the two layers compose. `OutlineDock`
+  set `color = PrimaryBlue` too, so the one line the reader was looking at was the one line that lost
+  its syntax colours.
+- **Memoize an `annotate` call on `ThemeController.isDark`.** A colour read inside `remember` does not
+  subscribe to the theme — see the note in `Theme.kt` — so without it the preview keeps the previous
+  theme's colours until its text next changes.
+- **`DockSurface` has four entries for five surfaces.** Outline and Board are one rule file with one
+  selection, and whether the dock starts open is a property of the area. Giving the canvases separate
+  identities is how switching canvas starts closing the dock.
+- **The default open state lives on `DockSurface.openByDefault`**, not at the call sites. It is open for
+  `RULES` — seeing the DSL a row generates is how the Builder teaches the language — and closed for the
+  other three. This reverses `OutlineDock`'s "collapsed by default, it is reference material not the
+  work", which was written when the dock showed only the generated rule and could not be resized.
+- **Ranges belong in tested functions, not in the renderer.** `findRuleBlockRange` / `rowLineRanges`
+  (`ui/RuleDslBlocks.kt`) and `schemaFieldRange` / `actionRange` / `manifestEntryRange`
+  (`ui/dock/YamlRanges.kt`). The YAML ones encode the bridges' layout, so their tests drive the **real
+  bridges** — a writer that changes its indentation then fails a test instead of silently moving a
+  highlight.
+
 ## The Inspector and the right panel
 
 Two invariants here are easy to break by adding code that looks correct in isolation.
@@ -114,19 +267,99 @@ Two invariants here are easy to break by adding code that looks correct in isola
   site; make the click reach `BuilderRulesController` and the panel follows.
   The effect is guarded on `appArea == RULES` so a field or action selected in the Schema or Actions
   area survives until the user returns to the rules.
-- **`RightPanelController` is the only writer of the panel's open state and tab**, because both are
-  persisted through `RightPanelPersistence`. Flipping `RuleEditorState.rightPanelExpanded` directly is
-  what makes the stored value drift from the one on screen.
+- **`RightPanelController` is the only writer of the panel's open state, tab and width**, because all
+  three are persisted through `RightPanelPersistence`. Flipping `RuleEditorState.rightPanelExpanded` or
+  `rightPanelWidth` directly is what makes the stored value drift from the one on screen. The width in
+  particular is clamped inside `setWidth` and again in `RightPanelPersistence.loadWidth`, so a value
+  saved on a wide display cannot come back as a layout with the drag handle off the edge.
 
 `InspectorPanel` takes `builderState` *and* `ruleStates` and they are not interchangeable: the condition
 branch needs the open builder state, because that is where the inspected row lives, while the rule branch
 needs the selected rule's own — in code mode the caret can sit in a rule the builder does not hold open,
 and reading `builderState` there reports one rule's id with another rule's counts.
 
-A row in the schema or action tables gets its inspect affordance as a **36 dp button**, not a click on
-the row: every cell is a text field, so a row-wide target fights the editing under it, and the header
-reserves exactly 36 dp per trailing button — a default-width `TextButton` takes 64 dp out of the weighted
-columns beside it, which is enough to squeeze the longest chip to one letter per line.
+The 36 dp `ⓘ` button convention is **gone**, along with the tables it was a workaround for. It existed
+because every cell of a schema or action row was a text field, so a row-wide click target would have
+fought the editing under it. The canvases have no editing controls, so the whole row is the target and
+the selection carries the **dotted path**.
+
+## The three canvases
+
+`ui.schema.canvas.SchemaCanvas`, `ui.actions.canvas.ActionsCanvas` and `ui.manifest.canvas.ManifestCanvas`
+are the same shape as `ui.builder.outline`: one line per declaration, read-only, with the Inspector doing
+the writing. The rules that are easy to break by adding something that looks right in isolation:
+
+- **A row carries no editing control.** The controls that appear on the selected row are structural —
+  add a member, remove — exactly as `OutlineRows.RowActions` is. Put an editor on a row and the area
+  stops being readable, which is the whole defect the tables had.
+- **A short label is `softWrap = false`.** The token `FlowRow` wraps between parts; a part never wraps
+  inside itself. Without this, `integer` renders as `inte` / `ger` as soon as the Inspector is dragged
+  wide enough to squeeze the canvas — measured in the HTML prototype, and it will happen again.
+- **A nested structure is a bracket rail with `Modifier.height(IntrinsicSize.Min)`.** Without the
+  intrinsic height the rail `Box` has none of its own and collapses, leaving the group with no bracket.
+  Same requirement, same reason, as the Builder's condition groups.
+- **A refused gesture says why.** `SchemaCanvasGuards.blockedRemoval` and `ActionCanvasGuards` refuse to
+  delete a field a rule reads or an action a rule emits, naming the rules, and the reason reaches the
+  status bar.
+- **Issues come from `SchemaIssues` / `ActionIssues`, never computed in the renderer.** The row shows the
+  first non-note issue and the dock's Checks tab lists them all; two implementations would be two
+  answers, and the row is the one people would trust. A `NOTE` is not a row issue — "no rule reads this"
+  is already said by the `unread` tag on the same line.
+- **The manifest's paths are navigation.** It is the one file whose whole job is to point at the other
+  three, so clicking a path opens that area.
+- **A rule file's row says what it publishes and what it reads.** `ManifestVariableFlow` answers it, and
+  it is built on `VariableFlow.of` + `RibbonModel.groups` — the board's own derivation — precisely so the
+  two surfaces cannot give different answers about the same files. It is shown for the **active entry
+  only**: the loaded rules are that entry's rules, and a sibling may list the same files in another
+  order, which is exactly what changes the answer.
+- **The active entry is the session's.** `session.activeEntryId` and
+  `RuleEditorState.selectedManifestEntry` are two notions of the same thing, and nothing observed them
+  into agreement — so renaming the active entry left the editor looking up an id the manifest no longer
+  had, and the next `loadRuleFiles` wrote an empty map over the working copy. `ProjectWorkspace`
+  adopts the session's entry on every apply and every save; `ManifestSessionSyncTest` is the invariant.
+- **The active entry falls back to the first.** A sample has no `ProjectSession`, so
+  `session.activeEntryId` is null and the sole entry would otherwise be labelled "not the entry being
+  edited". `RuleEditorState.activeScope` already makes the same fallback, and so does the CLI for a
+  manifest without `--entry`.
+
+## The Inspector is the writer
+
+The Schema, Actions and Manifest inspectors used to be read-only summaries while the tables beside them
+did the editing. That is now reversed, and three invariants keep it that way.
+
+- **One model, held above both.** `RuleEditorState.schemaEditor` and `.actionEditor` are
+  `YamlModelSync` holders — the panel draws them and the Inspector writes them, so they cannot disagree
+  about what the schema currently is. They used to be `remember`ed inside `SchemaEditorPanel`, which put
+  them out of the Inspector's reach entirely.
+- **The sync effects live in `RuleEditor`, not in the area.** The Inspector can edit a field while
+  another area is on screen, and an effect that is not composed cannot push that edit to the YAML.
+- **A model with a blank or duplicate key is not serialized.** `SyncModelAndYaml` skips the push, because
+  the writers drop such entries — pushing would delete the row the author is still typing. This is why
+  the model rather than the YAML is the in-memory source of truth, and why the dock labels the Schema and
+  Actions previews *(last valid)* when the model has not been publishable.
+
+**Two lists in the schema format are ordered, and both were rendered as sets.** `normalizers` is a chain
+applied left to right; `argTypes` is a positional parameter list whose arity and per-index type
+`Validator` checks. Use `OrderedListEditor` for either — `allowDuplicates` is the only difference, and it
+is what makes `audit(string, string)` expressible. Do not put either back behind a chip row: a chip
+cannot hold an order, and it cannot hold the same value twice.
+
+**A path is typed first and picked second.** `PathField` is a text box with a `Choose…` button beside
+it, never a button alone: a manifest path is frequently one that does not exist yet, because the saver
+creates `rules/` and `schemas/`, and no dialog can offer a file nobody has written. The picker returns a
+path **relative to the manifest**, relativized by `ProjectWorkspace` — the Inspector is `commonMain` and
+has no business knowing where the project lives. Before the first save the button is disabled and
+`ProjectWorkspace.chosenPathBlockedReason` says why, shown both on hover and as a line under the field;
+`choosePathForManifest` refuses in that state too, so a caller that ignores the reason still cannot write
+an absolute path into a file that addresses everything relatively.
+
+**A value the engine forbids stays visible.** `ReasonedChipRow` renders it dashed, prints the reason, and
+leaves it clickable *while it is selected* so it can be removed. Hiding it would let the editor silently
+disagree with the file on disk; disabling it would leave the YAML tab as the only repair.
+
+**A field is reached by its dotted path**, never by leaf name — `ui.schema.findByPath` /
+`updateAtPath` / `removeAtPath`. A leaf name is not unique, and `EditableFieldPathsTest` pins that with
+a `lender` under three different parents.
 
 ## The project session and the manifest entry
 

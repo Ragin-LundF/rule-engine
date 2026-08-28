@@ -84,6 +84,7 @@ private fun AnnotatedString.Builder.styleLine(
                 indent = indent,
                 lineOffset = lineOffset,
                 parentKey = parentKey,
+                editorType = editorType,
             )
 
         trimmed.contains(':') -> {
@@ -107,23 +108,50 @@ private fun AnnotatedString.Builder.styleLine(
  * Inline bracket lists such as `argTypes: [string]` are not this shape — they arrive at the
  * key-value branch instead.
  */
+@Suppress("LongParameterList")
 private fun AnnotatedString.Builder.styleListItem(
     lineLen: Int,
     trimmed: String,
     indent: Int,
     lineOffset: Int,
     parentKey: String?,
+    editorType: YamlEditorType,
 ) {
     val dashAbs = lineOffset + indent
     val valueAbs = dashAbs + 2 // skip "- "
     val valueStr = if (trimmed.length > 2) trimmed.substring(2).trimEnd() else ""
 
     addStyle(style = SpanStyle(color = TextMuted), start = dashAbs, end = dashAbs + 1)
+    if (valueStr.isEmpty() || valueAbs >= lineOffset + lineLen) return
 
-    val valueStyle = resolveListItemStyle(parentKey = parentKey)
-    if (valueStr.isNotEmpty() && valueAbs < lineOffset + lineLen) {
-        addStyle(style = valueStyle, start = valueAbs, end = lineOffset + lineLen)
+    // A sequence item that is itself a mapping — `- id: loan-decisioning`, which opens every manifest
+    // entry. Colouring the whole thing as one value would lose the key, and the key is the entry's name.
+    val colonIdx = valueStr.indexOf(':')
+    if (colonIdx > 0 && valueStr.getOrNull(index = colonIdx + 1)?.isWhitespace() != false) {
+        val itemKey = valueStr.substring(0, colonIdx)
+        addStyle(
+            style = resolveKeyStyle(key = itemKey, indent = indent, parentKey = parentKey, editorType = editorType),
+            start = valueAbs,
+            end = valueAbs + itemKey.length,
+        )
+        addStyle(
+            style = SpanStyle(color = TextMuted),
+            start = valueAbs + itemKey.length,
+            end = valueAbs + itemKey.length + 1,
+        )
+        addStyle(
+            style = SpanStyle(color = ColorString),
+            start = valueAbs + colonIdx + 1,
+            end = lineOffset + lineLen,
+        )
+        return
     }
+
+    addStyle(
+        style = resolveListItemStyle(parentKey = parentKey, editorType = editorType),
+        start = valueAbs,
+        end = lineOffset + lineLen,
+    )
 }
 
 /** A `key: value` line, or a key-only line such as `fields:`. Returns the key it styled. */
@@ -167,8 +195,21 @@ private fun resolveKeyStyle(
     key: String,
     indent: Int,
     parentKey: String?,
-    @Suppress("UNUSED_PARAMETER") editorType: YamlEditorType,
+    editorType: YamlEditorType,
 ): SpanStyle {
+    // The manifest is the first type whose keys mean something different from the schemas': `id` names
+    // an entry, and `schema` / `actions` / `rules` are file references rather than definitions. Handled
+    // before the shared rules below, which would otherwise colour them as schema sub-keys.
+    if (editorType == YamlEditorType.PROJECT_MANIFEST) {
+        return when (key) {
+            "name", "entries" -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
+            "id" -> SpanStyle(color = ColorAction, fontWeight = FontWeight.SemiBold)
+            "schema", "actions", "rules" -> SpanStyle(color = ColorKeyword)
+            "scope" -> SpanStyle(color = ColorField)
+            else -> SpanStyle(color = TextSecondary)
+        }
+    }
+
     return when {
         // Top-level structural keys (`schema`, `fields`, `actions`).
         indent == 0 -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
@@ -187,8 +228,19 @@ private fun resolveKeyStyle(
     }
 }
 
-/** Returns the [SpanStyle] for a YAML list item value based on the enclosing key. */
-private fun resolveListItemStyle(parentKey: String?): SpanStyle {
+/**
+ * Returns the [SpanStyle] for a YAML list item value based on the enclosing key.
+ *
+ * A manifest's `rules:` items are file paths, and its `- id:` items open a sequence entry — neither is
+ * an enum value like a normalizer or an argType, so the manifest is resolved on its own terms.
+ */
+private fun resolveListItemStyle(parentKey: String?, editorType: YamlEditorType): SpanStyle {
+    if (editorType == YamlEditorType.PROJECT_MANIFEST) {
+        return when (parentKey) {
+            "rules" -> SpanStyle(color = ColorString)
+            else -> SpanStyle(color = TextPrimary)
+        }
+    }
     return when (parentKey) {
         "normalizers" -> SpanStyle(color = AccentOrange)
         "operators" -> SpanStyle(color = ColorOp)

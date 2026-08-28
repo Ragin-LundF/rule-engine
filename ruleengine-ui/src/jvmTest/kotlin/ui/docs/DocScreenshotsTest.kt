@@ -8,6 +8,7 @@ import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -61,16 +62,25 @@ class DocScreenshotsTest {
 
             loadFirstSample()
 
-            // A sample opens in Code mode, so the Builder is one click away rather than already there.
-            onNodeWithText(text = "Builder").performClick()
+            // A sample opens in Code mode, so the Builder — the "Visual" tab — is one click away
+            // rather than already there.
+            onNodeWithContentDescription(label = "Visual").performClick()
             waitForIdle()
             capture(name = "rule-builder")
 
-            onNodeWithText(text = "Code").performClick()
+            // The board is a canvas inside the Builder, not a mode tab, so its switch is on the canvas.
+            onNodeWithContentDescription(label = "Board").performClick()
+            waitForIdle()
+            capture(name = "rule-board")
+
+            onNodeWithContentDescription(label = "Outline").performClick()
+            waitForIdle()
+
+            onNodeWithContentDescription(label = "Code").performClick()
             waitForIdle()
             capture(name = "code-view")
 
-            onNodeWithText(text = "Diagram").performClick()
+            onNodeWithContentDescription(label = "Diagram").performClick()
             waitForIdle()
             capture(name = "diagram-rule-trees")
 
@@ -93,7 +103,7 @@ class DocScreenshotsTest {
      */
     @OptIn(ExperimentalTestApi::class)
     private fun DesktopComposeUiTest.captureLightMode() {
-        onNodeWithText(text = "Code").performClick()
+        onNodeWithContentDescription(label = "Code").performClick()
         waitForIdle()
         ThemeController.isDark = false
         try {

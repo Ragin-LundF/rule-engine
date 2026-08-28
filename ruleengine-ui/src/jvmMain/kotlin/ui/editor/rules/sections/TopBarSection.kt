@@ -2,9 +2,8 @@ package ui.editor.rules.sections
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,36 +11,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.Divider
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.Res
 import io.github.ragin_lundf.ruleengine_ui.generated.resources.app
 import org.jetbrains.compose.resources.painterResource
-import ui.BgElevated
-import ui.BgHover
+import ui.AccentOrange
 import ui.BgSurface
-import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
 import ui.components.StatusBadge
 import ui.components.ToolbarButton
+import ui.components.header.BindingChip
+import ui.components.header.densityFor
+import ui.components.header.model.BarDensity
+import ui.components.header.model.BindingMenuItem
+import ui.components.header.model.BindingSpec
 import ui.project.ProjectWorkspace
 import ui.project.manifest.ManifestEntrySelection
-import ui.project.model.ProjectFileKind
 import ui.theme.ThemeController
 import ui.theme.ThemePersistence
 
@@ -71,97 +65,86 @@ fun TopBarSection(
 ) {
     val isDirty = workspace.isDirty
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(color = BgSurface)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(space = 12.dp),
-    ) {
-        AppLogo()
-        Text(
-            text = "Rule Engine",
-            style = MaterialTheme.typography.h6.copy(fontWeight = FontWeight.SemiBold),
-            color = TextPrimary,
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().background(color = BgSurface)) {
+        // Measured on the window, unlike an area header, which is measured on its panel: this bar has
+        // the whole width, and it gives up its identity first and its labels last.
+        val density = densityFor(
+            width = maxWidth,
+            fullWidth = TOP_BAR_FULL_WIDTH,
+            compactWidth = TOP_BAR_COMPACT_WIDTH,
         )
-        StatusBadge(label = "WORKBENCH", color = PrimaryBlue)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
+        ) {
+            AppLogo()
+            if (density == BarDensity.FULL) {
+                Text(
+                    text = "Rule Engine",
+                    style = MaterialTheme.typography.h6.copy(fontWeight = FontWeight.SemiBold),
+                    color = TextPrimary,
+                )
+            }
+            if (density != BarDensity.MINIMAL) {
+                StatusBadge(label = "WORKBENCH", color = PrimaryBlue)
+            }
 
-        entrySelection?.let { selection ->
-            ManifestEntryPicker(
-                selection = selection,
-                onSelect = { entryId -> workspace.selectEntry(entryId = entryId) },
-                onAdd = {
-                    // The new entry needs naming, and the Manifest area is where its card lives.
-                    if (workspace.addEntry(entryId = workspace.suggestEntryId())) onManageEntries()
+            entrySelection?.let { selection ->
+                ManifestEntryPicker(
+                    selection = selection,
+                    density = density,
+                    onSelect = { entryId -> workspace.selectEntry(entryId = entryId) },
+                    onAdd = {
+                        // The new entry needs naming, and the Manifest area is where its card lives.
+                        if (workspace.addEntry(entryId = workspace.suggestEntryId())) onManageEntries()
+                    },
+                )
+            }
+
+            // What the `•` on the old Save button had to carry on its own. A badge says it once, where
+            // the eye already is, and leaves the button to say what it does.
+            if (isDirty) {
+                StatusBadge(label = "UNSAVED", color = AccentOrange)
+            }
+
+            Spacer(modifier = Modifier.weight(weight = 1f))
+
+            ProjectMenuButton(workspace = workspace)
+            SaveSplitButton(workspace = workspace, isDirty = isDirty)
+
+            Spacer(modifier = Modifier.width(width = 6.dp))
+
+            // The only entry point to the Inspector that does not require finding the collapsed strip on
+            // the right edge first. `primary` rather than a separate marker: the pressed look is the
+            // state, so the button cannot disagree with the panel.
+            ToolbarButton(
+                label = "Inspector",
+                onClick = onToggleInspector,
+                primary = inspectorOpen,
+            )
+
+            // The one place a picture beats a word: everyone reads sun and moon, and the button shows
+            // the theme it switches *to*. The sun is drawn from the emoji font, so it is a colour glyph
+            // where the moon is monochrome — deliberate here, and the reason this is the only
+            // pictogram left on the bar.
+            ToolbarButton(
+                label = if (ThemeController.isDark) "☀" else "☾",
+                onClick = {
+                    ThemeController.isDark = !ThemeController.isDark
+                    ThemePersistence.saveIsDark(ThemeController.isDark)
                 },
             )
         }
-
-        Spacer(modifier = Modifier.weight(weight = 1f))
-
-        ProjectActions(workspace = workspace, isDirty = isDirty)
-
-        Spacer(modifier = Modifier.width(width = 16.dp))
-
-        SharedFileExports(workspace = workspace)
-
-        Spacer(modifier = Modifier.width(width = 16.dp))
-
-        // The only entry point to the Inspector that does not require finding the collapsed strip on
-        // the right edge first. `primary` rather than a separate marker: the pressed look is the
-        // state, so the button cannot disagree with the panel.
-        ToolbarButton(
-            label = "ⓘ Inspector",
-            onClick = onToggleInspector,
-            primary = inspectorOpen,
-        )
-
-        ToolbarButton(
-            label = if (ThemeController.isDark) "☀" else "☾",
-            onClick = {
-                ThemeController.isDark = !ThemeController.isDark
-                ThemePersistence.saveIsDark(ThemeController.isDark)
-            },
-        )
     }
 }
 
-@Composable
-private fun ProjectActions(workspace: ProjectWorkspace, isDirty: Boolean) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ToolbarButton(label = "New Project", onClick = workspace::newProject)
-        ToolbarButton(label = "Open Project…", onClick = workspace::openProject)
-        ToolbarButton(
-            // The dot is the only place the toolbar can say "there is work not yet on disk".
-            label = if (isDirty) "Save Project •" else "Save Project",
-            onClick = { workspace.saveProject() },
-            primary = isDirty,
-            enabled = isDirty,
-        )
-        ToolbarButton(label = "Save Project As…", onClick = { workspace.saveProjectAs() })
-    }
-}
+/** Below this the wordmark goes; the logo stays, because it is the mark people aim at. */
+private val TOP_BAR_FULL_WIDTH: Dp = 1_300.dp
 
-@Composable
-private fun SharedFileExports(workspace: ProjectWorkspace) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ToolbarButton(
-            label = "Save Schema As…",
-            onClick = { workspace.exportShared(kind = ProjectFileKind.SCHEMA) },
-        )
-        ToolbarButton(
-            label = "Save Actions As…",
-            onClick = { workspace.exportShared(kind = ProjectFileKind.ACTIONS) },
-        )
-    }
-}
+/** Below this the badge goes and the entry chip drops its key. The right-hand controls are words, and
+ *  words do not shrink: what is left is short enough to fit. */
+private val TOP_BAR_COMPACT_WIDTH: Dp = 1_100.dp
 
 /**
  * Which manifest entry the workbench is editing.
@@ -176,62 +159,37 @@ private fun SharedFileExports(workspace: ProjectWorkspace) {
 @Composable
 private fun ManifestEntryPicker(
     selection: ManifestEntrySelection,
+    density: BarDensity,
     onSelect: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(value = false) }
     val activeEntryId = selection.activeEntryId
 
-    if (!selection.editable) {
-        ToolbarButton(label = "Entry: $activeEntryId", onClick = {}, enabled = false)
-        return
+    // No items when the manifest has no project behind it — a loaded sample. The chip still names the
+    // entry, because that is the question it is here to answer, but it does not open: both operations
+    // behind the menu need a session, so a menu would offer two controls that do nothing.
+    val items = if (!selection.editable) {
+        emptyList()
+    } else {
+        selection.entryIds.mapIndexed { index, entryId ->
+            BindingMenuItem(
+                id = entryId,
+                label = entryId,
+                selected = entryId == activeEntryId,
+                sectionTitle = if (index == 0) "Manifest entry" else null,
+            )
+        } + BindingMenuItem(id = NEW_ENTRY, label = "New entry…", separatorBefore = true)
     }
 
-    Box {
-        ToolbarButton(label = "Entry: $activeEntryId ▾", onClick = { expanded = true })
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier
-                .background(color = BgElevated)
-                .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
-        ) {
-            selection.entryIds.forEach { entryId ->
-                val isSelected = entryId == activeEntryId
-                DropdownMenuItem(
-                    onClick = {
-                        expanded = false
-                        onSelect(entryId)
-                    },
-                    modifier = Modifier.background(
-                        color = if (isSelected) BgHover else BgElevated,
-                        shape = RoundedCornerShape(size = 6.dp),
-                    ),
-                ) {
-                    Text(
-                        text = entryId,
-                        style = MaterialTheme.typography.body2,
-                        color = if (isSelected) PrimaryBlue else TextPrimary,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                }
-            }
-            Divider(color = BorderColor, thickness = 1.dp)
-            DropdownMenuItem(
-                onClick = {
-                    expanded = false
-                    onAdd()
-                },
-            ) {
-                Text(
-                    text = "+ New entry…",
-                    style = MaterialTheme.typography.body2,
-                    color = TextPrimary,
-                )
-            }
-        }
-    }
+    BindingChip(
+        spec = BindingSpec(label = "Entry", value = activeEntryId, items = items),
+        density = density,
+        onItem = { id -> if (id == NEW_ENTRY) onAdd() else onSelect(id) },
+    )
 }
+
+/** The picker's id for "make a new one"; anything else is an entry id. */
+private const val NEW_ENTRY = "*new*"
 
 @Composable
 private fun AppLogo(modifier: Modifier = Modifier) {
