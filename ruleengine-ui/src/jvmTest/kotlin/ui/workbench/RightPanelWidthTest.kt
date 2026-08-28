@@ -16,12 +16,19 @@ import kotlin.test.assertTrue
  */
 class RightPanelWidthTest {
 
+    // The savers are injected — the seam `RightPanelController` provides for exactly this — so the clamp
+    // is asserted without writing the developer's, or the CI runner's, real preferences node. Written
+    // there, a width from one test becomes the next run's startup layout on that machine, and the suite
+    // stops meaning the same thing twice.
     private fun controllerWith(width: Float): Pair<RightPanelController, () -> Float> {
         val state = mutableStateOf(value = width)
         val controller = RightPanelController(
             expanded = mutableStateOf(value = true),
             width = state,
             viewModel = RuleWorkbenchViewModel(initialState = RuleWorkbenchState.Empty),
+            saveExpanded = {},
+            saveWidth = {},
+            saveTab = {},
         )
         return controller to { state.value }
     }

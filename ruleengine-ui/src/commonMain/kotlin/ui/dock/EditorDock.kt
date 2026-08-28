@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -70,7 +71,11 @@ fun EditorDock(
 
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            // Height only while there is content to give it to. `CanvasDockScaffold` measures the canvas
+            // with whatever the dock leaves, so a collapsed dock that filled the height would take the
+            // whole centre panel and lay the canvas out at zero height — the area's header, tabs and all.
+            .then(other = if (expanded) Modifier.fillMaxHeight() else Modifier)
             .clip(shape = RoundedCornerShape(size = 8.dp))
             .background(color = BgSurface)
             .border(width = 1.dp, color = BorderColor, shape = RoundedCornerShape(size = 8.dp)),
