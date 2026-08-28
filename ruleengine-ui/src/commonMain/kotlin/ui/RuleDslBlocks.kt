@@ -91,6 +91,42 @@ internal fun ruleLineRange(fullText: String, ruleId: String): IntRange? {
     return firstLine..lastLine
 }
 
+/**
+ * The character ranges of the lines inside [block] that end with [rowText].
+ *
+ * What the dock's preview marks when a condition row is selected. Scoped to [block] — the range
+ * [findRuleBlockRange] returns for the rule being edited — which is the whole point: the dock this
+ * replaces matched trimmed lines across the *entire file*, so an identical row in another rule lit up
+ * alongside the real one.
+ *
+ * A list rather than one range, because inside a single rule two identical rows are legal, if
+ * pointless, and genuinely ambiguous. Marking both is honest; picking one arbitrarily would be a claim
+ * about which row is selected that is wrong half the time.
+ *
+ * Matched with `endsWith` on the trimmed line so the generator's indentation and the `and` / `or` that
+ * joins a row to the one above it do not have to be reproduced by the caller.
+ */
+internal fun rowLineRanges(fullText: String, block: IntRange, rowText: String): List<IntRange> {
+    val needle = rowText.trim()
+    if (needle.isEmpty() || fullText.isEmpty()) return emptyList()
+
+    val from = block.first.coerceIn(minimumValue = 0, maximumValue = fullText.length)
+    val to = (block.last + 1).coerceIn(minimumValue = from, maximumValue = fullText.length)
+
+    val ranges = mutableListOf<IntRange>()
+    var lineStart = from
+    while (lineStart < to) {
+        val newline = fullText.indexOf(char = '\n', startIndex = lineStart)
+        val lineEnd = if (newline == -1 || newline > to) to else newline
+        val line = fullText.substring(startIndex = lineStart, endIndex = lineEnd)
+        if (line.trim().endsWith(suffix = needle)) {
+            ranges.add(element = lineStart..lineEnd - 1)
+        }
+        lineStart = lineEnd + 1
+    }
+    return ranges
+}
+
 /** 1-based line number of [offset]. */
 private fun String.lineCountUpTo(offset: Int): Int {
     var lines = 1

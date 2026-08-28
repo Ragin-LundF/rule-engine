@@ -77,3 +77,12 @@ fun pickSchemaFilePath(): Path? =
 /** As [pickSchemaFilePath], for the actions file. */
 fun pickActionsFilePath(): Path? =
     nativeOpen(title = "Link Actions YAML", filter = yamlFilter)?.toPath()
+
+/**
+ * Picks a rule file to list in a manifest entry.
+ *
+ * Distinct from [pickRuleFile], which returns the file's *content* for the code editor and throws the
+ * path away. A manifest lists paths, so the path is the whole answer here.
+ */
+fun pickRuleFilePath(): Path? =
+    nativeOpen(title = "Add Rule File", filter = ruleFilter)?.toPath()

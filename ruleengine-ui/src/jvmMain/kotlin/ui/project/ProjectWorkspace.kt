@@ -11,9 +11,11 @@ import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
 import ui.manifest.ManifestYamlBridge
 import ui.manifest.model.ManifestEditorState
+import ui.manifest.model.ManifestPathKind
 import ui.pickActionsFilePath
 import ui.pickProjectManifestPath
 import ui.pickProjectManifestSavePath
+import ui.pickRuleFilePath
 import ui.pickSchemaFilePath
 import ui.pickSharedFileSavePath
 import ui.project.io.ProjectLoader
@@ -54,6 +56,14 @@ class ProjectWorkspace(
     private val chooseManifestToOpen: () -> Path? = { pickProjectManifestPath() },
     private val chooseManifestToSave: (String) -> Path? = { suggested ->
         pickProjectManifestSavePath(suggestedName = suggested)
+    },
+    /** Same reason: a manifest path can be chosen in a test without a dialog appearing. */
+    private val chooseFileOfKind: (ManifestPathKind) -> Path? = { kind ->
+        when (kind) {
+            ManifestPathKind.SCHEMA -> pickSchemaFilePath()
+            ManifestPathKind.ACTIONS -> pickActionsFilePath()
+            ManifestPathKind.RULE -> pickRuleFilePath()
+        }
     },
 ) {
 
@@ -335,7 +345,31 @@ class ProjectWorkspace(
         val pathsChanged = active.schemaLink != activeBefore.schemaLink ||
                 active.actionsLink != activeBefore.actionsLink ||
                 active.ruleFiles != activeBefore.ruleFiles
-        if (pathsChanged) performSelectEntry(entryId = active.id) else revision.value++
+        if (pathsChanged) {
+            performSelectEntry(entryId = active.id)
+        } else {
+            // A rename changes the id and nothing else, so there is nothing to reload — but the editor's
+            // own entry selection still has to follow. Without this it keeps pointing at an id the
+            // manifest no longer has, `currentEntryRulePaths()` finds nothing, and the next
+            // `loadRuleFiles` replaces every rule file in the working copy with an empty map.
+            adoptActiveEntry(entryId = active.id)
+            revision.value++
+        }
+    }
+
+    /**
+     * Points the editor's own entry selection at [entryId], without reloading anything.
+     *
+     * The third store. `session.activeEntryId` is the save target,
+     * `RuleEditorState.selectedManifestEntry` is what every read of the parsed manifest goes through,
+     * and nothing observes them into agreement — so a change of active entry that does *not* go through
+     * [performSelectEntry] has to come through here instead.
+     *
+     * Deliberately not a reload: a rename leaves every path alone, and reloading would throw away the
+     * in-memory edits that are the whole point of the working copy.
+     */
+    private fun adoptActiveEntry(entryId: String) {
+        state.selectedManifestEntry.value = entryId
     }
 
     /**
@@ -414,6 +448,9 @@ class ProjectWorkspace(
                 session.value = outcome.session
                 // The manifest on disk was just regenerated from the session; the buffer has to agree.
                 syncManifestBuffers()
+                // A scratch project's first save invents an entry id. Nothing had ever set the editor's
+                // selection, so it stayed null and every read of the parsed manifest missed.
+                adoptActiveEntry(entryId = outcome.session.activeEntryId)
                 scratchSchemaLink = null
                 scratchActionsLink = null
                 // The files just written are where the buffers live now, so their provenance is this
@@ -550,6 +587,36 @@ class ProjectWorkspace(
             return
         }
         body()
+    }
+
+    // ── Choosing a path to write into the manifest ────────────────────────────
+
+    /**
+     * Why the manifest's `Choose…` buttons cannot be used, or null when they can.
+     *
+     * **A manifest path is relative to the manifest file.** A project that has never been saved has no
+     * manifest file, so there is no location for a chosen path to be relative to — and writing the
+     * absolute path instead would produce an entry that stops resolving the moment the project moves,
+     * which is worse than not offering the dialog.
+     */
+    val chosenPathBlockedReason: String?
+        get() = if (session.value == null) {
+            "Save the project first — a path in the manifest is relative to the manifest file."
+        } else {
+            null
+        }
+
+    /**
+     * The file the user picks, as the manifest would write it: relative to the project root.
+     *
+     * Returns null when the dialog is cancelled, and refuses outright while
+     * [chosenPathBlockedReason] holds — the button is disabled for that case, and a guard here means a
+     * caller that ignores the reason cannot write an unresolvable path anyway.
+     */
+    fun choosePathForManifest(kind: ManifestPathKind): String? {
+        val root = session.value?.root ?: return null
+        val picked = chooseFileOfKind(kind) ?: return null
+        return ProjectPaths.relativize(root = root, target = picked)
     }
 
     // ── Linking shared schema / action files ──────────────────────────────────

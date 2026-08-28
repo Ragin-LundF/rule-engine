@@ -75,7 +75,7 @@ object OperandText {
      * `take(orders, 3)` spelling means, and it is why the fold carries a running string instead of
      * joining segments at the end.
      */
-    private fun pathToDsl(path: List<BuilderPathStep>): String {
+    fun pathToDsl(path: List<BuilderPathStep>): String {
         val builder = StringBuilder()
         path.forEach { step ->
             if (builder.isNotEmpty()) builder.append('.')
@@ -120,7 +120,7 @@ object OperandText {
      * list keeps its brackets, and a field or variable name must not be quoted or it turns into a
      * text literal that can never match.
      */
-    private fun filterToDsl(filter: BuilderFilter): String =
+    fun filterToDsl(filter: BuilderFilter): String =
         "${toDsl(operand = filter.left)} ${filter.operator} ${toDsl(operand = filter.right)}"
 
     // ── chip labels ───────────────────────────────────────────────────────────

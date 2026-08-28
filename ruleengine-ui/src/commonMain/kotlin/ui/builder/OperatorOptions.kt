@@ -4,6 +4,7 @@ import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.evaluator.compiled.DslFunctions
+import ui.builder.model.catalog.CatalogFieldInfo
 
 /**
  * The operator vocabulary for the visual editor: the names themselves, and the default list offered
@@ -249,6 +250,22 @@ object OperatorOptions {
             defaults.filter { it in normalizedSchema }
                 .ifEmpty { schemaOperators }
         }
+    }
+
+    /**
+     * The operator a freshly added row starts on: the first one [field] actually allows.
+     *
+     * So a new row is usable without touching the dropdown, and — more importantly — never starts on
+     * an operator its own field rejects. `equals` is the fallback because every scalar type supports it.
+     *
+     * Moved here from the Builder's view layer when that layer was replaced: which operator is
+     * *allowed* is this object's business, and the answer has to match [forCatalogField] exactly.
+     */
+    fun defaultFor(field: CatalogFieldInfo?): String {
+        val allowed = field?.let { info ->
+            forCatalogField(fieldId = info.id, fieldType = info.type, schemaOperators = info.operators)
+        }
+        return allowed?.firstOrNull() ?: EQUALS
     }
 
     /** Returns true if the operator expects two values (low/high). */

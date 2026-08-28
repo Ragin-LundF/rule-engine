@@ -20,6 +20,8 @@ fun RuleWorkbenchScreen(
     rightPanel: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
     rightPanelWidth: Dp = 320.dp,
+    /** Forwarded to the shell's splitter; null leaves the panel a fixed width. */
+    onRightPanelResize: ((Dp) -> Unit)? = null,
 ) {
     WorkbenchShell(
         topBar = topBar,
@@ -29,5 +31,6 @@ fun RuleWorkbenchScreen(
         rightPanel = rightPanel,
         modifier = modifier,
         rightPanelWidth = rightPanelWidth,
+        onRightPanelResize = onRightPanelResize,
     )
 }

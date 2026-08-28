@@ -3,23 +3,26 @@ package ui.workbench
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
+import ui.editor.yaml.YamlModelSync
 import ui.schema.SchemaEditorPanel
 import ui.schema.model.SchemaEditorState
+import ui.workbench.model.mode.SchemaMode
 
 /**
  * Field Schema editor area.
  *
- * Replaces the earlier placeholder with a real Visual/YAML/Usages editor.
+ * Replaces the earlier placeholder with a real Visual/YAML editor.
  */
 @Composable
 fun SchemaAreaScreen(
-    schemaYaml: String,
-    fromYaml: (String) -> SchemaEditorState,
-    toYaml: (SchemaEditorState) -> String,
-    onSchemaYamlChange: (String) -> Unit,
+    sync: YamlModelSync<SchemaEditorState>,
+    mode: SchemaMode,
+
     modifier: Modifier = Modifier,
-    usagesContent: (@Composable () -> Unit)? = null,
     onInspectField: ((path: String) -> Unit)? = null,
+    selectedFieldPath: String? = null,
+    readBy: Map<String, Int> = emptyMap(),
+    onMessage: (String) -> Unit = {},
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -34,13 +37,13 @@ fun SchemaAreaScreen(
     },
 ) {
     SchemaEditorPanel(
-        yaml = schemaYaml,
-        fromYaml = fromYaml,
-        toYaml = toYaml,
-        onYamlChange = onSchemaYamlChange,
+        sync = sync,
+        mode = mode,
         modifier = modifier,
-        usagesContent = usagesContent,
         onInspectField = onInspectField,
+        selectedFieldPath = selectedFieldPath,
+        readBy = readBy,
+        onMessage = onMessage,
         yamlEditor = yamlEditor,
     )
 }

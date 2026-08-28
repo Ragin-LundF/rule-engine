@@ -1,7 +1,9 @@
 package ui.editor.rules
 
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
@@ -14,14 +16,20 @@ import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
+import ui.actions.model.ActionEditorState
 import ui.autocompletion.model.CompletionItem
 import ui.diagrams.model.DiagramViewKind
 import ui.diagrams.model.RuleSource
+import ui.dock.DockPersistence
+import ui.dock.model.DockSurface
 import ui.dsl.model.DslCursorContext
 import ui.dsl.model.DslSection
 import ui.editor.CodeEditing
 import ui.editor.rules.model.StatusKind
 import ui.editor.rules.model.ViewMode
+import ui.editor.yaml.YamlModelSync
+import ui.schema.model.SchemaEditorState
+import ui.workbench.RightPanelPersistence
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -152,6 +160,55 @@ class RuleEditorState(
      * flip it directly — a second writer is how the stored value and the one on screen drift apart.
      */
     val rightPanelExpanded: MutableState<Boolean> = mutableStateOf(value = false)
+
+    /**
+     * The right panel's width in dp while it is open, dragged by the shell's splitter.
+     *
+     * Held here beside [rightPanelExpanded] so the shell still reads one source for the panel's size,
+     * and seeded from the stored preference so a width chosen once survives the next launch. Written
+     * only through `RightPanelController`, like the flag above it.
+     */
+    val rightPanelWidth: MutableState<Float> = mutableStateOf(value = RightPanelPersistence.loadWidth())
+
+    /**
+     * The bottom dock's height in dp, dragged by the scaffold's splitter.
+     *
+     * One height for every area, seeded from the stored preference and written only through
+     * `DockController`. How much of the window goes to reference material is one answer, not four: a
+     * per-area height would make the canvas jump on every area switch.
+     */
+    val dockHeight: MutableState<Float> = mutableStateOf(value = DockPersistence.loadHeight())
+
+    /**
+     * Whether each area's dock is open. Absent means "whatever that surface defaults to", which is open
+     * for the Builder and closed elsewhere — see [DockSurface.openByDefault].
+     *
+     * A map rather than four flags because the surfaces are an enum and the default lives on it; also
+     * written only through `DockController`.
+     */
+    val dockExpanded: SnapshotStateMap<DockSurface, Boolean> = mutableStateMapOf<DockSurface, Boolean>()
+        .apply { DockSurface.entries.forEach { surface -> put(surface, DockPersistence.loadExpanded(surface)) } }
+
+    /** Which dock tab each area is showing. Within-session only, unlike the open state. */
+    val dockTab: SnapshotStateMap<DockSurface, String> = mutableStateMapOf()
+
+    /**
+     * The Schema area's model and text.
+     *
+     * Held here rather than inside `SchemaEditorPanel` so the Inspector can edit it: the panel draws the
+     * canvas and the Inspector writes, and both have to be looking at one object. `RuleEditor` keeps the
+     * three sync effects composed, so an Inspector edit made from another area still reaches the YAML.
+     */
+    val schemaEditor: YamlModelSync<SchemaEditorState> = YamlModelSync(
+        yaml = "",
+        state = SchemaEditorState.Empty,
+    )
+
+    /** The Actions area's model and text, on the same terms as [schemaEditor]. */
+    val actionEditor: YamlModelSync<ActionEditorState> = YamlModelSync(
+        yaml = "",
+        state = ActionEditorState.Empty,
+    )
 
     /** Whether the Builder rule tree is expanded; collapsing it hands its width to the rule editor. */
     val ruleTreeExpanded: MutableState<Boolean> = mutableStateOf(value = true)

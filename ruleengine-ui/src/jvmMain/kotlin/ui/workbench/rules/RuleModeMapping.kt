@@ -9,6 +9,7 @@ import ui.workbench.model.mode.RuleMode
  */
 fun RuleMode.toViewMode(): ViewMode = when (this) {
     RuleMode.BUILDER -> ViewMode.BUILDER
+    RuleMode.BOARD -> ViewMode.BOARD
     RuleMode.CODE -> ViewMode.CODE
     RuleMode.DIAGRAM -> ViewMode.DIAGRAM
     RuleMode.TEST -> ViewMode.TEST
@@ -20,6 +21,7 @@ fun RuleMode.toViewMode(): ViewMode = when (this) {
  */
 fun ViewMode.toRuleMode(): RuleMode = when (this) {
     ViewMode.BUILDER -> RuleMode.BUILDER
+    ViewMode.BOARD -> RuleMode.BOARD
     ViewMode.CODE -> RuleMode.CODE
     ViewMode.DIAGRAM -> RuleMode.DIAGRAM
     ViewMode.TEST -> RuleMode.TEST

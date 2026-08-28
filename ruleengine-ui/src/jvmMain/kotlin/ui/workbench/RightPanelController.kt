@@ -15,12 +15,20 @@ import ui.workbench.model.mode.RightPanelTab
  * takes effect in the same frame.
  *
  * @param expanded  The editor state's own flag, so the panel's width still animates from one source.
+ * @param width     The panel's width in dp, dragged by the splitter and persisted like the rest.
  * @param viewModel Holds the selected tab; read through it rather than copied, so the two cannot
  *                  disagree about which tab is showing.
  */
 class RightPanelController(
     private val expanded: MutableState<Boolean>,
+    private val width: MutableState<Float>,
     private val viewModel: RuleWorkbenchViewModel,
+    // Injected so a test can observe what would be stored without writing to the developer's real
+    // preferences node — which `RightPanelWidthTest` did as a side effect of every assertion. The idiom
+    // is `SettingsController.setAutoCompleteShortcut(persist = ...)` and `DockController`'s.
+    private val saveExpanded: (Boolean) -> Unit = RightPanelPersistence::saveExpanded,
+    private val saveWidth: (Float) -> Unit = RightPanelPersistence::saveWidth,
+    private val saveTab: (RightPanelTab) -> Unit = RightPanelPersistence::saveTab,
 ) {
 
     /**
@@ -34,12 +42,37 @@ class RightPanelController(
 
     fun setExpanded(value: Boolean) {
         expanded.value = value
-        RightPanelPersistence.saveExpanded(expanded = value)
+        saveExpanded(value)
+    }
+
+    /**
+     * The panel's width in dp while it is open.
+     *
+     * Read straight through to the state rather than cached, so the splitter's drag and the stored value
+     * cannot disagree mid-gesture.
+     */
+    val widthDp: Float
+        get() = width.value
+
+    /**
+     * Resizes the panel, clamping to what the layout supports.
+     *
+     * Every drag delta comes through here rather than being applied to the state directly, so the clamp
+     * is applied once and in one place — a splitter that clamped its own deltas would let the width
+     * escape the range whenever a second caller appeared.
+     */
+    fun setWidth(value: Float) {
+        val clamped = value.coerceIn(
+            RightPanelPersistence.MIN_WIDTH,
+            RightPanelPersistence.MAX_WIDTH,
+        )
+        width.value = clamped
+        saveWidth(clamped)
     }
 
     fun selectTab(tab: RightPanelTab) {
         viewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
-        RightPanelPersistence.saveTab(tab = tab)
+        saveTab(tab)
     }
 
     /** Opens the panel *and* switches to the Inspector, so callers cannot open it on the wrong tab. */
