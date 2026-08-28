@@ -1,17 +1,11 @@
 package ui.manifest
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
@@ -23,19 +17,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import ui.BgElevated
-import ui.BorderColor
-import ui.PrimaryBlue
 import ui.TextSecondary
-import ui.builder.components.dropdown.DropdownSelector
-import ui.components.PathListEditor
 import ui.components.SectionTitle
-import ui.components.StatusBadge
 import ui.components.ToolbarButton
-import ui.manifest.model.EditableManifestEntry
+import ui.editor.YamlEditorPane
+import ui.manifest.canvas.ManifestCanvas
 import ui.manifest.model.ManifestEditorState
 import ui.workbench.model.mode.ManifestMode
 
@@ -59,7 +48,36 @@ fun ManifestEditorPanel(
     toYaml: (ManifestEditorState) -> String,
     fieldTypes: Map<String, String>? = null,
     initialMode: ManifestMode = ManifestMode.BUILDER,
+    /** True while the Inspector is on the manifest itself, which the canvas marks. */
+    manifestSelected: Boolean = false,
+    onSelectManifest: () -> Unit = {},
+    /** The paths are navigation: clicking one opens that area. */
+    onOpenSchema: () -> Unit = {},
+    onOpenActions: () -> Unit = {},
+    /** Whether a manifest-relative path resolves to a file on disk. */
+    exists: (String) -> Boolean = { true },
+    /** What each rule file of the active entry publishes and reads, by manifest-relative path. */
+    variableFlow: Map<String, RuleFileFlow> = emptyMap(),
     modifier: Modifier = Modifier,
+    /**
+     * The YAML surface for the text tab.
+     *
+     * A slot for the same reason the Schema and Actions panels have one: the highlighter and the
+     * completions are JVM-only, and this file is `commonMain`. Until this existed the manifest — the one
+     * file that decides what runs in what order — was the only YAML in the app shown as plain text.
+     */
+    yamlEditor: @Composable (
+        value: TextFieldValue,
+        onValueChange: (TextFieldValue) -> Unit,
+        modifier: Modifier,
+    ) -> Unit = { value, onValueChange, fieldModifier ->
+        OutlinedTextField(
+            value = value.text,
+            onValueChange = { text -> onValueChange(TextFieldValue(text = text)) },
+            modifier = fieldModifier,
+            textStyle = MaterialTheme.typography.body2,
+        )
+    },
 ) {
     var mode by remember { mutableStateOf(initialMode) }
     var yamlText by remember { mutableStateOf(toYaml(state)) }
@@ -97,14 +115,19 @@ fun ManifestEditorPanel(
         )
 
         when (mode) {
-            ManifestMode.BUILDER -> VisualManifestEditor(
+            ManifestMode.BUILDER -> BuilderModeBody(
                 state = state,
-                onStateChange = onStateChange,
                 activeEntryId = activeEntryId,
+                manifestSelected = manifestSelected,
+                fieldTypes = fieldTypes,
+                onSelectManifest = onSelectManifest,
                 onSelectEntry = onSelectEntry,
                 onAddEntry = onAddEntry,
                 onRemoveEntry = onRemoveEntry,
-                fieldTypes = fieldTypes,
+                onOpenSchema = onOpenSchema,
+                onOpenActions = onOpenActions,
+                exists = exists,
+                variableFlow = variableFlow,
             )
 
             ManifestMode.YAML -> YamlManifestEditor(
@@ -114,12 +137,7 @@ fun ManifestEditorPanel(
                     yamlText = newText
                     yamlError = null
                 },
-            )
-
-            ManifestMode.CHECKS -> ManifestChecksPanel(
-                state = state,
-                activeEntryId = activeEntryId,
-                fieldTypes = fieldTypes,
+                yamlEditor = yamlEditor,
             )
         }
     }
@@ -127,165 +145,51 @@ fun ManifestEditorPanel(
 
 private const val YAML_PARSE_DELAY_MS = 500L
 
-/** The picker's stand-in for an absent scope, since a dropdown cannot offer emptiness. */
-internal const val SCOPE_NONE: String = "(none — run once per document)"
-
+/** The Builder tab: the canvas, and the two gestures that are about the entry list rather than an entry. */
+@Suppress("FunctionNaming", "LongParameterList")
 @Composable
-@Suppress("LongParameterList")
-private fun VisualManifestEditor(
+private fun BuilderModeBody(
     state: ManifestEditorState,
-    onStateChange: (ManifestEditorState) -> Unit,
     activeEntryId: String?,
+    manifestSelected: Boolean,
+    fieldTypes: Map<String, String>?,
+    onSelectManifest: () -> Unit,
     onSelectEntry: (String) -> Unit,
     onAddEntry: () -> Unit,
     onRemoveEntry: (String) -> Unit,
-    fieldTypes: Map<String, String>?,
+    onOpenSchema: () -> Unit,
+    onOpenActions: () -> Unit,
+    exists: (String) -> Boolean,
+    variableFlow: Map<String, RuleFileFlow>,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(space = 8.dp),
     ) {
-        SectionTitle(text = "MANIFEST")
-        OutlinedTextField(
-            value = state.name,
-            onValueChange = { onStateChange(state.copy(name = it)) },
-            label = { Text("Name") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+        ManifestCanvas(
+            state = state,
+            modifier = Modifier.fillMaxWidth().weight(weight = 1f),
+            activeEntryId = activeEntryId,
+            selected = manifestSelected,
+            onSelectManifest = onSelectManifest,
+            onSelectEntry = onSelectEntry,
+            onOpenSchema = onOpenSchema,
+            onOpenActions = onOpenActions,
+            exists = exists,
+            fieldTypes = fieldTypes,
+            variableFlow = variableFlow,
         )
-
-        SectionTitle(text = "ENTRIES")
-        state.entries.forEachIndexed { index, entry ->
-            ManifestEntryCard(
-                entry = entry,
-                index = index,
-                isActive = entry.id == activeEntryId,
-                hasSiblings = state.entries.size > 1,
-                // Only the entry being edited: the loaded schema is that entry's, and a sibling may
-                // well name a different schema file whose fields we have not parsed.
-                fieldTypes = fieldTypes.takeIf { entry.id == activeEntryId },
-                onSelect = { onSelectEntry(entry.id) },
-                onRemove = { onRemoveEntry(entry.id) },
-                onEntryChange = { updated ->
-                    onStateChange(
-                        state.copy(
-                            entries = state.entries.toMutableList().also { it[index] = updated },
-                        ),
-                    )
-                },
-            )
+        Row(horizontalArrangement = Arrangement.spacedBy(space = 6.dp)) {
+            ToolbarButton(label = "+ Add entry", onClick = onAddEntry)
+            if (state.entries.size > 1 && activeEntryId != null) {
+                ToolbarButton(label = "Remove entry…", onClick = { onRemoveEntry(activeEntryId) })
+            }
         }
-
-        ToolbarButton(label = "+ Add entry", onClick = onAddEntry)
     }
 }
 
-@Composable
-@Suppress("LongParameterList")
-private fun ManifestEntryCard(
-    entry: EditableManifestEntry,
-    index: Int,
-    isActive: Boolean,
-    hasSiblings: Boolean,
-    fieldTypes: Map<String, String>?,
-    onSelect: () -> Unit,
-    onRemove: () -> Unit,
-    onEntryChange: (EditableManifestEntry) -> Unit,
-) {
-    // The id is edited locally and only committed once it is non-blank: pushing an empty id upwards
-    // would make the entry vanish from the manifest between two keystrokes.
-    var idDraft by remember(index) { mutableStateOf(entry.id) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape = RoundedCornerShape(size = 8.dp))
-            .background(color = BgElevated)
-            .border(
-                width = 1.dp,
-                color = if (isActive) PrimaryBlue else BorderColor,
-                shape = RoundedCornerShape(size = 8.dp),
-            )
-            .padding(all = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(space = 8.dp),
-        ) {
-            if (isActive) StatusBadge(label = "EDITING", color = PrimaryBlue)
-            Spacer(modifier = Modifier.weight(weight = 1f))
-            // Both controls need a sibling to make sense: with a single entry there is nothing to
-            // switch to and nothing that may be removed. `!isActive` alone would not do — with no
-            // project open there is no active entry, so the sole card would still offer the switch.
-            if (hasSiblings && !isActive) ToolbarButton(label = "Switch to this entry", onClick = onSelect)
-            if (hasSiblings) ToolbarButton(label = "Remove…", onClick = onRemove)
-        }
-
-        OutlinedTextField(
-            value = idDraft,
-            onValueChange = { newId ->
-                idDraft = newId
-                if (newId.isNotBlank()) onEntryChange(entry.copy(id = newId.trim()))
-            },
-            label = { Text("Name (entry id)") },
-            isError = idDraft.isBlank(),
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
-        ManifestEntryFields(entry = entry, fieldTypes = fieldTypes, onEntryChange = onEntryChange)
-        SectionTitle(text = "RULE FILES")
-        PathListEditor(
-            paths = entry.rulePaths,
-            onPathsChange = { onEntryChange(entry.copy(rulePaths = it)) },
-            label = "Rule file",
-        )
-    }
-}
-
-/** The entry's settings other than its id and its rule files. */
-@Composable
-private fun ManifestEntryFields(
-    entry: EditableManifestEntry,
-    fieldTypes: Map<String, String>?,
-    onEntryChange: (EditableManifestEntry) -> Unit,
-) {
-    OutlinedTextField(
-        value = entry.schemaPath,
-        onValueChange = { onEntryChange(entry.copy(schemaPath = it)) },
-        label = { Text("Field schema file") },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    OutlinedTextField(
-        value = entry.actionsPath,
-        onValueChange = { onEntryChange(entry.copy(actionsPath = it)) },
-        label = { Text("Action schema file") },
-        modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
-    )
-    // A picker rather than free text: there are only ever a handful of legal values and the schema
-    // knows all of them, so the whole class of mistyped scopes stops existing. Left at
-    // [SCOPE_NONE] the rules run once for the whole document, which is the default and what every
-    // manifest written before this setting existed means.
-    Text(
-        text = "Scope — run once per collection member (optional)",
-        style = MaterialTheme.typography.caption,
-        color = TextSecondary,
-    )
-    DropdownSelector(
-        selected = entry.scope.ifBlank { SCOPE_NONE },
-        options = scopeOptions(scope = entry.scope, fieldTypes = fieldTypes),
-        onSelected = { picked ->
-            onEntryChange(entry.copy(scope = if (picked == SCOPE_NONE) "" else picked))
-        },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    ScopeFieldNote(issue = scopeIssue(scope = entry.scope, fieldTypes = fieldTypes))
-}
+/** The picker's stand-in for an absent scope, since a dropdown cannot offer emptiness. */
+internal const val SCOPE_NONE: String = "(none — run once per document)"
 
 /**
  * What the picker offers, given what the schema declares.
@@ -325,6 +229,11 @@ private fun YamlManifestEditor(
     yaml: String,
     error: String?,
     onYamlChange: (String) -> Unit,
+    yamlEditor: @Composable (
+        value: TextFieldValue,
+        onValueChange: (TextFieldValue) -> Unit,
+        modifier: Modifier,
+    ) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxSize(),
@@ -349,82 +258,11 @@ private fun YamlManifestEditor(
                 color = MaterialTheme.colors.error,
             )
         }
-        OutlinedTextField(
-            value = yaml,
-            onValueChange = onYamlChange,
+        YamlEditorPane(
+            yaml = yaml,
+            onYamlChange = onYamlChange,
             modifier = Modifier.fillMaxWidth().weight(1f),
-            textStyle = MaterialTheme.typography.body2,
+            editor = yamlEditor,
         )
-    }
-}
-
-@Composable
-private fun ManifestChecksPanel(
-    state: ManifestEditorState,
-    activeEntryId: String?,
-    fieldTypes: Map<String, String>?,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SectionTitle(text = "CHECKS")
-        val issues = manifestIssues(state = state, activeEntryId = activeEntryId, fieldTypes = fieldTypes)
-        if (issues.isEmpty()) {
-            Text(
-                text = "✓ Manifest structure looks valid",
-                color = MaterialTheme.colors.primary,
-                style = MaterialTheme.typography.body2,
-            )
-        } else {
-            issues.forEach { issue ->
-                Text(
-                    text = "• $issue",
-                    color = MaterialTheme.colors.error,
-                    style = MaterialTheme.typography.body2,
-                )
-            }
-        }
-    }
-}
-
-/**
- * What would stop this manifest from loading, plus the softer omissions.
- *
- * Duplicate entry ids are the one that matters most: the engine rejects the manifest outright, and
- * the id is otherwise invisible enough that two entries can end up sharing one by accident.
- *
- * The scope check needs a schema, so it only runs for [activeEntryId] — [fieldTypes] describes the
- * schema that entry loaded, and a sibling may name another one entirely.
- */
-private fun manifestIssues(
-    state: ManifestEditorState,
-    activeEntryId: String?,
-    fieldTypes: Map<String, String>?,
-): List<String> {
-    return buildList {
-        if (state.name.isBlank()) add("Manifest name is empty")
-        if (state.entries.isEmpty()) {
-            add("No manifest entry defined")
-            return@buildList
-        }
-
-        state.entries
-            .groupBy { it.id }
-            .filter { (id, entries) -> id.isNotBlank() && entries.size > 1 }
-            .forEach { (id, _) -> add("Entry id \"$id\" is used more than once") }
-
-        state.entries.forEachIndexed { index, entry ->
-            val label = entry.id.ifBlank { "entry ${index + 1}" }
-            if (entry.id.isBlank()) add("$label has no id")
-            if (entry.schemaPath.isBlank()) add("$label: field schema file not set")
-            if (entry.actionsPath.isBlank()) add("$label: action schema file not set")
-            if (entry.rulePaths.isEmpty()) add("$label: no rule files configured")
-            if (entry.id == activeEntryId) {
-                scopeIssue(scope = entry.scope, fieldTypes = fieldTypes)?.let { add("$label: $it") }
-            }
-        }
     }
 }

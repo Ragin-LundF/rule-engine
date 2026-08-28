@@ -6,7 +6,7 @@ import ui.components.ModeTabs
 import ui.workbench.model.mode.ManifestMode
 
 /**
- * Tab switcher for the Manifest editor area: Builder / YAML / Checks.
+ * Tab switcher for the Manifest editor area: Builder / YAML.
  */
 @Composable
 fun ManifestModeTabs(
@@ -27,5 +27,4 @@ private val ManifestMode.displayName: String
     get() = when (this) {
         ManifestMode.BUILDER -> "Builder"
         ManifestMode.YAML -> "YAML"
-        ManifestMode.CHECKS -> "Checks"
     }

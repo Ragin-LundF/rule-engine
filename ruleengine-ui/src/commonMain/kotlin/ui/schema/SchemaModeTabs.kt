@@ -6,7 +6,7 @@ import ui.components.ModeTabs
 import ui.workbench.model.mode.SchemaMode
 
 /**
- * Tab switcher for the Field Schema editor area: Visual / YAML / Usages.
+ * Tab switcher for the Field Schema editor area: Visual / YAML.
  */
 @Composable
 fun SchemaModeTabs(
@@ -27,5 +27,4 @@ private val SchemaMode.displayName: String
     get() = when (this) {
         SchemaMode.VISUAL -> "Visual"
         SchemaMode.YAML -> "YAML"
-        SchemaMode.USAGES -> "Usages"
     }

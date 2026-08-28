@@ -10,6 +10,8 @@ import ui.builder.model.BuilderLockKind
 import ui.builder.model.BuilderRule
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableConditionNode
+import ui.findRuleBlockRange
+import ui.rowLineRanges
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -217,10 +219,18 @@ class OutlineCanvasBehaviourTest {
         assertEquals(expected = BuilderLockKind.NO_RULE_SELECTED, actual = empty.lockKind)
     }
 
-    // ── the dock's row highlight (task 2.5) ───────────────────────────────────
+    // ── the dock's row highlight ───────────────────────────────────────────────
 
+    /**
+     * Asserts through the shipped function rather than re-implementing its rule.
+     *
+     * This test used to spell `line.trim().endsWith(rowText.trim())` itself, which meant it agreed with
+     * the dock only for as long as nobody changed either one. `rowLineRanges` is now what the dock calls
+     * and what this calls, so the invariant it protects is the real one: every row the generator writes
+     * is findable, inside its own rule's block.
+     */
     @Test
-    fun `the text the dock highlights is a line of the text it shows`() {
+    fun `every row the generator writes is findable inside its own rule block`() {
         val state = stateOf(
             dsl = """
                 rule "r" {
@@ -233,18 +243,26 @@ class OutlineCanvasBehaviourTest {
             """.trimIndent(),
         )
         val generated = generate(state = state)
+        val block = assertNotNull(
+            actual = findRuleBlockRange(fullText = generated, ruleId = state.ruleId),
+            message = "the generated rule has no locatable block:\n$generated",
+        )
 
         state.conditionNodes.forEach { node ->
             val rowText = assertNotNull(
                 actual = BuilderToRuleDsl.renderRow(node = node),
                 message = "leaf row rendered as null",
             )
-            // The highlight matches the generator's own output, so this is the invariant that keeps
-            // the dock pointing at the right line as the generator changes.
+            val ranges = rowLineRanges(fullText = generated, block = block, rowText = rowText)
             assertTrue(
-                actual = generated.lines().any { line -> line.trim().endsWith(rowText.trim()) },
+                actual = ranges.isNotEmpty(),
                 message = "'$rowText' is not a line of:\n$generated",
             )
+            ranges.forEach { range ->
+                val line = generated.substring(range.first, range.last + 1)
+                assertTrue(actual = line.trim().endsWith(rowText.trim()), message = line)
+                assertTrue(actual = range.first in block && range.last in block, message = "$range outside $block")
+            }
         }
     }
 

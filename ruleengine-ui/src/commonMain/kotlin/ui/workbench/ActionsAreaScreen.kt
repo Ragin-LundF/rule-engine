@@ -5,19 +5,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import ui.actions.ActionEditorPanel
 import ui.actions.model.ActionEditorState
+import ui.editor.yaml.YamlModelSync
+import ui.workbench.model.mode.ActionMode
 
 /**
  * Action schema editor area.
  */
 @Composable
 fun ActionsAreaScreen(
-    actionsYaml: String,
-    fromYaml: (String) -> ActionEditorState,
+    sync: YamlModelSync<ActionEditorState, ActionMode>,
     toYaml: (ActionEditorState) -> String,
     onActionsYamlChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    usagesContent: (@Composable () -> Unit)? = null,
     onInspectAction: ((name: String) -> Unit)? = null,
+    selectedActionName: String? = null,
+    emittedBy: Map<String, Int> = emptyMap(),
+    onMessage: (String) -> Unit = {},
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -32,13 +35,14 @@ fun ActionsAreaScreen(
     },
 ) {
     ActionEditorPanel(
-        yaml = actionsYaml,
-        fromYaml = fromYaml,
+        sync = sync,
         toYaml = toYaml,
         onYamlChange = onActionsYamlChange,
         modifier = modifier,
-        usagesContent = usagesContent,
         onInspectAction = onInspectAction,
+        selectedActionName = selectedActionName,
+        emittedBy = emittedBy,
+        onMessage = onMessage,
         yamlEditor = yamlEditor,
     )
 }

@@ -19,6 +19,10 @@ data class CanvasSelection(
     val nodeId: String?,
     val statementId: String?,
     val steps: List<SelectionStep>?,
+    /** The selected schema field's dotted path, for the areas outside the Builder. */
+    val fieldId: String? = null,
+    /** The selected action's name, likewise. */
+    val actionName: String? = null,
 ) {
     companion object {
 
@@ -37,6 +41,23 @@ data class CanvasSelection(
                 nodeId = null,
                 statementId = item.statementId,
                 steps = item.steps,
+            )
+
+            // Not drawn by a builder canvas, but the Schema and Actions docks highlight the lines
+            // these own — which is the same question ("what is selected") answered for another surface,
+            // so it belongs in the same translation rather than in a cast at the call site.
+            is InspectorItem.Field -> CanvasSelection(
+                nodeId = null,
+                statementId = null,
+                steps = null,
+                fieldId = item.id,
+            )
+
+            is InspectorItem.Action -> CanvasSelection(
+                nodeId = null,
+                statementId = null,
+                steps = null,
+                actionName = item.name,
             )
 
             else -> None

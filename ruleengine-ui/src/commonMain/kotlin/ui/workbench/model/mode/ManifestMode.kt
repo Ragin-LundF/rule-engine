@@ -5,5 +5,4 @@ package ui.workbench.model.mode
 enum class ManifestMode {
     BUILDER,
     YAML,
-    CHECKS,
 }

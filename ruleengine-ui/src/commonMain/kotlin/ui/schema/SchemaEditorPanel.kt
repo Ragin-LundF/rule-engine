@@ -6,25 +6,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.delay
 import ui.TextSecondary
 import ui.components.SectionTitle
 import ui.editor.YamlEditorPane
+import ui.editor.yaml.YamlModelSync
+import ui.schema.canvas.SchemaCanvas
 import ui.schema.model.SchemaEditorState
 import ui.workbench.model.mode.SchemaMode
 
@@ -46,19 +40,24 @@ import ui.workbench.model.mode.SchemaMode
  */
 @Composable
 fun SchemaEditorPanel(
-    yaml: String,
-    fromYaml: (String) -> SchemaEditorState,
+    /**
+     * The model and the text, owned by the caller.
+     *
+     * It used to be `remember`ed here, which put it out of reach of the Inspector — and the Inspector is
+     * now the editing surface. One object, read and written by both.
+     */
+    sync: YamlModelSync<SchemaEditorState, SchemaMode>,
     toYaml: (SchemaEditorState) -> String,
     onYamlChange: (String) -> Unit,
-    initialMode: SchemaMode = SchemaMode.VISUAL,
     modifier: Modifier = Modifier,
-    /**
-     * Draws which rules read which field. Supplied by the platform because the diagram renderer is
-     * JVM-side; null keeps the "later phase" placeholder.
-     */
-    usagesContent: (@Composable () -> Unit)? = null,
-    /** Shows one field in the Inspector; null hides the per-row button. */
+    /** Shows one field in the Inspector. The whole row is the target now, not a 36 dp button. */
     onInspectField: ((path: String) -> Unit)? = null,
+    /** The dotted path the Inspector is on, highlighted in the canvas. */
+    selectedFieldPath: String? = null,
+    /** How many loaded rules read each field, by dotted path. */
+    readBy: Map<String, Int> = emptyMap(),
+    /** Where a refused gesture explains itself. */
+    onMessage: (String) -> Unit = {},
     yamlEditor: @Composable (
         value: TextFieldValue,
         onValueChange: (TextFieldValue) -> Unit,
@@ -72,9 +71,6 @@ fun SchemaEditorPanel(
         )
     },
 ) {
-    val sync = remember { SchemaEditorSync(yaml = yaml, mode = initialMode, state = fromYaml(yaml)) }
-    SyncSchemaAndYaml(sync = sync, yaml = yaml, fromYaml = fromYaml, toYaml = toYaml, onYamlChange = onYamlChange)
-
     Column(
         modifier = modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -82,28 +78,28 @@ fun SchemaEditorPanel(
         SchemaModeTabs(
             current = sync.mode,
             onSelect = { newMode ->
-                if (newMode == SchemaMode.YAML && sync.mode != SchemaMode.YAML) {
-                    if (!sync.state.hasValidationIssues()) {
-                        sync.yaml = runCatching { toYaml(sync.state) }.getOrNull() ?: sync.yaml
-                        onYamlChange(sync.yaml)
-                    }
-                }
-                if (newMode != SchemaMode.YAML && sync.mode == SchemaMode.YAML) {
-                    val generated = runCatching { toYaml(sync.state) }.getOrNull()
-                    if (generated != null) {
-                        sync.yaml = generated
-                        onYamlChange(sync.yaml)
-                    }
+                // Either direction across the text tab republishes, so the tab that is arriving shows
+                // what the schema is now rather than what it was when it was last open.
+                if (newMode != sync.mode) {
+                    sync.publish(
+                        toYaml = toYaml,
+                        hasIssues = { state -> state.hasValidationIssues() },
+                        onYamlChange = onYamlChange,
+                    )
                 }
                 sync.mode = newMode
             },
         )
 
         when (sync.mode) {
-            SchemaMode.VISUAL -> VisualSchemaEditor(
+            SchemaMode.VISUAL -> SchemaCanvas(
                 state = sync.state,
-                onStateChange = { sync.state = it },
-                onInspectField = onInspectField,
+                onStateChange = { edited -> sync.state = edited },
+                modifier = Modifier.fillMaxSize(),
+                selectedPath = selectedFieldPath,
+                onSelectPath = { path -> onInspectField?.invoke(path) },
+                readBy = readBy,
+                onMessage = onMessage,
             )
             SchemaMode.YAML -> YamlSchemaEditor(
                 yaml = sync.yaml,
@@ -115,75 +111,10 @@ fun SchemaEditorPanel(
                 },
                 yamlEditor = yamlEditor,
             )
-            SchemaMode.USAGES -> usagesContent?.invoke() ?: FieldUsagesPanel()
         }
     }
 }
 
-
-/**
- * The panel's mutable state, held together because the three sync effects below all move values
- * between these fields.
- *
- * [loaded] is the model as it was last read from YAML. Regenerating YAML from the model is lossy —
- * comments, blank lines and quoting style are the author's, and the serializer does not keep them.
- * So the panel must be able to tell "the user changed a field" from "the panel merely parsed the
- * file", and only push in the first case. Without it, simply opening the schema tab rewrites the
- * file the next time the project is saved.
- */
-private class SchemaEditorSync(yaml: String, mode: SchemaMode, state: SchemaEditorState) {
-    var mode by mutableStateOf(value = mode)
-    var state by mutableStateOf(value = state)
-    var yaml by mutableStateOf(value = yaml)
-    var error by mutableStateOf<String?>(value = null)
-    var loaded by mutableStateOf(value = state)
-}
-
-/** Keeps the visual model and the YAML text in step, in whichever direction the edit came from. */
-@Suppress("FunctionNaming")
-@Composable
-private fun SyncSchemaAndYaml(
-    sync: SchemaEditorSync,
-    yaml: String,
-    fromYaml: (String) -> SchemaEditorState,
-    toYaml: (SchemaEditorState) -> String,
-    onYamlChange: (String) -> Unit,
-) {
-    // External YAML changes (e.g. project load) should pull into the local model.
-    LaunchedEffect(key1 = yaml) {
-        if (yaml != sync.yaml) {
-            sync.yaml = yaml
-            sync.state = fromYaml(yaml)
-            sync.loaded = sync.state
-            sync.error = null
-        }
-    }
-
-    // Visual/editor changes push to YAML only when the model is valid and actually different.
-    LaunchedEffect(key1 = sync.state, key2 = sync.mode) {
-        if (sync.mode == SchemaMode.YAML) return@LaunchedEffect
-        if (sync.state.hasValidationIssues()) return@LaunchedEffect
-        if (sync.state == sync.loaded) return@LaunchedEffect
-        val generated = runCatching { toYaml(sync.state) }.getOrNull() ?: return@LaunchedEffect
-        if (generated != sync.yaml) {
-            sync.yaml = generated
-            onYamlChange(generated)
-        }
-    }
-
-    // YAML edits parse back to the visual model when valid (debounced).
-    LaunchedEffect(key1 = sync.yaml, key2 = sync.mode) {
-        if (sync.mode != SchemaMode.YAML) return@LaunchedEffect
-        delay(timeMillis = 500)
-        val parsed = runCatching { fromYaml(sync.yaml) }.getOrNull()
-        if (parsed != null && !parsed.isReadOnly) {
-            sync.state = parsed
-            sync.error = null
-        } else {
-            sync.error = "Invalid YAML: could not parse field schema"
-        }
-    }
-}
 
 /**
  * Determines if the current schema editor state contains validation issues.
@@ -191,41 +122,11 @@ private fun SyncSchemaAndYaml(
  *
  * @return True if there are any blank or duplicate field paths in the editor state, false otherwise.
  */
-private fun SchemaEditorState.hasValidationIssues(): Boolean {
+internal fun SchemaEditorState.hasValidationIssues(): Boolean {
     val paths = fields.map { it.path.trim() }.filter { it.isNotBlank() }
     val hasBlank = fields.any { it.path.isBlank() }
     val hasDuplicate = paths.size != paths.toSet().size
     return hasBlank || hasDuplicate
-}
-
-/**
- * A composable function for editing a visual schema, including its fields and properties,
- * within an arranged layout. Displays field definitions inside an editable table,
- * along with a title section.
- *
- * @param state The current state of the schema editor, including the schema name,
- *              fields, and read-only status.
- * @param onStateChange A callback function invoked with the updated schema state
- *                      when changes occur in the editor.
- */
-@Composable
-private fun VisualSchemaEditor(
-    state: SchemaEditorState,
-    onStateChange: (SchemaEditorState) -> Unit,
-    onInspectField: ((path: String) -> Unit)? = null,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SectionTitle(text = "FIELDS")
-        FieldSchemaTable(
-            state = state,
-            onStateChange = onStateChange,
-            modifier = Modifier.fillMaxWidth().weight(1f),
-            onInspectField = onInspectField,
-        )
-    }
 }
 
 /**
@@ -290,19 +191,3 @@ private fun YamlSchemaEditor(
     }
 }
 
-@Composable
-private fun FieldUsagesPanel() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        SectionTitle(text = "USAGE")
-        Text(
-            text = "Field usage across conditions will be shown here in a later phase.",
-            style = MaterialTheme.typography.body2,
-            color = TextSecondary,
-        )
-    }
-}

@@ -7,7 +7,140 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- **Every editor now shows the file it is about to write, under the canvas, without leaving the canvas.**
+  A resizable, read-only, syntax-highlighted preview dock sits beneath the Builder's two canvases and the
+  Schema, Actions and Manifest editors. It shows the **whole file** with the current selection
+  highlighted — the open rule as a block and the selected condition row as a line inside it, or the
+  selected field, action or manifest entry and everything under it — plus a Checks tab whose count is on
+  the tab, so a problem is visible before the panel is opened rather than after the edit is saved.
+
+  Drag its top edge to resize it, double-click to reset; the height is remembered and shared across
+  areas, while whether it is open is remembered per area. It starts open in the Builder, because seeing
+  the DSL a row generates is how the Builder teaches the language, and closed elsewhere.
+
+  Three things this replaces or fills in:
+  - the Builder's old `GENERATED DSL` strip, which showed only the generated rule, was collapsed by
+    default, was not highlighted, could not be resized, and matched the selected row by trimmed text —
+    so an identical row in another rule lit up alongside the real one. The mark is now a character range
+    scoped to the rule's own block;
+  - the **board canvas had no such panel at all**, and now shares the Builder's;
+  - the **Manifest YAML tab was the only YAML in the app shown as plain, unhighlighted text**, although
+    it is the file that decides what runs in what order. `YamlEditorType` gained `PROJECT_MANIFEST`, and
+    the highlighter now colours entry ids, file references and `scope` — which also put the `editorType`
+    its list-item styling had been ignoring to use.
+
+- **A manifest path can be chosen from a file dialog instead of typed.** `Choose…` sits beside every path
+  field in the Inspector — the two schema files and each rule file — and writes the chosen file **relative
+  to the manifest**, which is how a manifest addresses its files and what keeps a project portable when
+  it moves.
+
+  Typing stays the primary control: a path in a manifest is often one that does not exist yet (the saver
+  creates `rules/` and `schemas/`), and a dialog cannot offer a file nobody has written. Rule-file rows
+  were in fact the worse case before this — they had **no editor at all** and nothing to offer as an
+  option, so a mistyped path could only be removed and added again.
+
+  Before the project's first save the button is greyed out and says why, on hover and again under the
+  field: a manifest path is relative to the manifest file, and a project that has never been saved has no
+  manifest file for it to be relative to. Writing the absolute path instead would produce an entry that
+  resolves on one machine and nowhere else.
+
+- **The manifest now shows what its file order actually decides.** Each rule file's row carries what it
+  publishes (`↑$tier`) and what it reads (`↓$tier`), and a read no earlier file publishes is marked on
+  the row and named in Checks: *"reads `$tier` before any file publishes it, so it resolves to null on
+  every run."* This is the one property of a manifest that no single-file view can see, because it is a
+  property of the **order** — the same two files in the other order turn a working entry into one where a
+  rule parses, validates, runs, and silently never fires. It sits beside the reordering control, and is
+  computed by the same `VariableFlow` derivation the board uses, so the two cannot give different
+  answers.
+
 ### Fixed
+- **Two ordered declarations were being edited as unordered sets, and the control could not express what
+  the file means.** Both are now edited in the Inspector as ordered lists, with move and remove per
+  position:
+
+  - an action's `argTypes` is a **positional parameter list** — `Validator` checks the argument count and
+    then the type at each index. Rendered as a row of tick-boxes, `audit(string, integer)` and
+    `audit(integer, string)` were indistinguishable, `audit(string, string)` was **unreachable**, and
+    unticking then re-ticking a chip silently rewrote the signature;
+  - a field's `normalizers` is a **chain** applied left to right. `NormalizerRegistry.applyAll`
+    documents the counter-example: `trim` then `lowercase` is not the same chain as the other way round
+    once `collapse_whitespace` is between them. The order was whatever order the boxes happened to be
+    clicked in, invisible and unsettable — and the compiler and `PreparedRuleContext` both apply exactly
+    that chain, so getting it wrong stops a rule matching its own data.
+
+  Both are covered by round-trip tests through the real bridges and the real loaders.
+
+- **Renaming the active manifest entry no longer empties the working copy.** The session and the editor
+  each hold their own idea of which entry is selected, and nothing kept them in step: renaming the entry
+  moved the session's but not the editor's, so the next lookup asked the manifest for an id it no longer
+  had, found no rule files, and wrote an empty map over the rules in memory. The editor now adopts the
+  session's entry whenever the manifest is applied or saved, and the invariant has a test of its own —
+  which was verified by reverting the fix and watching it fail with the empty list.
+
+- **An operator the field's type forbids now says why, and can be removed.** It used to be appended to
+  the row with a bare warning glyph and no explanation. It stays visible — it may be in the file
+  legitimately, or the type may have changed under it — and clicking it removes it, so a schema can be
+  repaired without going to the YAML tab.
+
+- **A nested schema member can be inspected.** The info button was offered on top-level rows only,
+  because the Inspector resolved a field by top-level id; it now walks the dotted path segment by
+  segment, which is also what keeps `existingLoans.lender` and `applicant.lender` apart.
+
+### Changed
+- **The Schema, Actions and Manifest editors are now outlines, not tables.** One line per declaration,
+  read rather than edited; the Inspector does the editing. `FieldSchemaTable` drew `Path / Alias / Type /
+  Normalizers / Operators` column headers and then, beneath them, a bordered **card** per field holding
+  three text fields, a dropdown and two buttons on its first line plus Format, Normalizers and Operators
+  lines under it — so the headers described columns that did not exist, a field cost three to five rows,
+  and because every cell was a live text box the schema could only be edited, never read. Twelve fields
+  used to be two screens; it is now twelve lines.
+
+  What each line says is what the file will say: the path, the alias a rule may use, the declared type,
+  the normalizer chain **as a chain** (`trim → lowercase`), and the operators. An action is shown as the
+  call a rule makes — `audit(string, integer)` — because arity and order are the declaration. A manifest
+  entry's properties sit on one rail with its rule files numbered in run order, and its two paths are
+  **links**: clicking `schema.yaml` opens the Schema area.
+
+  Nested schema members use the Builder's bracket-rail geometry, coloured per depth, so nesting is read
+  rather than counted — and **the whole row is the click target**. The 36 dp `ⓘ` button existed for a
+  stated reason, "every cell is a text field, so a row-wide target would fight the editing under it",
+  and that reason went with the text fields.
+
+  Also new on every row: how many loaded rules read a field or emit an action, with `unread` / `unused`
+  called out; and per-row issues where the declaration is made. Deleting a field a rule reads, or an
+  action a rule emits, is **refused with the reason** — the same rule the Builder already applies, for
+  the same reason: a gesture that springs back silently is indistinguishable from a broken one.
+
+  Removed with them: `NormalizerSelector`, `OperatorSelector`, `ToggleChip`, `HeaderCell` and
+  `PathListEditor`, which nothing else used. `PathListEditor` is worth naming — it is the component whose
+  inability to reorder *was* the manifest defect, and `OrderedListEditor` replaced it.
+
+- **Looking at usages no longer hides what you are working on.** `Usages` was a *mode* of the Schema and
+  Actions areas and `Checks` a mode of the Manifest, so seeing which rules read a field replaced the
+  field you were editing. All three are now tabs of the dock, beside the file preview and under the
+  canvas that stays on screen — which is what they were always for. `SchemaMode.USAGES`,
+  `ActionMode.USAGES` and `ManifestMode.CHECKS` are gone, along with the two "shown here in a later
+  phase" placeholders that stood in when the platform supplied no diagram.
+
+  A check is no longer a sentence, either: each one carries the declaration it is about, so the row is
+  clickable and selects it. The manifest's checks moved to the same shape, which is how the entry that a
+  duplicate id or an unresolved read belongs to became something you can click rather than read.
+
+- **Picking a scope moved to the Inspector**, which is where writing happens. The canvas shows the scope
+  and the engine's verdict on it; the Inspector offers the collections the schema declares, keeps an
+  off-list value visible and marked rather than silently swapping it, and says when there is no schema to
+  check a name against at all.
+
+- **The Inspector edits; the area panels no longer own their model.** `FieldInspector`,
+  `ActionInspector` and `ManifestInspector` were read-only summaries sitting beside tables where every
+  cell was a live text box — the wrong way round in both directions. The schema and action models are
+  hoisted out of their panels into one holder each, so the panel and the Inspector read the same object
+  and cannot disagree; the Inspector is now the only writer. The manifest's **rule files are reorderable
+  for the first time** — their order is the run order, and a `$variable` is visible only to the files
+  after the one that sets it, so this was the one thing in the file that changes behaviour and the one
+  thing that could not be edited as what it is.
+
 - **The visual builder no longer rewrites your operator when you build a computed condition.** The
   "make it a computed comparison" action was a one-way door with no inverse, and it hard-coded `==` — so
   `amount >= 300` came back as `amount == 300`. It also silently dropped `between`'s upper bound, the

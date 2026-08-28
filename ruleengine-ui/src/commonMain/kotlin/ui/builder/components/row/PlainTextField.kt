@@ -31,10 +31,13 @@ fun PlainTextField(
     placeholder: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** False for a schema the visual editor will not rewrite — see `SchemaEditorState.isReadOnly`. */
+    enabled: Boolean = true,
 ) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         singleLine = true,
         textStyle = MaterialTheme.typography.body2.copy(color = TextPrimary),
         cursorBrush = SolidColor(value = TextPrimary),

@@ -11,11 +11,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
+import ui.actions.model.ActionEditorState
 import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableConditionNode
 import ui.components.SectionTitle
+import ui.manifest.model.ManifestEditorState
+import ui.manifest.model.ManifestPathKind
+import ui.schema.findByPath
+import ui.schema.model.SchemaEditorState
+import ui.schema.updateAtPath
 import ui.workbench.model.InspectorItem
 import ui.workbench.model.UiDiagnostic
 import ui.workbench.model.catalog.CatalogField
@@ -52,18 +58,47 @@ fun InspectorPanel(
     onBuilderMessage: (String) -> Unit = {},
     /** Moves the selection — how drilling into an operand works. */
     onSelectItem: (InspectorItem) -> Unit = {},
+    /**
+     * The schema being edited, and how to write it back.
+     *
+     * Null leaves the field branch read-only, which is what a caller with no schema editor gets. The
+     * Inspector is the *only* writer of these models — see the sub-inspectors.
+     */
+    schemaState: SchemaEditorState? = null,
+    onSchemaChange: (SchemaEditorState) -> Unit = {},
+    actionState: ActionEditorState? = null,
+    onActionChange: (ActionEditorState) -> Unit = {},
+    manifestState: ManifestEditorState? = null,
+    onManifestChange: (ManifestEditorState) -> Unit = {},
+    /** Which manifest entry the project is saving against, so the inspector can say so. */
+    activeEntryId: String? = null,
+    /** The loaded schema's top-level field types, which is what a scope is checked against. */
+    schemaFieldTypes: Map<String, String>? = null,
+    /** Opens the platform file dialog for a manifest path; see `ManifestInspector.choosePath`. */
+    chooseManifestPath: ((ManifestPathKind) -> String?)? = null,
+    /** Why that dialog cannot be used — an unsaved project has nothing to be relative to. */
+    chooseManifestPathDisabledReason: String? = null,
     modifier: Modifier = Modifier,
 ) {
     when (selectedItem) {
-        is InspectorItem.Field -> Inspect(
-            subject = fields.firstOrNull { it.id == selectedItem.id },
+        // The dotted path, not a top-level id: a member of a collection is selectable, and a leaf name
+        // is not unique — `lender` can belong to two different structures.
+        is InspectorItem.Field -> FieldBranch(
+            path = selectedItem.id,
+            schemaState = schemaState,
+            catalogUsages = fields.firstOrNull { candidate -> candidate.id == selectedItem.id }?.usages,
+            onSchemaChange = onSchemaChange,
+            onSelectItem = onSelectItem,
             modifier = modifier,
-        ) { field -> FieldInspector(field = field, modifier = modifier) }
+        )
 
-        is InspectorItem.Action -> Inspect(
-            subject = actions.firstOrNull { it.name == selectedItem.name },
+        is InspectorItem.Action -> ActionBranch(
+            name = selectedItem.name,
+            actionState = actionState,
+            catalogUsages = actions.firstOrNull { candidate -> candidate.name == selectedItem.name }?.usages,
+            onActionChange = onActionChange,
             modifier = modifier,
-        ) { action -> ActionInspector(action = action, modifier = modifier) }
+        )
 
         is InspectorItem.Rule -> Inspect(
             subject = rules.firstOrNull { it.id == selectedItem.id },
@@ -99,9 +134,112 @@ fun InspectorPanel(
             modifier = modifier,
         )
 
-        is InspectorItem.Manifest -> ManifestInspector(modifier = modifier)
+        is InspectorItem.Manifest -> ManifestBranch(
+            manifestState = manifestState,
+            onManifestChange = onManifestChange,
+            activeEntryId = activeEntryId,
+            schemaFieldTypes = schemaFieldTypes,
+            choosePath = chooseManifestPath,
+            choosePathDisabledReason = chooseManifestPathDisabledReason,
+            modifier = modifier,
+        )
         null -> InspectorPlaceholder(modifier = modifier)
     }
+}
+
+
+
+/** The manifest branch, extracted for the same reason [FieldBranch] was: this function has one job. */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun ManifestBranch(
+    manifestState: ManifestEditorState?,
+    onManifestChange: (ManifestEditorState) -> Unit,
+    activeEntryId: String?,
+    schemaFieldTypes: Map<String, String>?,
+    choosePath: ((ManifestPathKind) -> String?)?,
+    choosePathDisabledReason: String?,
+    modifier: Modifier,
+) {
+    Inspect(subject = manifestState, modifier = modifier) { manifest ->
+        ManifestInspector(
+            manifest = manifest,
+            activeEntryId = activeEntryId,
+            fieldTypes = schemaFieldTypes,
+            onManifestChange = onManifestChange,
+            choosePath = choosePath,
+            choosePathDisabledReason = choosePathDisabledReason,
+            modifier = modifier,
+        )
+    }
+}
+
+/**
+ * The field branch.
+ *
+ * Split out because the panel's `when` had grown past what one function should decide, and because this
+ * is where the Inspector stopped being a summary: [onSchemaChange] below is the only writer of the
+ * schema model.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun FieldBranch(
+    path: String,
+    schemaState: SchemaEditorState?,
+    catalogUsages: Int?,
+    onSchemaChange: (SchemaEditorState) -> Unit,
+    onSelectItem: (InspectorItem) -> Unit,
+    modifier: Modifier,
+) {
+    val field = schemaState?.fields?.findByPath(dotted = path)
+    if (schemaState == null || field == null) {
+        InspectorPlaceholder(modifier = modifier)
+        return
+    }
+    FieldInspector(
+        dottedPath = path,
+        field = field,
+        editable = !schemaState.isReadOnly,
+        usages = catalogUsages,
+        onSelectMember = { member -> onSelectItem(InspectorItem.Field(id = member)) },
+        onFieldChange = { updated ->
+            onSchemaChange(
+                schemaState.copy(fields = schemaState.fields.updateAtPath(dotted = path) { updated }),
+            )
+        },
+        modifier = modifier,
+    )
+}
+
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun ActionBranch(
+    name: String,
+    actionState: ActionEditorState?,
+    catalogUsages: Int?,
+    onActionChange: (ActionEditorState) -> Unit,
+    modifier: Modifier,
+) {
+    val action = actionState?.actions?.firstOrNull { candidate -> candidate.name == name }
+    if (actionState == null || action == null) {
+        InspectorPlaceholder(modifier = modifier)
+        return
+    }
+    ActionInspector(
+        action = action,
+        editable = !actionState.isReadOnly,
+        usages = catalogUsages,
+        onActionChange = { updated ->
+            onActionChange(
+                actionState.copy(
+                    actions = actionState.actions.map { candidate ->
+                        if (candidate.name == name) updated else candidate
+                    },
+                ),
+            )
+        },
+        modifier = modifier,
+    )
 }
 
 /**

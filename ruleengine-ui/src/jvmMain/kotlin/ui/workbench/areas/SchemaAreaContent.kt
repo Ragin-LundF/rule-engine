@@ -12,11 +12,17 @@ import ruleengine.dsl.ast.RuleAst
 import ruleengine.schema.FieldSchemaLoader
 import ui.diagrams.FieldFlowDiagram
 import ui.diagrams.render.DiagramSurface
+import ui.dock.DockController
+import ui.dock.model.DockSurface
+import ui.dock.schemaFieldRange
 import ui.editor.rules.RuleEditorState
 import ui.project.ProjectWorkspace
 import ui.project.dialog.LinkedFileHeader
 import ui.project.model.ProjectFileKind
 import ui.schema.FieldSchemaYamlBridge
+import ui.schema.IssueLevel
+import ui.schema.SchemaIssue
+import ui.schema.SchemaIssues
 import ui.workbench.SchemaAreaScreen
 import ui.yaml.YamlEditor
 import ui.yaml.annotateYaml
@@ -35,11 +41,60 @@ fun SchemaAreaContent(
     state: RuleEditorState,
     workspace: ProjectWorkspace,
     expandedDiagramRules: List<RuleAst>,
+    dock: DockController,
+    /** The field the Inspector is on, whose lines the dock highlights and whose row is marked. */
+    selectedFieldId: String? = null,
+    /** How many loaded rules read each field, by dotted path. */
+    readBy: Map<String, Int> = emptyMap(),
+    /** Where a refused gesture explains itself. */
+    onMessage: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     /** Shows one field in the right-hand Inspector; null hides the per-row button. */
     onInspectField: ((path: String) -> Unit)? = null,
 ) {
-    Column(modifier = modifier) {
+    val yaml = state.schemaText.value
+    YamlAreaWithDock(
+        surface = DockSurface.SCHEMA,
+        dock = dock,
+        fileName = "schema.yaml",
+        yaml = yaml,
+        editorType = YamlEditorType.FIELD_SCHEMA,
+        highlight = selectedFieldId?.let { path -> schemaFieldRange(yaml = yaml, dottedPath = path) },
+        issues = SchemaIssues.of(state = state.schemaEditor.state) + unreadFieldNotes(readBy = readBy),
+        onSelectIssue = onInspectField,
+        usagesContent = fieldFlow(state = state, rules = expandedDiagramRules),
+        // The panel only publishes YAML it could parse, so a blank or duplicate path freezes this text
+        // at the last good version. Saying so beats showing text that contradicts the Checks tab.
+        staleNotice = if (state.parsedSchema.value == null && yaml.isNotBlank()) {
+            "This is the last schema that parsed. Fix the rows below and it will catch up."
+        } else {
+            null
+        },
+        modifier = modifier,
+    ) {
+        SchemaAreaBody(
+            state = state,
+            workspace = workspace,
+            onInspectField = onInspectField,
+            selectedFieldId = selectedFieldId,
+            readBy = readBy,
+            onMessage = onMessage,
+        )
+    }
+}
+
+/** The area's own content: the linked-file header and the editor, with no dock concerns. */
+@Suppress("FunctionNaming")
+@Composable
+private fun SchemaAreaBody(
+    state: RuleEditorState,
+    workspace: ProjectWorkspace,
+    onInspectField: ((path: String) -> Unit)?,
+    selectedFieldId: String?,
+    readBy: Map<String, Int>,
+    onMessage: (String) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
         LinkedFileHeader(
             label = "SCHEMA FILE",
             linkedPath = workspace.session.value?.schemaLink,
@@ -49,28 +104,16 @@ fun SchemaAreaContent(
         )
         Spacer(modifier = Modifier.height(height = 10.dp))
         SchemaAreaScreen(
-            schemaYaml = state.schemaText.value,
-            fromYaml = { yaml ->
-                FieldSchemaYamlBridge.fromYaml(yaml = yaml)
-            },
+            sync = state.schemaEditor,
             toYaml = { editorState ->
                 FieldSchemaYamlBridge.toYaml(state = editorState)
             },
             onSchemaYamlChange = { newYaml -> state.applySchemaYaml(yaml = newYaml) },
             modifier = Modifier.fillMaxSize(),
-            // The same field-flow diagram the rule editor shows, filling the "Usages" tab
-            // that has been a placeholder: here the schema is the subject, so the fields
-            // nothing reads are the point.
-            usagesContent = {
-                DiagramSurface {
-                    FieldFlowDiagram(
-                        rules = expandedDiagramRules,
-                        schema = state.ruleSchema,
-                        entryWide = state.showAllRules.value,
-                    )
-                }
-            },
             onInspectField = onInspectField,
+            selectedFieldPath = selectedFieldId,
+            readBy = readBy,
+            onMessage = onMessage,
             yamlEditor = { value, onValueChange, editorModifier ->
                 YamlEditor(
                     value = value,
@@ -91,6 +134,35 @@ fun SchemaAreaContent(
                     },
                 )
             },
+        )
+    }
+}
+
+/**
+ * The fields no loaded rule reads.
+ *
+ * Kept apart from [SchemaIssues] because it is the one verdict the model cannot reach on its own: how
+ * many rules read a field is a property of the *rules*, and the schema editor has never seen them.
+ */
+private fun unreadFieldNotes(readBy: Map<String, Int>): List<SchemaIssue> =
+    readBy.filterValues { count -> count == 0 }
+        .keys
+        .sorted()
+        .map { path ->
+            SchemaIssue(level = IssueLevel.NOTE, path = path, message = "No loaded rule reads this field.")
+        }
+
+/**
+ * The field-flow diagram, which now lives in the dock rather than replacing the editor.
+ *
+ * Here the schema is the subject, so the fields nothing reads are the point.
+ */
+private fun fieldFlow(state: RuleEditorState, rules: List<RuleAst>): @Composable () -> Unit = {
+    DiagramSurface {
+        FieldFlowDiagram(
+            rules = rules,
+            schema = state.ruleSchema,
+            entryWide = state.showAllRules.value,
         )
     }
 }

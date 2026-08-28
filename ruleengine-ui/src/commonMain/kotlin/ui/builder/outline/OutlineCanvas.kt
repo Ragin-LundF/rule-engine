@@ -47,7 +47,6 @@ import ui.builder.model.BuilderOperand
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.selection.SelectionStep
-import ui.builder.selection.SelectionResolver
 import ui.components.SectionDivider
 import ui.components.TinyButton
 
@@ -61,6 +60,9 @@ import ui.components.TinyButton
  *
  * Here the whole rule reads top to bottom in one flow, at one line per row. Editing happens in the
  * Inspector, so nothing in this canvas expands and the row being worked on never moves.
+ *
+ * The generated text and the rule's problems are not here either: they belong to `EditorDock`, which
+ * `CanvasDockScaffold` puts under *both* Builder canvases. This one only draws the rule.
  */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
@@ -75,8 +77,6 @@ fun OutlineCanvas(
     onDslChange: (String) -> Unit,
     onMessage: (String) -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
-    /** Problems with the rule as it stands, already filtered to this rule by the caller. */
-    diagnostics: List<String> = emptyList(),
     modifier: Modifier = Modifier,
 ) {
     // Which rows are picked for grouping. Held here rather than in the selection: it is a transient
@@ -86,10 +86,6 @@ fun OutlineCanvas(
     fun emit() {
         BuilderToRuleDsl.generate(state = state)?.let(onDslChange)
     }
-
-    // The dock is closed until asked for, and remembers that per rule: an author who opens it is
-    // usually checking one specific rule's text, not turning it on for the session.
-    var dockExpanded by remember(state) { mutableStateOf(value = false) }
 
     Column(modifier = modifier.fillMaxSize()) {
         Column(
@@ -113,19 +109,6 @@ fun OutlineCanvas(
                 onMessage = onMessage,
             )
         }
-
-        // Outside the scroll on purpose: a panel that says what is wrong is no use if it scrolls away
-        // from the row that is wrong.
-        OutlineDock(
-            dsl = BuilderToRuleDsl.generate(state = state).orEmpty(),
-            selectedRowText = selectedNodeId
-                ?.let { id -> SelectionResolver.findNode(nodes = state.conditionNodes, id = id) }
-                ?.let { node -> BuilderToRuleDsl.renderRow(node = node) },
-            diagnostics = diagnostics,
-            expanded = dockExpanded,
-            onToggleExpanded = { dockExpanded = !dockExpanded },
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-        )
     }
 }
 

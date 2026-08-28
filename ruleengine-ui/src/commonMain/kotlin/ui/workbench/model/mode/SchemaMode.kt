@@ -5,5 +5,4 @@ package ui.workbench.model.mode
 enum class SchemaMode {
     VISUAL,
     YAML,
-    USAGES,
 }

@@ -23,6 +23,12 @@ class RightPanelController(
     private val expanded: MutableState<Boolean>,
     private val width: MutableState<Float>,
     private val viewModel: RuleWorkbenchViewModel,
+    // Injected so a test can observe what would be stored without writing to the developer's real
+    // preferences node — which `RightPanelWidthTest` did as a side effect of every assertion. The idiom
+    // is `SettingsController.setAutoCompleteShortcut(persist = ...)` and `DockController`'s.
+    private val saveExpanded: (Boolean) -> Unit = RightPanelPersistence::saveExpanded,
+    private val saveWidth: (Float) -> Unit = RightPanelPersistence::saveWidth,
+    private val saveTab: (RightPanelTab) -> Unit = RightPanelPersistence::saveTab,
 ) {
 
     /**
@@ -36,7 +42,7 @@ class RightPanelController(
 
     fun setExpanded(value: Boolean) {
         expanded.value = value
-        RightPanelPersistence.saveExpanded(expanded = value)
+        saveExpanded(value)
     }
 
     /**
@@ -61,12 +67,12 @@ class RightPanelController(
             RightPanelPersistence.MAX_WIDTH,
         )
         width.value = clamped
-        RightPanelPersistence.saveWidth(width = clamped)
+        saveWidth(clamped)
     }
 
     fun selectTab(tab: RightPanelTab) {
         viewModel.dispatch(action = WorkbenchAction.SelectRightPanelTab(tab = tab))
-        RightPanelPersistence.saveTab(tab = tab)
+        saveTab(tab)
     }
 
     /** Opens the panel *and* switches to the Inspector, so callers cannot open it on the wrong tab. */

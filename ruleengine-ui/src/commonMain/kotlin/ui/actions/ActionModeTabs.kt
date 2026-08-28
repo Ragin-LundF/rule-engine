@@ -6,7 +6,7 @@ import ui.components.ModeTabs
 import ui.workbench.model.mode.ActionMode
 
 /**
- * Tab switcher for the Action Schema editor area: Visual / YAML / Usages.
+ * Tab switcher for the Action Schema editor area: Visual / YAML.
  */
 @Composable
 fun ActionModeTabs(
@@ -27,5 +27,4 @@ private val ActionMode.displayName: String
     get() = when (this) {
         ActionMode.VISUAL -> "Visual"
         ActionMode.YAML -> "YAML"
-        ActionMode.USAGES -> "Usages"
     }

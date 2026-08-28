@@ -274,14 +274,6 @@ private fun CenterModeContent(
                     catalogActions = catalogActions,
                     ruleTreeFiles = ruleTreeFiles,
                     allBuilderRules = allBuilderRules,
-                    // The open file's problems, not this rule's: a diagnostic carries a file and a line
-                    // but no rule id, and the Builder does not know where in the file its rule starts.
-                    // Showing the file's is honest and still useful; claiming per-rule precision would
-                    // not be.
-                    diagnostics = state.diagnosticsList.value.map { diagnostic ->
-                        val where = diagnostic.line?.let { line -> "line $line: " }.orEmpty()
-                        where + diagnostic.message
-                    },
                     onAddRule = onAddRule,
                     onRenameRule = onRenameRule,
                     onBuilderDslChange = onBuilderDslChange,
@@ -393,7 +385,6 @@ private fun BuilderModeContent(
     catalogActions: List<CatalogActionInfo>,
     ruleTreeFiles: List<RuleTreeFile>,
     allBuilderRules: List<BuilderRule>,
-    diagnostics: List<String>,
     onAddRule: () -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit,
     onBuilderDslChange: (String) -> Unit,
@@ -457,7 +448,6 @@ private fun BuilderModeContent(
                     onDslChange = onBuilderDslChange,
                     onMessage = onBuilderMessage,
                     onRenameRule = onRenameRule,
-                    diagnostics = diagnostics,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
