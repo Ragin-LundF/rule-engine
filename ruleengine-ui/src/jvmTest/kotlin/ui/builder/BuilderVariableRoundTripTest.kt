@@ -11,6 +11,7 @@ import ruleengine.dsl.ast.AssignmentKindAst
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.diagrams.model.RuleSource
@@ -309,8 +310,10 @@ class BuilderVariableRoundTripTest {
     /** And the row must then offer `contains` rather than the text fallback. */
     @Test
     fun `a guard row on that list offers contains`() {
-        val fields = listOf(
-            CatalogFieldInfo(id = "${'$'}topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
+        val fields = BuilderCatalog.of(
+            fields = listOf(
+                CatalogFieldInfo(id = "${'$'}topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
+            ),
         )
 
         val operators = OperandRules.operatorsFor(

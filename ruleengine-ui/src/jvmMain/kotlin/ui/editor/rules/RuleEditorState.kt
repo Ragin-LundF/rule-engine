@@ -22,6 +22,7 @@ import ui.dsl.model.DslSection
 import ui.editor.CodeEditing
 import ui.editor.rules.model.StatusKind
 import ui.editor.rules.model.ViewMode
+import ui.workbench.RightPanelPersistence
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -152,6 +153,15 @@ class RuleEditorState(
      * flip it directly — a second writer is how the stored value and the one on screen drift apart.
      */
     val rightPanelExpanded: MutableState<Boolean> = mutableStateOf(value = false)
+
+    /**
+     * The right panel's width in dp while it is open, dragged by the shell's splitter.
+     *
+     * Held here beside [rightPanelExpanded] so the shell still reads one source for the panel's size,
+     * and seeded from the stored preference so a width chosen once survives the next launch. Written
+     * only through `RightPanelController`, like the flag above it.
+     */
+    val rightPanelWidth: MutableState<Float> = mutableStateOf(value = RightPanelPersistence.loadWidth())
 
     /** Whether the Builder rule tree is expanded; collapsing it hands its width to the rule editor. */
     val ruleTreeExpanded: MutableState<Boolean> = mutableStateOf(value = true)

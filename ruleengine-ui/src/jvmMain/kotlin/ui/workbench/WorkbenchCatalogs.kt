@@ -19,6 +19,7 @@ import ruleengine.dsl.ast.VariableRefAst
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.OperatorOptions
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.toCatalogFieldInfo
@@ -74,10 +75,39 @@ private fun fieldReaderCounts(rules: List<RuleAst>): Map<String, Int> {
         .eachCount()
 }
 
-/** Schema fields as the builder's path picker needs them: recursive, with a format hint. */
-internal fun builderCatalogFieldsFrom(schema: FieldSchema?): List<CatalogFieldInfo> {
-    return schema?.fields?.values?.map { def -> def.toCatalogFieldInfo() } ?: emptyList()
+/**
+ * Schema fields as the builder's path picker needs them: recursive, with a format hint — and the
+ * bare-alias index beside them.
+ *
+ * The index is taken from the engine rather than re-derived, because *which* aliases may be used bare
+ * is a semantic question the engine has already answered. Two rules narrow `aliasPaths` here, both of
+ * them the engine's own:
+ *
+ *  - an alias declared on a field inside a `collection` can never be used on its own — the engine
+ *    answers `FieldPathResolution.CrossesCollection` for one, and `AliasTarget.collectionPath` is how
+ *    it records that;
+ *  - a declared top-level name always wins over an alias that shares its spelling, because
+ *    `FieldPathResolver.resolve` tries a direct hit before it consults the index at all.
+ *
+ * A duplicate alias is not filtered: `FieldSchema.aliasPaths` already keeps the first declaration, and
+ * `Validator` reports the collision as a diagnostic of its own.
+ */
+internal fun builderCatalogFieldsFrom(schema: FieldSchema?): BuilderCatalog {
+    if (schema == null) {
+        return BuilderCatalog.Empty
+    }
+    val declared = schema.fields.keys.map { id -> id.value }.toSet()
+    return BuilderCatalog(
+        fields = schema.fields.values.map { def -> def.toCatalogFieldInfo() },
+        aliasPaths = schema.aliasPaths
+            .filterValues { target -> target.collectionPath == null }
+            .filterKeys { alias -> alias !in declared }
+            .mapValues { (_, target) -> target.path.value.split(FIELD_PATH_SEPARATOR) },
+    )
 }
+
+/** How the engine spells a dotted field path, and how `AliasTarget.path` carries one. */
+private const val FIELD_PATH_SEPARATOR: Char = '.'
 
 /**
  * Rule output variables in scope at [uptoRuleId], as extra entries for the builder's operand picker.

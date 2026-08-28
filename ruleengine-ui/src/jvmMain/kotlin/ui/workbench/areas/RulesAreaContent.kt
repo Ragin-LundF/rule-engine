@@ -3,11 +3,12 @@ package ui.workbench.areas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.CoroutineScope
+import ruleengine.core.domain.dto.RuleBranch
 import ui.builder.BuilderRulesController
 import ui.builder.model.BuilderRule
 import ui.builder.model.catalog.CatalogActionInfo
-import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.mutable.BuilderEditorState
+import ui.builder.model.selection.SelectionStep
 import ui.diagrams.TraceDiagram
 import ui.editor.rules.RuleEditorState
 import ui.tester.RuleTestController
@@ -34,13 +35,16 @@ internal fun RulesAreaContent(
     onRuleModeChange: (RuleMode) -> Unit,
     builderRules: BuilderRulesController,
     builderEditorState: BuilderEditorState,
-    allRuleIds: List<String>,
     allBuilderRules: List<BuilderRule>,
     catalogRules: List<CatalogRule>,
-    catalogFields: List<CatalogFieldInfo>,
     catalogActions: List<CatalogActionInfo>,
     ruleTreeFiles: List<RuleTreeFile>,
-    onConditionSelected: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    selectedNodeId: String?,
+    selectedStatementId: String?,
+    selectedSteps: List<SelectionStep>?,
+    onSelectNode: (String, List<SelectionStep>) -> Unit,
+    onSelectStatement: (RuleBranch, String) -> Unit,
     testInputState: TestInputState,
     onTestInputStateChange: (TestInputState) -> Unit,
     testController: RuleTestController,
@@ -53,18 +57,21 @@ internal fun RulesAreaContent(
         ruleMode = ruleMode,
         onRuleModeChange = onRuleModeChange,
         builderEditorState = builderEditorState,
-        allRuleIds = allRuleIds,
         allBuilderRules = allBuilderRules,
         catalogRules = catalogRules,
         onRuleSelected = { ruleId -> builderRules.select(ruleId = ruleId) },
         onRenameRule = { oldId, newId -> builderRules.rename(oldId = oldId, newId = newId) },
         onAddRule = { builderRules.add() },
-        catalogFields = catalogFields,
         catalogActions = catalogActions,
         onBuilderDslChange = { newDsl ->
             builderRules.applyDsl(ruleId = builderEditorState.ruleId, newDsl = newDsl)
         },
-        onConditionSelected = onConditionSelected,
+        onBuilderMessage = onBuilderMessage,
+        selectedNodeId = selectedNodeId,
+        selectedStatementId = selectedStatementId,
+        selectedSteps = selectedSteps,
+        onSelectNode = onSelectNode,
+        onSelectStatement = onSelectStatement,
         ruleTreeFiles = ruleTreeFiles,
         onTreeRuleSelected = { relativePath, ruleId ->
             // The file load stays at this level: it is disk I/O against the editor's manifest state,

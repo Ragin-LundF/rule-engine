@@ -5,6 +5,93 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+- **The visual builder no longer rewrites your operator when you build a computed condition.** The
+  "make it a computed comparison" action was a one-way door with no inverse, and it hard-coded `==` — so
+  `amount >= 300` came back as `amount == 300`. It also silently dropped `between`'s upper bound, the
+  list behind `in` / `containsAny` / `containsAll`, and `ignoreCase`. Because the builder regenerates the
+  whole rule text on every edit, that was data loss in the rule file rather than only on screen.
+
+  A row's form is now *derived* from its operands, the way the parser derives it from the text: a plain
+  field path against a literal or a list is a simple condition — the only form the named operators exist
+  in — and anything computed is a value-expression comparison. There is no action to convert between
+  them, because choosing a computed operand *is* the conversion. Where a named operator has no computed
+  spelling, the builder refuses with a reason naming the operator instead of reinterpreting the
+  condition.
+
+- **Switching one side of a condition to a different kind keeps the path it was built on.** It returned
+  the schema's first field instead, so switching `abs(sum(invoices.amount) - …)` to a plain field lost
+  `invoices.amount` and offered something unrelated. The path is now carried through from wherever it was
+  buried — an aggregate's path, a call's field argument, a calculation's first field term — so a kind
+  switch is reversible however deep the operand was.
+
+- **Renaming a rule is back on the rule's own id** in the builder, committing on Enter or on losing
+  focus.
+
+### Added
+- **The rule builder has two canvases over one rule**, switched on the canvas itself rather than in the
+  mode tabs, because both show the same rule with the same selection and the same inspector.
+
+  The **outline** reads the whole rule top to bottom at one line per condition, with `AND` / `OR` on the
+  gutter and groups as bracket rails. Every part of a row is a click target, so a sub-expression four
+  levels down is one click from being edited — and because editing happens in the inspector, the row
+  being worked on never moves or changes height. This replaces a stack of bordered cards in which a rule
+  with all three branches was five cards, so `when` scrolled out of sight while its outcome was edited.
+
+  The **board** shows every rule in evaluation order along the top, grouped by file, with what each rule
+  reads and sets and whether it halts the run; then this rule as nested condition rails and three
+  outcome lanes side by side. Conditions are grouped by dragging one row onto another, and an action or
+  assignment is moved between branches by dragging its card between lanes. A refused drop says why.
+
+- **`$variable` flow across rules.** Clicking a variable chip on the board lights up every rule that sets
+  it and every rule that reads it. Only a rule earlier in the run publishes to a later one, so a rule
+  reading a variable that nothing before it sets is called out explicitly — that rule parses, validates,
+  runs, and can never fire, and nothing in the tool could say so before.
+
+- **A formula bar over both canvases.** The selected condition appears as editable text; type
+  `count(invoices) > 2` and the row rebuilds. It is validated as you type and applied on Enter, and
+  nothing is applied unless it parses. It reuses the engine's own parser rather than a second one, so an
+  expression the bar accepts is one the engine accepts.
+
+- **The generated DSL under the outline**, collapsible, with the selected row's line highlighted, plus
+  the open file's diagnostics. Previously the only way to see what the builder was about to write was to
+  switch to the code view — by which point it was already written.
+
+- **Incomplete condition rows say what they still need**, inline, recursing into arguments and terms so a
+  hole several levels down is named. A row that is half-filled generates text that does not parse, and
+  the builder now says so while it is being written rather than after the file has been rewritten.
+
+- **The right panel can be dragged wider.** A handle sits in the gap between the centre panel and the
+  right panel; the width it is set to is remembered between launches, and clamped so neither panel can be
+  squeezed to the point where the drag handle itself is unreachable. The Inspector's default width is
+  unchanged — this is for the cases where a deep expression needs more room than the default gives it.
+
+### Changed
+- Sections are separated by a rule with real space around them, in the builder's outline, on the board,
+  and inside the inspector. At the old spacing the parts of a rule — the condition and the up-to-three
+  outcomes — read as one continuous list of boxes, which is the wrong reading: they answer different
+  questions.
+
+- The inspector's breadcrumb sits on its own labelled surface, separated from the editor below it, so
+  what moves you and what edits the rule are visually distinct. Going back up a level is now a named
+  button — "← back to comparison" — in its own fixed position rather than the leftmost of a row of
+  identical crumbs, which moved as the trail grew.
+
+- A rule's missing `else` / `not_exists` branches are offered as one compact row rather than two
+  placeholder sections, so the empty part of a rule no longer takes more room on screen than the part
+  carrying its logic.
+
+- The inspector is now the builder's single editing surface. Operands were previously edited in panels
+  that expanded underneath the row, one at a time, which pushed the row being edited off screen for a
+  deep expression and made two sub-expressions impossible to compare. Depth is now navigation — a trail
+  in the panel header, with one click back — instead of layout.
+
+- Path segments show their `where` filters, ordering and `first`/`last` bound on separate cards, all
+  visible at once, instead of behind a drawer on a pill. A silent filter, or a silent truncation that
+  decides which elements the filter then sees, is exactly what should not need a click to discover.
+
 ## Release 1.11.0
 
 ### Added

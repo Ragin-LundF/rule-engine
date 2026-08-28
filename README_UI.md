@@ -71,44 +71,76 @@ for:
 |---|---|
 | **Sample gallery** | Open a ready-made project — financial transactions, KYC onboarding, loan decisioning, log filter, product recommendation, access control, warehouse shipments — without touching the file system. Each carries its own manifest, so the diagram views work straight away |
 | **Schema editor** | Edit fields as a table or as YAML, including nested `collection` / `object` members as indented child rows |
-| **Rule builder** | Build conditions visually: field/operator/value rows, AND/OR grouping, `not`, `ignoreCase`, and aggregate or arithmetic operands. The THEN block holds action rows and `set` rows; an optional ELSE block holds the same for a false condition, and an optional NOT EXISTS block for a condition the record carries no data to decide |
+| **Rule builder** | Two canvases over one rule, switched on the canvas itself. The **outline** reads the whole rule top to bottom, one line per condition, with AND/OR on the gutter and groups as bracket rails. The **board** shows every rule in evaluation order along the top, then this rule as draggable condition rails and three outcome lanes side by side. Both edit through the same right-hand Inspector, and the selection survives the switch |
+| **Formula bar** | The selected condition as editable text. Type `count(invoices) > 2` and the row rebuilds; the row's own DSL appears there when you click it. Validated as you type, applied on ⏎, and nothing is applied unless it parses |
 | **Code view** | Edit the DSL directly, with syntax highlighting, autocompletion and inline diagnostics |
 | **Diagram view** | Four diagrams over the same rules, picked in the toolbar: the **rule trees** (each rule's condition tree), the **manifest run** (the whole entry on one spine, in evaluation order), the **outcome map** (rules grouped by the output they produce, from any branch) and the **field flow** (schema field → rule → outcome, with the fields no rule reads) |
 | **Table view** | Scan all loaded rules, their conditions and their actions at a glance |
-| **Inspector** | Describe what is selected, in the right-hand panel: the rule you are editing — its status, condition and action counts per branch, and the variables it publishes — or a schema field or action, with how many rules use it. Opened with **ⓘ Inspector** in the top bar |
+| **Inspector** | Describe and edit what is selected, in the right-hand panel — drag its left edge to make it wider when a deep expression needs the room: the rule you are editing — its status, condition and action counts per branch, and the variables it publishes — or a schema field or action, with how many rules use it. Opened with **ⓘ Inspector** in the top bar |
 | **Test panel** | Evaluate the rule set against JSON input: every variable the run published and every action it emitted, both grouped by the rule responsible, plus one row per rule — matched, else, not exists, partial, no match, or not evaluated — whose condition trace expands on click |
 
 ### Advanced conditions in the builder
 
-A condition row is `operand · operator · operand`. Each operand is a chip that can be a field, a
-literal value, an aggregate, a calculation, or a function call:
+A condition row is one line of clickable text — the DSL it will generate, not a summary of it. Clicking
+any part of it selects *that* part and the Inspector opens on it, so the aggregate inside
+`abs(sum(a) - sum(b))` is one click away and the row never changes height while you work on it.
+
+Each side of a comparison is a field, a literal, an aggregate, a calculation or a function call:
 
 - **Aggregate** — pick a reduction (`count`, `sum`, `avg`, `median`, `max`, `min`, `subtract`) and build
   the path one segment at a time, attaching `where` filters to any segment.
 - **Calculation** — a flat list of terms joined by `+`, `-`, `*`, `/`, with optional parentheses.
 - **Function** — any other call the engine knows (`abs`, `daysBetween`, `every`, `any`, `sumByKey`),
-  with one row per argument. An argument is an operand in its own right, so
+  one argument per row. An argument is an operand in its own right, so
   `abs(sum(invoices.amount) - sum(payments.amount))` is a function around a calculation around two
-  aggregates, each editable in place.
+  aggregates. Each level is reached by drilling into it, with one click back along the trail in the
+  panel header.
 
-Computed operands are numeric, so those kinds are offered only when the comparison can be numeric —
-a text field will not let you build a sum against it. Rows carrying a computed operand are marked
-with an accent stripe and show the DSL they generate underneath.
+**The row's form follows its operands.** A plain field against a literal is a simple condition, and only
+that form has the named operators — `contains`, `between`, `in`, `startsWith`. Once either side is
+computed the row is a value-expression comparison, where only `== != > >= < <=` exist. You do not switch
+between the two: choosing a computed operand *is* the switch. And where a named operator has no computed
+spelling, the picker says so instead of converting — `purpose contains "rent"` cannot become an
+arithmetic comparison, so the option is disabled with that reason rather than silently rewriting your
+operator.
 
-**Path segments** carry three things beyond their name, all edited in the segment's drawer and all
-badged on the pill so they are visible while it is closed:
+**Path segments** carry three things beyond their name, each on its own card and all visible at once —
+no drawer to open, because a silent filter is exactly what you must not have to go looking for:
 
-- a **where** filter, `and`-joined when there is more than one. `in` takes either a written-out list
-  (`paid, sent`) or the name of another field or list variable (`priorityCustomerIds`) — a bare name
-  is emitted unquoted, so it stays a membership test rather than becoming a text comparison.
+- a **where** filter, `and`-joined when there is more than one. `in` takes either a written-out list or
+  the name of another field or list variable (`priorityCustomerIds`); switch that side to **Field** and
+  name it, and it is emitted unquoted so it stays a membership test rather than becoming a text
+  comparison.
 - an **order by** control, which is what `sortBy` generates: a member to order by (absent for a
-  `string_set`, which orders by its own values) and a direction. It sits above the bound below,
-  because that is almost always what is meant — ordering first and keeping three gives the three
-  largest, while keeping three first puts an arbitrary three in order.
+  `string_set`, which orders by its own values) and a direction. It sits above the bound below, because
+  that is almost always what is meant — ordering first and keeping three gives the three largest, while
+  keeping three first puts an arbitrary three in order.
 - a **first / last n** bound, which is what `take` and `takeLast` generate. It applies where it sits
   relative to the filters above it, because the order is the meaning: `take(orders, 3)[paid == true]`
   selects paid orders among the first three, while `take(orders[paid == true], 3)` selects the first
   three paid orders.
+
+Under the outline is a collapsible strip showing **the text this rule will become**, with the line for
+the selected row highlighted. That is the bridge between the two ways of working: it is where you learn
+which line of DSL the row you are editing corresponds to.
+
+### The board
+
+The board answers the question no other view can: **what order do these rules run in, and what do they
+pass to each other.**
+
+- The **ribbon** along the top is every rule in evaluation order, grouped by file, numbered continuously
+  across files because the run does not restart at each file. Every card shows the same four rows — its
+  number and name, `↓` what it reads, `↑` what it sets, and `⊘` if it halts the run — with a dash where
+  a slot is empty, because an omitted row reads as *unknown* while a dash reads as *none*.
+- Clicking a `$variable` chip lights up every rule that sets it and every rule that reads it. Only a
+  rule *earlier* in the run publishes to a later one, so a rule reading a variable nothing before it sets
+  is called out: that rule parses, validates, runs — and can never fire.
+- **`when`** is nested rails, a colour per depth. Drag a row onto another to bracket the two, or into an
+  existing group to join it. A drop that would not work says why rather than springing back.
+- **The three outcomes** sit side by side, all always shown, each stating when it runs. Drag a card
+  between lanes to move an action or an assignment from one branch to another. Moving the last `then`
+  action is refused, because a rule with an empty `then` does not parse.
 
 ### Variables in the builder
 

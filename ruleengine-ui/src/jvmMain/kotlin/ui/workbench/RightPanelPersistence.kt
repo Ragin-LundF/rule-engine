@@ -15,6 +15,7 @@ import java.util.prefs.Preferences
 object RightPanelPersistence {
     private const val EXPANDED_KEY = "rightPanelExpanded"
     private const val TAB_KEY = "rightPanelTab"
+    private const val WIDTH_KEY = "rightPanelWidth"
     private val prefs: Preferences = Preferences.userRoot().node("rule-engine-ui")
 
     /**
@@ -32,4 +33,31 @@ object RightPanelPersistence {
     }
 
     fun saveTab(tab: RightPanelTab) = prefs.put(TAB_KEY, tab.name)
+
+    /**
+     * The panel's width in dp, clamped to the range the layout supports.
+     *
+     * Clamped on *read* as well as on write, because a stored value can outlive the range that produced
+     * it — a width saved on a wide display would otherwise leave nothing for the centre panel on a
+     * laptop screen, with no way to drag it back because the handle would be off the edge.
+     */
+    fun loadWidth(): Float {
+        return prefs.getFloat(WIDTH_KEY, DEFAULT_WIDTH).coerceIn(MIN_WIDTH, MAX_WIDTH)
+    }
+
+    fun saveWidth(width: Float) {
+        prefs.putFloat(WIDTH_KEY, width.coerceIn(MIN_WIDTH, MAX_WIDTH))
+    }
+
+    /** Wide enough for the Inspector's two-column fields without crowding the Builder beside it. */
+    const val DEFAULT_WIDTH: Float = 320f
+
+    /** Below this the Inspector's own labels wrap and it stops being readable. */
+    const val MIN_WIDTH: Float = 260f
+
+    /**
+     * An upper bound rather than none at all: past this the centre canvas is the narrow one, and a
+     * layout the user cannot recover from by dragging is worse than one they cannot reach.
+     */
+    const val MAX_WIDTH: Float = 720f
 }

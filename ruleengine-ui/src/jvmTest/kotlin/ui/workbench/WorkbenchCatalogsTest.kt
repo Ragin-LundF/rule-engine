@@ -12,6 +12,7 @@ import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
+import ui.builder.model.catalog.BuilderCatalog
 import ui.diagrams.model.RuleSource
 import ui.workbench.model.catalog.CatalogRuleStatus
 import ui.workbench.rules.ruleTreeFilesFrom
@@ -56,7 +57,9 @@ class WorkbenchCatalogsTest {
     @Test
     fun `a null schema yields no fields rather than throwing`() {
         assertEquals(expected = emptyList(), actual = catalogFieldsFrom(schema = null))
-        assertEquals(expected = emptyList(), actual = builderCatalogFieldsFrom(schema = null))
+        // The catalog, not just an empty list: a plain list would compare equal here and hide the
+        // difference, and what the caller needs back is something that still carries an alias index.
+        assertEquals(expected = BuilderCatalog.Empty, actual = builderCatalogFieldsFrom(schema = null))
     }
 
     @Test

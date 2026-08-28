@@ -11,9 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.TextSecondary
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
-import ui.builder.model.mutable.MutableBuilderCondition
 import ui.builder.model.mutable.MutableConditionNode
 import ui.components.SectionTitle
 import ui.workbench.model.InspectorItem
@@ -44,6 +44,14 @@ fun InspectorPanel(
      */
     ruleStates: Map<String, BuilderEditorState> = emptyMap(),
     diagnostics: List<UiDiagnostic> = emptyList(),
+    /** The builder's own field catalog — dotted paths and `$name` variables, not the schema table's. */
+    builderFields: BuilderCatalog = BuilderCatalog.Empty,
+    /** Regenerated rule text, for the edits made in the builder branches. */
+    onBuilderDslChange: (String) -> Unit = {},
+    /** Where a refused builder gesture explains itself. */
+    onBuilderMessage: (String) -> Unit = {},
+    /** Moves the selection — how drilling into an operand works. */
+    onSelectItem: (InspectorItem) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     when (selectedItem) {
@@ -76,10 +84,20 @@ fun InspectorPanel(
             )
         }
 
-        is InspectorItem.Condition -> Inspect(
-            subject = builderState?.let { findLeafCondition(it.conditionNodes, selectedItem.conditionId) },
+        // Everything selected inside a rule goes to one place, which is where the editing surface
+        // is being built. See BuilderNodeInspector.
+        is InspectorItem.Condition,
+        is InspectorItem.Statement,
+        -> BuilderNodeInspector(
+            item = selectedItem,
+            builderState = builderState,
+            builderFields = builderFields,
+            builderActions = actions,
+            onSelectItem = onSelectItem,
+            onDslChange = onBuilderDslChange,
+            onMessage = onBuilderMessage,
             modifier = modifier,
-        ) { condition -> ConditionInspector(condition = condition.toImmutable(), modifier = modifier) }
+        )
 
         is InspectorItem.Manifest -> ManifestInspector(modifier = modifier)
         null -> InspectorPlaceholder(modifier = modifier)
@@ -111,31 +129,9 @@ private fun countLeafConditions(nodes: List<MutableConditionNode>): Int {
     }
 }
 
-/**
- * Recursively finds a leaf condition by id in the node tree.
- */
-private fun findLeafCondition(
-    nodes: List<MutableConditionNode>,
-    id: String,
-): MutableBuilderCondition? {
-    for (node in nodes) {
-        when (node) {
-            is MutableConditionNode.Leaf -> {
-                if (node.inner.id == id) return node.inner
-            }
-            // Comparison rows are inspected in the row itself, not in the inspector panel.
-            is MutableConditionNode.ComparisonLeaf -> Unit
-            is MutableConditionNode.Group -> {
-                val found = findLeafCondition(node.nodes, id)
-                if (found != null) return found
-            }
-        }
-    }
-    return null
-}
-
+/** Shown when nothing is selected, or when a selection no longer resolves. */
 @Composable
-private fun InspectorPlaceholder(modifier: Modifier = Modifier) {
+internal fun InspectorPlaceholder(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

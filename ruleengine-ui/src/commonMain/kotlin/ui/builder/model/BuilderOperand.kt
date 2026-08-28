@@ -76,6 +76,51 @@ sealed interface BuilderOperand {
     ) : BuilderOperand
 }
 
+/**
+ * The path of an operand that has one, or null.
+ *
+ * [BuilderOperand.FieldRef] and [BuilderOperand.Aggregate] are the two kinds built around a path, and
+ * both use the same [BuilderPathStep] list. Reading them through one accessor is what lets the
+ * selection walk address a path segment without caring which of the two it sits under.
+ */
+val BuilderOperand.pathOrNull: List<BuilderPathStep>?
+    get() {
+        return when (this) {
+            is BuilderOperand.FieldRef -> path
+            is BuilderOperand.Aggregate -> path
+            else -> null
+        }
+    }
+
+/**
+ * The first path found anywhere in an operand tree, or null.
+ *
+ * Deeper than [pathOrNull], which looks only at the operand itself. This is what makes switching a
+ * side's kind reversible: `abs(sum(invoices.amount) - sum(payments.amount))` switched to Field must
+ * come back as `invoices.amount`, not as whatever the schema happens to declare first. Without it one
+ * mis-click silently replaced the author's field.
+ *
+ * Depth-first and left-to-right, so it returns the path the author would read first.
+ */
+val BuilderOperand.firstPath: List<BuilderPathStep>?
+    get() {
+        pathOrNull?.let { path -> return path }
+        return when (this) {
+            is BuilderOperand.Call -> args.firstNotNullOfOrNull { arg -> arg.firstPath }
+            is BuilderOperand.Calc -> terms.firstNotNullOfOrNull { term -> term.operand.firstPath }
+            else -> null
+        }
+    }
+
+/** Replaces the path of an operand that has one; returns the operand unchanged when it has none. */
+fun BuilderOperand.withPath(path: List<BuilderPathStep>): BuilderOperand {
+    return when (this) {
+        is BuilderOperand.FieldRef -> copy(path = path)
+        is BuilderOperand.Aggregate -> copy(path = path)
+        else -> this
+    }
+}
+
 /** Builds a single-segment, unfiltered field reference. */
 fun fieldOperand(name: String): BuilderOperand.FieldRef =
     BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = name)))

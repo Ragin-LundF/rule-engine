@@ -13,6 +13,7 @@ import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.BuilderRule
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.fieldOperand
 import ui.builder.model.filters
 import ui.builder.model.mutable.BuilderEditorState
@@ -389,7 +390,7 @@ class AdvancedExpressionRoundTripTest {
 
     @Test
     fun `path pickers offer members at every depth`() {
-        val catalog = schema.fields.values.map { it.toCatalogFieldInfo() }
+        val catalog = BuilderCatalog.of(fields = schema.fields.values.map { it.toCatalogFieldInfo() })
 
         assertEquals(
             expected = listOf("status", "total", "origin", "items"),
@@ -409,7 +410,7 @@ class AdvancedExpressionRoundTripTest {
 
     @Test
     fun `computed operand kinds are hidden for a text field but offered for a numeric one`() {
-        val catalog = schema.fields.values.map { it.toCatalogFieldInfo() }
+        val catalog = BuilderCatalog.of(fields = schema.fields.values.map { it.toCatalogFieldInfo() })
 
         val forText = OperandRules.availableKinds(other = pathOperand(dotted = "purpose"), fields = catalog)
         assertEquals(
@@ -424,7 +425,7 @@ class AdvancedExpressionRoundTripTest {
 
     @Test
     fun `text comparison offers equality operators only`() {
-        val catalog = schema.fields.values.map { it.toCatalogFieldInfo() }
+        val catalog = BuilderCatalog.of(fields = schema.fields.values.map { it.toCatalogFieldInfo() })
         val operators = OperandRules.operatorsFor(
             left = pathOperand(dotted = "purpose"),
             right = BuilderOperand.Literal(text = "rent", numeric = false),

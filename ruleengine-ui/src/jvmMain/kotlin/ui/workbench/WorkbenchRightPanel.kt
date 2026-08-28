@@ -3,6 +3,7 @@ package ui.workbench
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
 import ui.editor.rules.RuleEditorState
@@ -37,6 +38,11 @@ internal fun WorkbenchRightPanel(
     catalogRules: List<CatalogRule>,
     builderEditorState: BuilderEditorState,
     ruleStates: Map<String, BuilderEditorState>,
+    /** The builder's own field catalog: dotted paths plus the `$name` variables in scope. */
+    builderFields: BuilderCatalog,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    onSelectInspectorItem: (InspectorItem) -> Unit,
     uiDiagnostics: List<UiDiagnostic>,
     testInputState: TestInputState,
     onTestInputStateChange: (TestInputState) -> Unit,
@@ -55,6 +61,10 @@ internal fun WorkbenchRightPanel(
                 builderState = builderEditorState,
                 ruleStates = ruleStates,
                 diagnostics = uiDiagnostics,
+                builderFields = builderFields,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+                onSelectItem = onSelectInspectorItem,
                 modifier = Modifier.fillMaxSize(),
             )
         },

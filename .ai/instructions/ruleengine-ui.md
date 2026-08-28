@@ -25,7 +25,7 @@ Each feature package (`ui.builder`, `ui.tester`, `ui.project`, `ui.workbench`, `
 |---|---|
 | `ui.<feature>` | Composables, controllers, services, mappers — anything with behavior. |
 | `ui.<feature>.model` | Every model and enum of that feature. See the Models and DTOs rules in `coding-guidelines.md`. |
-| `ui.<feature>.<role>` | Further behavior groups when the feature package exceeds 8 files: `ui.workbench.areas`, `ui.builder.view`, `ui.diagrams.render`, `ui.builder.components.dropdown`. |
+| `ui.<feature>.<role>` | Further behavior groups when the feature package exceeds 8 files: `ui.workbench.areas`, `ui.builder.outline`, `ui.builder.board`, `ui.builder.inspector`. |
 | `ui.<feature>.model.<group>` | Model groups when `model` itself exceeds 8 files: `ui.workbench.model.mode`, `ui.project.model.dialog`. |
 
 - A new data class or enum goes in `model`, never beside the composable that uses it.
@@ -101,6 +101,83 @@ Three passes, and they are not interchangeable:
   result reports every file with lines relative to *its* file, so underlining the lot marks the wrong
   lines. The diagnostics panel shows them all and labels the ones from elsewhere.
 
+## The Builder: two canvases, one selection
+
+The Builder is two renderings of one rule. Adding a third, or changing either, means keeping the
+invariants below — they are the reason the pair does not become two half-editors that disagree.
+
+- **`ui.builder.outline`** — the reading canvas: one line per condition, joins as pills on the gutter,
+  groups as bracket rails, and the outcome blocks in DSL order. Nothing in it expands, so the row being
+  worked on never moves.
+- **`ui.builder.board`** — the run: every rule in evaluation order along the top, then the selected rule
+  as drag-and-droppable rails and three outcome lanes.
+- **`ui.builder.inspector`** — the editing surface for **both**. There is no other one.
+
+### The selection is one value, held where it already was
+
+`InspectorItem.Condition(conditionId, steps)` and `InspectorItem.Statement(branch, statementId, steps)`
+*are* the selection store. Both carry a `List<SelectionStep>` — a positional path into the expression
+(`Left`, `Argument(2)`, `Segment(1)`, `Filter(0)`, …) — so depth is navigation, not layout.
+
+There is deliberately **no** `BuilderSelectionController`. The dispatch path already existed
+(`WorkbenchAction.SelectInspectorItem`), and a second store for node selection would be the same trap
+this file already records for rule selection. Canvases dispatch; the Inspector reads; `CanvasSelection.of`
+is the one place that decides which of the three pieces a canvas gets.
+
+### The row's DSL form is derived, never toggled
+
+`ui.builder.RowForm` decides whether a row is a *simple condition* or a *value-expression comparison*
+from its operands, the way the parser decides it from the text:
+
+- a plain field path (no filters, sort or slice, not a `$var`) against a literal or a list is a simple
+  condition — the only form the **named** operators (`contains`, `between`, `in`, `startsWith`, …) exist
+  in;
+- anything computed is a comparison, and only `== != > >= < <=` can spell it.
+
+`blockedPromotion` refuses, with a reason naming the operator, rather than converting. The button this
+replaced was a **one-way door that lost data**: it hard-coded `==`, so `amount >= 300` became
+`amount == 300`, and it dropped `valueTo`, `listItems` and `ignoreCase`. Because the Builder regenerates
+the whole rule text on every edit, that was data loss on disk. Do not add a "convert to…" action that
+cannot round-trip.
+
+### Adding a canvas — the checklist
+
+1. Add the value to `RuleMode`, `ViewMode` and **both** directions of `RuleModeMapping`. The exhaustive
+   `when`s in `CenterEditorPanel` will then tell you what is missing.
+2. Do **not** add a tab to `ViewModeToggle` if the new canvas shows the same rule with the same
+   selection — put the switch on the canvas, as `CanvasSwitch` does. The tabs change what the centre
+   panel *is*; a canvas changes how one rule is drawn.
+3. Read the selection, never store it. Write it with `SelectInspectorItem` and open the panel with
+   `RightPanelController.showInspector()`.
+4. Render row text through `BuilderToRuleDsl.renderRow` and operands through `OperandText.toDsl`. Two
+   renderers drift; one cannot.
+5. Every new model state must round-trip through **both** `RuleAstToBuilderMapper` and
+   `BuilderToRuleDsl`. Anything the mapper cannot represent is deleted from the file on the next edit.
+
+### Things that must not change
+
+- **`stop` is a `Boolean` on the branch and a badge in the UI**, never a row. A `stop` in the middle of a
+  branch does not parse, and a flag cannot drift from the end of its block.
+- **State a ribbon group's width from its item count** (`n × card + (n − 1) × arrow`), never from an
+  intrinsic measurement. The HTML prototype of that ribbon painted cards on top of each other in two of
+  three browser engines because each computed a different intrinsic width; `Row` + `horizontalScroll`
+  with intrinsic children fails the same way and just as silently.
+- **A refused gesture says why.** `blockedRemoval`, `blockedMove`, `blockedPromotion` and
+  `validateDrop` all return a reason, and it reaches the status bar. A drag that springs back silently is
+  indistinguishable from a broken drag, and a refusal is where the DSL gets taught.
+- **Only a rule earlier in the run publishes a `$variable`.** `VariableFlow` encodes this; a reader whose
+  producer runs later is an `orphanReader`, not a reader. That case — a rule that parses, validates, runs
+  and can never fire — is the board's one genuine warning, and no single-rule view can see it.
+
+### What the Builder cannot do yet, and why
+
+Core diagnostics cannot be attributed to a **row**. A `ValidationDiagnostic` carries a file and a line;
+nothing in the chain — parser AST → `RuleAstToBuilderMapper` → `BuilderRule` → `BuilderEditorState` —
+records which line a row came from, and the Builder does not know where in the file its rule starts.
+Doing it properly means carrying line provenance the whole way through. Until then `OutlineDock` shows
+the open file's diagnostics, and `ui.builder.RowIssues` covers the incomplete-row cases the Builder has
+complete information about on its own.
+
 ## The Inspector and the right panel
 
 Two invariants here are easy to break by adding code that looks correct in isolation.
@@ -114,9 +191,11 @@ Two invariants here are easy to break by adding code that looks correct in isola
   site; make the click reach `BuilderRulesController` and the panel follows.
   The effect is guarded on `appArea == RULES` so a field or action selected in the Schema or Actions
   area survives until the user returns to the rules.
-- **`RightPanelController` is the only writer of the panel's open state and tab**, because both are
-  persisted through `RightPanelPersistence`. Flipping `RuleEditorState.rightPanelExpanded` directly is
-  what makes the stored value drift from the one on screen.
+- **`RightPanelController` is the only writer of the panel's open state, tab and width**, because all
+  three are persisted through `RightPanelPersistence`. Flipping `RuleEditorState.rightPanelExpanded` or
+  `rightPanelWidth` directly is what makes the stored value drift from the one on screen. The width in
+  particular is clamped inside `setWidth` and again in `RightPanelPersistence.loadWidth`, so a value
+  saved on a wide display cannot come back as a layout with the drag handle off the edge.
 
 `InspectorPanel` takes `builderState` *and* `ruleStates` and they are not interchangeable: the condition
 branch needs the open builder state, because that is where the inspected row lives, while the rule branch

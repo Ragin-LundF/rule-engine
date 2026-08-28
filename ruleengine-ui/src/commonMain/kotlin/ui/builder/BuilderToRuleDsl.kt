@@ -136,6 +136,22 @@ object BuilderToRuleDsl {
 
     // ── recursive node rendering ──────────────────────────────────────────────
 
+    /**
+     * The exact text [generate] writes for one leaf row, without its indent or join.
+     *
+     * Exists so the dock can highlight the line belonging to the selected row by matching the text
+     * rather than by counting lines. Counting would need the generator to report provenance for every
+     * line it writes, and would silently point at the wrong row the first time anything about the
+     * layout changed. Matching the generator's own output cannot drift from it, because it *is* it.
+     *
+     * Returns null for a group: a group is a bracket spanning several lines, not a line.
+     */
+    internal fun renderRow(node: MutableConditionNode): String? = when (node) {
+        is MutableConditionNode.Leaf -> renderConditionLine(cond = node.inner)
+        is MutableConditionNode.ComparisonLeaf -> renderComparisonLine(comparison = node.inner)
+        is MutableConditionNode.Group -> null
+    }
+
     private fun renderNodes(
         nodes: List<MutableConditionNode>,
         sb: StringBuilder,

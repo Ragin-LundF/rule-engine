@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import ruleengine.core.errors.Severity
 import ruleengine.dsl.parser.Parser
@@ -19,6 +20,7 @@ import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.model.BuilderRule
 import ui.editor.rules.RuleEditorState
+import ui.editor.rules.model.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
@@ -48,6 +50,8 @@ import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
 import ui.workbench.diagram.ExpandedDiagramWindow
 import ui.workbench.inspectorSelectionFor
+import ui.workbench.model.CanvasSelection
+import ui.workbench.model.InspectorItem
 import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.WorkbenchAction
 import ui.workbench.model.mode.AppArea
@@ -203,8 +207,10 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             uptoRuleId = activeBuilderEditorState.ruleId.takeIf { it.isNotBlank() },
         )
     }
+    // `withVariables` rather than list concatenation: a plain `+` yields a List and would drop the
+    // bare-alias index the catalog carries.
     val builderFieldsAndVariables = remember(key1 = builderCatalogFields, key2 = builderCatalogVariables) {
-        builderCatalogFields + builderCatalogVariables
+        builderCatalogFields.withVariables(variables = builderCatalogVariables)
     }
     val catalogActions = remember(key1 = state.parsedActionSchema.value, key2 = diagramRulesForWindow) {
         catalogActionsFrom(actions = state.parsedActionSchema.value, rules = diagramRulesForWindow)
@@ -277,7 +283,11 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     }
 
     val rightPanel = remember {
-        RightPanelController(expanded = state.rightPanelExpanded, viewModel = workbenchViewModel)
+        RightPanelController(
+            expanded = state.rightPanelExpanded,
+            width = state.rightPanelWidth,
+            viewModel = workbenchViewModel,
+        )
     }
 
     ProjectDialogHost(workspace = workspace)
@@ -310,6 +320,8 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             )
         },
         centerContent = {
+            val canvasSelection = CanvasSelection.of(item = workbenchState.selectedInspectorItem)
+
             when (workbenchState.appArea) {
                 AppArea.RULES -> RulesAreaContent(
                     state = state,
@@ -320,16 +332,38 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     },
                     builderRules = builderRules,
                     builderEditorState = activeBuilderEditorState,
-                    allRuleIds = builderStateMap.keys.filter { it.isNotBlank() },
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
-                    catalogFields = builderFieldsAndVariables,
                     catalogActions = builderCatalogActions,
                     ruleTreeFiles = ruleTreeFiles,
-                    onConditionSelected = { conditionId ->
+                    // A gesture the Builder refuses — emptying a `when`, or promoting a row whose
+                    // operator has no value-expression form — says why here rather than doing nothing.
+                    onBuilderMessage = { message ->
+                        state.setStatus(msg = message, kind = StatusKind.ERROR)
+                    },
+                    // The canvas highlights whatever the Inspector is pointed at, and moves it. Both
+                    // read the one selection the workbench already holds, so they cannot disagree.
+                    selectedNodeId = canvasSelection.nodeId,
+                    selectedStatementId = canvasSelection.statementId,
+                    selectedSteps = canvasSelection.steps,
+                    onSelectNode = { nodeId, steps ->
                         workbenchViewModel.dispatch(
-                            action = WorkbenchAction.SelectCondition(conditionId = conditionId),
+                            action = WorkbenchAction.SelectInspectorItem(
+                                item = InspectorItem.Condition(conditionId = nodeId, steps = steps),
+                            ),
                         )
+                        rightPanel.showInspector()
+                    },
+                    onSelectStatement = { branch, statementId ->
+                        workbenchViewModel.dispatch(
+                            action = WorkbenchAction.SelectInspectorItem(
+                                item = InspectorItem.Statement(
+                                    branch = branch,
+                                    statementId = statementId,
+                                ),
+                            ),
+                        )
+                        rightPanel.showInspector()
                     },
                     testInputState = testInputState,
                     onTestInputStateChange = { testInputState = it },
@@ -407,6 +441,17 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                 catalogRules = catalogRules,
                 builderEditorState = activeBuilderEditorState,
                 ruleStates = builderStateMap,
+                builderFields = builderFieldsAndVariables,
+                // The Inspector edits, so it writes rule text the same way the canvas does.
+                onBuilderDslChange = { newDsl ->
+                    builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+                },
+                onBuilderMessage = { message ->
+                    state.setStatus(msg = message, kind = StatusKind.ERROR)
+                },
+                onSelectInspectorItem = { item ->
+                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
+                },
                 uiDiagnostics = inspectorSelection.diagnostics,
                 testInputState = testInputState,
                 onTestInputStateChange = { testInputState = it },
@@ -418,7 +463,8 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             DiagnosticsSection(state = state)
             StatusBarSection(state = state, workspace = workspace)
         },
-        rightPanelWidth = if (state.rightPanelExpanded.value) 320.dp else 56.dp,
+        rightPanelWidth = rightPanelWidthOf(state = state),
+        onRightPanelResize = rightPanelResizeOf(state = state, controller = rightPanel),
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
@@ -428,3 +474,34 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
         ExpandedDiagramWindow(state = state, rules = expandedDiagramRules)
     }
 }
+
+/** How wide the right panel is: the dragged width while open, the icon strip's width while closed. */
+private fun rightPanelWidthOf(state: RuleEditorState): Dp {
+    return if (state.rightPanelExpanded.value) {
+        state.rightPanelWidth.value.dp
+    } else {
+        COLLAPSED_PANEL_WIDTH
+    }
+}
+
+/**
+ * The shell's resize callback, or null when the panel should not be resizable.
+ *
+ * Null while collapsed: a collapsed panel is an icon strip with one correct width, and a handle that
+ * silently refuses to move is worse than no handle at all.
+ *
+ * Every delta goes through [RightPanelController.setWidth] rather than to the state, so the clamp that
+ * keeps the width usable is applied in one place — see `RightPanelWidthTest`.
+ */
+private fun rightPanelResizeOf(
+    state: RuleEditorState,
+    controller: RightPanelController,
+): ((Dp) -> Unit)? {
+    if (!state.rightPanelExpanded.value) {
+        return null
+    }
+    return { delta -> controller.setWidth(value = state.rightPanelWidth.value + delta.value) }
+}
+
+/** The icon strip's width when the right panel is closed — wide enough for its vertical tab labels. */
+private val COLLAPSED_PANEL_WIDTH = 56.dp

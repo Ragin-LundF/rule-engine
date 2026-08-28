@@ -5,10 +5,12 @@ import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.BuilderTerm
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.catalog.fieldAtPath
 import ui.builder.model.catalog.fieldsAtPath
 import ui.builder.model.catalog.scalarPaths
+import ui.builder.model.firstPath
 import ui.builder.model.names
 
 
@@ -46,7 +48,7 @@ object OperandRules {
      * Kinds selectable for one side, given the operand on the [other] side.
      * Computed kinds appear only when a numeric comparison is possible.
      */
-    fun availableKinds(other: BuilderOperand, fields: List<CatalogFieldInfo>): List<OperandKind> {
+    fun availableKinds(other: BuilderOperand, fields: BuilderCatalog): List<OperandKind> {
         val base = listOf(OperandKind.FIELD, OperandKind.VALUE)
         return if (canBeNumeric(operand = other, fields = fields)) {
             base + OperandKind.AGGREGATE + OperandKind.CALCULATION + OperandKind.FUNCTION
@@ -56,7 +58,7 @@ object OperandRules {
     }
 
     /** True unless the operand is definitely non-numeric. */
-    fun canBeNumeric(operand: BuilderOperand, fields: List<CatalogFieldInfo>): Boolean = when (operand) {
+    fun canBeNumeric(operand: BuilderOperand, fields: BuilderCatalog): Boolean = when (operand) {
         is BuilderOperand.Aggregate, is BuilderOperand.Calc -> true
         // A whole list is only ever tested for membership, never ordered against a number.
         is BuilderOperand.ListLiteral -> false
@@ -74,7 +76,7 @@ object OperandRules {
     }
 
     /** True when the operand is certainly numeric, which drives the operator list. */
-    private fun isDefinitelyNumeric(operand: BuilderOperand, fields: List<CatalogFieldInfo>): Boolean =
+    private fun isDefinitelyNumeric(operand: BuilderOperand, fields: BuilderCatalog): Boolean =
         when (operand) {
             is BuilderOperand.Aggregate, is BuilderOperand.Calc -> true
             is BuilderOperand.Call -> resultKind(operand = operand) == FunctionResultKind.NUMERIC
@@ -96,7 +98,7 @@ object OperandRules {
     fun operatorsFor(
         left: BuilderOperand,
         right: BuilderOperand,
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
     ): List<String> {
         // A list is only ever tested for membership, so it replaces the symbolic set rather than
         // extending it — every ordering or equality against a whole list evaluates to false.
@@ -113,7 +115,7 @@ object OperandRules {
         DslFunctions.resultKindOf(name = operand.function)
 
     /** True when the operand is a written-out list, or resolves to a variable an `add` clause builds. */
-    private fun isList(operand: BuilderOperand, fields: List<CatalogFieldInfo>): Boolean {
+    private fun isList(operand: BuilderOperand, fields: BuilderCatalog): Boolean {
         if (operand is BuilderOperand.ListLiteral) {
             return true
         }
@@ -132,7 +134,7 @@ object OperandRules {
     fun supportsIgnoreCase(
         left: BuilderOperand,
         right: BuilderOperand,
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
     ): Boolean = !isList(operand = left, fields = fields) &&
         !isList(operand = right, fields = fields) &&
         !isDefinitelyNumeric(operand = left, fields = fields) &&
@@ -155,18 +157,25 @@ object OperandRules {
      */
     fun defaultOperand(
         kind: OperandKind,
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
         previous: BuilderOperand,
     ): BuilderOperand = when (kind) {
+        // Carries the previous operand's path through, so switching a side's kind is reversible:
+        // `customer.tier` → Aggregate → Field gives `customer.tier` back rather than a default. This
+        // used to return the first schema field regardless, which meant one mis-click silently
+        // replaced the author's field — the same quiet loss as the conversion button this supports.
         OperandKind.FIELD -> BuilderOperand.FieldRef(
-            path = listOf(BuilderPathStep(name = fields.firstOrNull()?.id ?: ""))
+            path = previous.firstPath
+                ?: listOf(BuilderPathStep(name = fields.firstOrNull()?.id ?: "")),
         )
 
-        OperandKind.VALUE -> BuilderOperand.Literal(text = "", numeric = false)
+        // A literal keeps what was typed when there was a literal to keep.
+        OperandKind.VALUE -> previous as? BuilderOperand.Literal
+            ?: BuilderOperand.Literal(text = "", numeric = false)
 
         OperandKind.AGGREGATE -> BuilderOperand.Aggregate(
             function = "count",
-            path = listOf(
+            path = previous.firstPath ?: listOf(
                 BuilderPathStep(
                     name = fields.firstOrNull { OperatorOptions.isStructureType(fieldType = it.type) }?.id
                         ?: fields.firstOrNull()?.id
@@ -199,14 +208,14 @@ object OperandRules {
      * preceding segments point at. The first segment lists the schema's top-level fields.
      */
     fun segmentOptions(
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
         path: List<BuilderPathStep>,
         depth: Int,
     ): List<CatalogFieldInfo> =
         if (depth == 0) fields else fields.fieldsAtPath(segments = path.take(n = depth).names)
 
     /** True when a further segment can be appended, i.e. the current leaf is a declared structure. */
-    fun canAppendSegment(fields: List<CatalogFieldInfo>, path: List<BuilderPathStep>): Boolean {
+    fun canAppendSegment(fields: BuilderCatalog, path: List<BuilderPathStep>): Boolean {
         val leaf = fields.fieldAtPath(segments = path.names) ?: return false
         return OperatorOptions.isStructureType(fieldType = leaf.type) && leaf.nestedFields.isNotEmpty()
     }
@@ -217,7 +226,7 @@ object OperandRules {
      * Read off the segment's own declared type rather than off whether it has members, because a
      * `string_set` has none and is exactly the case the two-argument `sortBy` exists for.
      */
-    fun canSort(fields: List<CatalogFieldInfo>, path: List<BuilderPathStep>, depth: Int): Boolean {
+    fun canSort(fields: BuilderCatalog, path: List<BuilderPathStep>, depth: Int): Boolean {
         val segment = fields.fieldAtPath(segments = path.take(n = depth + 1).names) ?: return false
         return OperatorOptions.isOrderableType(fieldType = segment.type)
     }
@@ -231,7 +240,7 @@ object OperandRules {
      * `field op value` row has nothing to compare against.
      */
     fun filterFieldOptions(
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
         path: List<BuilderPathStep>,
         depth: Int,
     ): List<CatalogFieldInfo> = fields.fieldAtPath(segments = path.take(n = depth + 1).names)
@@ -250,14 +259,33 @@ object OperandRules {
      *
      * Nested rather than flattened, so a chip can walk into an object member the way it can anywhere
      * else.
+     *
+     * Carries **no alias index**: an alias declared on a field inside a `collection` can never be used
+     * on its own (`FieldPathResolution.CrossesCollection`), so there is no bare alias for a filter's
+     * operands to resolve. A member's own alias still matches, at its own level, like anywhere else.
      */
     fun filterCatalog(
-        fields: List<CatalogFieldInfo>,
+        fields: BuilderCatalog,
         path: List<BuilderPathStep>,
         depth: Int,
-    ): List<CatalogFieldInfo> {
+    ): BuilderCatalog {
+        // An undeclared segment has no members to overlay, but the document half is still there and a
+        // predicate may name it. Falling back to it keeps a filter on an undeclared collection editable,
+        // which is the same permissiveness the engine applies to an undeclared root.
         val members = fields.fieldAtPath(segments = path.take(n = depth + 1).names)?.nestedFields
-            ?: return emptyList()
-        return members + fields.filterNot { field -> members.any { member -> member.id == field.id } }
+            ?: return fields
+        // Shadowing compares both spellings: a document field the element also declares is hidden
+        // whether the rule names it by id or by alias, which is what `ElementRuleContext` does.
+        val shadowed = buildSet {
+            for (member in members) {
+                add(member.id)
+                member.alias?.let(::add)
+            }
+        }
+        return BuilderCatalog.of(
+            fields = members + fields.filterNot { field ->
+                field.id in shadowed || field.alias?.let { alias -> alias in shadowed } == true
+            },
+        )
     }
 }

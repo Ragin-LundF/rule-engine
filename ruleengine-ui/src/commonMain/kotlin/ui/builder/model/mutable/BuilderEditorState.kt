@@ -15,7 +15,6 @@ import ui.builder.model.BuilderLockKind
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderRule
 import ui.builder.model.BuilderVariable
-import ui.builder.model.pathOperand
 
 /** Converts a [MutableConditionNode] tree to an immutable [BuilderConditionNode] tree. */
 fun MutableConditionNode.toImmutable(): BuilderConditionNode = when (this) {
@@ -213,40 +212,6 @@ class BuilderEditorState private constructor(
             }.toMutableStateList()
         }
 
-        private fun BuilderConditionNode.toMutable(): MutableConditionNode = when (this) {
-            is BuilderConditionNode.Condition -> MutableConditionNode.Leaf(
-                MutableBuilderCondition(
-                    id = nodeId,
-                    field = field,
-                    operator = operator,
-                    value = value,
-                    valueTo = valueTo,
-                    listItems = listItems,
-                    ignoreCase = ignoreCase,
-                    negated = negated,
-                    joinToPrevious = joinToPrevious,
-                )
-            )
-
-            is BuilderConditionNode.Comparison -> MutableConditionNode.ComparisonLeaf(
-                MutableBuilderComparison(
-                    id = nodeId,
-                    left = left,
-                    operator = operator,
-                    right = right,
-                    ignoreCase = ignoreCase,
-                    negated = negated,
-                    joinToPrevious = joinToPrevious,
-                )
-            )
-
-            is BuilderConditionNode.Group -> MutableConditionNode.Group(
-                id = nodeId,
-                nodes = nodes.map { it.toMutable() },
-                joinToPrevious = joinToPrevious,
-                negated = negated,
-            )
-        }
     }
 
     /**
@@ -291,6 +256,48 @@ class BuilderEditorState private constructor(
         indices.sortedDescending().forEach { conditionNodes.removeAt(it) }
         // Insert the group at the position of the first wrapped node
         conditionNodes.add(index = indices.first(), element = group)
+    }
+
+    /**
+     * Wraps the single row [id] in a new group, in place.
+     *
+     * The keyboard-and-click counterpart to [groupConditions], which wraps a multi-row selection. A
+     * one-row group is a valid starting point — the author adds the second row into it — and the
+     * generated `( … )` parses either way.
+     */
+    fun wrapInGroup(id: String): Boolean {
+        val holder = containerOf(nodes = conditionNodes, id = id) ?: return false
+        val index = holder.indexOfFirst { node -> node.id == id }
+        if (index < 0) {
+            return false
+        }
+        val node = holder[index]
+        val group = MutableConditionNode.Group(
+            id = "grp-${nextConditionId++}",
+            nodes = listOf(node),
+            joinToPrevious = node.joinToPrevious,
+        )
+        // The wrapped row's own join now belongs to the group; leaving it on both would emit it twice.
+        node.joinToPrevious = ""
+        holder[index] = group
+        return true
+    }
+
+    /** The list that directly holds [id], at any depth — what an in-place replacement needs. */
+    private fun containerOf(
+        nodes: SnapshotStateList<MutableConditionNode>,
+        id: String,
+    ): SnapshotStateList<MutableConditionNode>? {
+        if (nodes.any { node -> node.id == id }) {
+            return nodes
+        }
+        for (group in nodes.filterIsInstance<MutableConditionNode.Group>()) {
+            val found = containerOf(nodes = group.nodes, id = id)
+            if (found != null) {
+                return found
+            }
+        }
+        return null
     }
 
     /**
@@ -347,6 +354,81 @@ class BuilderEditorState private constructor(
         removeIn(nodes = conditionNodes, id = id)
     }
 
+    /**
+     * Why [id] cannot be removed, or null when it can.
+     *
+     * A rule must keep at least one condition and at least one outcome in `then`: neither an empty
+     * `when` nor an empty `then` parses, and the Builder regenerates the whole rule text on every
+     * edit, so a gesture that empties either writes a broken rule to the file.
+     *
+     * A reason rather than a silent refusal, because a delete button that does nothing reads as
+     * broken. The caller shows it — see the `onMessage` channel on the Builder views.
+     */
+    fun blockedRemoval(id: String): String? {
+        if (findAnyNode(nodes = conditionNodes, id = id) != null && countLeafConditions() <= 1) {
+            return "A rule needs at least one condition — edit this one instead of removing it."
+        }
+        val isLastThenAction = actions.size <= 1 &&
+            actions.any { action -> action.id == id } &&
+            variables.isEmpty() &&
+            !stopOnThen
+        if (isLastThenAction) {
+            return "A rule needs at least one outcome in THEN — add another before removing this one."
+        }
+        val isLastThenVariable = variables.size <= 1 &&
+            variables.any { variable -> variable.id == id } &&
+            actions.isEmpty() &&
+            !stopOnThen
+        if (isLastThenVariable) {
+            return "A rule needs at least one outcome in THEN — add another before removing this one."
+        }
+        return null
+    }
+
+    /** Leaf conditions across the whole tree, groups included. */
+    fun countLeafConditions(): Int {
+        return countLeaves(nodes = conditionNodes)
+    }
+
+    private fun countLeaves(nodes: List<MutableConditionNode>): Int {
+        return nodes.sumOf { node ->
+            when (node) {
+                is MutableConditionNode.Leaf -> 1
+                is MutableConditionNode.ComparisonLeaf -> 1
+                is MutableConditionNode.Group -> countLeaves(nodes = node.nodes)
+            }
+        }
+    }
+
+    /** Any node with [id], group or leaf, at any depth. */
+    private fun findAnyNode(nodes: List<MutableConditionNode>, id: String): MutableConditionNode? {
+        for (node in nodes) {
+            if (node.id == id) {
+                return node
+            }
+            if (node is MutableConditionNode.Group) {
+                val found = findAnyNode(nodes = node.nodes, id = id)
+                if (found != null) {
+                    return found
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Why moving the statement [id] out of [from] is refused, or null when it is allowed.
+     *
+     * Dragging the only `then` outcome into another lane empties `then`, which is the same broken
+     * rule a delete would produce.
+     */
+    fun blockedMove(id: String, from: RuleBranch): String? {
+        if (from != RuleBranch.THEN) {
+            return null
+        }
+        return blockedRemoval(id = id)
+    }
+
     private fun removeIn(nodes: SnapshotStateList<MutableConditionNode>, id: String): Boolean {
         if (nodes.removeAll { it.id == id }) {
             return true
@@ -386,46 +468,6 @@ class BuilderEditorState private constructor(
         return nodes.filterIsInstance<MutableConditionNode.Group>().any { group ->
             replaceIn(nodes = group.nodes, id = id, replacement = replacement)
         }
-    }
-
-    /**
-     * Converts the simple condition row with the given [id] into a comparison row, so its sides can
-     * hold aggregates or calculations. The field becomes the left operand and the value the right.
-     * Returns the new comparison, or null when [id] is not a simple condition row.
-     */
-    fun toComparison(id: String, operator: String): MutableBuilderComparison? {
-        val leaf = findLeaf(nodes = conditionNodes, id = id) ?: return null
-        val condition = leaf.inner
-        val comparison = MutableBuilderComparison(
-            id = condition.id,
-            left = pathOperand(dotted = condition.field),
-            operator = operator,
-            right = BuilderOperand.Literal(
-                text = condition.value,
-                numeric = condition.value.trim().toDoubleOrNull() != null,
-            ),
-            negated = condition.negated,
-            joinToPrevious = condition.joinToPrevious,
-        )
-        return if (replaceNode(id = id, replacement = MutableConditionNode.ComparisonLeaf(inner = comparison))) {
-            comparison
-        } else {
-            null
-        }
-    }
-
-    private fun findLeaf(
-        nodes: List<MutableConditionNode>,
-        id: String,
-    ): MutableConditionNode.Leaf? {
-        for (node in nodes) {
-            when (node) {
-                is MutableConditionNode.Leaf -> if (node.id == id) return node
-                is MutableConditionNode.Group -> findLeaf(nodes = node.nodes, id = id)?.let { return it }
-                is MutableConditionNode.ComparisonLeaf -> Unit
-            }
-        }
-        return null
     }
 
     /** Adds a new comparison row after the existing ones, at the top level. */

@@ -2,6 +2,7 @@ package ui.builder
 
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep
+import ui.builder.model.catalog.BuilderCatalog
 import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.fieldOperand
 import kotlin.test.Test
@@ -18,7 +19,7 @@ import kotlin.test.assertTrue
  */
 class OperandRulesTest {
 
-    private val fields = listOf(
+    private val fields = BuilderCatalog.of(fields = listOf(
         CatalogFieldInfo(
             id = "parcels",
             type = "collection",
@@ -37,7 +38,7 @@ class OperandRulesTest {
                 ),
             ),
         ),
-    )
+    ))
 
     private val path = listOf(BuilderPathStep(name = "parcels"))
 
@@ -59,7 +60,9 @@ class OperandRulesTest {
 
     @Test
     fun `filter catalog offers the element's members and the document's fields`() {
-        val documentFields = fields + CatalogFieldInfo(id = "priorityCodes", type = "string_set")
+        val documentFields = fields.withVariables(
+            variables = listOf(CatalogFieldInfo(id = "priorityCodes", type = "string_set")),
+        )
         val catalog = OperandRules.filterCatalog(fields = documentFields, path = path, depth = 0)
 
         assertEquals(
@@ -71,7 +74,9 @@ class OperandRulesTest {
 
     @Test
     fun `a member shadows a document field of the same name`() {
-        val documentFields = fields + CatalogFieldInfo(id = "code", type = "integer")
+        val documentFields = fields.withVariables(
+            variables = listOf(CatalogFieldInfo(id = "code", type = "integer")),
+        )
         val catalog = OperandRules.filterCatalog(fields = documentFields, path = path, depth = 0)
 
         assertEquals(
@@ -87,14 +92,17 @@ class OperandRulesTest {
     }
 
     @Test
-    fun `filter catalog is empty for an undeclared segment`() {
+    fun `filter catalog falls back to the document for an undeclared segment`() {
         val catalog = OperandRules.filterCatalog(
             fields = fields,
             path = listOf(BuilderPathStep(name = "unknown")),
             depth = 0,
         )
 
-        assertTrue(actual = catalog.isEmpty())
+        // There are no members to overlay, but the document half of the element schema still is one, and
+        // this catalog is now what a filter's operands are actually offered — returning nothing would
+        // make a filter on an undeclared collection uneditable rather than merely unchecked.
+        assertEquals(expected = fields.map { it.id }, actual = catalog.map { it.id })
     }
 
     @Test
@@ -112,9 +120,11 @@ class OperandRulesTest {
         path = listOf(BuilderPathStep(name = "\$topics")),
     )
     private val literal = BuilderOperand.Literal(text = "billing", numeric = false)
-    private val variableFields = listOf(
-        CatalogFieldInfo(id = "\$topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
-        CatalogFieldInfo(id = "\$tier", type = OperatorOptions.VARIABLE_TYPE),
+    private val variableFields = BuilderCatalog.of(
+        fields = listOf(
+            CatalogFieldInfo(id = "\$topics", type = OperatorOptions.LIST_VARIABLE_TYPE),
+            CatalogFieldInfo(id = "\$tier", type = OperatorOptions.VARIABLE_TYPE),
+        ),
     )
 
     @Test

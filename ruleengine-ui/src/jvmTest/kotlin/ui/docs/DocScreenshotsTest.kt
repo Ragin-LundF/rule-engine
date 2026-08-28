@@ -66,6 +66,14 @@ class DocScreenshotsTest {
             waitForIdle()
             capture(name = "rule-builder")
 
+            // The board is a canvas inside the Builder, not a mode tab, so its switch is on the canvas.
+            onNodeWithText(text = "Board").performClick()
+            waitForIdle()
+            capture(name = "rule-board")
+
+            onNodeWithText(text = "Outline").performClick()
+            waitForIdle()
+
             onNodeWithText(text = "Code").performClick()
             waitForIdle()
             capture(name = "code-view")

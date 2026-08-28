@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -35,16 +36,24 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import ruleengine.core.domain.dto.RuleBranch
 import ui.BgElevated
 import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
+import ui.builder.BuilderToRuleDsl
+import ui.builder.FormulaParser
+import ui.builder.board.BoardCanvas
+import ui.builder.board.CanvasSwitch
+import ui.builder.formula.FormulaBar
 import ui.builder.model.BuilderRule
 import ui.builder.model.catalog.CatalogActionInfo
-import ui.builder.model.catalog.CatalogFieldInfo
 import ui.builder.model.mutable.BuilderEditorState
-import ui.builder.view.RuleBuilderView
+import ui.builder.model.mutable.replaceNodeFromFormula
+import ui.builder.model.selection.SelectionStep
+import ui.builder.outline.OutlineCanvas
+import ui.builder.selection.SelectionResolver
 import ui.components.SecondaryButton
 import ui.components.ToolbarButton
 import ui.copyToClipboard
@@ -152,16 +161,21 @@ fun CenterEditorPanel(
     ruleMode: RuleMode,
     onRuleModeChange: (RuleMode) -> Unit,
     builderEditorState: BuilderEditorState = BuilderEditorState.fromBuilderRule(BuilderRule.None),
-    allRuleIds: List<String> = emptyList(),
     allBuilderRules: List<BuilderRule> = emptyList(),
     catalogRules: List<CatalogRule> = emptyList(),
     onRuleSelected: (String) -> Unit = {},
     onAddRule: () -> Unit = {},
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
-    catalogFields: List<CatalogFieldInfo> = emptyList(),
     catalogActions: List<CatalogActionInfo> = emptyList(),
     onBuilderDslChange: (String) -> Unit = {},
-    onConditionSelected: (String) -> Unit = {},
+    /** Where a refused builder gesture explains itself; reaches the status bar. */
+    onBuilderMessage: (String) -> Unit = {},
+    /** What the canvas highlights, and what the Inspector is pointed at. */
+    selectedNodeId: String? = null,
+    selectedStatementId: String? = null,
+    selectedSteps: List<SelectionStep>? = null,
+    onSelectNode: (String, List<SelectionStep>) -> Unit = { _, _ -> },
+    onSelectStatement: (RuleBranch, String) -> Unit = { _, _ -> },
     testContent: @Composable () -> Unit = {},
     ruleTreeFiles: List<RuleTreeFile> = emptyList(),
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit = { _, _ -> },
@@ -190,19 +204,93 @@ fun CenterEditorPanel(
         Spacer(modifier = Modifier.height(height = 12.dp))
 
         Box(modifier = Modifier.weight(weight = 1f)) {
+            CenterModeContent(
+                viewMode = viewMode,
+                state = state,
+                builderEditorState = builderEditorState,
+                allBuilderRules = allBuilderRules,
+                catalogRules = catalogRules,
+                catalogActions = catalogActions,
+                ruleTreeFiles = ruleTreeFiles,
+                diagramGraphicsLayer = diagramGraphicsLayer,
+                onRuleModeChange = onRuleModeChange,
+                onRuleSelected = onRuleSelected,
+                onAddRule = onAddRule,
+                onRenameRule = onRenameRule,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+                selectedNodeId = selectedNodeId,
+                selectedStatementId = selectedStatementId,
+                selectedSteps = selectedSteps,
+                onSelectNode = onSelectNode,
+                onSelectStatement = onSelectStatement,
+                onTreeRuleSelected = onTreeRuleSelected,
+                testContent = testContent,
+            )
+        }
+    }
+}
+
+/**
+ * Dispatches to the view for [viewMode].
+ *
+ * Split out of [CenterEditorPanel] so that function is only the frame — header, divider, body — and the
+ * `when` that has to grow a branch for every new view lives on its own. `BUILDER` and `BOARD` share a
+ * branch: they are two canvases over one rule, not two views of the panel.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun CenterModeContent(
+    viewMode: ViewMode,
+    state: RuleEditorState,
+    builderEditorState: BuilderEditorState,
+    allBuilderRules: List<BuilderRule>,
+    catalogRules: List<CatalogRule>,
+    catalogActions: List<CatalogActionInfo>,
+    ruleTreeFiles: List<RuleTreeFile>,
+    diagramGraphicsLayer: GraphicsLayer,
+    onRuleModeChange: (RuleMode) -> Unit,
+    onRuleSelected: (String) -> Unit,
+    onAddRule: () -> Unit,
+    onRenameRule: (oldId: String, newId: String) -> Unit,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    selectedNodeId: String?,
+    selectedStatementId: String?,
+    selectedSteps: List<SelectionStep>?,
+    onSelectNode: (String, List<SelectionStep>) -> Unit,
+    onSelectStatement: (RuleBranch, String) -> Unit,
+    onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
+    testContent: @Composable () -> Unit,
+) {
             when (viewMode) {
-                ViewMode.BUILDER -> BuilderModeContent(
+                ViewMode.BUILDER, ViewMode.BOARD -> BuilderModeContent(
+                    boardActive = viewMode == ViewMode.BOARD,
+                    onCanvasChange = { board ->
+                        onRuleModeChange(if (board) RuleMode.BOARD else RuleMode.BUILDER)
+                    },
                     state = state,
                     builderEditorState = builderEditorState,
-                    allRuleIds = allRuleIds,
-                    catalogFields = catalogFields,
                     catalogActions = catalogActions,
                     ruleTreeFiles = ruleTreeFiles,
-                    onRuleSelected = onRuleSelected,
+                    allBuilderRules = allBuilderRules,
+                    // The open file's problems, not this rule's: a diagnostic carries a file and a line
+                    // but no rule id, and the Builder does not know where in the file its rule starts.
+                    // Showing the file's is honest and still useful; claiming per-rule precision would
+                    // not be.
+                    diagnostics = state.diagnosticsList.value.map { diagnostic ->
+                        val where = diagnostic.line?.let { line -> "line $line: " }.orEmpty()
+                        where + diagnostic.message
+                    },
                     onAddRule = onAddRule,
                     onRenameRule = onRenameRule,
-                    onConditionSelected = onConditionSelected,
                     onBuilderDslChange = onBuilderDslChange,
+                    onBuilderMessage = onBuilderMessage,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    selectedSteps = selectedSteps,
+                    onSelectNode = onSelectNode,
+                    onSelectStatement = onSelectStatement,
                     onTreeRuleSelected = onTreeRuleSelected,
                 )
 
@@ -217,36 +305,104 @@ fun CenterEditorPanel(
                 }
 
                 ViewMode.TEST -> testContent()
-                ViewMode.TABLE -> RuleTablePanel(
+                ViewMode.TABLE -> TableModeContent(
                     allBuilderRules = allBuilderRules,
                     catalogRules = catalogRules,
                     selectedRuleId = builderEditorState.ruleId,
-                    onRuleClick = { ruleId ->
-                        onRuleSelected(ruleId)
-                        onRuleModeChange(RuleMode.BUILDER)
-                    },
-                    modifier = Modifier.fillMaxSize(),
+                    onRuleSelected = onRuleSelected,
+                    onRuleModeChange = onRuleModeChange,
                 )
             }
-        }
+}
+
+/**
+ * The strip above the canvas: which canvas, and the selected row as text.
+ *
+ * Above *both* canvases because neither owns it — the switch changes how the rule is drawn and the
+ * formula bar edits the selection, and both canvases read and write the same selection. So this belongs
+ * to the pair of them rather than to either.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun CanvasToolbar(
+    boardActive: Boolean,
+    onCanvasChange: (Boolean) -> Unit,
+    builderEditorState: BuilderEditorState,
+    selectedNodeId: String?,
+    onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
+    ) {
+        CanvasSwitch(boardActive = boardActive, onChange = onCanvasChange)
+        FormulaBar(
+            text = selectedNodeId?.let { id ->
+                SelectionResolver.findNode(nodes = builderEditorState.conditionNodes, id = id)
+                    ?.let { node -> BuilderToRuleDsl.renderRow(node = node) }
+            },
+            parse = { text -> FormulaParser.parseCondition(text = text) },
+            onApply = { node ->
+                val id = selectedNodeId ?: return@FormulaBar
+                val replaced = builderEditorState.replaceNodeFromFormula(id = id, parsed = node)
+                if (replaced) {
+                    BuilderToRuleDsl.generate(state = builderEditorState)?.let(onBuilderDslChange)
+                } else {
+                    onBuilderMessage("That row could not be replaced.")
+                }
+            },
+            modifier = Modifier.weight(weight = 1f),
+        )
     }
+}
+
+/** Table mode: every loaded rule at a glance, with a click through to the Builder. */
+@Suppress("FunctionNaming")
+@Composable
+private fun TableModeContent(
+    allBuilderRules: List<BuilderRule>,
+    catalogRules: List<CatalogRule>,
+    selectedRuleId: String,
+    onRuleSelected: (String) -> Unit,
+    onRuleModeChange: (RuleMode) -> Unit,
+) {
+    RuleTablePanel(
+        allBuilderRules = allBuilderRules,
+        catalogRules = catalogRules,
+        selectedRuleId = selectedRuleId,
+        onRuleClick = { ruleId ->
+            onRuleSelected(ruleId)
+            onRuleModeChange(RuleMode.BUILDER)
+        },
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 /** Builder mode: the rule tree on the left, the selected rule's blocks on the right. */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
 private fun BuilderModeContent(
+    boardActive: Boolean,
+    onCanvasChange: (Boolean) -> Unit,
     state: RuleEditorState,
     builderEditorState: BuilderEditorState,
-    allRuleIds: List<String>,
-    catalogFields: List<CatalogFieldInfo>,
     catalogActions: List<CatalogActionInfo>,
     ruleTreeFiles: List<RuleTreeFile>,
-    onRuleSelected: (String) -> Unit,
+    allBuilderRules: List<BuilderRule>,
+    diagnostics: List<String>,
     onAddRule: () -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit,
-    onConditionSelected: (String) -> Unit,
     onBuilderDslChange: (String) -> Unit,
+    onBuilderMessage: (String) -> Unit,
+    selectedNodeId: String?,
+    selectedStatementId: String?,
+    selectedSteps: List<SelectionStep>?,
+    onSelectNode: (String, List<SelectionStep>) -> Unit,
+    onSelectStatement: (RuleBranch, String) -> Unit,
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
@@ -262,18 +418,50 @@ private fun BuilderModeContent(
             color = BorderColor,
             modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
         )
-        RuleBuilderView(
-            editorState = builderEditorState,
-            allRuleIds = allRuleIds,
-            onRuleSelected = onRuleSelected,
-            onAddRule = onAddRule,
-            onRenameRule = onRenameRule,
-            catalogFields = catalogFields,
-            catalogActions = catalogActions,
-            onConditionSelected = onConditionSelected,
-            onDslChange = onBuilderDslChange,
-            modifier = Modifier.weight(weight = 1f).fillMaxSize(),
-        )
+        Column(modifier = Modifier.weight(weight = 1f).fillMaxSize()) {
+            // The switch sits on the canvas rather than in the mode tabs: both canvases show the same
+            // rule with the same selection and the same Inspector, so this changes how it is drawn, not
+            // what the centre panel is.
+            CanvasToolbar(
+                boardActive = boardActive,
+                onCanvasChange = onCanvasChange,
+                builderEditorState = builderEditorState,
+                selectedNodeId = selectedNodeId,
+                onBuilderDslChange = onBuilderDslChange,
+                onBuilderMessage = onBuilderMessage,
+            )
+
+            if (boardActive) {
+                BoardCanvas(
+                    state = builderEditorState,
+                    files = ruleTreeFiles,
+                    rules = allBuilderRules,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    onSelectNode = { nodeId -> onSelectNode(nodeId, emptyList()) },
+                    onSelectStatement = onSelectStatement,
+                    onSelectRule = onTreeRuleSelected,
+                    onDslChange = onBuilderDslChange,
+                    onMessage = onBuilderMessage,
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            } else {
+                OutlineCanvas(
+                    state = builderEditorState,
+                    catalogActions = catalogActions,
+                    selectedNodeId = selectedNodeId,
+                    selectedStatementId = selectedStatementId,
+                    selectedSteps = selectedSteps,
+                    onSelectNode = onSelectNode,
+                    onSelectStatement = onSelectStatement,
+                    onDslChange = onBuilderDslChange,
+                    onMessage = onBuilderMessage,
+                    onRenameRule = onRenameRule,
+                    diagnostics = diagnostics,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
     }
 }
 
@@ -348,7 +536,7 @@ private fun CenterPanelActions(
                 diagramGraphicsLayer = diagramGraphicsLayer,
             )
 
-            ViewMode.BUILDER, ViewMode.TEST, ViewMode.TABLE -> {}
+            ViewMode.BUILDER, ViewMode.BOARD, ViewMode.TEST, ViewMode.TABLE -> {}
         }
     }
 }
