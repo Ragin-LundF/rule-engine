@@ -4,8 +4,19 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
 }
 
+// Single source of truth for the desktop entry point: consumed both by the Kotlin Multiplatform
+// `jvmRun` task below and by `compose.desktop.application` in packaging-ui.gradle.
+ext.desktopMainClass = "ui.DesktopMainKt"
+
 kotlin {
-    jvm()
+    jvm {
+        // Compose's `mainClass` only configures the Compose plugin's own `run`/`package*` tasks.
+        // KMP registers a separate `jvmRun` (the task the IDE run gutter uses) that has no main
+        // class unless it is set here, and fails with "No main class specified" without it.
+        mainRun { run ->
+            run.mainClass.set(project.ext.desktopMainClass)
+        }
+    }
 
     sourceSets {
         commonMain {
@@ -50,6 +61,19 @@ tasks.named("jvmTest") {
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 ext.TargetFormat = TargetFormat
 apply from: "${project.rootDir}/config/gradle/packaging-ui.gradle"
+
+// `jvmRun` is what `./gradlew jvmRun` and the IDE run gutter use, but KMP registers it as a bare
+// JavaExec: besides the main class set through `mainRun` above, it gets none of the JVM setup that
+// Compose applies to its own `run` task. Without `-Dcompose.application.configure.swing.globals=true`
+// the app starts and exits again within a second instead of showing its window. Mirroring `run`
+// rather than restating its arguments keeps the two entry points from drifting apart.
+// `matching`, because both tasks are registered by their plugins only after this script is evaluated.
+tasks.matching { it.name == "jvmRun" }.configureEach { jvmRunTask ->
+    def composeRun = project.tasks.named("run", JavaExec).get()
+    jvmRunTask.jvmArgs = composeRun.jvmArgs
+    // Fills the directory that Compose's `-Dcompose.application.resources.dir` argument points at.
+    jvmRunTask.dependsOn(project.tasks.named("prepareAppResources"))
+}
 
 
 
