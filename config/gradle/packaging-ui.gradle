@@ -1,6 +1,6 @@
 compose.desktop {
     application {
-        mainClass = "ui.DesktopMainKt"
+        mainClass = project.ext.desktopMainClass
 
         nativeDistributions {
             targetFormats = [
