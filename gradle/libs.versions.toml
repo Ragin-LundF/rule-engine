@@ -33,7 +33,7 @@ jreleaser = "org.jreleaser:1.25.0"
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-dokka = "org.jetbrains.dokka:2.2.0"
-jetbrains-compose = "org.jetbrains.compose:1.11.1"
+jetbrains-compose = "org.jetbrains.compose:1.12.0"
 jetbrains-compose-kotlin-plugin = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 detekt = "dev.detekt:2.0.0-alpha.6"
 version-catalog-update = "nl.littlerobots.version-catalog-update:1.1.1"
