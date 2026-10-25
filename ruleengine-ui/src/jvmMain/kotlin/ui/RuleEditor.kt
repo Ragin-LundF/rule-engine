@@ -21,6 +21,9 @@ import ui.actions.hasValidationIssues
 import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.model.BuilderRule
+import ui.builder.model.catalog.BuilderCatalog
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.mutable.BuilderEditorState
 import ui.dock.DockController
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
@@ -342,9 +345,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
         parseError = "Invalid YAML: could not parse action schema",
     )
 
-    // The Visual tab of the Rules area is the rule workspace: navigator, workspace and context column.
-    val inRuleWorkspace = workbenchState.appArea == AppArea.RULES &&
-        (workbenchState.ruleMode == RuleMode.BUILDER || workbenchState.ruleMode == RuleMode.BOARD)
+    val inRuleWorkspace = isRuleWorkspace(state = workbenchState)
     val selectItem: (InspectorItem) -> Unit = { item ->
         workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
     }
@@ -424,17 +425,15 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     selectedItem = workbenchState.selectedInspectorItem,
                     onSelectItem = selectItem,
                     inlineEditor = {
-                        workbenchState.selectedInspectorItem?.let { item ->
-                            BuilderNodeInspector(
-                                item = item,
-                                builderState = activeBuilderEditorState,
-                                builderFields = builderFieldsAndVariables,
-                                builderActions = catalogActions,
-                                onSelectItem = selectItem,
-                                onDslChange = applyBuilderDsl,
-                                onMessage = showBuilderMessage,
-                            )
-                        }
+                        InlineBuilderEditor(
+                            item = workbenchState.selectedInspectorItem,
+                            builderState = activeBuilderEditorState,
+                            builderFields = builderFieldsAndVariables,
+                            builderActions = catalogActions,
+                            onSelectItem = selectItem,
+                            onDslChange = applyBuilderDsl,
+                            onMessage = showBuilderMessage,
+                        )
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -542,76 +541,74 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             }
         },
         rightPanel = {
-            if (inRuleWorkspace) {
-                RuleContextPanel(
-                    ruleId = activeBuilderEditorState.ruleId,
-                    testInput = testInputState,
-                    onJsonChange = { json -> testInputState = testInputState.copy(inputJson = json) },
-                    onRun = { testController.run(ruleText = state.ruleValue.value.text) },
-                    onLoadJson = { testController.loadInputJson() },
-                    scope = WorkspaceScopes.of(
-                        state = activeBuilderEditorState,
-                        item = workbenchState.selectedInspectorItem,
-                        catalog = builderFieldsAndVariables,
-                    ),
-                    expanded = state.rightPanelExpanded.value,
-                    onToggleExpanded = rightPanel::toggleExpanded,
-                )
-            } else {
-                WorkbenchRightPanel(
-                    state = state,
-                    tab = workbenchState.rightPanelTab,
-                    onTabChange = rightPanel::selectTab,
-                    selectedInspectorItem = workbenchState.selectedInspectorItem,
-                    catalogFields = catalogFields,
-                    catalogActions = catalogActions,
-                    catalogRules = catalogRules,
-                    builderEditorState = activeBuilderEditorState,
-                    ruleStates = builderStateMap,
-                    builderFields = builderFieldsAndVariables,
-                    // The Inspector edits, so it writes rule text the same way the canvas does.
-                    onBuilderDslChange = { newDsl ->
-                        builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
-                    },
-                    onBuilderMessage = { message ->
-                        state.setStatus(msg = message, kind = StatusKind.ERROR)
-                    },
-                    onSelectInspectorItem = { item ->
-                        workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
-                    },
-                    manifestState = workspace.session.value?.toEditorState(),
-                    onManifestChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
-                    activeEntryId = workspace.session.value?.activeEntryId,
-                    // The document schema, not `ruleSchema`: a scope names a field of the file as written.
-                    schemaFieldTypes = state.parsedSchema.value?.fields
-                        ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
-                        ?.toMap(),
-                    // Relativized by the workspace, because only it knows where the manifest lives.
-                    chooseManifestPath = { kind -> workspace.choosePathForManifest(kind = kind) },
-                    chooseManifestPathDisabledReason = workspace.chosenPathBlockedReason,
-                    uiDiagnostics = inspectorSelection.diagnostics,
-                    testInputState = testInputState,
-                    onTestInputStateChange = { testInputState = it },
-                    testController = testController,
-                    onToggleExpanded = rightPanel::toggleExpanded,
-                )
-            }
+            RightPanelContent(
+                contextColumn = inRuleWorkspace,
+                contextPanel = {
+                    RuleContextPanel(
+                        ruleId = activeBuilderEditorState.ruleId,
+                        testInput = testInputState,
+                        onJsonChange = { json -> testInputState = testInputState.copy(inputJson = json) },
+                        onRun = { testController.run(ruleText = state.ruleValue.value.text) },
+                        onLoadJson = { testController.loadInputJson() },
+                        scope = WorkspaceScopes.of(
+                            state = activeBuilderEditorState,
+                            item = workbenchState.selectedInspectorItem,
+                            catalog = builderFieldsAndVariables,
+                        ),
+                        expanded = state.rightPanelExpanded.value,
+                        onToggleExpanded = rightPanel::toggleExpanded,
+                    )
+                },
+                workbenchPanel = {
+                    WorkbenchRightPanel(
+                        state = state,
+                        tab = workbenchState.rightPanelTab,
+                        onTabChange = rightPanel::selectTab,
+                        selectedInspectorItem = workbenchState.selectedInspectorItem,
+                        catalogFields = catalogFields,
+                        catalogActions = catalogActions,
+                        catalogRules = catalogRules,
+                        builderEditorState = activeBuilderEditorState,
+                        ruleStates = builderStateMap,
+                        builderFields = builderFieldsAndVariables,
+                        // The Inspector edits, so it writes rule text the same way the canvas does.
+                        onBuilderDslChange = { newDsl ->
+                            builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+                        },
+                        onBuilderMessage = { message ->
+                            state.setStatus(msg = message, kind = StatusKind.ERROR)
+                        },
+                        onSelectInspectorItem = { item ->
+                            workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
+                        },
+                        manifestState = workspace.session.value?.toEditorState(),
+                        onManifestChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
+                        activeEntryId = workspace.session.value?.activeEntryId,
+                        // The document schema, not `ruleSchema`: a scope names a field of the file as written.
+                        schemaFieldTypes = state.parsedSchema.value?.fields
+                            ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
+                            ?.toMap(),
+                        // Relativized by the workspace, because only it knows where the manifest lives.
+                        chooseManifestPath = { kind -> workspace.choosePathForManifest(kind = kind) },
+                        chooseManifestPathDisabledReason = workspace.chosenPathBlockedReason,
+                        uiDiagnostics = inspectorSelection.diagnostics,
+                        testInputState = testInputState,
+                        onTestInputStateChange = { testInputState = it },
+                        testController = testController,
+                        onToggleExpanded = rightPanel::toggleExpanded,
+                    )
+                },
+            )
         },
         bottomBar = {
-            // The workspace reports problems in one place — the context bar's counter and the drawer's
-            // Checks tab — so the strip that reported the same list a second time is not shown there.
-            if (!inRuleWorkspace) {
-                DiagnosticsSection(state = state)
-            }
-            StatusBarSection(state = state, workspace = workspace)
+            BottomBarContent(state = state, workspace = workspace, showDiagnostics = !inRuleWorkspace)
         },
         rightPanelWidth = rightPanelWidthOf(state = state, contextColumn = inRuleWorkspace),
-        // The context column is fixed: only the workspace between the columns is elastic.
-        onRightPanelResize = if (inRuleWorkspace) {
-            null
-        } else {
-            rightPanelResizeOf(state = state, controller = rightPanel)
-        },
+        onRightPanelResize = rightPanelResizeOf(
+            state = state,
+            controller = rightPanel,
+            contextColumn = inRuleWorkspace,
+        ),
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
@@ -620,6 +617,62 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     if (state.showExpandedDiagram.value) {
         ExpandedDiagramWindow(state = state, rules = expandedDiagramRules)
     }
+}
+
+/** The Visual tab of the Rules area is the rule workspace: navigator, workspace and context column. */
+private fun isRuleWorkspace(state: RuleWorkbenchState): Boolean {
+    return state.appArea == AppArea.RULES && (state.ruleMode == RuleMode.BUILDER || state.ruleMode == RuleMode.BOARD)
+}
+
+/** The editor that opens under the selected row of the outline, or nothing when no row is selected. */
+@Composable
+private fun InlineBuilderEditor(
+    item: InspectorItem?,
+    builderState: BuilderEditorState,
+    builderFields: BuilderCatalog,
+    builderActions: List<CatalogActionInfo>,
+    onSelectItem: (InspectorItem) -> Unit,
+    onDslChange: (String) -> Unit,
+    onMessage: (String) -> Unit,
+) {
+    if (item == null) {
+        return
+    }
+    BuilderNodeInspector(
+        item = item,
+        builderState = builderState,
+        builderFields = builderFields,
+        builderActions = builderActions,
+        onSelectItem = onSelectItem,
+        onDslChange = onDslChange,
+        onMessage = onMessage,
+    )
+}
+
+/** The context column in the rule workspace, the tabbed workbench panel everywhere else. */
+@Composable
+private fun RightPanelContent(
+    contextColumn: Boolean,
+    contextPanel: @Composable () -> Unit,
+    workbenchPanel: @Composable () -> Unit,
+) {
+    if (contextColumn) {
+        contextPanel()
+    } else {
+        workbenchPanel()
+    }
+}
+
+/**
+ * The diagnostics strip and the status bar. The rule workspace reports problems in one place — the context
+ * bar's counter and the drawer's Checks tab — so it leaves out the strip that would list them a second time.
+ */
+@Composable
+private fun BottomBarContent(state: RuleEditorState, workspace: ProjectWorkspace, showDiagnostics: Boolean) {
+    if (showDiagnostics) {
+        DiagnosticsSection(state = state)
+    }
+    StatusBarSection(state = state, workspace = workspace)
 }
 
 /**
@@ -637,6 +690,8 @@ private fun rightPanelWidthOf(state: RuleEditorState, contextColumn: Boolean): D
 /**
  * The shell's resize callback, or null when the panel should not be resizable.
  *
+ * Null in the rule workspace, whose context column has a fixed width.
+ *
  * Null while collapsed: a collapsed panel is an icon strip with one correct width, and a handle that
  * silently refuses to move is worse than no handle at all.
  *
@@ -646,8 +701,10 @@ private fun rightPanelWidthOf(state: RuleEditorState, contextColumn: Boolean): D
 private fun rightPanelResizeOf(
     state: RuleEditorState,
     controller: RightPanelController,
+    contextColumn: Boolean,
 ): ((Dp) -> Unit)? {
-    if (!state.rightPanelExpanded.value) {
+    // The context column is fixed: only the workspace between the columns is elastic.
+    if (!state.rightPanelExpanded.value || contextColumn) {
         return null
     }
     return { delta -> controller.setWidth(value = state.rightPanelWidth.value + delta.value) }
