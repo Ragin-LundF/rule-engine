@@ -77,6 +77,8 @@ fun OutlineCanvas(
     onDslChange: (String) -> Unit,
     onMessage: (String) -> Unit,
     onRenameRule: (oldId: String, newId: String) -> Unit = { _, _ -> },
+    /** The editor for whatever is selected; drawn directly under the selected row or statement. */
+    inlineEditor: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Which rows are picked for grouping. Held here rather than in the selection: it is a transient
@@ -107,6 +109,7 @@ fun OutlineCanvas(
                 onRenameRule = onRenameRule,
                 onEdited = ::emit,
                 onMessage = onMessage,
+                inlineEditor = inlineEditor,
             )
         }
     }
@@ -132,6 +135,7 @@ private fun OutlineBody(
     onRenameRule: (oldId: String, newId: String) -> Unit,
     onEdited: () -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
 ) {
     RuleHeader(state = state, onRenameRule = onRenameRule)
 
@@ -156,6 +160,7 @@ private fun OutlineBody(
             if (id in picked) picked.remove(id) else picked.add(id)
         },
         onMessage = onMessage,
+        inlineEditor = inlineEditor,
     )
 
     // One divider before each section that exists, so the parts of a rule read as parts. `when` and the
@@ -173,6 +178,7 @@ private fun OutlineBody(
         onSelectStatement = onSelectStatement,
         onEdited = onEdited,
         onMessage = onMessage,
+        inlineEditor = inlineEditor,
     )
 
     optional.filter { branch -> state.hasBranch(branch = branch) }.forEach { branch ->
@@ -185,6 +191,7 @@ private fun OutlineBody(
             onSelectStatement = onSelectStatement,
             onEdited = onEdited,
             onMessage = onMessage,
+            inlineEditor = inlineEditor,
         )
     }
 
@@ -304,6 +311,7 @@ private fun WhenSection(
     onEdited: () -> Unit,
     onTogglePick: (String) -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -344,6 +352,7 @@ private fun WhenSection(
         onTogglePick = onTogglePick,
         onEdited = onEdited,
         onMessage = onMessage,
+        inlineEditor = inlineEditor,
     )
 
     if (state.conditionNodes.isEmpty()) {

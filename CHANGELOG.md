@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+- **The Rules area's Visual tab is a three-column workspace, and the editor opens under the row.**
+  This is the first part of the rule builder redesign for complex rules. Specifically:
+  - **Navigator.** The file-and-rule tree is replaced by the run order: every rule of the entry numbered
+    across files, each carrying `↓ reads`, `↑ publishes` and `stops run`, derived the way the board
+    derives them. A read with no earlier publisher is shown in the warning colour.
+  - **Context bar.** One bar above the canvas holds a clickable trail — file › rule › group ›
+    condition › side › nested level — the current editing mode with `Esc` to go up one level, and a
+    single checks counter that opens the drawer's Checks tab. It replaces the **formula bar**, which is
+    removed, and the diagnostics strip under the window, which is no longer shown in this tab.
+  - **Edit in place.** Clicking a condition, a part of it, a group or an outcome row opens its editor
+    directly under that row instead of in the right-hand Inspector. Nested levels open in the same place.
+    Choosing a row on the board opens it in the outline.
+  - **Context column.** In this tab the right-hand panel is the context: a test record with Run, what the
+    selected rule did with it (its lane, its outputs, each condition's answer), and the names that can be
+    used at the current selection — the record's fields and earlier rules' variables, or the members of
+    the element inside a `where`.
+  - **No overlap at any window size.** Only the middle column is elastic; the navigator and the context
+    column have fixed widths, and the workspace clips and scrolls inside itself. `WorkspaceLayoutTest`
+    checks it at 1920 × 1080, 1536 × 864 and 1280 × 720.
+  - **Drawer.** The dock under the canvas is titled "Rule text" and sits under the workspace only.
+- The Loan Decisioning sample has a new rule, `refer-concentrated-debt`, with a computed comparison
+  inside a group — the shape the redesign is aimed at.
+
 ## 1.13.0
 
 ### Changed

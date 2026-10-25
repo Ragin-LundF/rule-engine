@@ -39,6 +39,26 @@ rule "auto-approve" {
     reason "within-policy-limits"
 }
 
+# Concentrated debt — a computed comparison inside a group.
+#
+# The first half of the group asks whether the applicant's three largest commitments that are not in
+# arrears carry more than sixty percent of everything they owe: `sortBy` orders the loans, `take` keeps
+# the three largest, and `sum` adds what is left. The second half counts loans from payday lenders. Either
+# one, on top of a stretched ratio, is a file a human should read — so the group is an `or` inside the
+# rule's `and`, written with brackets because that is the only way the text can say it.
+rule "refer-concentrated-debt" {
+  description "A stretched applicant whose debt sits with a few lenders, or with payday lenders, is decided by an underwriter."
+  when
+    $debtToIncomeRatio > 0.35
+    and (sum(take(sortBy(existingLoans[inArrears == false], "remainingBalance", desc), 3).remainingBalance) > sum(existingLoans.remainingBalance) * 0.6
+    or count(existingLoans[lender in ["payday-direct", "quickcash"]]) >= 2)
+
+  then
+    decision "refer"
+    reason "concentrated-debt"
+    requireDocument "loan-statements"
+}
+
 rule "refer-to-underwriter" {
   description "Affordability is stretched but still inside policy, so a human takes the decision."
   when

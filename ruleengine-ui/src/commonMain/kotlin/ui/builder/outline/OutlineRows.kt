@@ -6,11 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,13 +17,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ui.AccentCyan
 import ui.AccentOrange
 import ui.AccentPurple
 import ui.BgHover
+import ui.BgSurface
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.PrimaryGlow
@@ -65,6 +67,8 @@ internal fun OutlineRows(
     onTogglePick: (String) -> Unit,
     onEdited: () -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
+    numberPrefix: String = "",
 ) {
     nodes.forEachIndexed { index, node ->
         if (index > 0) {
@@ -81,6 +85,7 @@ internal fun OutlineRows(
                 group = node,
                 state = state,
                 depth = depth,
+                number = numberPrefix + "${index + 1}",
                 selectedNodeId = selectedNodeId,
                 selectedSteps = selectedSteps,
                 picked = picked,
@@ -88,13 +93,13 @@ internal fun OutlineRows(
                 onTogglePick = onTogglePick,
                 onEdited = onEdited,
                 onMessage = onMessage,
+                inlineEditor = inlineEditor,
             )
 
             else -> ConditionOutlineRow(
                 node = node,
                 state = state,
-                index = index,
-                depth = depth,
+                number = numberPrefix + "${index + 1}",
                 selected = node.id == selectedNodeId,
                 selectedSteps = if (node.id == selectedNodeId) selectedSteps else null,
                 pickedForGrouping = node.id in picked,
@@ -102,19 +107,62 @@ internal fun OutlineRows(
                 onTogglePick = { onTogglePick(node.id) },
                 onEdited = onEdited,
                 onMessage = onMessage,
+                inlineEditor = inlineEditor,
             )
         }
     }
 }
 
-/** One row: its number, its tokens, and — only when selected — what can be done to it. */
+/**
+ * One row: its number, its tokens, and — only when selected — what can be done to it, with its editor
+ * open directly underneath.
+ *
+ * The editor used to be the Inspector on the far side of the window, so the eye travelled between the
+ * part being changed and the row it changes. Under the row, the two are read together; depth inside the
+ * editor is still navigation (the selection path), so opening a nested level replaces the editor in the
+ * same place rather than stacking another one below it.
+ */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
 private fun ConditionOutlineRow(
     node: MutableConditionNode,
     state: BuilderEditorState,
-    index: Int,
-    depth: Int,
+    number: String,
+    selected: Boolean,
+    selectedSteps: List<SelectionStep>?,
+    pickedForGrouping: Boolean,
+    onSelect: (List<SelectionStep>) -> Unit,
+    onTogglePick: () -> Unit,
+    onEdited: () -> Unit,
+    onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        ConditionLine(
+            node = node,
+            state = state,
+            number = number,
+            selected = selected,
+            selectedSteps = selectedSteps,
+            pickedForGrouping = pickedForGrouping,
+            onSelect = onSelect,
+            onTogglePick = onTogglePick,
+            onEdited = onEdited,
+            onMessage = onMessage,
+        )
+        if (selected) {
+            InlineEditorFrame(content = inlineEditor)
+        }
+    }
+}
+
+/** The row's own line: number, tokens, issue note, and the selected row's controls. */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun ConditionLine(
+    node: MutableConditionNode,
+    state: BuilderEditorState,
+    number: String,
     selected: Boolean,
     selectedSteps: List<SelectionStep>?,
     pickedForGrouping: Boolean,
@@ -141,11 +189,14 @@ private fun ConditionOutlineRow(
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
     ) {
+        // The number is the one the context bar's trail names — "Condition 2.1" — so a nested row
+        // carries its full position rather than a bullet.
         Text(
-            text = if (depth > 0) "·" else "${index + 1}",
+            text = number,
             style = MaterialTheme.typography.caption,
             color = TextSecondary,
-            modifier = Modifier.width(width = 16.dp).padding(top = 2.dp),
+            softWrap = false,
+            modifier = Modifier.width(width = NUMBER_WIDTH).padding(top = 2.dp),
         )
         Column(modifier = Modifier.weight(weight = 1f)) {
             when (node) {
@@ -248,6 +299,7 @@ private fun GroupRail(
     group: MutableConditionNode.Group,
     state: BuilderEditorState,
     depth: Int,
+    number: String,
     selectedNodeId: String?,
     selectedSteps: List<SelectionStep>?,
     picked: List<String>,
@@ -255,62 +307,64 @@ private fun GroupRail(
     onTogglePick: (String) -> Unit,
     onEdited: () -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
 ) {
     val railColour = when (depth % 3) {
         0 -> PrimaryBlue
         1 -> AccentCyan
         else -> AccentPurple
     }
-    // IntrinsicSize.Min is what gives the rail a height to fill: without it the Box has no intrinsic
-    // height of its own and collapses to nothing, leaving the group with no bracket.
-    Row(
+    // The bracket is drawn behind the group rather than laid out as a Box beside it. A laid-out rail
+    // needed `IntrinsicSize.Min` to get a height, and an intrinsic pass over a group that holds an open
+    // editor measures every control in it twice — some of which cannot answer an intrinsic query at all.
+    // Drawing it reads the group's real height after layout, so the rail is still exactly as tall as
+    // what it brackets.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(intrinsicSize = IntrinsicSize.Min)
-            .padding(vertical = 2.dp),
-    ) {
-        // The bracket, as an actual edge rather than a border on a padded box: a group is read as the
-        // span its rail covers, so the rail has to be exactly as tall as its contents.
-        Box(
-            modifier = Modifier
-                .width(width = 2.dp)
-                .fillMaxHeight()
-                .clip(shape = RoundedCornerShape(size = 1.dp))
-                .background(color = railColour.copy(alpha = 0.55f)),
-        )
-        Column(
-            modifier = Modifier
-                .weight(weight = 1f)
-                .background(color = railColour.copy(alpha = 0.05f))
-                .padding(start = 8.dp, top = 3.dp, bottom = 3.dp),
-        ) {
-            GroupRailHeader(
-                group = group,
-                state = state,
-                colour = railColour,
-                selected = group.id == selectedNodeId,
-                onSelect = { onSelectNode(group.id, emptyList()) },
-                onEdited = onEdited,
-            )
-            OutlineRows(
-                nodes = group.nodes.toList(),
-                state = state,
-                depth = depth + 1,
-                selectedNodeId = selectedNodeId,
-                selectedSteps = selectedSteps,
-                picked = picked,
-                onSelectNode = onSelectNode,
-                onTogglePick = onTogglePick,
-                onEdited = onEdited,
-                onMessage = onMessage,
-            )
-            if (group.nodes.isEmpty()) {
-                Text(
-                    text = "(empty group — it renders as () and does not parse)",
-                    style = MaterialTheme.typography.caption,
-                    color = TextSecondary,
+            .padding(vertical = 2.dp)
+            .drawBehind {
+                drawRoundRect(
+                    color = railColour.copy(alpha = 0.55f),
+                    size = Size(width = RAIL_WIDTH.toPx(), height = size.height),
+                    cornerRadius = CornerRadius(x = 1.dp.toPx(), y = 1.dp.toPx()),
                 )
             }
+            .background(color = railColour.copy(alpha = 0.05f))
+            .padding(start = RAIL_WIDTH + 8.dp, top = 3.dp, bottom = 3.dp),
+    ) {
+        GroupRailHeader(
+            group = group,
+            state = state,
+            number = number,
+            colour = railColour,
+            selected = group.id == selectedNodeId,
+            onSelect = { onSelectNode(group.id, emptyList()) },
+            onEdited = onEdited,
+        )
+        if (group.id == selectedNodeId) {
+            InlineEditorFrame(content = inlineEditor)
+        }
+        OutlineRows(
+            nodes = group.nodes.toList(),
+            state = state,
+            depth = depth + 1,
+            selectedNodeId = selectedNodeId,
+            selectedSteps = selectedSteps,
+            picked = picked,
+            onSelectNode = onSelectNode,
+            onTogglePick = onTogglePick,
+            onEdited = onEdited,
+            onMessage = onMessage,
+            inlineEditor = inlineEditor,
+            numberPrefix = "$number.",
+        )
+        if (group.nodes.isEmpty()) {
+            Text(
+                text = "(empty group — it renders as () and does not parse)",
+                style = MaterialTheme.typography.caption,
+                color = TextSecondary,
+            )
         }
     }
 }
@@ -321,6 +375,7 @@ private fun GroupRail(
 private fun GroupRailHeader(
     group: MutableConditionNode.Group,
     state: BuilderEditorState,
+    number: String,
     colour: Color,
     selected: Boolean,
     onSelect: () -> Unit,
@@ -331,6 +386,12 @@ private fun GroupRailHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(space = 6.dp),
     ) {
+        Text(
+            text = number,
+            style = MaterialTheme.typography.caption,
+            color = TextSecondary,
+            softWrap = false,
+        )
         Text(
             text = if (group.negated) "not ( ${group.nodes.size} )" else "( ${group.nodes.size} )",
             style = MaterialTheme.typography.caption.copy(fontWeight = FontWeight.SemiBold),
@@ -404,3 +465,39 @@ private fun JoinPill(join: String, onToggle: () -> Unit) {
         )
     }
 }
+
+/**
+ * The frame the open editor sits in, directly under the row it edits.
+ *
+ * Indented past the row number so it reads as belonging to the row, and bordered in the selection
+ * colour so the row and its editor read as one selected thing. It never scrolls on its own: the outline
+ * around it does.
+ */
+@Suppress("FunctionNaming")
+@Composable
+internal fun InlineEditorFrame(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = NUMBER_WIDTH + 6.dp, top = 4.dp, bottom = 8.dp)
+            .clip(shape = RoundedCornerShape(size = 8.dp))
+            .background(color = BgSurface)
+            .border(
+                width = 1.dp,
+                color = PrimaryBlue.copy(alpha = 0.4f),
+                shape = RoundedCornerShape(size = 8.dp),
+            )
+            .testTag(tag = INLINE_EDITOR_TAG),
+    ) {
+        content()
+    }
+}
+
+/** What a test looks the open editor up by. */
+const val INLINE_EDITOR_TAG: String = "inline-editor"
+
+/** Wide enough for a nested number such as `2.10.3` without wrapping. */
+private val NUMBER_WIDTH = 34.dp
+
+/** The group's bracket. */
+private val RAIL_WIDTH = 2.dp

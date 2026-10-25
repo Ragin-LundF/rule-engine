@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -131,7 +133,7 @@ fun InspectorPanel(
             onSelectItem = onSelectItem,
             onDslChange = onBuilderDslChange,
             onMessage = onBuilderMessage,
-            modifier = modifier,
+            modifier = modifier.verticalScroll(state = rememberScrollState()),
         )
 
         is InspectorItem.Manifest -> ManifestBranch(

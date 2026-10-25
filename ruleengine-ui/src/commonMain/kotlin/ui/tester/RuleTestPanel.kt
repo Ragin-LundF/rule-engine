@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ui.AccentGreen
@@ -80,13 +81,13 @@ fun RuleTestPanel(
 /** The input JSON the simulation runs against. */
 @Suppress("FunctionNaming")
 @Composable
-private fun TestInputField(state: TestInputState, onJsonChange: (String) -> Unit) {
+internal fun TestInputField(state: TestInputState, onJsonChange: (String) -> Unit, height: Dp = 160.dp) {
     OutlinedTextField(
         value = state.inputJson,
         onValueChange = onJsonChange,
         modifier = Modifier
             .fillMaxWidth()
-            .height(160.dp),
+            .height(height = height),
         placeholder = {
             Text(
                 text = "{\n  \"purpose\": \"rent\",\n  \"amount\": 750\n}",
