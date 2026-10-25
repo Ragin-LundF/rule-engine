@@ -2,13 +2,11 @@ package ui.workbench
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.layer.GraphicsLayer
@@ -39,17 +36,12 @@ import ui.BgHover
 import ui.BorderColor
 import ui.PrimaryBlue
 import ui.TextPrimary
-import ui.builder.BuilderToRuleDsl
-import ui.builder.FormulaParser
 import ui.builder.board.BoardCanvas
-import ui.builder.formula.FormulaBar
 import ui.builder.model.BuilderRule
 import ui.builder.model.catalog.CatalogActionInfo
 import ui.builder.model.mutable.BuilderEditorState
-import ui.builder.model.mutable.replaceNodeFromFormula
 import ui.builder.model.selection.SelectionStep
 import ui.builder.outline.OutlineCanvas
-import ui.builder.selection.SelectionResolver
 import ui.components.ModeTabs
 import ui.components.ToolbarButton
 import ui.components.header.AreaHeader
@@ -79,6 +71,8 @@ import ui.workbench.model.mode.displayName
 import ui.workbench.model.mode.icon
 import ui.workbench.rules.RuleTablePanel
 import ui.workbench.rules.toViewMode
+import ui.workbench.workspace.RuleNavigator
+import ui.workbench.workspace.RuleWorkspaceColumn
 
 /**
  * Which rule file the Rules area is bound to, as the binding chip every area now has.
@@ -159,6 +153,8 @@ fun CenterEditorPanel(
     testContent: @Composable () -> Unit = {},
     ruleTreeFiles: List<RuleTreeFile> = emptyList(),
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit = { _, _ -> },
+    /** The workspace pieces the Visual tab is built from; see [BuilderModeContent]. */
+    workspace: RuleWorkspaceSlots = RuleWorkspaceSlots(),
     modifier: Modifier = Modifier,
 ) {
     val viewMode = ruleMode.toViewMode()
@@ -202,6 +198,7 @@ fun CenterEditorPanel(
                 onSelectStatement = onSelectStatement,
                 onTreeRuleSelected = onTreeRuleSelected,
                 testContent = testContent,
+                workspace = workspace,
             )
         }
     }
@@ -238,6 +235,7 @@ private fun CenterModeContent(
     onSelectStatement: (RuleBranch, String) -> Unit,
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
     testContent: @Composable () -> Unit,
+    workspace: RuleWorkspaceSlots,
 ) {
             when (viewMode) {
                 ViewMode.BUILDER, ViewMode.BOARD -> BuilderModeContent(
@@ -257,6 +255,7 @@ private fun CenterModeContent(
                     onSelectNode = onSelectNode,
                     onSelectStatement = onSelectStatement,
                     onTreeRuleSelected = onTreeRuleSelected,
+                    workspace = workspace,
                 )
 
                 ViewMode.CODE,
@@ -278,48 +277,6 @@ private fun CenterModeContent(
                     onRuleModeChange = onRuleModeChange,
                 )
             }
-}
-
-/**
- * The strip above the canvas: the selected row as text.
- *
- * Above *both* canvases because neither owns it — both read and write the same selection. The canvas
- * switch that used to share this row now sits in the area header beside the other view switches, so
- * every switch in the app is in one place; what is left here edits the selection, which is canvas work.
- */
-@Suppress("FunctionNaming")
-@Composable
-private fun FormulaRow(
-    builderEditorState: BuilderEditorState,
-    selectedNodeId: String?,
-    onBuilderDslChange: (String) -> Unit,
-    onBuilderMessage: (String) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(space = 10.dp),
-    ) {
-        FormulaBar(
-            text = selectedNodeId?.let { id ->
-                SelectionResolver.findNode(nodes = builderEditorState.conditionNodes, id = id)
-                    ?.let { node -> BuilderToRuleDsl.renderRow(node = node) }
-            },
-            parse = { text -> FormulaParser.parseCondition(text = text) },
-            onApply = { node ->
-                val id = selectedNodeId ?: return@FormulaBar
-                val replaced = builderEditorState.replaceNodeFromFormula(id = id, parsed = node)
-                if (replaced) {
-                    BuilderToRuleDsl.generate(state = builderEditorState)?.let(onBuilderDslChange)
-                } else {
-                    onBuilderMessage("That row could not be replaced.")
-                }
-            },
-            modifier = Modifier.weight(weight = 1f),
-        )
-    }
 }
 
 /** Table mode: every loaded rule at a glance, with a click through to the Builder. */
@@ -344,7 +301,13 @@ private fun TableModeContent(
     )
 }
 
-/** Builder mode: the rule tree on the left, the selected rule's blocks on the right. */
+/**
+ * The Visual tab: navigator, then the workspace — the context bar, the canvas, and the drawer under it.
+ *
+ * The navigator has a fixed width and the workspace takes the rest; the context column is the shell's
+ * right panel. Only the workspace is elastic, and it clips — see `RuleWorkspaceColumn` and
+ * `WorkspaceLayout` for why that is the whole of the no-overlap guarantee.
+ */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
 private fun BuilderModeContent(
@@ -364,10 +327,12 @@ private fun BuilderModeContent(
     onSelectNode: (String, List<SelectionStep>) -> Unit,
     onSelectStatement: (RuleBranch, String) -> Unit,
     onTreeRuleSelected: (relativePath: String, ruleId: String) -> Unit,
+    workspace: RuleWorkspaceSlots,
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
-        RuleTreePanel(
+        RuleNavigator(
             files = ruleTreeFiles,
+            rules = allBuilderRules,
             selectedRuleId = builderEditorState.ruleId,
             onRuleSelected = onTreeRuleSelected,
             onAddRule = onAddRule,
@@ -378,42 +343,43 @@ private fun BuilderModeContent(
             color = BorderColor,
             modifier = Modifier.width(width = 1.dp).fillMaxHeight(),
         )
-        Column(modifier = Modifier.weight(weight = 1f).fillMaxSize()) {
-            FormulaRow(
-                builderEditorState = builderEditorState,
-                selectedNodeId = selectedNodeId,
-                onBuilderDslChange = onBuilderDslChange,
-                onBuilderMessage = onBuilderMessage,
-            )
-
-            if (boardActive) {
-                BoardCanvas(
-                    state = builderEditorState,
-                    files = ruleTreeFiles,
-                    rules = allBuilderRules,
-                    selectedNodeId = selectedNodeId,
-                    selectedStatementId = selectedStatementId,
-                    onSelectNode = { nodeId -> onSelectNode(nodeId, emptyList()) },
-                    onSelectStatement = onSelectStatement,
-                    onSelectRule = onTreeRuleSelected,
-                    onDslChange = onBuilderDslChange,
-                    onMessage = onBuilderMessage,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            } else {
-                OutlineCanvas(
-                    state = builderEditorState,
-                    catalogActions = catalogActions,
-                    selectedNodeId = selectedNodeId,
-                    selectedStatementId = selectedStatementId,
-                    selectedSteps = selectedSteps,
-                    onSelectNode = onSelectNode,
-                    onSelectStatement = onSelectStatement,
-                    onDslChange = onBuilderDslChange,
-                    onMessage = onBuilderMessage,
-                    onRenameRule = onRenameRule,
-                    modifier = Modifier.fillMaxSize(),
-                )
+        RuleWorkspaceColumn(
+            contextBar = workspace.contextBar,
+            selectionKey = selectedNodeId ?: selectedStatementId,
+            onEscape = workspace.onEscape,
+            modifier = Modifier.weight(weight = 1f).fillMaxHeight(),
+        ) {
+            workspace.canvasFrame {
+                if (boardActive) {
+                    BoardCanvas(
+                        state = builderEditorState,
+                        files = ruleTreeFiles,
+                        rules = allBuilderRules,
+                        selectedNodeId = selectedNodeId,
+                        selectedStatementId = selectedStatementId,
+                        onSelectNode = { nodeId -> onSelectNode(nodeId, emptyList()) },
+                        onSelectStatement = onSelectStatement,
+                        onSelectRule = onTreeRuleSelected,
+                        onDslChange = onBuilderDslChange,
+                        onMessage = onBuilderMessage,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                } else {
+                    OutlineCanvas(
+                        state = builderEditorState,
+                        catalogActions = catalogActions,
+                        selectedNodeId = selectedNodeId,
+                        selectedStatementId = selectedStatementId,
+                        selectedSteps = selectedSteps,
+                        onSelectNode = onSelectNode,
+                        onSelectStatement = onSelectStatement,
+                        onDslChange = onBuilderDslChange,
+                        onMessage = onBuilderMessage,
+                        onRenameRule = onRenameRule,
+                        inlineEditor = workspace.inlineEditor,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
     }

@@ -44,9 +44,13 @@ import ui.tester.RuleTestController
 import ui.tester.TestCenterPanel
 import ui.tester.model.TestInputState
 import ui.workbench.CenterEditorPanel
+import ui.workbench.RuleWorkspaceSlots
+import ui.workbench.model.InspectorItem
 import ui.workbench.model.catalog.CatalogRule
 import ui.workbench.model.catalog.RuleTreeFile
 import ui.workbench.model.mode.RuleMode
+import ui.workbench.workspace.ContextBar
+import ui.workbench.workspace.WorkspaceCrumbs
 
 /**
  * The Rules area: the centre editor in whichever mode is active, and the Test panel it hosts.
@@ -79,15 +83,44 @@ internal fun RulesAreaContent(
     testController: RuleTestController,
     hasErrors: Boolean,
     dock: DockController,
+    /** The one selection, as the workbench holds it; the context bar's trail and `Esc` walk it. */
+    selectedItem: InspectorItem?,
+    onSelectItem: (InspectorItem) -> Unit,
+    /** The editor for [selectedItem], opened under its row. */
+    inlineEditor: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // The dock belongs to the two visual canvases. Code mode *is* the text, so previewing it there
-    // would be the same panel twice; the diagram, test and table modes have no file of their own.
-    val showsDock = ruleMode == RuleMode.BUILDER || ruleMode == RuleMode.BOARD
+    // The Visual tab is built from these: the bar above the canvas, the editor under the row, and the
+    // drawer under the canvas. The drawer belongs to the two visual canvases only — Code mode *is* the
+    // text, so previewing it there would be the same panel twice, and the diagram, test and table modes
+    // have no file of their own.
+    val workspace = RuleWorkspaceSlots(
+        contextBar = {
+            RulesContextBar(
+                state = state,
+                builderEditorState = builderEditorState,
+                ruleTreeFiles = ruleTreeFiles,
+                selectedItem = selectedItem,
+                onSelectItem = onSelectItem,
+                dock = dock,
+            )
+        },
+        inlineEditor = inlineEditor,
+        canvasFrame = { canvas ->
+            RulesDockFrame(
+                state = state,
+                builderEditorState = builderEditorState,
+                selectedNodeId = selectedNodeId,
+                dock = dock,
+                canvas = canvas,
+            )
+        },
+        onEscape = {
+            WorkspaceCrumbs.upOneLevel(state = builderEditorState, item = selectedItem)?.let(onSelectItem)
+        },
+    )
 
-    // One slot, used with or without a dock under it. Spelling the call twice is how the two copies
-    // drift apart on the next argument either of them gains.
-    val centre: @Composable () -> Unit = {
+    Box(modifier = modifier.fillMaxSize()) {
         RulesCenter(
             state = state,
             scope = scope,
@@ -103,21 +136,76 @@ internal fun RulesAreaContent(
             selectedNodeId = selectedNodeId,
             selectedStatementId = selectedStatementId,
             selectedSteps = selectedSteps,
-            onSelectNode = onSelectNode,
-            onSelectStatement = onSelectStatement,
+            // The board is an overview: choosing something on it opens it where it is edited, under its
+            // row in the outline. That is the one editing surface, so there is nothing to edit it with
+            // on the board itself.
+            onSelectNode = { nodeId, steps ->
+                onSelectNode(nodeId, steps)
+                if (ruleMode == RuleMode.BOARD) onRuleModeChange(RuleMode.BUILDER)
+            },
+            onSelectStatement = { branch, statementId ->
+                onSelectStatement(branch, statementId)
+                if (ruleMode == RuleMode.BOARD) onRuleModeChange(RuleMode.BUILDER)
+            },
             testInputState = testInputState,
             onTestInputStateChange = onTestInputStateChange,
             testController = testController,
             hasErrors = hasErrors,
+            workspace = workspace,
             modifier = Modifier.fillMaxSize(),
         )
     }
+}
 
-    if (!showsDock) {
-        Box(modifier = modifier.fillMaxSize()) { centre() }
-        return
-    }
+/**
+ * The context bar, wired: the trail from the one selection, and the checks counter that opens the
+ * drawer's Checks tab.
+ */
+@Suppress("FunctionNaming", "LongParameterList")
+@Composable
+private fun RulesContextBar(
+    state: RuleEditorState,
+    builderEditorState: BuilderEditorState,
+    ruleTreeFiles: List<RuleTreeFile>,
+    selectedItem: InspectorItem?,
+    onSelectItem: (InspectorItem) -> Unit,
+    dock: DockController,
+) {
+    val ruleId = builderEditorState.ruleId
+    val ordinal = ruleTreeFiles.flatMap { file -> file.rules }
+        .indexOfFirst { rule -> rule.id == ruleId }
+        .takeIf { index -> index >= 0 }
+        ?.plus(other = 1)
+    val fileName = ruleTreeFiles.firstOrNull { file -> file.rules.any { rule -> rule.id == ruleId } }
+        ?.relativePath
+        ?: state.selectedManifestRuleFile.value
+    ContextBar(
+        crumbs = WorkspaceCrumbs.of(
+            fileName = fileName?.substringAfterLast(delimiter = '/'),
+            ruleOrdinal = ordinal,
+            state = builderEditorState,
+            item = selectedItem,
+        ),
+        editing = WorkspaceCrumbs.editingLabel(state = builderEditorState, item = selectedItem),
+        checks = state.diagnosticsList.value.size,
+        onCrumb = onSelectItem,
+        onChecks = {
+            dock.selectTab(surface = DockSurface.RULES, tabId = CHECKS_TAB_ID)
+            dock.setExpanded(surface = DockSurface.RULES, value = true)
+        },
+    )
+}
 
+/** The canvas with the drawer under it — rule text and checks — inside the workspace column. */
+@Suppress("FunctionNaming")
+@Composable
+private fun RulesDockFrame(
+    state: RuleEditorState,
+    builderEditorState: BuilderEditorState,
+    selectedNodeId: String?,
+    dock: DockController,
+    canvas: @Composable () -> Unit,
+) {
     val expanded = dock.isExpanded(surface = DockSurface.RULES)
     CanvasDockScaffold(
         expanded = expanded,
@@ -130,7 +218,6 @@ internal fun RulesAreaContent(
             null
         },
         onDockResetHeight = { dock.resetHeight() },
-        modifier = modifier,
         dock = {
             RulesDock(
                 state = state,
@@ -140,7 +227,7 @@ internal fun RulesAreaContent(
                 expanded = expanded,
             )
         },
-        canvas = centre,
+        canvas = canvas,
     )
 }
 
@@ -214,8 +301,10 @@ private fun ruleDockTabs(
     val diagnostics = state.diagnosticsList.value
 
     return listOf(
+        // "Rule text" rather than the file name: the context bar above already names the file, and what
+        // a reader wants from this tab is the text the Builder writes — read-only, selection marked.
         fileDockTab(
-            title = state.selectedManifestRuleFile.value?.substringAfterLast(delimiter = '/') ?: "rules",
+            title = "Rule text",
             text = fullText,
             annotate = { text ->
                 annotateRule(text = text, schema = schema, actions = actions, diagnostics = diagnostics)
@@ -223,7 +312,7 @@ private fun ruleDockTabs(
             highlights = highlights,
         ),
         DockTab(
-            id = "checks",
+            id = CHECKS_TAB_ID,
             title = "Checks",
             badge = if (problems.isEmpty()) {
                 DockBadge(text = "ok", kind = DockBadgeKind.OK)
@@ -255,7 +344,7 @@ private fun DockProblemList(problems: List<String>) {
     }
 }
 
-/** The centre panel, factored out so it can be composed with or without a dock under it. */
+/** The centre panel; the workspace slots reach the Visual tab through it. */
 @Suppress("FunctionNaming", "LongParameterList")
 @Composable
 private fun RulesCenter(
@@ -279,6 +368,7 @@ private fun RulesCenter(
     onTestInputStateChange: (TestInputState) -> Unit,
     testController: RuleTestController,
     hasErrors: Boolean,
+    workspace: RuleWorkspaceSlots,
     modifier: Modifier = Modifier,
 ) {
     CenterEditorPanel(
@@ -332,6 +422,7 @@ private fun RulesCenter(
                 hasErrors = hasErrors,
             )
         },
+        workspace = workspace,
         modifier = modifier,
     )
 }
@@ -375,3 +466,6 @@ private fun RulesTestContent(
         traceContent = { results -> TraceDiagram(results = results) },
     )
 }
+
+/** The Checks tab's id, which the context bar's counter opens. */
+private const val CHECKS_TAB_ID = "checks"

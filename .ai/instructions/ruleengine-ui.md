@@ -106,12 +106,17 @@ Three passes, and they are not interchangeable:
 The Builder is two renderings of one rule. Adding a third, or changing either, means keeping the
 invariants below — they are the reason the pair does not become two half-editors that disagree.
 
-- **`ui.builder.outline`** — the reading canvas: one line per condition, joins as pills on the gutter,
-  groups as bracket rails, and the outcome blocks in DSL order. Nothing in it expands, so the row being
-  worked on never moves.
+- **`ui.builder.outline`** — the editing canvas: one line per condition, joins as pills on the gutter,
+  groups as bracket rails, and the outcome blocks in DSL order. The selected row's editor opens
+  **directly under it** (`InlineEditorFrame`); the row itself never moves, and a nested level replaces
+  the editor in the same place rather than stacking a second one.
 - **`ui.builder.board`** — the run: every rule in evaluation order along the top, then the selected rule
-  as drag-and-droppable rails and three outcome lanes.
-- **`ui.builder.inspector`** — the editing surface for **both**. There is no other one.
+  as drag-and-droppable rails and three outcome lanes. Choosing a row there switches to the outline,
+  because that is where the editor is.
+- **`ui.builder.inspector`** — the editors themselves (`BuilderInspector` and the per-target editors).
+  They are rendered under the row by the outline; `InspectorPanel` still hosts them for a selection made
+  outside the Visual tab, and adds the vertical scroll there — `BuilderInspector` has none of its own,
+  because inside the outline it would be a scroll inside a scroll.
 
 ### The selection is one value, held where it already was
 
@@ -151,8 +156,8 @@ cannot round-trip.
    item is merely raised rather than accented. (This switch used to float on the canvas itself. It moved
    so that every view switch in the app is in one strip; the rule it still has to satisfy is that it
    never reads as a mode tab.)
-3. Read the selection, never store it. Write it with `SelectInspectorItem` and open the panel with
-   `RightPanelController.showInspector()`.
+3. Read the selection, never store it. Write it with `SelectInspectorItem`; the editor for it opens under
+   the row in the outline, so a canvas does not open the Inspector panel.
 4. Render row text through `BuilderToRuleDsl.renderRow` and operands through `OperandText.toDsl`. Two
    renderers drift; one cannot.
 5. Every new model state must round-trip through **both** `RuleAstToBuilderMapper` and
@@ -186,6 +191,37 @@ Note what *is* now known, because the older wording said otherwise: the Builder 
 the file exactly, via `findRuleBlockRange` in `ui/RuleDslBlocks.kt`. That is what the preview dock's
 highlight is built on. What is still missing is the other direction — a row to a line — and
 `rowLineRanges` only approximates it, by matching the row's generated text *inside* that block.
+
+## The rule workspace
+
+The Visual tab of the Rules area (`RuleMode.BUILDER` and `.BOARD`) is three columns: the **navigator**
+(`ui.workbench.workspace.RuleNavigator`), the **workspace** (`RuleWorkspaceColumn`: context bar, canvas,
+drawer) and the **context column** (`RuleContextPanel`, in the shell's right-panel slot). Everything in
+`ui.workbench.workspace` is commonMain; `RuleWorkspaceSlots` carries the wired pieces from
+`RulesAreaContent` through `CenterEditorPanel` to the canvas.
+
+- **Only the workspace is elastic, and it clips.** The navigator and the context column take the fixed
+  widths in `WorkspaceLayout` and never measure their content; the workspace gets `weight(1f)`,
+  `clipToBounds()`, and its content scrolls inside it. That is the whole no-overlap guarantee — the HTML
+  prototype measured its centre from its content and painted it over the right column below 1920 px.
+  `WorkspaceLayoutTest` drives the real app at 1920 × 1080, 1536 × 864 and 1280 × 720 with the complex
+  sample rule's condition 2.1 open, and asserts that no node under `WORKSPACE_TAG` overlaps
+  `CONTEXT_TAG`. A wide new piece (a pipeline row, a long line) scrolls inside its own box; state its width
+  from item counts, as for the ribbon.
+- **The context column is not resizable.** `RuleEditor` passes `onRightPanelResize = null` in the
+  workspace and `rightPanelWidthOf` returns `WorkspaceLayout.CONTEXT_WIDTH`, so the persisted Inspector
+  width is neither applied nor overwritten there. It still folds with the same open state.
+- **The trail and `Esc` are one path.** `WorkspaceCrumbs.of` builds the context bar's trail from the
+  selection and `upOneLevel` walks it back — out of a nested operand, out of the row into its group, out
+  to the rule. Each crumb's target is an `InspectorItem`, never a second selection store.
+- **Problems are counted once.** The context bar's counter and the drawer's Checks tab read the same
+  `diagnosticsList`; the diagnostics strip under the window is not composed in the workspace. Refusal
+  reasons still go to the status bar.
+- **What is in scope** comes from `WorkspaceScopes.of`, which reads the `ResolutionScope` the open
+  editor resolves against, so the list and the editor's dropdowns cannot differ.
+- **The group rail is drawn, not laid out.** `GroupRail` draws its bracket with `drawBehind` instead of a
+  `Box` in an `IntrinsicSize.Min` row: a group can now hold an open editor, and an intrinsic pass over it
+  measures every control twice, some of which cannot answer an intrinsic query.
 
 ## The area header
 

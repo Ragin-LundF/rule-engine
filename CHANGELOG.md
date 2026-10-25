@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.0
+
+### Changed
+- **Dependencies updated to their latest stable versions.**
+    - Gradle wrapper 9.7.0 → 9.8.2
+    - Kotlin 2.4.10 → 2.4.21 (`settings.gradle` had still pinned 2.3.21 and is now aligned with the version catalog)
+    - Compose Multiplatform 1.11.1 → 1.12.2
+    - Jackson 3.2.2 → 3.2.4
+    - JReleaser 1.25.0 → 1.26.0
+
+- **The Rules area's Visual tab is a three-column workspace, and the editor opens under the row.**
+  This is the first part of the rule builder redesign for complex rules. Specifically:
+  - **Navigator.** The file-and-rule tree is replaced by the run order: every rule of the entry numbered
+    across files, each carrying `↓ reads`, `↑ publishes` and `stops run`, derived the way the board
+    derives them. A read with no earlier publisher is shown in the warning colour.
+  - **Context bar.** One bar above the canvas holds a clickable trail — file › rule › group ›
+    condition › side › nested level — the current editing mode with `Esc` to go up one level, and a
+    single checks counter that opens the drawer's Checks tab. It replaces the **formula bar**, which is
+    removed, and the diagnostics strip under the window, which is no longer shown in this tab.
+  - **Edit in place.** Clicking a condition, a part of it, a group or an outcome row opens its editor
+    directly under that row instead of in the right-hand Inspector. Nested levels open in the same place.
+    Choosing a row on the board opens it in the outline.
+  - **Context column.** In this tab the right-hand panel is the context: a test record with Run, what the
+    selected rule did with it (its lane, its outputs, each condition's answer), and the names that can be
+    used at the current selection — the record's fields and earlier rules' variables, or the members of
+    the element inside a `where`.
+  - **No overlap at any window size.** Only the middle column is elastic; the navigator and the context
+    column have fixed widths, and the workspace clips and scrolls inside itself. `WorkspaceLayoutTest`
+    checks it at 1920 × 1080, 1536 × 864 and 1280 × 720.
+  - **Drawer.** The dock under the canvas is titled "Rule text" and sits under the workspace only.
+- The Loan Decisioning sample has a new rule, `refer-concentrated-debt`, with a computed comparison
+  inside a group — the shape the redesign is aimed at.
+
+### Fixed
+- **A row with a named operator no longer shows a warning it does not have.** Opening a valid row such
+  as `purpose contains "rent"` showed "'contains' only exists as a named operator on a plain field …",
+  which read as a validation error. The reason belongs to the Aggregate, Calculation and Function kinds,
+  which stay unavailable while the operator is `contains`; it is now shown only when one of them is
+  clicked.
+
 ## 1.12.0
 
 ### Changed

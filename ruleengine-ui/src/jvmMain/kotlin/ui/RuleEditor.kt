@@ -21,6 +21,9 @@ import ui.actions.hasValidationIssues
 import ui.builder.BuilderRulesController
 import ui.builder.RuleAstToBuilderMapper
 import ui.builder.model.BuilderRule
+import ui.builder.model.catalog.BuilderCatalog
+import ui.builder.model.catalog.CatalogActionInfo
+import ui.builder.model.mutable.BuilderEditorState
 import ui.dock.DockController
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
@@ -58,6 +61,7 @@ import ui.workbench.catalogActionsFrom
 import ui.workbench.catalogFieldsFrom
 import ui.workbench.catalogRulesFrom
 import ui.workbench.diagram.ExpandedDiagramWindow
+import ui.workbench.inspector.BuilderNodeInspector
 import ui.workbench.inspectorSelectionFor
 import ui.workbench.model.CanvasSelection
 import ui.workbench.model.InspectorItem
@@ -65,10 +69,14 @@ import ui.workbench.model.RuleWorkbenchState
 import ui.workbench.model.WorkbenchAction
 import ui.workbench.model.mode.ActionMode
 import ui.workbench.model.mode.AppArea
+import ui.workbench.model.mode.RuleMode
 import ui.workbench.model.mode.SchemaMode
 import ui.workbench.rules.ruleTreeFilesFrom
 import ui.workbench.rules.toViewMode
 import ui.workbench.uiDiagnosticsFrom
+import ui.workbench.workspace.RuleContextPanel
+import ui.workbench.workspace.WorkspaceLayout
+import ui.workbench.workspace.WorkspaceScopes
 
 // ── Main composable ───────────────────────────────────────────────────────────
 
@@ -337,6 +345,15 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
         parseError = "Invalid YAML: could not parse action schema",
     )
 
+    val inRuleWorkspace = isRuleWorkspace(state = workbenchState)
+    val selectItem: (InspectorItem) -> Unit = { item ->
+        workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
+    }
+    val applyBuilderDsl: (String) -> Unit = { newDsl ->
+        builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+    }
+    val showBuilderMessage: (String) -> Unit = { message -> state.setStatus(msg = message, kind = StatusKind.ERROR) }
+
     ProjectDialogHost(workspace = workspace)
 
     RuleWorkbenchScreen(
@@ -393,30 +410,31 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
                     selectedNodeId = canvasSelection.nodeId,
                     selectedStatementId = canvasSelection.statementId,
                     selectedSteps = canvasSelection.steps,
+                    // The editor opens under the row now, so choosing a row no longer opens the Inspector.
                     onSelectNode = { nodeId, steps ->
-                        workbenchViewModel.dispatch(
-                            action = WorkbenchAction.SelectInspectorItem(
-                                item = InspectorItem.Condition(conditionId = nodeId, steps = steps),
-                            ),
-                        )
-                        rightPanel.showInspector()
+                        selectItem(InspectorItem.Condition(conditionId = nodeId, steps = steps))
                     },
                     onSelectStatement = { branch, statementId ->
-                        workbenchViewModel.dispatch(
-                            action = WorkbenchAction.SelectInspectorItem(
-                                item = InspectorItem.Statement(
-                                    branch = branch,
-                                    statementId = statementId,
-                                ),
-                            ),
-                        )
-                        rightPanel.showInspector()
+                        selectItem(InspectorItem.Statement(branch = branch, statementId = statementId))
                     },
                     testInputState = testInputState,
                     onTestInputStateChange = { testInputState = it },
                     testController = testController,
                     hasErrors = hasErrors,
                     dock = dock,
+                    selectedItem = workbenchState.selectedInspectorItem,
+                    onSelectItem = selectItem,
+                    inlineEditor = {
+                        InlineBuilderEditor(
+                            item = workbenchState.selectedInspectorItem,
+                            builderState = activeBuilderEditorState,
+                            builderFields = builderFieldsAndVariables,
+                            builderActions = catalogActions,
+                            onSelectItem = selectItem,
+                            onDslChange = applyBuilderDsl,
+                            onMessage = showBuilderMessage,
+                        )
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 
@@ -523,50 +541,74 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
             }
         },
         rightPanel = {
-            WorkbenchRightPanel(
-                state = state,
-                tab = workbenchState.rightPanelTab,
-                onTabChange = rightPanel::selectTab,
-                selectedInspectorItem = workbenchState.selectedInspectorItem,
-                catalogFields = catalogFields,
-                catalogActions = catalogActions,
-                catalogRules = catalogRules,
-                builderEditorState = activeBuilderEditorState,
-                ruleStates = builderStateMap,
-                builderFields = builderFieldsAndVariables,
-                // The Inspector edits, so it writes rule text the same way the canvas does.
-                onBuilderDslChange = { newDsl ->
-                    builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+            RightPanelContent(
+                contextColumn = inRuleWorkspace,
+                contextPanel = {
+                    RuleContextPanel(
+                        ruleId = activeBuilderEditorState.ruleId,
+                        testInput = testInputState,
+                        onJsonChange = { json -> testInputState = testInputState.copy(inputJson = json) },
+                        onRun = { testController.run(ruleText = state.ruleValue.value.text) },
+                        onLoadJson = { testController.loadInputJson() },
+                        scope = WorkspaceScopes.of(
+                            state = activeBuilderEditorState,
+                            item = workbenchState.selectedInspectorItem,
+                            catalog = builderFieldsAndVariables,
+                        ),
+                        expanded = state.rightPanelExpanded.value,
+                        onToggleExpanded = rightPanel::toggleExpanded,
+                    )
                 },
-                onBuilderMessage = { message ->
-                    state.setStatus(msg = message, kind = StatusKind.ERROR)
+                workbenchPanel = {
+                    WorkbenchRightPanel(
+                        state = state,
+                        tab = workbenchState.rightPanelTab,
+                        onTabChange = rightPanel::selectTab,
+                        selectedInspectorItem = workbenchState.selectedInspectorItem,
+                        catalogFields = catalogFields,
+                        catalogActions = catalogActions,
+                        catalogRules = catalogRules,
+                        builderEditorState = activeBuilderEditorState,
+                        ruleStates = builderStateMap,
+                        builderFields = builderFieldsAndVariables,
+                        // The Inspector edits, so it writes rule text the same way the canvas does.
+                        onBuilderDslChange = { newDsl ->
+                            builderRules.applyDsl(ruleId = activeBuilderEditorState.ruleId, newDsl = newDsl)
+                        },
+                        onBuilderMessage = { message ->
+                            state.setStatus(msg = message, kind = StatusKind.ERROR)
+                        },
+                        onSelectInspectorItem = { item ->
+                            workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
+                        },
+                        manifestState = workspace.session.value?.toEditorState(),
+                        onManifestChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
+                        activeEntryId = workspace.session.value?.activeEntryId,
+                        // The document schema, not `ruleSchema`: a scope names a field of the file as written.
+                        schemaFieldTypes = state.parsedSchema.value?.fields
+                            ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
+                            ?.toMap(),
+                        // Relativized by the workspace, because only it knows where the manifest lives.
+                        chooseManifestPath = { kind -> workspace.choosePathForManifest(kind = kind) },
+                        chooseManifestPathDisabledReason = workspace.chosenPathBlockedReason,
+                        uiDiagnostics = inspectorSelection.diagnostics,
+                        testInputState = testInputState,
+                        onTestInputStateChange = { testInputState = it },
+                        testController = testController,
+                        onToggleExpanded = rightPanel::toggleExpanded,
+                    )
                 },
-                onSelectInspectorItem = { item ->
-                    workbenchViewModel.dispatch(action = WorkbenchAction.SelectInspectorItem(item = item))
-                },
-                manifestState = workspace.session.value?.toEditorState(),
-                onManifestChange = { edited -> workspace.applyManifestEditorState(edited = edited) },
-                activeEntryId = workspace.session.value?.activeEntryId,
-                // The document schema, not `ruleSchema`: a scope names a field of the file as written.
-                schemaFieldTypes = state.parsedSchema.value?.fields
-                    ?.map { (id, definition) -> id.value to definition.type.name.lowercase() }
-                    ?.toMap(),
-                // Relativized by the workspace, because only it knows where the manifest lives.
-                chooseManifestPath = { kind -> workspace.choosePathForManifest(kind = kind) },
-                chooseManifestPathDisabledReason = workspace.chosenPathBlockedReason,
-                uiDiagnostics = inspectorSelection.diagnostics,
-                testInputState = testInputState,
-                onTestInputStateChange = { testInputState = it },
-                testController = testController,
-                onToggleExpanded = rightPanel::toggleExpanded,
             )
         },
         bottomBar = {
-            DiagnosticsSection(state = state)
-            StatusBarSection(state = state, workspace = workspace)
+            BottomBarContent(state = state, workspace = workspace, showDiagnostics = !inRuleWorkspace)
         },
-        rightPanelWidth = rightPanelWidthOf(state = state),
-        onRightPanelResize = rightPanelResizeOf(state = state, controller = rightPanel),
+        rightPanelWidth = rightPanelWidthOf(state = state, contextColumn = inRuleWorkspace),
+        onRightPanelResize = rightPanelResizeOf(
+            state = state,
+            controller = rightPanel,
+            contextColumn = inRuleWorkspace,
+        ),
     )
 
     // ── Expanded diagram window ───────────────────────────────────────────────
@@ -577,17 +619,78 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     }
 }
 
-/** How wide the right panel is: the dragged width while open, the icon strip's width while closed. */
-private fun rightPanelWidthOf(state: RuleEditorState): Dp {
-    return if (state.rightPanelExpanded.value) {
-        state.rightPanelWidth.value.dp
+/** The Visual tab of the Rules area is the rule workspace: navigator, workspace and context column. */
+private fun isRuleWorkspace(state: RuleWorkbenchState): Boolean {
+    return state.appArea == AppArea.RULES && (state.ruleMode == RuleMode.BUILDER || state.ruleMode == RuleMode.BOARD)
+}
+
+/** The editor that opens under the selected row of the outline, or nothing when no row is selected. */
+@Composable
+private fun InlineBuilderEditor(
+    item: InspectorItem?,
+    builderState: BuilderEditorState,
+    builderFields: BuilderCatalog,
+    builderActions: List<CatalogActionInfo>,
+    onSelectItem: (InspectorItem) -> Unit,
+    onDslChange: (String) -> Unit,
+    onMessage: (String) -> Unit,
+) {
+    if (item == null) {
+        return
+    }
+    BuilderNodeInspector(
+        item = item,
+        builderState = builderState,
+        builderFields = builderFields,
+        builderActions = builderActions,
+        onSelectItem = onSelectItem,
+        onDslChange = onDslChange,
+        onMessage = onMessage,
+    )
+}
+
+/** The context column in the rule workspace, the tabbed workbench panel everywhere else. */
+@Composable
+private fun RightPanelContent(
+    contextColumn: Boolean,
+    contextPanel: @Composable () -> Unit,
+    workbenchPanel: @Composable () -> Unit,
+) {
+    if (contextColumn) {
+        contextPanel()
     } else {
-        COLLAPSED_PANEL_WIDTH
+        workbenchPanel()
+    }
+}
+
+/**
+ * The diagnostics strip and the status bar. The rule workspace reports problems in one place — the context
+ * bar's counter and the drawer's Checks tab — so it leaves out the strip that would list them a second time.
+ */
+@Composable
+private fun BottomBarContent(state: RuleEditorState, workspace: ProjectWorkspace, showDiagnostics: Boolean) {
+    if (showDiagnostics) {
+        DiagnosticsSection(state = state)
+    }
+    StatusBarSection(state = state, workspace = workspace)
+}
+
+/**
+ * How wide the right panel is: the dragged width while open, the icon strip's width while closed — and
+ * in the rule workspace, the context column's fixed width.
+ */
+private fun rightPanelWidthOf(state: RuleEditorState, contextColumn: Boolean): Dp {
+    return when {
+        !state.rightPanelExpanded.value -> COLLAPSED_PANEL_WIDTH
+        contextColumn -> WorkspaceLayout.CONTEXT_WIDTH
+        else -> state.rightPanelWidth.value.dp
     }
 }
 
 /**
  * The shell's resize callback, or null when the panel should not be resizable.
+ *
+ * Null in the rule workspace, whose context column has a fixed width.
  *
  * Null while collapsed: a collapsed panel is an icon strip with one correct width, and a handle that
  * silently refuses to move is worse than no handle at all.
@@ -598,8 +701,10 @@ private fun rightPanelWidthOf(state: RuleEditorState): Dp {
 private fun rightPanelResizeOf(
     state: RuleEditorState,
     controller: RightPanelController,
+    contextColumn: Boolean,
 ): ((Dp) -> Unit)? {
-    if (!state.rightPanelExpanded.value) {
+    // The context column is fixed: only the workspace between the columns is elastic.
+    if (!state.rightPanelExpanded.value || contextColumn) {
         return null
     }
     return { delta -> controller.setWidth(value = state.rightPanelWidth.value + delta.value) }
