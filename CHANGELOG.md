@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.13.0
+
+### Changed
+- **Dependencies updated to their latest stable versions.**
+  - Gradle wrapper 9.7.0 → 9.8.2
+  - Kotlin 2.4.10 → 2.4.21 (`settings.gradle` had still pinned 2.3.21 and is now aligned with the version catalog)
+  - Compose Multiplatform 1.11.1 → 1.12.2
+  - Jackson 3.2.2 → 3.2.4
+  - JReleaser 1.25.0 → 1.26.0
+
 ## 1.12.0
 
 ### Changed
