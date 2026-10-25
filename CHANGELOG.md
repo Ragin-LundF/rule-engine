@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Loan Decisioning sample has a new rule, `refer-concentrated-debt`, with a computed comparison
   inside a group — the shape the redesign is aimed at.
 
+### Fixed
+- **A row with a named operator no longer shows a warning it does not have.** Opening a valid row such
+  as `purpose contains "rent"` showed "'contains' only exists as a named operator on a plain field …",
+  which read as a validation error. The reason belongs to the Aggregate, Calculation and Function kinds,
+  which stay unavailable while the operator is `contains`; it is now shown only when one of them is
+  clicked.
+
 ## 1.12.0
 
 ### Changed
