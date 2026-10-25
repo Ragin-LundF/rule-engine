@@ -48,6 +48,7 @@ internal fun BranchOutline(
     onSelectStatement: (RuleBranch, String) -> Unit,
     onEdited: () -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
 ) {
     val actions = state.actionsOf(branch = branch)
     val variables = state.variablesOf(branch = branch)
@@ -65,6 +66,7 @@ internal fun BranchOutline(
             onSelectStatement = onSelectStatement,
             onEdited = onEdited,
             onMessage = onMessage,
+            inlineEditor = inlineEditor,
         )
 
         if (actions.isEmpty() && variables.isEmpty() && !stops) {
@@ -116,6 +118,7 @@ private fun StatementRows(
     onSelectStatement: (RuleBranch, String) -> Unit,
     onEdited: () -> Unit,
     onMessage: (String) -> Unit,
+    inlineEditor: @Composable () -> Unit,
 ) {
     variables.forEach { variable ->
         StatementRow(
@@ -132,6 +135,9 @@ private fun StatementRows(
                 )
             },
         )
+        if (variable.id == selectedStatementId) {
+            InlineEditorFrame(content = inlineEditor)
+        }
     }
 
     actions.forEach { action ->
@@ -149,6 +155,9 @@ private fun StatementRows(
                 )
             },
         )
+        if (action.id == selectedStatementId) {
+            InlineEditorFrame(content = inlineEditor)
+        }
     }
 }
 

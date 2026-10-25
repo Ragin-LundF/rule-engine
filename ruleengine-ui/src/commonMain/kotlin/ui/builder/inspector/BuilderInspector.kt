@@ -3,8 +3,6 @@ package ui.builder.inspector
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -63,10 +61,12 @@ fun BuilderInspector(
         BuilderToRuleDsl.generate(state = state)?.let(onDslChange)
     }
 
+    // No scroll of its own: the editor opens under the row in the outline, which already scrolls, and a
+    // vertical scroll inside a vertical scroll has no height to measure against. A caller that hosts it
+    // in a panel of its own adds the scroll there.
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(state = rememberScrollState())
             .padding(all = 12.dp),
     ) {
         if (steps.isNotEmpty()) {
