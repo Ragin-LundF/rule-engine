@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Changed
+- **Dependencies updated to their latest stable versions.**
+    - Gradle wrapper 9.7.0 → 9.8.2
+    - Kotlin 2.4.10 → 2.4.21 (`settings.gradle` had still pinned 2.3.21 and is now aligned with the version catalog)
+    - Compose Multiplatform 1.11.1 → 1.12.2
+    - Jackson 3.2.2 → 3.2.4
+    - JReleaser 1.25.0 → 1.26.0
+
 - **The Rules area's Visual tab is a three-column workspace, and the editor opens under the row.**
   This is the first part of the rule builder redesign for complex rules. Specifically:
   - **Navigator.** The file-and-rule tree is replaced by the run order: every rule of the entry numbered
@@ -30,16 +37,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Drawer.** The dock under the canvas is titled "Rule text" and sits under the workspace only.
 - The Loan Decisioning sample has a new rule, `refer-concentrated-debt`, with a computed comparison
   inside a group — the shape the redesign is aimed at.
-
-## 1.13.0
-
-### Changed
-- **Dependencies updated to their latest stable versions.**
-  - Gradle wrapper 9.7.0 → 9.8.2
-  - Kotlin 2.4.10 → 2.4.21 (`settings.gradle` had still pinned 2.3.21 and is now aligned with the version catalog)
-  - Compose Multiplatform 1.11.1 → 1.12.2
-  - Jackson 3.2.2 → 3.2.4
-  - JReleaser 1.25.0 → 1.26.0
 
 ## 1.12.0
 
