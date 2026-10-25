@@ -17,6 +17,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -298,6 +302,9 @@ internal fun OperandKindPicker(
     onSelect: (OperandRules.OperandKind) -> Unit,
     disabledReason: String? = null,
 ) {
+    // The reason answers a click on a blocked kind. Shown up front, it read as an error on a row that is
+    // perfectly valid — `purpose contains "rent"` carried a warning before anyone touched it.
+    var explained by remember(disabledReason) { mutableStateOf(value = false) }
     Column(modifier = Modifier.fillMaxWidth()) {
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
@@ -312,11 +319,17 @@ internal fun OperandKindPicker(
                     kind = kind,
                     selected = kind == current,
                     blocked = blocked,
-                    onClick = { if (!blocked) onSelect(kind) },
+                    onClick = {
+                        if (blocked) {
+                            explained = true
+                        } else {
+                            onSelect(kind)
+                        }
+                    },
                 )
             }
         }
-        if (disabledReason != null) {
+        if (disabledReason != null && explained) {
             Spacer(modifier = Modifier.height(height = 6.dp))
             InspectorNote(text = disabledReason, warning = true)
         }
@@ -341,7 +354,7 @@ private fun KindChip(
                 color = if (selected) PrimaryBlue else BorderColor,
                 shape = RoundedCornerShape(percent = 50),
             )
-            .clickable(enabled = !blocked, onClick = onClick)
+            .clickable(onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(space = 4.dp),
