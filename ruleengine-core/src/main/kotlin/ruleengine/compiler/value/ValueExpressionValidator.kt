@@ -4,6 +4,7 @@ import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.compiler.support.FieldPathMessages
 import ruleengine.compiler.support.OperatorSupport
 import ruleengine.compiler.support.Suggestions
+import ruleengine.compiler.value.ValueExpressionValidator.validateSlice
 import ruleengine.core.domain.FieldPathResolution
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.OperatorNames
@@ -14,27 +15,28 @@ import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.evaluator.compiled.FunctionResultKind
 
 /**
@@ -309,7 +311,13 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
-        val rootSegment = expr.path.firstOrNull() as? FieldSegmentAst ?: return ValueKind.UNKNOWN
+        val root = expr.path.firstOrNull()
+        if (root is JoinSegmentAst) {
+            val rows = JoinByKeyValidator.validate(segment = root, schema = schema, diagnostics = diagnostics)
+                ?: return ValueKind.UNKNOWN
+            return validateSegments(start = rows, path = expr.path, schema = schema, diagnostics = diagnostics)
+        }
+        val rootSegment = root as? FieldSegmentAst ?: return ValueKind.UNKNOWN
         val isSingleSegment = expr.path.size == 1
         var current: FieldDefinition? = null
         var members = schema.fields
@@ -328,8 +336,18 @@ internal object ValueExpressionValidator {
             )
             return if (isSingleSegment) ValueKind.UNKNOWN else ValueKind.NUMERIC
         }
+        return validateSegments(start = current, path = expr.path, schema = schema, diagnostics = diagnostics)
+    }
 
-        for (segment in expr.path.drop(n = 1)) {
+    /** Types every segment after the root, starting from what the root resolved to. */
+    private fun validateSegments(
+        start: FieldDefinition?,
+        path: List<PathSegmentAst>,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ): ValueKind {
+        var current = start
+        for (segment in path.drop(n = 1)) {
             when (segment) {
                 is FilterSegmentAst -> validateFilterExpression(
                     expr = segment.expression,
@@ -341,14 +359,14 @@ internal object ValueExpressionValidator {
                 is SliceSegmentAst -> validateSlice(
                     segment = segment,
                     scope = current,
-                    path = expr.path,
+                    path = path,
                     diagnostics = diagnostics
                 )
 
                 is SortSegmentAst -> validateSort(
                     segment = segment,
                     scope = current,
-                    path = expr.path,
+                    path = path,
                     diagnostics = diagnostics
                 )
 
@@ -356,12 +374,15 @@ internal object ValueExpressionValidator {
                     val step = resolveMember(
                         parent = current,
                         segment = segment,
-                        path = expr.path,
+                        path = path,
                         diagnostics = diagnostics
                     )
                     if (step is MemberStep.Invalid) return ValueKind.UNKNOWN
                     current = (step as? MemberStep.Declared)?.definition
                 }
+
+                // The parser only ever puts a join first, which the root handling above has read.
+                is JoinSegmentAst -> Unit
             }
         }
 
@@ -540,16 +561,18 @@ internal object ValueExpressionValidator {
      * Maps a resolved leaf to its value kind. A null [definition] means the path left declared
      * territory, which keeps the pre-nesting numeric assumption.
      */
-    fun kindOf(definition: FieldDefinition?): ValueKind = when (definition?.type) {
-        null -> ValueKind.NUMERIC
-        FieldType.INTEGER, FieldType.DECIMAL -> ValueKind.NUMERIC
-        FieldType.TEXT -> ValueKind.TEXT
-        FieldType.BOOLEAN -> ValueKind.BOOLEAN
-        FieldType.DATE, FieldType.DATE_TIME -> ValueKind.DATE
-        FieldType.STRING_SET, FieldType.COLLECTION -> ValueKind.ARRAY
-        // A structure has no value of its own; comparing one directly is rejected by `Validator`,
-        // and as an aggregate argument it has always been treated as numeric.
-        else -> ValueKind.NUMERIC
+    fun kindOf(definition: FieldDefinition?): ValueKind {
+        return when (definition?.type) {
+            null -> ValueKind.NUMERIC
+            FieldType.INTEGER, FieldType.DECIMAL -> ValueKind.NUMERIC
+            FieldType.TEXT -> ValueKind.TEXT
+            FieldType.BOOLEAN -> ValueKind.BOOLEAN
+            FieldType.DATE, FieldType.DATE_TIME -> ValueKind.DATE
+            FieldType.STRING_SET, FieldType.COLLECTION -> ValueKind.ARRAY
+            // A structure has no value of its own; comparing one directly is rejected by `Validator`,
+            // and as an aggregate argument it has always been treated as numeric.
+            else -> ValueKind.NUMERIC
+        }
     }
 
     /**
@@ -678,8 +701,9 @@ internal object ValueExpressionValidator {
         }
     }
 
-    fun pathText(path: List<PathSegmentAst>): String =
-        path.filterIsInstance<FieldSegmentAst>().joinToString(separator = ".") { it.name }
+    fun pathText(path: List<PathSegmentAst>): String {
+        return path.filterIsInstance<FieldSegmentAst>().joinToString(separator = ".") { it.name }
+    }
 
     private fun validateArithmetic(
         expr: ArithmeticValueAst,
@@ -698,10 +722,12 @@ internal object ValueExpressionValidator {
         return ValueKind.NUMERIC
     }
 
-    fun valueKindOf(resultKind: FunctionResultKind): ValueKind = when (resultKind) {
-        FunctionResultKind.NUMERIC -> ValueKind.NUMERIC
-        FunctionResultKind.BOOLEAN -> ValueKind.BOOLEAN
-        FunctionResultKind.ARRAY -> ValueKind.ARRAY
+    fun valueKindOf(resultKind: FunctionResultKind): ValueKind {
+        return when (resultKind) {
+            FunctionResultKind.NUMERIC -> ValueKind.NUMERIC
+            FunctionResultKind.BOOLEAN -> ValueKind.BOOLEAN
+            FunctionResultKind.ARRAY -> ValueKind.ARRAY
+        }
     }
 
     fun arityText(arity: IntRange): String {

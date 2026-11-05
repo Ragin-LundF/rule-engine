@@ -18,6 +18,7 @@ import ui.pickProjectManifestSavePath
 import ui.pickRuleFilePath
 import ui.pickSchemaFilePath
 import ui.pickSharedFileSavePath
+import ui.project.io.AtomicFiles
 import ui.project.io.ProjectLoader
 import ui.project.io.ProjectSaver
 import ui.project.manifest.ManifestEntryRemoval
@@ -74,12 +75,7 @@ class ProjectWorkspace(
     val session: MutableState<ProjectSession?> = mutableStateOf(value = null)
     val dialog: MutableState<ProjectDialog?> = mutableStateOf(value = null)
     val closeRequested: MutableState<Boolean> = mutableStateOf(value = false)
-
-    /**
-     * Bumped whenever a baseline moves. [ProjectDirtyState] is a plain map, so without this the
-     * toolbar would keep showing "unsaved" after a save until something else recomposed it.
-     */
-    private val revision: MutableState<Int> = mutableStateOf(value = 0)
+    private val dirtyTracker = ProjectDirtyTracker(state = state, dirtyState = dirtyState, session = session)
 
     private var approvals: ProjectSaveApprovals = ProjectSaveApprovals()
     private var retrySave: (() -> ProjectSaveOutcome)? = null
@@ -101,17 +97,18 @@ class ProjectWorkspace(
 
     val isDirty: Boolean
         get() {
-            revision.value // read so composition re-runs when baselines change
-            return dirtyState.isDirty(key = ProjectDirtyState.SCHEMA, content = state.schemaText.value) ||
-                    dirtyState.isDirty(key = ProjectDirtyState.ACTIONS, content = state.actionSchemaText.value) ||
-                    dirtyState.isDirty(key = openRuleKey(), content = state.ruleValue.value.text)
+            return dirtyTracker.isDirty
         }
 
     // ── Open / New ────────────────────────────────────────────────────────────
 
-    fun openProject() = guardUnsavedWork(action = PendingProjectAction.OpenProject) { performOpen() }
+    fun openProject() {
+        guardUnsavedWork(action = PendingProjectAction.OpenProject) { performOpen() }
+    }
 
-    fun newProject() = guardUnsavedWork(action = PendingProjectAction.NewProject) { performNew() }
+    fun newProject() {
+        guardUnsavedWork(action = PendingProjectAction.NewProject) { performNew() }
+    }
 
     /**
      * Opens without asking about unsaved work.
@@ -127,11 +124,7 @@ class ProjectWorkspace(
         }
         when (val result = loader.load(manifestPath = manifestPath, into = state)) {
             is ProjectLoadResult.Loaded -> {
-                session.value = result.session
-                scratchSchemaLink = null
-                scratchActionsLink = null
-                buffersFromSample = false
-                revision.value++
+                adoptLoadedSession(loaded = result.session)
                 reportOpened(session = result.session)
             }
 
@@ -142,14 +135,25 @@ class ProjectWorkspace(
         }
     }
 
+    /** The project [loader] just read is now the one open, and what its manifest says is saved. */
+    private fun adoptLoadedSession(loaded: ProjectSession) {
+        session.value = loaded
+        dirtyTracker.manifestSaved(session = loaded)
+        scratchSchemaLink = null
+        scratchActionsLink = null
+        buffersFromSample = false
+        dirtyTracker.baselinesChanged()
+    }
+
     private fun performNew() {
         state.reset()
         dirtyState.clear()
         session.value = null
+        dirtyTracker.manifestSaved(session = null)
         scratchSchemaLink = null
         scratchActionsLink = null
         buffersFromSample = false
-        revision.value++
+        dirtyTracker.baselinesChanged()
         state.setStatus(msg = "New project", kind = StatusKind.IDLE)
     }
 
@@ -174,12 +178,13 @@ class ProjectWorkspace(
      */
     fun loadSample(applyToEditor: () -> Unit) {
         session.value = null
+        dirtyTracker.manifestSaved(session = null)
         dirtyState.clear()
         scratchSchemaLink = null
         scratchActionsLink = null
         buffersFromSample = true
         applyToEditor()
-        revision.value++
+        dirtyTracker.baselinesChanged()
     }
 
     fun requestClose() {
@@ -213,7 +218,7 @@ class ProjectWorkspace(
         val current = session.value ?: return
         val missing = loader.activate(session = current, entryId = entryId, into = state)
         session.value = current.copy(activeEntryId = entryId, missingFiles = missing)
-        revision.value++
+        dirtyTracker.baselinesChanged()
         state.setStatus(msg = "Entry $entryId", kind = StatusKind.IDLE)
     }
 
@@ -284,28 +289,40 @@ class ProjectWorkspace(
             dirtyState.forget(key = ProjectDirtyState.ruleKey(relativePath = file.relativePath))
         }
 
-        removeEntry(entryId = entryId)
-        if (failures.isEmpty()) {
-            state.setStatus(msg = "Removed $entryId — ${deletable.size} file(s) deleted", kind = StatusKind.SUCCESS)
-            return
-        }
-        // The entry is gone either way; saying which files survived beats a silent partial delete.
-        dialog.value = ProjectDialog.Error(
-            title = "Some files were not deleted",
-            message = failures.joinToString(separator = "\n"),
-        )
+        val deleted = "Removed $entryId — ${deletable.size} file(s) deleted"
+        finishRemoval(entryId = entryId, fileFailures = failures, success = deleted)
     }
 
     fun onRemoveEntryKeepingFiles(entryId: String) {
-        removeEntry(entryId = entryId)
-        state.setStatus(msg = "Removed $entryId from the manifest — files kept", kind = StatusKind.SUCCESS)
+        val kept = "Removed $entryId from the manifest — files kept"
+        finishRemoval(entryId = entryId, fileFailures = emptyList(), success = kept)
     }
 
-    private fun removeEntry(entryId: String) {
+    /**
+     * Drops the entry and reports the result. The entry is gone from the session either way, so a
+     * manifest that could not be written (it still names the entry) or a file that survived is said
+     * plainly rather than covered by a success message.
+     */
+    private fun finishRemoval(entryId: String, fileFailures: List<String>, success: String) {
+        val manifestFailure = removeEntry(entryId = entryId)
+        val manifestProblem = manifestFailure?.let { message -> "The manifest could not be written: $message" }
+        val problems = listOfNotNull(manifestProblem) + fileFailures
+        if (problems.isEmpty()) {
+            state.setStatus(msg = success, kind = StatusKind.SUCCESS)
+            return
+        }
+        dialog.value = ProjectDialog.Error(
+            title = if (manifestFailure != null) "Manifest not updated" else "Some files were not deleted",
+            message = problems.joinToString(separator = "\n"),
+        )
+    }
+
+    /** Returns why the manifest could not be written, or null when it was (or nothing was removed). */
+    private fun removeEntry(entryId: String): String? {
         dialog.value = null
-        val current = session.value ?: return
+        val current = session.value ?: return null
         val remaining = current.entries.filterNot { it.id == entryId }
-        if (remaining.isEmpty()) return
+        if (remaining.isEmpty()) return null
 
         val reduced = current.copy(entries = remaining, activeEntryId = current.activeEntryId)
         session.value = reduced
@@ -314,8 +331,12 @@ class ProjectWorkspace(
         if (current.activeEntryId == entryId) performSelectEntry(entryId = remaining.first().id)
 
         // Files may have just been deleted, so the index must stop naming them now, not at next save.
-        session.value?.let { updated -> saver.saveManifest(session = updated) }
-        revision.value++
+        val updated = session.value ?: return null
+        val outcome = saver.saveManifest(session = updated)
+        dirtyTracker.baselinesChanged()
+        if (outcome is ProjectSaveOutcome.Saved) dirtyTracker.manifestSaved(session = updated)
+        // saveManifest asks no questions, so it is either saved or failed.
+        return (outcome as? ProjectSaveOutcome.Failed)?.message
     }
 
     /**
@@ -353,7 +374,7 @@ class ProjectWorkspace(
             // manifest no longer has, `currentEntryRulePaths()` finds nothing, and the next
             // `loadRuleFiles` replaces every rule file in the working copy with an empty map.
             adoptActiveEntry(entryId = active.id)
-            revision.value++
+            dirtyTracker.baselinesChanged()
         }
     }
 
@@ -437,6 +458,8 @@ class ProjectWorkspace(
                 id = state.parsedManifest.value?.entries?.firstOrNull()?.id ?: ProjectSession.DEFAULT_ENTRY_ID,
                 schemaLink = scratchSchemaLink?.let { ProjectPaths.relativize(root = root, target = it) },
                 actionsLink = scratchActionsLink?.let { ProjectPaths.relativize(root = root, target = it) },
+                // A sample's rule files live only in the working copy; listing them is what gets them written.
+                ruleFiles = state.inMemoryRuleFiles.value.keys.toList(),
             ),
             manifestName = state.parsedManifest.value?.name,
         )
@@ -446,6 +469,10 @@ class ProjectWorkspace(
         return when (val outcome = attempt()) {
             is ProjectSaveOutcome.Saved -> {
                 session.value = outcome.session
+                dirtyTracker.manifestSaved(session = outcome.session)
+                // After a first save or a Save As the files live here; reading them from the old place
+                // (or from nowhere, for a saved sample) is how an export described the wrong files.
+                state.manifestBaseDir.value = outcome.session.root.toString()
                 // The manifest on disk was just regenerated from the session; the buffer has to agree.
                 syncManifestBuffers()
                 // A scratch project's first save invents an entry id. Nothing had ever set the editor's
@@ -458,7 +485,7 @@ class ProjectWorkspace(
                 buffersFromSample = false
                 approvals = ProjectSaveApprovals()
                 retrySave = null
-                revision.value++
+                dirtyTracker.baselinesChanged()
                 state.setStatus(
                     msg = "Saved ${outcome.session.displayName} — ${outcome.filesWritten} file(s) written",
                     kind = StatusKind.SUCCESS,
@@ -480,6 +507,7 @@ class ProjectWorkspace(
             }
 
             is ProjectSaveOutcome.Failed -> {
+                approvals = ProjectSaveApprovals()
                 retrySave = null
                 resumeAfterSave = null
                 dialog.value = ProjectDialog.Error(title = "Save failed", message = outcome.message)
@@ -492,6 +520,8 @@ class ProjectWorkspace(
 
     fun dismissDialog() {
         dialog.value = null
+        // An answer belongs to the save it was given for; a later save asks again.
+        approvals = ProjectSaveApprovals()
         retrySave = null
         resumeAfterSave = null
     }
@@ -554,13 +584,31 @@ class ProjectWorkspace(
         retrySave?.let { attempt -> runSave(attempt = attempt) }
     }
 
+    /**
+     * Throws the buffers away and reads the project again, staying on the entry that was open.
+     *
+     * The load activates the first entry, so the session has to follow it — buffers holding one entry
+     * while the session names another is how a save wrote one entry's content into the other's files.
+     */
     fun onReloadConflict() {
         dialog.value = null
+        approvals = ProjectSaveApprovals()
         retrySave = null
         val current = session.value ?: return
-        loader.load(manifestPath = current.manifestPath, into = state)
-        revision.value++
-        state.setStatus(msg = "Reloaded from disk", kind = StatusKind.IDLE)
+        when (val result = loader.load(manifestPath = current.manifestPath, into = state)) {
+            is ProjectLoadResult.Loaded -> {
+                adoptLoadedSession(loaded = result.session)
+                val stayOn = current.activeEntryId
+                if (stayOn != result.session.activeEntryId && result.session.entry(id = stayOn) != null) {
+                    performSelectEntry(entryId = stayOn)
+                }
+                state.setStatus(msg = "Reloaded from disk", kind = StatusKind.IDLE)
+            }
+
+            is ProjectLoadResult.Failed -> {
+                dialog.value = ProjectDialog.Error(title = "Cannot reload project", message = result.message)
+            }
+        }
     }
 
     fun onLinkAfterExport(kind: ProjectFileKind, exported: Path) {
@@ -578,8 +626,14 @@ class ProjectWorkspace(
         }
     }
 
+    /**
+     * A switch of entry replaces the buffers but keeps the session, so only edited buffers are at stake
+     * there — asking about a manifest change it carries along would offer a "Discard" that discards
+     * nothing.
+     */
     private inline fun guardUnsavedWork(action: PendingProjectAction, body: () -> Unit) {
-        if (isDirty) {
+        val atStake = if (action is PendingProjectAction.SwitchEntry) dirtyTracker.buffersDirty() else isDirty
+        if (atStake) {
             dialog.value = ProjectDialog.UnsavedChanges(
                 projectName = session.value?.displayName ?: "This project",
                 pending = action,
@@ -681,7 +735,7 @@ class ProjectWorkspace(
             syncManifestBuffers()
         }
 
-        revision.value++
+        dirtyTracker.baselinesChanged()
         state.setStatus(msg = "Linked ${path.fileName}", kind = StatusKind.SUCCESS)
     }
 
@@ -708,7 +762,7 @@ class ProjectWorkspace(
             ProjectFileKind.RULE -> return
         }
         syncManifestBuffers()
-        revision.value++
+        dirtyTracker.baselinesChanged()
         state.setStatus(msg = "Unlinked ${kind.label}", kind = StatusKind.IDLE)
     }
 
@@ -730,7 +784,7 @@ class ProjectWorkspace(
             return
         }
 
-        runCatching { Files.writeString(target, content) }.onFailure { ex ->
+        runCatching { AtomicFiles.writeString(path = target, content = content) }.onFailure { ex ->
             dialog.value = ProjectDialog.Error(title = "Save failed", message = ex.message ?: "could not write")
             return
         }
@@ -763,7 +817,4 @@ class ProjectWorkspace(
             kind = StatusKind.ERROR,
         )
     }
-
-    private fun openRuleKey(): String =
-        ProjectDirtyState.ruleKey(relativePath = state.selectedManifestRuleFile.value ?: "")
 }

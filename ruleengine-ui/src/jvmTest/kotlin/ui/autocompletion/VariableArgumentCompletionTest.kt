@@ -3,7 +3,8 @@ package ui.autocompletion
 import ruleengine.core.domain.dto.action.ActionArgType
 import ruleengine.core.domain.dto.action.ActionDefinition
 import ruleengine.core.domain.dto.action.ActionSchema
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ui.autocompletion.model.CompletionItem
 import ui.dsl.model.DslCursorContext
 import ui.dsl.model.DslSection
 import kotlin.test.Test
@@ -92,11 +93,13 @@ class VariableArgumentCompletionTest {
     private fun completions(
         afterAction: String,
         variableKinds: Map<String, AssignmentKindAst>,
-    ) = buildContextualCompletions(
-        context = DslCursorContext(section = DslSection.THEN, afterAction = afterAction),
-        schema = null,
-        actionSchema = actionSchema,
-        variableNames = listOf("why", "matters"),
-        variableKinds = variableKinds,
-    )
+    ): List<CompletionItem> {
+        return buildContextualCompletions(
+            context = DslCursorContext(section = DslSection.THEN, afterAction = afterAction),
+            schema = null,
+            actionSchema = actionSchema,
+            variableNames = listOf("why", "matters"),
+            variableKinds = variableKinds,
+        )
+    }
 }

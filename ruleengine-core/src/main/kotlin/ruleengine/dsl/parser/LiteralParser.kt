@@ -1,14 +1,14 @@
 package ruleengine.dsl.parser
 
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.rule.ExtractionAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
@@ -90,10 +90,12 @@ internal class LiteralParser(private val cursor: TokenCursor) {
      * Bounds are numbers for numeric fields and quoted ISO dates for date fields; [BetweenLiteral]
      * carries both as text and the field's compiler decides how to read them.
      */
-    fun parseBetween(): BetweenLiteral = BetweenLiteral(
-        low = parseBoundToken(label = "lower"),
-        high = parseBoundToken(label = "upper"),
-    )
+    fun parseBetween(): BetweenLiteral {
+        return BetweenLiteral(
+            low = parseBoundToken(label = "lower"),
+            high = parseBoundToken(label = "upper"),
+        )
+    }
 
     private fun parseBoundToken(label: String): String {
         val token = cursor.current()
@@ -113,15 +115,18 @@ internal class LiteralParser(private val cursor: TokenCursor) {
          * True when [token] can begin an action argument: a string, a number, a list, or a `$`
          * reference such as `$1` or `$total`. Anything else means the action has no argument.
          */
-        fun startsLiteral(token: Token): Boolean = when (token.type) {
-            TokenType.STRING, TokenType.NUMBER, TokenType.LBRACKET -> true
-            TokenType.IDENT -> token.text.startsWith(prefix = "$")
-            else -> false
+        fun startsLiteral(token: Token): Boolean {
+            return when (token.type) {
+                TokenType.STRING, TokenType.NUMBER, TokenType.LBRACKET -> true
+                TokenType.IDENT -> token.text.startsWith(prefix = "$")
+                else -> false
+            }
         }
 
         /** True for the two identifiers the parser treats as boolean literals in value position. */
-        fun isBooleanText(text: String): Boolean =
-            text.equals(other = "true", ignoreCase = true) || text.equals(other = "false", ignoreCase = true)
+        fun isBooleanText(text: String): Boolean {
+            return text.equals(other = "true", ignoreCase = true) || text.equals(other = "false", ignoreCase = true)
+        }
 
         /** The name part of a `$`-prefixed token, rejecting a bare `$`. */
         fun referenceName(token: Token): String {

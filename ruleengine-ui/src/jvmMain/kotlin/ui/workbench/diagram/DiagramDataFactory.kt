@@ -1,6 +1,6 @@
 package ui.workbench.diagram
 
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ui.diagrams.model.DiagramData
 import ui.editor.rules.RuleEditorState
 

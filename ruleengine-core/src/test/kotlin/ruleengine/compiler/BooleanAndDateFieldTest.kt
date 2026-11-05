@@ -1,5 +1,6 @@
 package ruleengine.compiler
 
+import ruleengine.core.domain.TemporalFormat
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
@@ -13,6 +14,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -31,6 +33,7 @@ class BooleanAndDateFieldTest {
             FieldDefinition(id = FieldId(value = "verified"), type = FieldType.BOOLEAN),
             FieldDefinition(id = FieldId(value = "createdAt"), type = FieldType.DATE),
             FieldDefinition(id = FieldId(value = "bookedAt"), type = FieldType.DATE_TIME),
+            FieldDefinition(id = FieldId(value = "registeredAt"), type = FieldType.DATE_TIME),
             FieldDefinition(id = FieldId(value = "dueDate"), type = FieldType.DATE, format = "dd.MM.yyyy"),
             FieldDefinition(
                 id = FieldId(value = "eventAt"),
@@ -64,6 +67,10 @@ class BooleanAndDateFieldTest {
         val compiled = Compiler.compileRules(asts = Parser(input = rule).parseRules(), schema = schema)
         val prepared = PreparedRuleContext.prepare(ctx = RuleContext.of(*fields), schema = schema)
         return RuleEngine(compiledRules = compiled).evaluate(prepared = prepared).matches.isNotEmpty()
+    }
+
+    private fun errorMessages(condition: String): List<String> {
+        return validate(condition = condition).diagnostics.filter { it.severity == Severity.ERROR }.map { it.message }
     }
 
     private fun assertValid(condition: String) {
@@ -372,5 +379,144 @@ class BooleanAndDateFieldTest {
         assertTrue(actual = matches(condition = condition, "eventAt" to "15.06.2024 09:01"))
         assertFalse(actual = matches(condition = condition, "eventAt" to "15.06.2024 09:00"))
         assertFalse(actual = matches(condition = condition, "eventAt" to "2024-06-15T09:01:00"))
+    }
+
+    // ── symbolic spelling agrees with the named operator ──────────────────────
+
+    @Test
+    fun `symbolic equality on a date_time reads the literal at time precision like equals`() {
+        assertTrue(
+            actual = matches(condition = """bookedAt == "2024-06-15T09:30:00"""", "bookedAt" to "2024-06-15T09:30:00")
+        )
+        assertTrue(
+            actual = matches(condition = """bookedAt != "2024-06-15T09:30:00"""", "bookedAt" to "2024-06-15T09:31:00")
+        )
+    }
+
+    @Test
+    fun `a date-only literal on a date_time field is valid and compares by calendar day`() {
+        assertValid(condition = """bookedAt == "2024-06-15"""")
+        assertTrue(actual = matches(condition = """bookedAt == "2024-06-15"""", "bookedAt" to "2024-06-15T17:00:00"))
+        assertTrue(actual = matches(condition = """bookedAt != "2024-06-16"""", "bookedAt" to "2024-06-15T23:59:00"))
+        assertFalse(actual = matches(condition = """bookedAt == "2024-06-15"""", "bookedAt" to "2024-06-16T00:00:00"))
+    }
+
+    @Test
+    fun `a date-only literal on a date_time field works with every operator, by calendar day`() {
+        val lateOnTheDay = arrayOf("bookedAt" to "2024-06-15T23:59:00")
+        assertValid(condition = """bookedAt lt "2024-06-16"""")
+        assertTrue(actual = matches(condition = """bookedAt < "2024-06-16"""", *lateOnTheDay))
+        assertTrue(actual = matches(condition = """bookedAt <= "2024-06-15"""", *lateOnTheDay))
+        assertFalse(actual = matches(condition = """bookedAt > "2024-06-15"""", *lateOnTheDay))
+        assertTrue(actual = matches(condition = """bookedAt >= "2024-06-15"""", *lateOnTheDay))
+        assertTrue(actual = matches(condition = """bookedAt equals "2024-06-15"""", *lateOnTheDay))
+        assertTrue(actual = matches(condition = """bookedAt between "2024-06-15" "2024-06-15"""", *lateOnTheDay))
+        assertTrue(actual = matches(condition = """bookedAt in ["2024-06-15"]""", *lateOnTheDay))
+    }
+
+    @Test
+    fun `a date-only literal on a formatted date_time field is rejected`() {
+        assertEquals(
+            expected = listOf(
+                "Invalid date '2024-06-15' for field 'eventAt'; expected format 'dd.MM.yyyy HH:mm' " +
+                    "(e.g. \"${TemporalFormat.sample(type = FieldType.DATE_TIME, pattern = "dd.MM.yyyy HH:mm")}\")"
+            ),
+            actual = errorMessages(condition = """eventAt == "2024-06-15""""),
+        )
+    }
+
+    @Test
+    fun `comparing two date_time fields keeps the time of day`() {
+        val record = arrayOf("bookedAt" to "2024-06-15T09:00:00", "registeredAt" to "2024-06-15T17:00:00")
+        assertTrue(actual = matches(condition = "bookedAt < registeredAt", *record))
+        assertFalse(actual = matches(condition = "bookedAt == registeredAt", *record))
+    }
+
+    @Test
+    fun `a date compared with a date_time field is compared by calendar day`() {
+        val record = arrayOf("createdAt" to "2024-06-15", "bookedAt" to "2024-06-15T17:00:00")
+        assertTrue(actual = matches(condition = "createdAt == bookedAt", *record))
+    }
+
+    @Test
+    fun `symbolic equality on a formatted date field reads the literal in its format`() {
+        assertTrue(actual = matches(condition = """dueDate == "31.01.2024"""", "dueDate" to "31.01.2024"))
+        assertTrue(actual = matches(condition = """dueDate != "31.01.2024"""", "dueDate" to "01.02.2024"))
+    }
+
+    @Test
+    fun `symbolic comparison rejects a literal outside the field format like equals`() {
+        val symbolic = errorMessages(condition = """dueDate == "2024-01-31"""")
+        val named = errorMessages(condition = """dueDate equals "2024-01-31"""")
+        assertEquals(expected = named, actual = symbolic)
+        assertEquals(
+            expected = listOf(
+                "Invalid date '2024-01-31' for field 'dueDate'; expected format 'dd.MM.yyyy' (e.g. \"31.01.2024\")"
+            ),
+            actual = symbolic,
+        )
+    }
+
+    @Test
+    fun `symbolic comparison rejects an unparseable date literal on either side`() {
+        assertEquals(
+            expected = listOf("Invalid date 'tomorrow' for field 'createdAt'; expected ISO format YYYY-MM-DD"),
+            actual = errorMessages(condition = """createdAt < "tomorrow""""),
+        )
+        assertEquals(
+            expected = listOf("Invalid date 'tomorrow' for field 'createdAt'; expected ISO format YYYY-MM-DD"),
+            actual = errorMessages(condition = """"tomorrow" == createdAt"""),
+        )
+    }
+
+    @Test
+    fun `symbolic comparison accepts a literal in the field format`() {
+        assertValid(condition = """dueDate == "31.01.2024"""")
+        assertValid(condition = """bookedAt >= "2024-06-15T09:30:00"""")
+    }
+
+    @Test
+    fun `a date literal inside a filter predicate stays text and is not rejected`() {
+        val bookingSchema = FieldSchema(
+            name = "bookings",
+            fields = listOf(
+                FieldDefinition(
+                    id = FieldId(value = "bookings"),
+                    type = FieldType.COLLECTION,
+                    fields = listOf(
+                        FieldDefinition(id = FieldId(value = "day"), type = FieldType.DATE, format = "dd.MM.yyyy"),
+                    ).associateBy { it.id },
+                ),
+            ).associateBy { it.id },
+        )
+        val rule = """
+            rule "test" {
+              when
+                count(bookings[day == "2024-01-31"]) > 0
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+        val result = Validator.validate(asts = Parser(input = rule).parseRules(), schema = bookingSchema)
+        assertEquals(expected = emptyList(), actual = result.diagnostics.filter { it.severity == Severity.ERROR })
+    }
+
+    // ── ISO timestamps on a field without a format ────────────────────────────
+
+    @Test
+    fun `an ISO timestamp string on a date field is cut to its date`() {
+        assertTrue(
+            actual = matches(condition = """createdAt equals "2024-06-15"""", "createdAt" to "2024-06-15T09:00:00")
+        )
+        assertTrue(
+            actual = matches(condition = """createdAt equals "2024-06-15"""", "createdAt" to "2024-06-15T23:30:00Z")
+        )
+    }
+
+    @Test
+    fun `an ISO timestamp string with an offset on a date_time field is read at UTC`() {
+        val condition = """bookedAt equals "2024-06-15T09:00:00""""
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T09:00:00Z"))
+        assertTrue(actual = matches(condition = condition, "bookedAt" to "2024-06-15T11:00:00+02:00"))
     }
 }

@@ -4,6 +4,8 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldType
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAccessor
 import java.util.concurrent.ConcurrentHashMap
@@ -54,6 +56,36 @@ object TemporalFormat {
                 LocalDateTime.parse(text, formatterFor(pattern = pattern))
             }
         }.getOrNull()
+    }
+
+    /**
+     * Reads an **input** date. Like [parseDate], plus — when the field declares no pattern — an ISO
+     * timestamp, cut to its date: `2024-06-15T09:00:00`, or with an offset (`…Z`, `…+02:00`) resolved
+     * at UTC first. Literals in rules stay strict; only record values carrying a time are accepted.
+     */
+    fun parseInputDate(text: String, pattern: String?): LocalDate? {
+        if (pattern != null) {
+            return parseDate(text = text, pattern = pattern)
+        }
+        return parseDate(text = text, pattern = null) ?: parseIsoTimestamp(text = text)?.toLocalDate()
+    }
+
+    /**
+     * Reads an **input** date with time. Like [parseDateTime], plus — when the field declares no
+     * pattern — an ISO timestamp with an offset (`…Z`, `…+02:00`), resolved at UTC.
+     */
+    fun parseInputDateTime(text: String, pattern: String?): LocalDateTime? {
+        if (pattern != null) {
+            return parseDateTime(text = text, pattern = pattern)
+        }
+        return parseIsoTimestamp(text = text)
+    }
+
+    /** An ISO local or offset timestamp as a UTC wall-clock time, or null when [text] is neither. */
+    private fun parseIsoTimestamp(text: String): LocalDateTime? {
+        return parseDateTime(text = text, pattern = null)
+            ?: runCatching { OffsetDateTime.parse(text).atZoneSameInstant(ZoneOffset.UTC).toLocalDateTime() }
+                .getOrNull()
     }
 
     /** An example value in [pattern], for placeholders and error messages. */

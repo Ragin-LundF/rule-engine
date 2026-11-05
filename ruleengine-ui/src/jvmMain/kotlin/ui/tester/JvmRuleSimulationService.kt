@@ -8,7 +8,7 @@ import ruleengine.core.domain.dto.RuleMatch
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.RuleEngine
@@ -44,19 +44,21 @@ class JvmRuleSimulationService : RuleSimulationService {
         ruleId: String,
         inputJson: String,
         scope: String,
-    ): SimulationResult = try {
-        SimulationResult(
-            outcome = runPipeline(
-                schemaText = schemaText,
-                actionsText = actionsText,
-                ruleText = ruleText,
-                ruleId = ruleId,
-                inputJson = inputJson,
-                scope = scope,
-            ),
-        )
-    } catch (stopped: PipelineStopped) {
-        SimulationResult(outcome = stopped.outcome)
+    ): SimulationResult {
+        return try {
+            SimulationResult(
+                outcome = runPipeline(
+                    schemaText = schemaText,
+                    actionsText = actionsText,
+                    ruleText = ruleText,
+                    ruleId = ruleId,
+                    inputJson = inputJson,
+                    scope = scope,
+                ),
+            )
+        } catch (stopped: PipelineStopped) {
+            SimulationResult(outcome = stopped.outcome)
+        }
     }
 
     /**
@@ -97,12 +99,14 @@ class JvmRuleSimulationService : RuleSimulationService {
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun parseFacts(inputJson: String): Map<String, Any?> = runCatching {
-        val mapType = JacksonUtil.jsonMapper.typeFactory
-            .constructMapType(Map::class.java, String::class.java, Any::class.java)
-        JacksonUtil.jsonMapper.readValue(inputJson, mapType) as Map<String, Any?>
-    }.getOrElse { e ->
-        stop(SimulationOutcome.InvalidJson(reason = e.message ?: "Invalid JSON"))
+    private fun parseFacts(inputJson: String): Map<String, Any?> {
+        return runCatching {
+            val mapType = JacksonUtil.jsonMapper.typeFactory
+                .constructMapType(Map::class.java, String::class.java, Any::class.java)
+            JacksonUtil.jsonMapper.readValue(inputJson, mapType) as Map<String, Any?>
+        }.getOrElse { e ->
+            stop(SimulationOutcome.InvalidJson(reason = e.message ?: "Invalid JSON"))
+        }
     }
 
     private fun loadSchema(schemaText: String): FieldSchema {
@@ -117,12 +121,13 @@ class JvmRuleSimulationService : RuleSimulationService {
     }
 
     /** Optional, and deliberately silent on failure: a rule set may use no actions at all. */
-    private fun loadActionSchema(actionsText: String): ActionSchema? =
-        if (actionsText.isBlank()) {
+    private fun loadActionSchema(actionsText: String): ActionSchema? {
+        return if (actionsText.isBlank()) {
             null
         } else {
             runCatching { ActionSchemaLoader.loadFromString(content = actionsText) }.getOrNull()
         }
+    }
 
     private fun parseAndValidate(ruleText: String, schema: FieldSchema, actionSchema: ActionSchema?): List<RuleAst> {
         val asts = runCatching {
@@ -155,10 +160,12 @@ class JvmRuleSimulationService : RuleSimulationService {
         return targetAsts
     }
 
-    private fun compile(targetAsts: List<RuleAst>, schema: FieldSchema) = runCatching {
-        Compiler.compileRules(asts = targetAsts, schema = schema)
-    }.getOrElse { e ->
-        stop(SimulationOutcome.ValidationFailed(reason = "Compile error: ${e.message}"))
+    private fun compile(targetAsts: List<RuleAst>, schema: FieldSchema): List<CompiledRule> {
+        return runCatching {
+            Compiler.compileRules(asts = targetAsts, schema = schema)
+        }.getOrElse { e ->
+            stop(SimulationOutcome.ValidationFailed(reason = "Compile error: ${e.message}"))
+        }
     }
 
     @Suppress("LongParameterList")
@@ -231,7 +238,9 @@ class JvmRuleSimulationService : RuleSimulationService {
     private class PipelineStopped(val outcome: SimulationOutcome) :
         Exception(null, null, false, false)
 
-    private fun stop(outcome: SimulationOutcome): Nothing = throw PipelineStopped(outcome = outcome)
+    private fun stop(outcome: SimulationOutcome): Nothing {
+        throw PipelineStopped(outcome = outcome)
+    }
 
     // ── result helpers ────────────────────────────────────────────────────────
 

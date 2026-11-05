@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import ruleengine.core.domain.dto.RuleBranch
@@ -662,9 +663,14 @@ private fun copyRule(state: RuleEditorState, ruleValue: TextFieldValue) {
 private suspend fun exportDiagramPng(state: RuleEditorState, diagramGraphicsLayer: GraphicsLayer) {
     runCatching {
         val bitmap = diagramGraphicsLayer.toImageBitmap()
-        saveDiagramAsPng(bitmap = bitmap)
-        state.setStatus(msg = "Diagram exported as PNG", kind = StatusKind.SUCCESS)
+        val written = saveDiagramAsPng(bitmap = bitmap)
+        if (written == null) {
+            state.setStatus(msg = "Export cancelled", kind = StatusKind.IDLE)
+        } else {
+            state.setStatus(msg = "Diagram exported as PNG to $written", kind = StatusKind.SUCCESS)
+        }
     }.onFailure { cause ->
+        if (cause is CancellationException) throw cause
         state.setStatus(msg = "Export failed: ${cause.message}", kind = StatusKind.ERROR)
     }
 }

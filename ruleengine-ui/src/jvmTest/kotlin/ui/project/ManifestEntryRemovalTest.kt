@@ -53,6 +53,25 @@ class ManifestEntryRemovalTest {
         )
     }
 
+    /** Two spellings of one path are one file: removing one entry must not delete the other's. */
+    @Test
+    fun `a file another entry spells differently is still kept`() {
+        val session = session(
+            root = Path.of("/projects/demo"),
+            ProjectEntry(id = "a", ruleFiles = listOf("rules/common.rule", "rules/a.rule")),
+            ProjectEntry(id = "b", ruleFiles = listOf("./rules/common.rule")),
+        )
+
+        assertEquals(
+            expected = listOf("rules/a.rule"),
+            actual = ManifestEntryRemoval.deletableFiles(session = session, entryId = "a").map { it.relativePath },
+        )
+        assertEquals(
+            expected = listOf("rules/common.rule"),
+            actual = ManifestEntryRemoval.keptFiles(session = session, entryId = "a"),
+        )
+    }
+
     /** Sharing is the whole reason a `../` link exists — other projects read that file. */
     @Test
     fun `a file outside the project is never deleted`() {

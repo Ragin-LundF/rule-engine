@@ -40,9 +40,11 @@ object ManifestEntryRemoval {
 
     private fun classify(session: ProjectSession, entryId: String): Pair<List<ProjectEntryFile>, List<String>> {
         val entry = session.entry(id = entryId) ?: return emptyList<ProjectEntryFile>() to emptyList()
+        // Compared as the files they name, not as text: `./rules/a.rule` and `rules/a.rule` are one file.
         val claimedElsewhere = session.entries
             .filterNot { it.id == entryId }
             .flatMap { other -> listOfNotNull(other.schemaLink, other.actionsLink) + other.ruleFiles }
+            .map { link -> fileIdentity(session = session, relativePath = link) }
             .toSet()
 
         val deletable = mutableListOf<ProjectEntryFile>()
@@ -51,13 +53,23 @@ object ManifestEntryRemoval {
         referencedFiles(entry = entry).forEach { (kind, relativePath) ->
             val resolved = resolveInsideProject(session = session, relativePath = relativePath)
             when {
-                relativePath in claimedElsewhere -> kept.add(relativePath)
+                fileIdentity(session = session, relativePath = relativePath) in claimedElsewhere ->
+                    kept.add(relativePath)
+
                 resolved == null -> kept.add(relativePath)
                 else -> deletable.add(ProjectEntryFile(kind = kind, relativePath = relativePath, path = resolved))
             }
         }
 
         return deletable to kept
+    }
+
+    /** The file a link names: the real path when it exists (case and symlinks resolved), else normalized. */
+    private fun fileIdentity(session: ProjectSession, relativePath: String): Path {
+        val path = ManifestPathResolver.resolveAllowingEscape(baseDir = session.root, relativePath = relativePath)
+            .toAbsolutePath()
+            .normalize()
+        return if (Files.exists(path)) path.toRealPath() else path
     }
 
     private fun referencedFiles(entry: ProjectEntry): List<Pair<ProjectFileKind, String>> {

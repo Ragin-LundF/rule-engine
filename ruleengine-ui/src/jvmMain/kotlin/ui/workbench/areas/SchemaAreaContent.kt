@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.schema.FieldSchemaLoader
 import ui.components.ModeTabs
 import ui.components.header.AreaHeader
@@ -212,26 +212,29 @@ private fun SchemaAreaHeader(
  * Kept apart from [SchemaIssues] because it is the one verdict the model cannot reach on its own: how
  * many rules read a field is a property of the *rules*, and the schema editor has never seen them.
  */
-private fun unreadFieldNotes(readBy: Map<String, Int>): List<SchemaIssue> =
-    readBy.filterValues { count -> count == 0 }
+private fun unreadFieldNotes(readBy: Map<String, Int>): List<SchemaIssue> {
+    return readBy.filterValues { count -> count == 0 }
         .keys
         .sorted()
         .map { path ->
             SchemaIssue(level = IssueLevel.NOTE, path = path, message = "No loaded rule reads this field.")
         }
+}
 
 /**
  * The field-flow diagram, which now lives in the dock rather than replacing the editor.
  *
  * Here the schema is the subject, so the fields nothing reads are the point.
  */
-private fun fieldFlow(state: RuleEditorState, rules: List<RuleAst>): @Composable () -> Unit = {
-    DiagramSurface {
-        FieldFlowDiagram(
-            rules = rules,
-            schema = state.ruleSchema,
-            entryWide = state.showAllRules.value,
-        )
+private fun fieldFlow(state: RuleEditorState, rules: List<RuleAst>): @Composable () -> Unit {
+    return {
+        DiagramSurface {
+            FieldFlowDiagram(
+                rules = rules,
+                schema = state.ruleSchema,
+                entryWide = state.showAllRules.value,
+            )
+        }
     }
 }
 

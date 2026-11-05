@@ -37,7 +37,7 @@ class ClasspathManifestFileResolver(
     override fun resolve(relativePath: String, label: String): ManifestFile {
         val segments = resolveSegments(relativePath = relativePath)
             ?: return ManifestFile.Unavailable(
-                message = "Manifest $label path '$relativePath' escapes base directory " +
+                message = "Manifest $label path '$relativePath' does not name a resource relative to " +
                     "'${baseSegments.joinToString(separator = "/")}'",
             )
 
@@ -54,15 +54,17 @@ class ClasspathManifestFileResolver(
     }
 
     /**
-     * Resolves [relativePath] against the base segments, or returns `null` when it would leave them.
+     * Resolves [relativePath] against the base segments, or returns `null` when it names no resource:
+     * an absolute name, one that climbs above the classpath root, or nothing at all.
+     *
+     * `../` is allowed, as on the filesystem: a manifest is trusted and may reference shared resources
+     * outside its own folder. It is resolved here rather than passed through, because
+     * `getResourceAsStream` returns `null` for `rules/../x` inside a jar while an exploded classpath
+     * resolves it — normalising first makes both behave the same.
      *
      * Hand-rolled rather than delegating to [java.nio.file.Path]: a resource name is not a path.
      * `Path.of` rejects names Windows forbids (`:`, `*`, `?`, `|`), treats an empty base specially and
      * yields OS separators that would have to be converted back.
-     *
-     * The check is not theoretical. `getResourceAsStream` returns `null` for `rules/../x` inside a
-     * jar, but on an exploded classpath the same name resolves and would read outside the manifest's
-     * own directory — which the filesystem resolver rejects.
      */
     private fun resolveSegments(relativePath: String): List<String>? {
         if (relativePath.startsWith(prefix = "/")) {
@@ -73,7 +75,7 @@ class ClasspathManifestFileResolver(
         for (segment in relativePath.split('/')) {
             when (segment) {
                 "", "." -> Unit
-                ".." -> if (segments.size <= baseSegments.size) return null else segments.removeLast()
+                ".." -> segments.removeLastOrNull() ?: return null
                 else -> segments.add(element = segment)
             }
         }

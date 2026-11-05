@@ -5,11 +5,8 @@ import ruleengine.builder.ClasspathProjectJars.manifest
 import ruleengine.builder.ClasspathProjectJars.nestedProject
 import ruleengine.builder.ClasspathProjectJars.ruleFile
 import ruleengine.builder.ClasspathProjectJars.withJarClassLoader
-import ruleengine.core.errors.RuleEngineBuildException
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
-import kotlin.test.assertTrue
 
 class RuleCatalogBuilderClasspathTest {
     @Test
@@ -38,25 +35,20 @@ class RuleCatalogBuilderClasspathTest {
     }
 
     @Test
-    fun `a resource path escaping the manifest base is rejected`() {
+    fun `a resource path above the manifest folder reaches a shared resource`() {
         val entries = nestedProject() + mapOf(
-            "rules/manifest.yaml" to manifest(schema = "../secret-schema.yaml"),
-            "secret-schema.yaml" to SCHEMA_YAML,
+            "rules/manifest.yaml" to manifest(schema = "../shared/schema.yaml"),
+            "shared/schema.yaml" to SCHEMA_YAML,
         )
 
         withJarClassLoader(entries = entries) { loader ->
-            val failure = assertFailsWith<RuleEngineBuildException> {
-                RuleCatalogBuilder.fromManifest(
-                    manifestLocation = "classpath:rules/manifest.yaml",
-                    classLoader = loader,
-                )
-            }
+            val catalog = RuleCatalogBuilder.fromManifest(
+                manifestLocation = "classpath:rules/manifest.yaml",
+                classLoader = loader,
+            ).single()
 
-            assertTrue(
-                actual = failure.message!!.contains(other = "escapes base directory"),
-                message = failure.message!!
-            )
-            assertEquals(expected = "e", actual = failure.entryId)
+            assertEquals(expected = "../shared/schema.yaml", actual = catalog.schemaPath)
+            assertEquals(expected = listOf("a"), actual = catalog.rules.map { rule -> rule.id })
         }
     }
 }

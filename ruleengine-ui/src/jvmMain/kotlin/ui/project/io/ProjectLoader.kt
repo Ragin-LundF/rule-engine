@@ -153,13 +153,19 @@ class ProjectLoader(private val dirtyState: ProjectDirtyState) {
         state.loadRuleFiles(relativePaths = entry.ruleFiles)
         val loadedPaths = state.entryRuleSources.value.map { it.relativePath }.toSet()
 
+        // Every file read gets a baseline, not just the one opened: a file without one reads as
+        // unsaved forever, and a save can only tell an edited file by comparing against it. A file
+        // that already has one keeps it — it is what disk held, which an edit in memory is not.
+        state.inMemoryRuleFiles.value.forEach { (relativePath, content) ->
+            val key = ProjectDirtyState.ruleKey(relativePath = relativePath)
+            if (dirtyState.baseline(key = key) == null) {
+                dirtyState.markClean(key = key, content = content)
+            }
+        }
+
         state.showAllRules.value = false
         entry.ruleFiles.firstOrNull { it in loadedPaths }?.let { first ->
             state.loadSingleManifestRuleFile(relativePath = first)
-            dirtyState.markClean(
-                key = ProjectDirtyState.ruleKey(relativePath = first),
-                content = state.ruleValue.value.text,
-            )
         }
 
         return entry.ruleFiles.filterNot { it in loadedPaths }.map { relativePath ->

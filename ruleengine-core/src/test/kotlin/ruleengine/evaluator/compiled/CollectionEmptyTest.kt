@@ -7,6 +7,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
+import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -44,6 +45,16 @@ class CollectionEmptyTest {
             FieldId(value = "tags") to FieldDefinition(
                 id = FieldId(value = "tags"),
                 type = FieldType.STRING_SET
+            ),
+            FieldId(value = "account") to FieldDefinition(
+                id = FieldId(value = "account"),
+                type = FieldType.OBJECT,
+                fields = mapOf(
+                    FieldId(value = "orders") to FieldDefinition(
+                        id = FieldId(value = "orders"),
+                        type = FieldType.COLLECTION
+                    )
+                )
             )
         )
     )
@@ -82,6 +93,25 @@ class CollectionEmptyTest {
         assertFalse(
             actual = evaluate(condition = "isEmpty(orders)", fields = arrayOf("orders" to null)),
             message = "null is absent, and absent is not empty"
+        )
+    }
+
+    @Test
+    fun `a nested collection that did not arrive is not empty`() {
+        assertFalse(
+            actual = evaluate(condition = "isEmpty(account.orders)", fields = arrayOf("account" to mapOf("id" to 1))),
+            message = "the object is there but the collection is not — absent, exactly as at the root"
+        )
+    }
+
+    @Test
+    fun `a nested collection that arrived empty is empty`() {
+        assertTrue(
+            actual = evaluate(
+                condition = "isEmpty(account.orders)",
+                fields = arrayOf("account" to mapOf("orders" to emptyList<Any>()))
+            ),
+            message = "present and holding no elements, one level down"
         )
     }
 
@@ -197,19 +227,22 @@ class CollectionEmptyTest {
         )
     }
 
-    private fun ruleFor(condition: String) = """
-        rule "empty-test" {
-          description "checks emptiness"
-          when
-            $condition
-          then
-            flag "ok"
-        }
-    """.trimIndent()
+    private fun ruleFor(condition: String): String {
+        return """
+            rule "empty-test" {
+              description "checks emptiness"
+              when
+                $condition
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+    }
 
-    private fun validate(condition: String) =
-        Validator.validate(asts = Parser(input = ruleFor(condition = condition)).parseRules(), schema = schema)
+    private fun validate(condition: String): List<ValidationDiagnostic> {
+        return Validator.validate(asts = Parser(input = ruleFor(condition = condition)).parseRules(), schema = schema)
             .diagnostics
+    }
 
     private fun evaluate(condition: String, fields: Array<Pair<String, Any?>>): Boolean {
         val compiled = Compiler.compileRules(

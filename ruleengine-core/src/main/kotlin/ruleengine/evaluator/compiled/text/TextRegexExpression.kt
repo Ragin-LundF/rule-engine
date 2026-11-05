@@ -17,10 +17,6 @@ class TextRegexExpression(
 ) : CompiledExpression {
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
 
-    companion object {
-        const val MAX_INPUT_LENGTH = 10_000
-    }
-
     override fun evaluate(context: PreparedRuleContext, trace: TraceCollector?): ConditionVerdict {
         trace?.enter(
             meta = NodeMeta(
@@ -38,13 +34,11 @@ class TextRegexExpression(
             return ConditionVerdict.UNKNOWN
         }
 
-        if (fieldValue.original.length > MAX_INPUT_LENGTH) {
-            trace?.exit(verdict = ConditionVerdict.FALSE)
-            return ConditionVerdict.FALSE
+        // Out of time means not tested, so not decided: `not ... regex` must not turn into a pass.
+        val matched = RegexDeadline.runOrNull(input = fieldValue.original) { input ->
+            pattern.containsMatchIn(input = input)
         }
-
-        val res = pattern.containsMatchIn(input = fieldValue.original)
-        val verdict = ConditionVerdict.of(value = res)
+        val verdict = matched?.let { ConditionVerdict.of(value = it) } ?: ConditionVerdict.UNKNOWN
         trace?.exit(verdict = verdict)
         return verdict
     }

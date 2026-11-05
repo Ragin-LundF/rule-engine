@@ -11,15 +11,8 @@ import java.nio.file.Path
  */
 class FileSystemManifestFileResolver(private val baseDir: Path) : ManifestFileResolver {
     override fun resolve(relativePath: String, label: String): ManifestFile {
-        val resolution = ManifestPathResolver.resolveWithinBase(
-            baseDir = baseDir,
-            relativePath = relativePath,
-            label = label,
-        )
-        val path = when (resolution) {
-            is ManifestPathResolution.Accepted -> resolution.path
-            is ManifestPathResolution.Rejected -> return ManifestFile.Unavailable(message = resolution.message)
-        }
+        // `../` is allowed on purpose: a manifest is trusted and may reference shared files.
+        val path = ManifestPathResolver.resolveAllowingEscape(baseDir = baseDir, relativePath = relativePath)
 
         if (!Files.isRegularFile(path)) {
             return ManifestFile.Unavailable(

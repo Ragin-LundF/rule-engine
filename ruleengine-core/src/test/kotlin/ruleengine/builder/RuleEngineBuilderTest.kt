@@ -281,19 +281,28 @@ class RuleEngineBuilderTest {
         )
     }
 
+    /** A trusted manifest may reach a shared file above its own directory. */
     @Test
-    fun `path escaping the manifest directory is rejected`() {
-        val dir = writeProject()
-        Files.writeString(dir.parent.resolve("outside-schema.yaml"), SCHEMA_YAML)
-        writeManifest(dir = dir, schema = "../outside-schema.yaml")
+    fun `a path above the manifest directory reaches a shared file`() {
+        val workspace = writeProject()
+        val shared = Files.createDirectories(workspace.resolve("shared"))
+        Files.writeString(shared.resolve("schema.yaml"), SCHEMA_YAML)
+        val project = Files.createDirectories(workspace.resolve("project"))
+        writeManifest(
+            dir = project,
+            schema = "../shared/schema.yaml",
+            actions = "../actions.yaml",
+            rules = listOf("../rules/a.rule"),
+        )
 
-        val failure = assertFailsWithBuildException {
-            RuleEngineBuilder.fromManifest(manifestPath = dir.resolve("manifest.yaml"))
-        }
+        val loaded = RuleEngineBuilder.fromManifestEntry(
+            manifestPath = project.resolve("manifest.yaml"),
+            entryId = "e",
+        )
 
-        assertTrue(
-            actual = failure.message!!.contains(other = "escapes base directory"),
-            message = failure.message!!
+        assertEquals(
+            expected = listOf("a"),
+            actual = loaded.evaluate(input = MATCHING_INPUT).matches.map { it.ruleId },
         )
     }
 
@@ -451,19 +460,21 @@ class RuleEngineBuilderTest {
         assertEquals(expected = listOf("no"), actual = elseFired.actions.single().arguments)
     }
 
-    private fun assertFailsWithBuildException(block: () -> Unit): RuleEngineBuildException =
-        runCatching(block).fold(
+    private fun assertFailsWithBuildException(block: () -> Unit): RuleEngineBuildException {
+        return runCatching(block).fold(
             onSuccess = { throw AssertionError("expected RuleEngineBuildException, but the call succeeded") },
             onFailure = { throwable ->
                 throwable as? RuleEngineBuildException
                     ?: throw AssertionError("expected RuleEngineBuildException, got $throwable")
             }
         )
+    }
 
-    private fun actionNamesFor(loaded: LoadedRuleEngine, inputFile: String): List<String> =
-        loaded.evaluate(input = readInput(relativePath = inputFile))
+    private fun actionNamesFor(loaded: LoadedRuleEngine, inputFile: String): List<String> {
+        return loaded.evaluate(input = readInput(relativePath = inputFile))
             .matches
             .flatMap { match -> match.actions.map { it.name } }
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun readInput(relativePath: String): Map<String, Any?> {
@@ -529,8 +540,8 @@ class RuleEngineBuilderTest {
         )
     }
 
-    private fun ruleFile(id: String): String =
-        """
+    private fun ruleFile(id: String): String {
+        return """
         rule "$id" {
           when
             p equals "x"
@@ -538,6 +549,7 @@ class RuleEngineBuilderTest {
             label "$id"
         }
         """.trimIndent()
+    }
 
     private companion object {
         val RESOURCES: Path = Path.of("src/test/resources")

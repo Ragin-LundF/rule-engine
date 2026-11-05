@@ -6,9 +6,14 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
 import ruleengine.dsl.parser.Parser
+import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
+import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
+import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -82,6 +87,44 @@ class ArithmeticEdgeCaseTest {
             ),
             message = "rounded to 10 places the quotient is exactly 0.3333333333, so it is not greater"
         )
+    }
+
+    /** RULE-SPEC: a division that divides evenly is exact, even past ten decimal places. */
+    @Test
+    fun `an even division keeps every decimal place`() {
+        assertEquals(
+            expected = ConditionVerdict.TRUE,
+            actual = verdict(
+                condition = "amount / divisor == 0.061728394506",
+                fields = arrayOf("amount" to "0.123456789012", "divisor" to 2)
+            ),
+            message = "rounding to ten places would give 0.0617283945"
+        )
+        assertEquals(
+            expected = ConditionVerdict.TRUE,
+            actual = verdict(condition = "amount / divisor == 2.5", fields = arrayOf("amount" to 10, "divisor" to 4))
+        )
+    }
+
+    @Test
+    fun `a quotient is exact when it terminates and has ten places otherwise`() {
+        val context = PreparedRuleContext.prepare(ctx = RuleContext.of(), schema = schema)
+        fun quotient(dividend: String, divisor: String): String {
+            val expression = ArithmeticCompiledValueExpression(
+                left = LiteralCompiledValueExpression(value = NumberExpressionValue(value = BigDecimal(dividend))),
+                operator = ArithmeticOperatorAst.DIVIDE,
+                right = LiteralCompiledValueExpression(value = NumberExpressionValue(value = BigDecimal(divisor))),
+                cost = EvaluationCost.CHEAP,
+            )
+            return (expression.evaluate(context = context) as NumberExpressionValue).value.toPlainString()
+        }
+
+        assertEquals(expected = "0.3333333333", actual = quotient(dividend = "1", divisor = "3"))
+        assertEquals(expected = "2.5", actual = quotient(dividend = "10", divisor = "4"))
+        assertEquals(expected = "0.061728394506", actual = quotient(dividend = "0.123456789012", divisor = "2"))
+        assertEquals(expected = "0.5", actual = quotient(dividend = "3", divisor = "6"))
+        assertEquals(expected = "-0.1666666667", actual = quotient(dividend = "-1", divisor = "6"))
+        assertEquals(expected = "40", actual = quotient(dividend = "1", divisor = "0.025"))
     }
 
     @Test

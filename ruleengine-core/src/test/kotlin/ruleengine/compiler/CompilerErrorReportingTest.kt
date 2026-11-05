@@ -246,7 +246,7 @@ class CompilerErrorReportingTest {
     }
 
     /**
-     * `startsWith` has no [ruleengine.dsl.ast.ComparisonOperatorAst] to compile to, so a filter cannot
+     * `startsWith` has no [ruleengine.dsl.ast.condition.ComparisonOperatorAst] to compile to, so a filter cannot
      * carry it. `contains` deliberately is not the example any more: it has one, and a filter using it
      * compiles and matches — see `LegacyFilterPredicateTest`.
      *

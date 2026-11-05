@@ -137,9 +137,61 @@ class ProjectWorkspaceTest {
         assertEquals(expected = project, actual = workspace.session.value?.root)
     }
 
+    /** Rule files are read relative to the project; after Save As that is the new folder, not the old one. */
+    @Test
+    fun `save as moves where rule files are read from`() {
+        val state = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+        val project = createProject(ruleId = "opened-rule")
+        val copy = Files.createTempDirectory("workspace-copy")
+        val workspace = ProjectWorkspace(
+            state = state,
+            chooseManifestToOpen = { project.resolve("manifest.yaml") },
+            chooseManifestToSave = { copy.resolve("manifest.yaml") },
+        )
+        workspace.openProject()
+
+        assertTrue(actual = workspace.saveProjectAs())
+
+        assertEquals(expected = copy.toString(), actual = state.manifestBaseDir.value)
+    }
+
+    /** An overwrite approved for one save attempt must not carry over to a later, cancelled-then-new save. */
+    @Test
+    fun `a cancelled save forgets the overwrite it was given`() {
+        val parent = Files.createTempDirectory("workspace-approvals")
+        val schema = "schema: sample\nfields:\n  purpose:\n    type: text\n"
+        Files.writeString(Files.createDirectories(parent.resolve("shared")).resolve("schema.yaml"), schema)
+        val project = Files.createDirectories(parent.resolve("project"))
+        Files.createDirectories(project.resolve("rules"))
+        Files.writeString(project.resolve("rules/main.rule"), ruleText(ruleId = "opened-rule"))
+        Files.writeString(
+            project.resolve("manifest.yaml"),
+            "entries:\n  - id: default\n    schema: ../shared/schema.yaml\n    rules:\n      - rules/main.rule\n",
+        )
+        val state = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+        val workspace = ProjectWorkspace(state = state, chooseManifestToOpen = { project.resolve("manifest.yaml") })
+        workspace.openProject()
+        state.ruleValue.value = TextFieldValue(text = ruleText(ruleId = "edited-rule"))
+        state.schemaText.value = "$schema# edited\n"
+        Files.writeString(project.resolve("rules/main.rule"), ruleText(ruleId = "changed-on-disk"))
+
+        workspace.saveProject()
+        assertIs<ProjectDialog.DiskConflict>(value = workspace.dialog.value)
+        workspace.onOverwriteConflict(relativePath = "rules/main.rule")
+        assertIs<ProjectDialog.ExternalWrite>(value = workspace.dialog.value)
+        workspace.dismissDialog()
+        Files.writeString(project.resolve("rules/main.rule"), ruleText(ruleId = "changed-again"))
+
+        workspace.saveProject()
+
+        assertIs<ProjectDialog.DiskConflict>(value = workspace.dialog.value)
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun fail(): Path = throw AssertionError("the file dialog should not have been opened")
+    private fun fail(): Path {
+        throw AssertionError("the file dialog should not have been opened")
+    }
 
     private fun scratchState(): RuleEditorState {
         val state = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
@@ -163,10 +215,12 @@ class ProjectWorkspaceTest {
         return root
     }
 
-    private fun ruleText(ruleId: String): String = """
-        rule "$ruleId" {
-          when purpose equals "rent"
-          then label "rent"
-        }
-    """.trimIndent()
+    private fun ruleText(ruleId: String): String {
+        return """
+            rule "$ruleId" {
+              when purpose equals "rent"
+              then label "rent"
+            }
+        """.trimIndent()
+    }
 }

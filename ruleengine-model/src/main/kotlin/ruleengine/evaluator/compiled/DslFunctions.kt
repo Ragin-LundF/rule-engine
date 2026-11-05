@@ -22,6 +22,13 @@ object DslFunctions {
      */
     val SORT_NAMES: List<String> = listOf("sortBy")
 
+    /**
+     * The keyed join, absent from every registry for the same reason as [SLICE_NAMES]: the parser
+     * turns `joinByKey("month", income: income.amount, spending: spending.amount)` into the first
+     * segment of a path, so filters, slices and sorts continue from its rows.
+     */
+    val JOIN_NAMES: List<String> = listOf("joinByKey")
+
     /** Every function name the DSL accepts, in declaration order. */
     fun allNames(): List<String> {
         return AggregateFunctionName.dslNames() + CollectionFunctionName.dslNames() + pathFunctionNames()
@@ -35,7 +42,7 @@ object DslFunctions {
      * as something else entirely.
      */
     fun pathFunctionNames(): List<String> {
-        return SLICE_NAMES + SORT_NAMES
+        return SLICE_NAMES + SORT_NAMES + JOIN_NAMES
     }
 
     /** The reductions over a collection, i.e. what an aggregate picker should offer. */

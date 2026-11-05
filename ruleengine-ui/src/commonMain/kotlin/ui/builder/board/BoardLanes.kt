@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.core.domain.dto.RuleBranch
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.AccentCyan
 import ui.AccentGreen
 import ui.AccentOrange
@@ -304,22 +304,28 @@ private fun StopBadge(onRemove: () -> Unit) {
     }
 }
 
-private fun laneTitle(branch: RuleBranch): String = when (branch) {
-    RuleBranch.THEN -> "THEN"
-    RuleBranch.ELSE -> "ELSE"
-    RuleBranch.NOT_EXISTS -> "NOT EXISTS"
+private fun laneTitle(branch: RuleBranch): String {
+    return when (branch) {
+        RuleBranch.THEN -> "THEN"
+        RuleBranch.ELSE -> "ELSE"
+        RuleBranch.NOT_EXISTS -> "NOT EXISTS"
+    }
 }
 
-private fun laneColour(branch: RuleBranch): Color = when (branch) {
-    RuleBranch.THEN -> AccentGreen
-    RuleBranch.ELSE -> AccentPurple
-    RuleBranch.NOT_EXISTS -> AccentOrange
+private fun laneColour(branch: RuleBranch): Color {
+    return when (branch) {
+        RuleBranch.THEN -> AccentGreen
+        RuleBranch.ELSE -> AccentPurple
+        RuleBranch.NOT_EXISTS -> AccentOrange
+    }
 }
 
-private fun laneWhen(branch: RuleBranch): String = when (branch) {
-    RuleBranch.THEN -> "the condition held"
-    RuleBranch.ELSE -> "the condition was false"
-    RuleBranch.NOT_EXISTS -> "the record could not decide it"
+private fun laneWhen(branch: RuleBranch): String {
+    return when (branch) {
+        RuleBranch.THEN -> "the condition held"
+        RuleBranch.ELSE -> "the condition was false"
+        RuleBranch.NOT_EXISTS -> "the record could not decide it"
+    }
 }
 
 /**
@@ -329,10 +335,12 @@ private fun laneWhen(branch: RuleBranch): String = when (branch) {
  * missing `not_exists` is the difference between a record with no data being treated as a `false` and
  * being treated as its own case.
  */
-private fun emptyLaneText(branch: RuleBranch): String = when (branch) {
-    RuleBranch.THEN -> "nothing yet — a rule with no `then` does not parse"
-    RuleBranch.ELSE -> "nothing — the rule does nothing when the condition is false"
-    RuleBranch.NOT_EXISTS -> "nothing — missing data falls through to `else`"
+private fun emptyLaneText(branch: RuleBranch): String {
+    return when (branch) {
+        RuleBranch.THEN -> "nothing yet — a rule with no `then` does not parse"
+        RuleBranch.ELSE -> "nothing — the rule does nothing when the condition is false"
+        RuleBranch.NOT_EXISTS -> "nothing — missing data falls through to `else`"
+    }
 }
 
 private fun actionText(name: String, argument: String?): String {

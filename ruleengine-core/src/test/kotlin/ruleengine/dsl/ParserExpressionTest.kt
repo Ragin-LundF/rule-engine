@@ -1,24 +1,31 @@
 package ruleengine.dsl
 
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticOperatorAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.JoinSourceAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.VariableRefAst
+import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class ParserExpressionTest {
 
@@ -201,16 +208,18 @@ class ParserExpressionTest {
     // `operators:` list and normalizes the literal, so a plain field comparison silently changing
     // path would change the meaning of every text rule in every project.
 
-    private fun conditionOf(input: String) = Parser(
-        input = """
-            rule "test" {
-              when
-                $input
-              then
-                flag "ok"
-            }
-        """.trimIndent()
-    ).parseRules().single().condition
+    private fun conditionOf(input: String): ExpressionAst {
+        return Parser(
+            input = """
+                rule "test" {
+                  when
+                    $input
+                  then
+                    flag "ok"
+                }
+            """.trimIndent()
+        ).parseRules().single().condition
+    }
 
     @Test
     fun `a plain field contains a literal stays on the legacy path`() {
@@ -250,5 +259,113 @@ class ParserExpressionTest {
         val expr = assertIs<ComparisonExpressionAst>(value = conditionOf(input = "purpose contains ${'$'}needle"))
         assertEquals(expected = ComparisonOperatorAst.CONTAINS, actual = expr.operator)
         assertIs<VariableRefAst>(value = expr.right)
+    }
+
+    // ── joinByKey ─────────────────────────────────────────────────────────────
+
+    private fun path(vararg names: String): FieldAccessAst {
+        return FieldAccessAst(path = names.map { name -> FieldSegmentAst(name = name) })
+    }
+
+    private val creditDebitJoin = JoinSegmentAst(
+        key = "period",
+        sources = listOf(
+            JoinSourceAst(alias = "credit", path = path("credits", "amount")),
+            JoinSourceAst(alias = "debit", path = path("debits", "amount")),
+        )
+    )
+
+    @Test
+    fun `joinByKey parses as the first segment of a filtered path`() {
+        val expr = parseCondition(
+            """count(joinByKey("period", credit: credits.amount, debit: debits.amount)[credit > debit]) >= 1"""
+        )
+
+        val count = assertIs<FunctionCallValueAst>(value = expr.left)
+        val argument = assertIs<FieldAccessAst>(value = count.arguments.single())
+        assertEquals(expected = creditDebitJoin, actual = argument.path[0])
+        assertIs<FilterSegmentAst>(value = argument.path[1])
+        assertEquals(expected = 2, actual = argument.path.size)
+    }
+
+    @Test
+    fun `joinByKey composes with a slice and a member read`() {
+        val expr = parseCondition(
+            """sum(take(joinByKey("period", credit: credits.amount, debit: debits.amount), 2).credit) > 0"""
+        )
+
+        val sum = assertIs<FunctionCallValueAst>(value = expr.left)
+        val argument = assertIs<FieldAccessAst>(value = sum.arguments.single())
+        assertEquals(
+            expected = listOf(
+                creditDebitJoin,
+                SliceSegmentAst(fromEnd = false, count = "2"),
+                FieldSegmentAst(name = "credit"),
+            ),
+            actual = argument.path
+        )
+    }
+
+    /** Validation names a missing key; the parser keeps the call so it can. */
+    @Test
+    fun `joinByKey without a key literal still parses`() {
+        val expr = parseCondition("count(joinByKey(credit: credits.amount, debit: debits.amount)) > 0")
+
+        val argument = assertIs<FieldAccessAst>(value = assertIs<FunctionCallValueAst>(value = expr.left).arguments[0])
+        assertEquals(expected = null, actual = assertIs<JoinSegmentAst>(value = argument.path[0]).key)
+    }
+
+    /** It used to pass validation and then fail compilation with a bare NumberFormatException. */
+    @Test
+    fun `a number with two dots is a parse error with its position`() {
+        val rule = """
+            rule "test" {
+              when
+                count(orders) > 1.2.3
+              then
+                flag "x"
+            }
+        """.trimIndent()
+
+        val error = assertFailsWith<ParseException> { Parser(input = rule).parseRules() }
+
+        assertEquals(expected = 3, actual = error.line)
+    }
+
+    /**
+     * A condition falls back to the legacy named-operator path when the modern parse throws, which
+     * replaces the message with that path's own. An assignment has no such fallback, so it is where
+     * the wording and position can be checked — the same approach `CollectionSortTest` takes.
+     */
+    private fun assignmentParseError(value: String): ParseException {
+        val rule = """
+            rule "test" {
+              when
+                count(credits) > 0
+              then
+                set rows = $value
+            }
+        """.trimIndent()
+        return assertFailsWith<ParseException> { Parser(input = rule).parseRules() }
+    }
+
+    @Test
+    fun `a joinByKey source without its alias is a parse error at the source`() {
+        val error = assignmentParseError(value = """count(joinByKey("period", credits.amount, debit: debits.amount))""")
+
+        assertEquals(expected = 5, actual = error.line)
+        assertEquals(expected = 42, actual = error.column)
+        assertTrue(actual = error.message.orEmpty().contains(other = "missing its ':'"), message = error.message)
+    }
+
+    @Test
+    fun `a joinByKey source that is not a path is a parse error`() {
+        val error = assignmentParseError(value = """count(joinByKey("period", credit: 5, debit: debits.amount))""")
+
+        assertEquals(expected = 5, actual = error.line)
+        assertTrue(
+            actual = error.message.orEmpty().contains(other = "must be a collection path"),
+            message = error.message
+        )
     }
 }

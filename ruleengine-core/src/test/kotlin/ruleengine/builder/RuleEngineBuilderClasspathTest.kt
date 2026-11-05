@@ -113,13 +113,31 @@ class RuleEngineBuilderClasspathTest {
         }
     }
 
+    /** A trusted manifest may reach a shared resource above its own folder, as on the filesystem. */
     @Test
-    fun `a resource path escaping the manifest base is rejected`() {
-        // The escape target exists and is valid, so a rejection cannot be mistaken for "not found".
+    fun `a resource path above the manifest folder reaches a shared resource`() {
         val entries = nestedProject() + mapOf(
-            "rules/manifest.yaml" to manifest(schema = "../secret-schema.yaml"),
-            "secret-schema.yaml" to SCHEMA_YAML,
+            "rules/manifest.yaml" to manifest(schema = "../shared/schema.yaml"),
+            "shared/schema.yaml" to SCHEMA_YAML,
         )
+
+        withJarClassLoader(entries = entries) { loader ->
+            val loaded = RuleEngineBuilder.fromManifestEntry(
+                manifestLocation = "classpath:rules/manifest.yaml",
+                entryId = "e",
+                classLoader = loader,
+            )
+
+            assertEquals(
+                expected = listOf("a"),
+                actual = loaded.evaluate(input = MATCHING_INPUT).matches.map { it.ruleId }
+            )
+        }
+    }
+
+    @Test
+    fun `a resource path above the classpath root is unavailable`() {
+        val entries = nestedProject() + mapOf("rules/manifest.yaml" to manifest(schema = "../../schema.yaml"))
 
         withJarClassLoader(entries = entries) { loader ->
             val failure = assertFailsWith<RuleEngineBuildException> {
@@ -127,7 +145,7 @@ class RuleEngineBuilderClasspathTest {
             }
 
             assertTrue(
-                actual = failure.message!!.contains(other = "escapes base directory"),
+                actual = failure.message!!.contains(other = "does not name a resource"),
                 message = failure.message!!
             )
             assertEquals(expected = "e", actual = failure.entryId)

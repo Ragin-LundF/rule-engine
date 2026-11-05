@@ -1,7 +1,7 @@
 package ruleengine.core.analysis
 
 import ruleengine.core.io.FileInputSupport
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.parser.Parser
 import java.nio.file.Path
 import kotlin.test.Test
@@ -162,6 +162,25 @@ class FieldUsageTest {
         assertEquals(
             expected = setOf("topics"),
             actual = FieldUsage.fieldsOf(rule = inlineRule(condition = "count(sortBy(topics, asc)) > 0")),
+        )
+    }
+
+    /**
+     * A join reads each source's value and key; its rows are built, not read, so a filter on them
+     * adds only the document fields it names — `periods` here, not `credit` or `period`.
+     */
+    @Test
+    fun `a keyed join reports its sources and keys, not its row members`() {
+        assertEquals(
+            expected = setOf(
+                "credits.amount", "credits.period", "debits.amount", "debits.period", "periods",
+            ),
+            actual = FieldUsage.fieldsOf(
+                rule = inlineRule(
+                    condition = """count(joinByKey("period", credit: credits.amount, debit: debits.amount)""" +
+                        """[period in periods and credit > debit]) > 0"""
+                ),
+            ),
         )
     }
 

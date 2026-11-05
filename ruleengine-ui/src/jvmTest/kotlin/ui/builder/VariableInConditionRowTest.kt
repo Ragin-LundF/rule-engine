@@ -184,7 +184,7 @@ class VariableInConditionRowTest {
                 """.trimIndent()
                 val condition = Parser(input = dsl).parseRules().single().condition
                 assertTrue(
-                    actual = condition is ruleengine.dsl.ast.ComparisonExpressionAst,
+                    actual = condition is ruleengine.dsl.ast.condition.ComparisonExpressionAst,
                     message = "$id $operator took the legacy path: $condition",
                 )
             }

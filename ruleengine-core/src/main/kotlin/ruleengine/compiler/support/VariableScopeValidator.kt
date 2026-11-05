@@ -6,11 +6,11 @@ import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.VariableAssignmentAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
 
 /**
  * Checks that every `$name` read resolves to a variable some earlier rule assigns.

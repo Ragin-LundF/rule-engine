@@ -28,7 +28,9 @@ entries:
       - <path-to-another-rule-file.rule>
 ```
 
-All paths are **relative to the manifest file itself**.
+All paths are **relative to the manifest file itself**. A path may leave the manifest's folder (`../shared/schema.yaml`), for
+schema, action and rule files alike — that is how projects share a schema. A manifest can therefore point
+at any file the process can read, so load manifests only from trusted sources.
 This means you can move the entire project folder without changing any paths.
 
 ---

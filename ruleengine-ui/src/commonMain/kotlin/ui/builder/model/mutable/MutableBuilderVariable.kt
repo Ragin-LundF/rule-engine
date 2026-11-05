@@ -3,7 +3,7 @@ package ui.builder.model.mutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderVariable
 
@@ -24,10 +24,12 @@ class MutableBuilderVariable(
     var expression by mutableStateOf(value = expression)
     var kind by mutableStateOf(value = kind)
 
-    fun toImmutable(): BuilderVariable = BuilderVariable(
-        id = id,
-        name = name,
-        expression = expression,
-        kind = kind,
-    )
+    fun toImmutable(): BuilderVariable {
+        return BuilderVariable(
+            id = id,
+            name = name,
+            expression = expression,
+            kind = kind,
+        )
+    }
 }

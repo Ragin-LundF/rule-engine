@@ -5,6 +5,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
+import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -17,8 +18,11 @@ import kotlin.test.assertTrue
 /** `sumByKey(key, source, source, ...)` — REQ-03. */
 class KeyedJoinTest {
 
-    private fun monthly(keyType: FieldType = FieldType.TEXT, valueType: FieldType = FieldType.DECIMAL) =
-        FieldDefinition(
+    private fun monthly(
+        keyType: FieldType = FieldType.TEXT,
+        valueType: FieldType = FieldType.DECIMAL,
+    ): FieldDefinition {
+        return FieldDefinition(
             id = FieldId(value = "byMonth"),
             type = FieldType.COLLECTION,
             fields = mapOf(
@@ -26,6 +30,7 @@ class KeyedJoinTest {
                 FieldId(value = "amount") to FieldDefinition(id = FieldId(value = "amount"), type = valueType)
             )
         )
+    }
 
     private val schema = FieldSchema(
         name = "join-schema",
@@ -126,10 +131,22 @@ class KeyedJoinTest {
         )
     }
 
+    /**
+     * A total over a collection the record does not carry is unknown, not zero, so the result is
+     * missing and any comparison over it is undecided — `>= 0` holds for every count there is.
+     */
     @Test
-    fun `missing sources produce no keys`() {
+    fun `missing sources make the result missing`() {
+        val anyCount = """count(sumByKey("month", sales.amount, refunds.amount)) >= 0"""
+
+        assertFalse(actual = evaluate(condition = anyCount), message = "both sources missing")
+        assertFalse(
+            actual = evaluate(condition = anyCount, "sales" to rows("2024-01" to 500)),
+            message = "one source missing is enough"
+        )
         assertTrue(
-            actual = evaluate(condition = """count(sumByKey("month", sales.amount, refunds.amount)) == 0""")
+            actual = evaluate(condition = anyCount, "sales" to rows("2024-01" to 500), "refunds" to emptyList<Any>()),
+            message = "an empty source is present and contributes nothing"
         )
     }
 
@@ -228,17 +245,21 @@ class KeyedJoinTest {
         return RuleEngine(compiledRules = compiled).evaluate(prepared = prepared).matches.isNotEmpty()
     }
 
-    private fun validate(condition: String) = Validator.validate(
-        asts = Parser(input = rule(condition = condition)).parseRules(),
-        schema = schema
-    ).diagnostics
+    private fun validate(condition: String): List<ValidationDiagnostic> {
+        return Validator.validate(
+            asts = Parser(input = rule(condition = condition)).parseRules(),
+            schema = schema
+        ).diagnostics
+    }
 
-    private fun rule(condition: String): String = """
-        rule "join-test" {
-          when
-            $condition
-          then
-            flag "ok"
-        }
-    """.trimIndent()
+    private fun rule(condition: String): String {
+        return """
+            rule "join-test" {
+              when
+                $condition
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+    }
 }

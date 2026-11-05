@@ -1,6 +1,6 @@
 package ui.builder
 
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.builder.model.mutable.BuilderEditorState
 import ui.builder.model.mutable.MutableBuilderAction
 import ui.builder.model.mutable.MutableBuilderComparison
@@ -121,11 +121,11 @@ object BuilderToRuleDsl {
     /**
      * Makes [text] safe to place inside a double-quoted DSL string literal.
      *
-     * The lexer treats a backslash as a generic escape (`\X` yields `X`), so both the backslash and
-     * the quote have to be escaped or a description containing either would terminate the literal
-     * early and corrupt the rule file. Line breaks are collapsed rather than escaped: a literal may
-     * span lines, but a multi-line clause makes the surrounding rule unreadable, and a description
-     * is one sentence by definition.
+     * The lexer reads `\\` as a backslash and `\"` as a quote, so both are escaped or a description
+     * containing a quote (or ending in a backslash) would terminate the literal early and corrupt the
+     * rule file. Escaping every backslash is lossless: `\\` always reads back as one backslash.
+     * Line breaks are collapsed rather than escaped: a literal may span lines, but a multi-line clause
+     * makes the surrounding rule unreadable, and a description is one sentence by definition.
      */
     private fun escapeStringLiteral(text: String): String {
         return text
@@ -146,10 +146,12 @@ object BuilderToRuleDsl {
      *
      * Returns null for a group: a group is a bracket spanning several lines, not a line.
      */
-    internal fun renderRow(node: MutableConditionNode): String? = when (node) {
-        is MutableConditionNode.Leaf -> renderConditionLine(cond = node.inner)
-        is MutableConditionNode.ComparisonLeaf -> renderComparisonLine(comparison = node.inner)
-        is MutableConditionNode.Group -> null
+    internal fun renderRow(node: MutableConditionNode): String? {
+        return when (node) {
+            is MutableConditionNode.Leaf -> renderConditionLine(cond = node.inner)
+            is MutableConditionNode.ComparisonLeaf -> renderComparisonLine(comparison = node.inner)
+            is MutableConditionNode.Group -> null
+        }
     }
 
     private fun renderNodes(
@@ -207,7 +209,9 @@ object BuilderToRuleDsl {
         return "$left ${comparison.operator} $right" + ignoreCaseSuffix(ignoreCase = comparison.ignoreCase)
     }
 
-    private fun ignoreCaseSuffix(ignoreCase: Boolean): String = if (ignoreCase) " ignoreCase" else ""
+    private fun ignoreCaseSuffix(ignoreCase: Boolean): String {
+        return if (ignoreCase) " ignoreCase" else ""
+    }
 
     private fun renderVariable(variable: MutableBuilderVariable): String {
         val value = OperandText.toDsl(operand = variable.expression)
@@ -230,8 +234,8 @@ object BuilderToRuleDsl {
         if (extraction == null) {
             return call
         }
-        // The pattern goes through the same escaping a description does: the lexer treats a backslash
-        // as a generic escape, so a `\d` written raw would be read as a plain `d` on the next parse.
+        // The pattern goes through the same escaping a description does, so a pattern holding a quote
+        // or a trailing backslash still reads back exactly; a `\d` comes back as `\d`.
         return "extract ${extraction.sourceField} " +
                 "regex(\"${escapeStringLiteral(text = extraction.pattern)}\", ${extraction.groupIndex}) " +
                 call
@@ -250,5 +254,7 @@ object BuilderToRuleDsl {
      * Wraps [value] in double quotes if it is not already quoted and is not a
      * plain number or boolean literal.
      */
-    private fun quoteIfNeeded(value: String): String = OperandText.quoteUnlessNumeric(value = value)
+    private fun quoteIfNeeded(value: String): String {
+        return OperandText.quoteUnlessNumeric(value = value)
+    }
 }

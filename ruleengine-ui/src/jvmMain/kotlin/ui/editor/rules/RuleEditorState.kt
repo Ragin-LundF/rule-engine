@@ -13,7 +13,6 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.ScopedEvaluation
-import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
 import ui.actions.model.ActionEditorState
@@ -104,6 +103,14 @@ class RuleEditorState(
      * be written back to one.
      */
     val showAllRules: MutableState<Boolean> = mutableStateOf(value = false)
+
+    /**
+     * A rule file the user asked to open while the All-files buffer held edits.
+     *
+     * The joined buffer cannot be split back into its files, so opening one would drop those edits;
+     * the switch waits here until the user discards them or cancels.
+     */
+    val pendingRuleFileSwitch: MutableState<String?> = mutableStateOf(value = null)
 
     /**
      * The current entry's rule files parsed one by one, keeping the file each rule came from.
@@ -287,6 +294,7 @@ class RuleEditorState(
 
         ruleValue.value = TextFieldValue(text = "")
         showAllRules.value = false
+        pendingRuleFileSwitch.value = null
         entryRuleSources.value = emptyList()
         selectedManifestRuleFile.value = null
 
@@ -344,7 +352,7 @@ class RuleEditorState(
         // Into the one buffer every view reads. The Builder writes there, the code editor shows it and
         // the tester runs it; a second copy of the same text is what let the Builder's edits and the
         // other views disagree about what the entry says.
-        ruleValue.value = TextFieldValue(text = loaded.joinToString(separator = "\n\n") { (_, c) -> c })
+        ruleValue.value = TextFieldValue(text = joinRuleFiles(contents = loaded.map { (_, content) -> content }))
         entryRuleSources.value = parseRuleSources(loaded = loaded)
         showAllRules.value = true
     }
@@ -357,12 +365,31 @@ class RuleEditorState(
      * be open. Reading here rather than reusing that state keeps the export from silently covering
      * only part of the entry.
      *
-     * Reads from disk, so unsaved edits in the open buffer are not included — the caller is expected
-     * to say so rather than to merge them in, which would export a mixture of saved and unsaved
-     * rules with no way for the reader to tell which was which.
+     * Reads the working copy, so a file edited and left is shown as edited; only the open buffer's
+     * latest keystrokes are not in it until they are stashed. An export wants
+     * [savedRuleFilesForCurrentEntry] instead.
      */
     fun parsedRuleFilesForCurrentEntry(): List<RuleSource> {
         return parseRuleSources(loaded = readRuleFiles(relativePaths = currentEntryRulePaths()))
+    }
+
+    /**
+     * The current entry's rule files as saved, as `(relativePath, content)` pairs in manifest order.
+     *
+     * Read from disk, so no unsaved edit is included — the caller says so rather than mixing saved and
+     * unsaved rules with no way for the reader to tell which was which. A sample has no disk behind it
+     * (no [manifestBaseDir]); its working copy is all there is, so that is what it returns.
+     *
+     * The content is null for a file the manifest names that cannot be read from disk, so the caller
+     * can say so instead of leaving it out unnoticed.
+     */
+    fun savedRuleFilesForCurrentEntry(): List<Pair<String, String?>> {
+        val paths = currentEntryRulePaths()
+        val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() }
+            ?: return readRuleFiles(relativePaths = paths)
+        return paths.map { relativePath ->
+            relativePath to readRuleFileFromDisk(base = base, relativePath = relativePath)
+        }
     }
 
     /**
@@ -404,7 +431,7 @@ class RuleEditorState(
         val base = manifestBaseDir.value?.let { Path.of(it).toAbsolutePath().normalize() } ?: return false
 
         return runCatching {
-            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+            val path = ManifestPathResolver.resolveAllowingEscape(baseDir = base, relativePath = relativePath)
             Files.readString(path) != ruleValue.value.text
         }.getOrDefault(defaultValue = false)
     }
@@ -418,13 +445,13 @@ class RuleEditorState(
      *
      * The map is the working copy, so it has to keep up with the buffer: a file switch reads from it,
      * and without this it would hand back the text as of the last explicit load and silently drop
-     * everything edited since. Saving is what writes through to disk; this only keeps the session
-     * consistent with itself.
+     * everything edited since. Saving is what writes through to disk — the project saver calls this
+     * first, so a file edited and then left is written along with the one on screen.
      *
      * Only when a single file is open. In "All files" the buffer is the whole entry concatenated, and
      * there is no way to attribute it back to the files it came from.
      */
-    private fun stashOpenBufferInMemory() {
+    fun stashOpenBufferInMemory() {
         if (showAllRules.value || inMemoryRuleFiles.value.isEmpty()) {
             return
         }
@@ -433,6 +460,38 @@ class RuleEditorState(
             return
         }
         inMemoryRuleFiles.value = inMemoryRuleFiles.value + (relativePath to ruleValue.value.text)
+    }
+
+    /**
+     * True when the "All files" buffer was edited since it was joined.
+     *
+     * Such an edit cannot be attributed back to the files it came from, so it can neither be saved nor
+     * stashed. The comparison is against the same join [loadRuleFiles] produced, from the working copy,
+     * which the All-files view never changes.
+     */
+    fun allFilesBufferHasEdits(): Boolean {
+        if (!showAllRules.value) {
+            return false
+        }
+        return ruleValue.value.text != joinedWorkingCopy()
+    }
+
+    private fun joinedWorkingCopy(): String {
+        return joinRuleFiles(
+            contents = entryRuleSources.value.mapNotNull { source -> inMemoryRuleFiles.value[source.relativePath] }
+        )
+    }
+
+    /** "Discard" for [pendingRuleFileSwitch]: drops the All-files edits, then opens the file asked for. */
+    fun discardAllFilesEditsAndOpenPending() {
+        val relativePath = pendingRuleFileSwitch.value ?: return
+        pendingRuleFileSwitch.value = null
+        ruleValue.value = TextFieldValue(text = joinedWorkingCopy())
+        loadSingleManifestRuleFile(relativePath = relativePath)
+    }
+
+    private fun joinRuleFiles(contents: List<String>): String {
+        return contents.joinToString(separator = "\n\n")
     }
 
     /**
@@ -457,7 +516,7 @@ class RuleEditorState(
 
     private fun readRuleFileFromDisk(base: Path, relativePath: String): String? {
         return runCatching {
-            Files.readString(resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule"))
+            Files.readString(ManifestPathResolver.resolveAllowingEscape(baseDir = base, relativePath = relativePath))
         }.getOrNull()
     }
 
@@ -481,6 +540,10 @@ class RuleEditorState(
 
     /** Load a single rule file from the current manifest entry into the editor. */
     fun loadSingleManifestRuleFile(relativePath: String) {
+        if (allFilesBufferHasEdits()) {
+            pendingRuleFileSwitch.value = relativePath
+            return
+        }
         stashOpenBufferInMemory()
         showAllRules.value = false
 
@@ -501,7 +564,7 @@ class RuleEditorState(
             return
         }
         runCatching {
-            val path = resolveManifestPathOrThrow(baseDir = base, relativePath = relativePath, label = "rule")
+            val path = ManifestPathResolver.resolveAllowingEscape(baseDir = base, relativePath = relativePath)
             val content = Files.readString(path)
             ruleValue.value = TextFieldValue(text = content)
             selectedManifestRuleFile.value = relativePath
@@ -510,23 +573,6 @@ class RuleEditorState(
             setStatus(msg = "Loaded ${path.fileName}", kind = StatusKind.SUCCESS)
         }.onFailure { ex ->
             reportManifestPathIssue(message = "Failed to load rule file: ${ex.message}")
-        }
-    }
-
-    private fun resolveManifestPathOrThrow(
-        baseDir: Path,
-        relativePath: String,
-        label: String,
-    ): Path {
-        return when (
-            val resolution = ManifestPathResolver.resolveWithinBase(
-                baseDir = baseDir,
-                relativePath = relativePath,
-                label = label,
-            )
-        ) {
-            is ManifestPathResolution.Accepted -> resolution.path
-            is ManifestPathResolution.Rejected -> throw IllegalArgumentException(resolution.message)
         }
     }
 

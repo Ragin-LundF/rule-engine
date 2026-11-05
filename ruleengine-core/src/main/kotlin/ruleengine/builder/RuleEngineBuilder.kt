@@ -13,7 +13,7 @@ import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.core.io.FileInputSupport
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
@@ -452,20 +452,22 @@ object RuleEngineBuilder {
         entry: ManifestEntry,
         relativePath: String,
         file: ManifestFile.Available,
-    ): List<RuleAst> = runCatching {
-        val text = when (file) {
-            is ManifestFile.OnDisk -> FileInputSupport.readBoundedText(path = file.path, kind = "rule file")
-            is ManifestFile.InMemory -> file.content
+    ): List<RuleAst> {
+        return runCatching {
+            val text = when (file) {
+                is ManifestFile.OnDisk -> FileInputSupport.readBoundedText(path = file.path, kind = "rule file")
+                is ManifestFile.InMemory -> file.content
+            }
+            Parser(input = text).parseRules()
+        }.getOrElse { cause ->
+            val reason = (cause as? ParseException)?.messageText ?: cause.message
+            fail(
+                manifestPath = manifestPath,
+                entryId = entry.id,
+                details = "rule file '$relativePath' could not be parsed: $reason",
+                cause = cause,
+            )
         }
-        Parser(input = text).parseRules()
-    }.getOrElse { cause ->
-        val reason = (cause as? ParseException)?.messageText ?: cause.message
-        fail(
-            manifestPath = manifestPath,
-            entryId = entry.id,
-            details = "rule file '$relativePath' could not be parsed: $reason",
-            cause = cause,
-        )
     }
 
     private fun resolveExisting(
@@ -501,11 +503,13 @@ object RuleEngineBuilder {
         details: String,
         diagnostics: List<ValidationDiagnostic> = emptyList(),
         cause: Throwable? = null,
-    ): Nothing = throw RuleEngineBuildException(
-        manifestPath = manifestPath,
-        entryId = entryId,
-        details = details,
-        diagnostics = diagnostics,
-        cause = cause,
-    )
+    ): Nothing {
+        throw RuleEngineBuildException(
+            manifestPath = manifestPath,
+            entryId = entryId,
+            details = details,
+            diagnostics = diagnostics,
+            cause = cause,
+        )
+    }
 }

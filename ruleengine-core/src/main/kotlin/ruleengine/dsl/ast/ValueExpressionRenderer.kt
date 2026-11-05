@@ -1,5 +1,36 @@
 package ruleengine.dsl.ast
 
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
+
 /**
  * Renders a parsed expression back to DSL-like text.
  *
@@ -72,6 +103,10 @@ object ValueExpressionRenderer {
                     builder.setLength(0)
                     builder.append(call).append('(').append(inner).append(", ").append(segment.count).append(')')
                 }
+                // Always the first segment, so it starts the text everything after it continues.
+                // The key and the `alias:` spelling are written exactly as `Parser.parseJoinByKey`
+                // reads them back.
+                is JoinSegmentAst -> builder.append(renderJoin(segment = segment))
                 // A sort wraps what came before it for the same reason a slice does. The member
                 // is quoted and the direction is not, matching exactly what `Parser.parseSort`
                 // reads back — this text is what the Builder round-trips through.
@@ -88,9 +123,34 @@ object ValueExpressionRenderer {
         return builder.toString()
     }
 
+    private fun renderJoin(segment: JoinSegmentAst): String {
+        val key = listOfNotNull(segment.key?.let { name -> "\"$name\"" })
+        val sources = segment.sources.map { source -> "${source.alias}: ${render(expr = source.path)}" }
+        return (key + sources).joinToString(separator = ", ", prefix = "joinByKey(", postfix = ")")
+    }
+
+    /**
+     * [value] as a DSL string literal that the lexer reads back to exactly [value].
+     *
+     * Only `\\` and `\"` are escapes, so a backslash is escaped only where it would otherwise be read
+     * as one — before `\`, before `"` or at the end. A regex's `\d` is rendered as written.
+     */
+    private fun quote(value: String): String {
+        val out = StringBuilder(value.length + 2).append('"')
+        value.forEachIndexed { index, char ->
+            val next = value.getOrNull(index = index + 1)
+            when {
+                char == '"' -> out.append("\\\"")
+                char == '\\' && (next == null || next == '\\' || next == '"') -> out.append("\\\\")
+                else -> out.append(char)
+            }
+        }
+        return out.append('"').toString()
+    }
+
     private fun renderLiteral(literal: LiteralAst): String {
         return when (literal) {
-            is StringLiteral -> "\"${literal.value}\""
+            is StringLiteral -> quote(value = literal.value)
             is NumberLiteral -> literal.value
             is BooleanLiteral -> literal.value.toString()
             is ListLiteral -> {

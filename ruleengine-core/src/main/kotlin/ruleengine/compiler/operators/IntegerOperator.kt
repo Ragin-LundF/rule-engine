@@ -3,15 +3,15 @@ package ruleengine.compiler.operators
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.NumberLiteral
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.numeric.IntegerBetweenExpression
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonExpression
-import ruleengine.evaluator.compiled.numeric.IntegerInExpression
 import ruleengine.evaluator.compiled.numeric.IntegerComparisonOperator
+import ruleengine.evaluator.compiled.numeric.IntegerInExpression
 
 object IntegerOperator {
     /** [op] is the canonical operator name; aliases are already resolved by the caller. */

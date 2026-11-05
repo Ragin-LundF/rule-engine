@@ -41,6 +41,7 @@ private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
     Triple("every", "every(orders[total > 0])", "predicate"),
     Triple("any", "any(orders[total > 1000])", "predicate"),
     Triple("sumByKey", "sumByKey(\"month\", sales.amount, refunds.amount)", "join"),
+    Triple("joinByKey", "joinByKey(\"month\", sale: sales.amount, refund: refunds.amount)", "join"),
 )
 
 /** Completions offered inside a rule's `when` block. */

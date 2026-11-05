@@ -1,5 +1,6 @@
 package ui.workbench.export
 
+import ruleengine.dsl.parser.Parser
 import ruleengine.export.RuleCatalogBuilder
 import ruleengine.export.docx.DocxCatalogWriter
 import ruleengine.export.dto.ParsedRuleFile
@@ -29,8 +30,12 @@ object RuleOverviewExport {
         data class Ready(val fileName: String, val bytes: ByteArray, val ruleCount: Int) : Result {
             // ByteArray uses identity equality, which would make the data class's generated equals
             // lie. Nothing compares these, so the members are simply not generated.
-            override fun equals(other: Any?): Boolean = this === other
-            override fun hashCode(): Int = System.identityHashCode(this)
+            override fun equals(other: Any?): Boolean {
+                return this === other
+            }
+            override fun hashCode(): Int {
+                return System.identityHashCode(this)
+            }
         }
 
         data class Unavailable(val reason: String) : Result
@@ -49,7 +54,14 @@ object RuleOverviewExport {
         val entry = state.parsedManifest.value?.entries?.find { candidate -> candidate.id == entryId }
             ?: return Result.Unavailable(reason = "Manifest entry '$entryId' is no longer in the manifest")
 
-        val files = state.parsedRuleFilesForCurrentEntry()
+        val files = mutableListOf<ParsedRuleFile>()
+        for ((relativePath, saved) in state.savedRuleFilesForCurrentEntry()) {
+            val content = saved ?: return Result.Unavailable(reason = "$relativePath is not saved yet")
+            // A file that does not parse would silently drop its rules from a document handed to a customer.
+            val rules = runCatching { Parser(input = content).parseRules() }.getOrNull()
+                ?: return Result.Unavailable(reason = "$relativePath does not parse")
+            files += ParsedRuleFile(relativePath = relativePath, rules = rules)
+        }
         if (files.all { file -> file.rules.isEmpty() }) {
             return Result.Unavailable(reason = "Entry '$entryId' has no rules to export")
         }
@@ -57,9 +69,7 @@ object RuleOverviewExport {
         val catalog = RuleCatalogBuilder.build(
             projectName = state.parsedManifest.value?.name,
             entryId = entryId,
-            files = files.map { source ->
-                ParsedRuleFile(relativePath = source.relativePath, rules = source.rules)
-            },
+            files = files,
             schema = state.ruleSchema,
             schemaPath = entry.schema,
         )

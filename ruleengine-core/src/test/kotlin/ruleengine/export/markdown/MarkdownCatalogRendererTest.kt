@@ -131,6 +131,24 @@ class MarkdownCatalogRendererTest {
         )
     }
 
+    @Test
+    fun `markdown characters in prose and in the glance cell render literally`() {
+        val markdown = oneRule(condition = "purpose regex \"^A*B*$\" or purpose equals \"<b>[x]_y\\\\\"")
+
+        val bullets = markdown.lines().filter { line -> line.startsWith(prefix = "- ") }
+        assertEquals(
+            expected = listOf(
+                "- Purpose matches the pattern \"^A\\*B\\*$\"",
+                "- Purpose is \"\\<b\\>\\[x\\]\\_y\\\\\"",
+            ),
+            actual = bullets,
+            message = markdown,
+        )
+        val indexRow = markdown.lines().single { line -> line.startsWith(prefix = "| [`r`]") }
+        assertTrue(actual = indexRow.contains(other = "\"^A\\*B\\*$\""), message = indexRow)
+        assertTrue(actual = indexRow.contains(other = "\"\\<b\\>"), message = indexRow)
+    }
+
     // ── outcomes ──────────────────────────────────────────────────────────────
 
     @Test
@@ -148,6 +166,25 @@ class MarkdownCatalogRendererTest {
             ),
             message = markdown,
         )
+    }
+
+    @Test
+    fun `a backtick in an outcome or the dsl cannot break out of inline code`() {
+        val markdown = renderRules(
+            rules = """
+                |rule "r" {
+                |  when
+                |    amount > 1
+                |  then
+                |    label "pay`now"
+                |    label "`x"
+                |}
+            """.trimMargin()
+        )
+
+        assertTrue(actual = markdown.contains(other = "**Then:** ``label pay`now``, ``label `x``"), message = markdown)
+        assertTrue(actual = markdown.contains(other = "| `label` | ``pay`now`` |"), message = markdown)
+        assertTrue(actual = markdown.contains(other = "| `label` | `` `x `` |"), message = markdown)
     }
 
     // ── one rule ──────────────────────────────────────────────────────────────
@@ -298,6 +335,16 @@ class MarkdownCatalogRendererTest {
     @Test
     fun `a rule without a not_exists branch gets no missing-data section`() {
         assertFalse(actual = renderRules(rules = TIERED_RULE).contains(other = "**When the data is missing:**"))
+    }
+
+    @Test
+    fun `the glance row lists the missing-data outcome like the word index`() {
+        val markdown = renderRules(rules = THREE_BRANCH_RULE)
+
+        assertTrue(
+            actual = markdown.contains(other = "`label high`; otherwise `label low`; when missing `label unknown`"),
+            message = markdown,
+        )
     }
 
     @Test

@@ -1,8 +1,9 @@
 package ruleengine.dsl
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.ExtractionAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
@@ -380,12 +381,14 @@ class ParserElseBranchTest {
         return assertIs<StringLiteral>(value = action.arguments.single()).value
     }
 
-    private fun parseSingle(body: String) = Parser(
-        input = """
-            rule "r" {
-              description "d"
-              $body
-            }
-        """.trimIndent()
-    ).parseRules().single()
+    private fun parseSingle(body: String): RuleAst {
+        return Parser(
+            input = """
+                rule "r" {
+                  description "d"
+                  $body
+                }
+            """.trimIndent()
+        ).parseRules().single()
+    }
 }

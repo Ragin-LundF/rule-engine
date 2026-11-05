@@ -77,7 +77,10 @@ Each field has exactly one type. The type determines which operators can be used
 > `LocalDateTime`, or an `Instant` — anything carrying a time is reduced to its date. Use `date_time`
 > when the time of day must take part in the comparison: there, a `LocalDate` input starts at midnight
 > and an `Instant` is resolved at UTC. A string input is read with the field's declared
-> [format](#date-formats), or as ISO-8601 when it declares none.
+> [format](#date-formats), or as ISO-8601 when it declares none. Without a format, an ISO timestamp
+> string is accepted too: `"2024-06-15T09:00:00"` on a `date` field reads as `2024-06-15`, and a
+> timestamp with an offset (`"2024-06-15T09:00:00Z"`, `"…+02:00"`) is resolved at UTC first, on both
+> types. Literals in rules stay strict.
 
 ---
 
@@ -210,11 +213,15 @@ operators listed for that type can be ticked.
 
 Date literals are always quoted. By default they are ISO — `YYYY-MM-DD` for a `date`,
 `YYYY-MM-DDTHH:MM:SS` for a `date_time` — and any other spelling is rejected when the rules load. A
-field that declares a [format](#date-formats) uses that pattern instead.
+`date_time` also accepts a plain `YYYY-MM-DD`, compared by calendar day. A field that declares a
+[format](#date-formats) uses that pattern instead and accepts no other spelling.
 
 Only a `date_time` comparison can see the time of day. `bookedAt gt "2024-06-15T09:00:00"` is false for
 a value at exactly 09:00:00 and true one second later; on a `date` field the same input would have been
-truncated to `2024-06-15` first.
+truncated to `2024-06-15` first. The symbolic spellings mean the same: `bookedAt == "2024-06-15T09:30:00"`
+equals `bookedAt equals …`, and comparing two `date_time` fields (`bookedAt < registeredAt`) keeps the
+time. A `date` compared with a `date_time` field is compared by calendar day, and so is a date-only
+literal on a `date_time` field without a `format`: `bookedAt lt "2024-06-16"` is true for any time on the 15th.
 
 ### Date Formats
 
@@ -242,7 +249,7 @@ pattern. It is the field's **only** date format, and it applies in both directio
 - every literal written in a rule for that field must use it — `dueDate lt "31.01.2024"`.
 
 A declared format **replaces** ISO rather than extending it, so with the schema above
-`dueDate equals "2024-01-31"` is a validation error and the input `"2024-01-31"` does not match. Leave
+`dueDate equals "2024-01-31"` (and `dueDate == "2024-01-31"`) is a validation error and the input `"2024-01-31"` does not match. Leave
 `format` out whenever the data is ISO — that is the default, and `issuedOn` above needs no declaration.
 
 The schema is rejected at load time when a `format`:

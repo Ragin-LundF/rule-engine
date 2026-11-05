@@ -17,9 +17,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.core.domain.dto.RuleBranch
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ui.diagrams.model.OutcomeSource
 import ui.diagrams.render.DiagramChip
 import ui.diagrams.render.DiagramConditionLine

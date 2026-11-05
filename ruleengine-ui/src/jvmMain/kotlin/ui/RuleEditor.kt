@@ -28,6 +28,7 @@ import ui.dock.DockController
 import ui.editor.rules.RuleEditorState
 import ui.editor.rules.model.StatusKind
 import ui.editor.rules.sections.DiagnosticsSection
+import ui.editor.rules.sections.DiscardAllFilesEditsDialog
 import ui.editor.rules.sections.StatusBarSection
 import ui.editor.rules.sections.TopBarSection
 import ui.editor.yaml.SyncModelAndYaml
@@ -355,6 +356,7 @@ actual fun RuleEditor(closeController: AppCloseController, saveController: AppSa
     val showBuilderMessage: (String) -> Unit = { message -> state.setStatus(msg = message, kind = StatusKind.ERROR) }
 
     ProjectDialogHost(workspace = workspace)
+    DiscardAllFilesEditsDialog(state = state)
 
     RuleWorkbenchScreen(
         topBar = {

@@ -21,10 +21,6 @@ object ProjectPaths {
     const val DEFAULT_SCHEMA_FILE: String = "schema.yaml"
     const val DEFAULT_ACTIONS_FILE: String = "actions.yaml"
 
-    fun rulesDir(root: Path): Path = root.resolve(RULES_DIR)
-
-    fun schemasDir(root: Path): Path = root.resolve(SCHEMAS_DIR)
-
     /**
      * Where a file the user never named should go, for an entry that has not linked one yet.
      *
@@ -75,7 +71,9 @@ object ProjectPaths {
 
     /** True when [relativePath] points outside the project — what the "(shared)" badge reports. */
     fun isExternal(relativePath: String): Boolean {
-        return relativePath.startsWith(prefix = "../") ||
-                runCatching { Path.of(relativePath).isAbsolute }.getOrDefault(defaultValue = false)
+        // Normalised so `rules/../../x`, `./../x` and Windows `..\x` are caught, not only a leading `../`.
+        val path = runCatching { Path.of(relativePath.replace(oldChar = '\\', newChar = '/')).normalize() }
+            .getOrNull() ?: return false
+        return path.isAbsolute || path.startsWith("..")
     }
 }

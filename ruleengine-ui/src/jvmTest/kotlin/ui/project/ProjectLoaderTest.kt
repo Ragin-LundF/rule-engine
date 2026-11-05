@@ -141,6 +141,38 @@ class ProjectLoaderTest {
         assertTrue(actual = state.schemaText.value.contains(other = "shared"))
     }
 
+    /** Rule files follow the engine's rule: a trusted manifest may reach a shared file above the root. */
+    @Test
+    fun `rule file outside the project root is loaded`() {
+        val parent = Files.createTempDirectory("shared-rules")
+        val shared = Files.createDirectories(parent.resolve("shared"))
+        Files.writeString(shared.resolve("common.rule"), ruleText(ruleId = "shared-rule"))
+
+        val root = Files.createDirectories(parent.resolve("project"))
+        Files.writeString(root.resolve("schema.yaml"), schemaYaml(name = "local"))
+        Files.writeString(
+            root.resolve("manifest.yaml"),
+            """
+                entries:
+                  - id: default
+                    schema: schema.yaml
+                    rules:
+                      - ../shared/common.rule
+            """.trimIndent(),
+        )
+        val state = newState()
+
+        val result = ProjectLoader(dirtyState = ProjectDirtyState()).load(
+            manifestPath = root.resolve("manifest.yaml"),
+            into = state,
+        )
+
+        val loaded = assertIs<ProjectLoadResult.Loaded>(value = result)
+        assertEquals(expected = emptyList(), actual = loaded.session.missingFiles)
+        val sharedRule = state.inMemoryRuleFiles.value.getValue(key = "../shared/common.rule")
+        assertTrue(actual = sharedRule.contains(other = "shared-rule"))
+    }
+
     /** Every entry has to survive the load: the ones not on screen are still part of the project. */
     @Test
     fun `manifest with several entries keeps them all and opens the first`() {
@@ -184,7 +216,9 @@ class ProjectLoaderTest {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun newState() = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+    private fun newState(): RuleEditorState {
+        return RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+    }
 
     private fun multiEntryProject(): Path {
         val root = createProject(name = "alpha", ruleId = "alpha-rule")
@@ -229,27 +263,33 @@ class ProjectLoaderTest {
         return root
     }
 
-    private fun schemaYaml(name: String): String = """
-        schema: $name
-        fields:
-          purpose:
-            type: text
-            normalizers:
-              - trim
-            operators:
-              - equals
-    """.trimIndent()
+    private fun schemaYaml(name: String): String {
+        return """
+            schema: $name
+            fields:
+              purpose:
+                type: text
+                normalizers:
+                  - trim
+                operators:
+                  - equals
+        """.trimIndent()
+    }
 
-    private fun actionsYaml(): String = """
-        actions:
-          label:
-            argTypes: [string]
-    """.trimIndent()
+    private fun actionsYaml(): String {
+        return """
+            actions:
+              label:
+                argTypes: [string]
+        """.trimIndent()
+    }
 
-    private fun ruleText(ruleId: String): String = """
-        rule "$ruleId" {
-          when purpose equals "rent"
-          then label "rent"
-        }
-    """.trimIndent()
+    private fun ruleText(ruleId: String): String {
+        return """
+            rule "$ruleId" {
+              when purpose equals "rent"
+              then label "rent"
+            }
+        """.trimIndent()
+    }
 }

@@ -1,10 +1,10 @@
 package ruleengine.dsl
 
+import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
-import ruleengine.dsl.parser.Parser
 
 class ParserTest {
     @Test
@@ -73,7 +73,7 @@ class ParserTest {
         """.trimIndent()
 
         val condition = Parser(input = txt).parseRules().single().condition
-        val and = condition as ruleengine.dsl.ast.AndAst
+        val and = condition as ruleengine.dsl.ast.condition.AndAst
         assertEquals(expected = 3, actual = and.children.size)
     }
 
@@ -90,7 +90,7 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.AndAst
+        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.AndAst
         assertEquals(expected = 3, actual = and.children.size)
     }
 
@@ -108,10 +108,10 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val or = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.OrAst
+        val or = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.OrAst
         assertEquals(expected = 2, actual = or.children.size)
         // `b and c` on the right-hand side, because the implicit and binds tighter.
-        assertIs<ruleengine.dsl.ast.AndAst>(value = or.children[1])
+        assertIs<ruleengine.dsl.ast.condition.AndAst>(value = or.children[1])
     }
 
     @Test
@@ -127,9 +127,9 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.AndAst
+        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.AndAst
         assertEquals(expected = 2, actual = and.children.size)
-        assertIs<ruleengine.dsl.ast.OrAst>(value = and.children[0])
+        assertIs<ruleengine.dsl.ast.condition.OrAst>(value = and.children[0])
     }
 
     @Test
@@ -144,9 +144,9 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.AndAst
+        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.AndAst
         assertEquals(expected = 2, actual = and.children.size)
-        val first = and.children[0] as ruleengine.dsl.ast.ConditionAst
+        val first = and.children[0] as ruleengine.dsl.ast.condition.ConditionAst
         assertTrue(actual = first.ignoreCase)
     }
 
@@ -164,12 +164,12 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.AndAst
-        val first = and.children[0] as ruleengine.dsl.ast.ConditionAst
-        val second = and.children[1] as ruleengine.dsl.ast.ConditionAst
+        val and = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.AndAst
+        val first = and.children[0] as ruleengine.dsl.ast.condition.ConditionAst
+        val second = and.children[1] as ruleengine.dsl.ast.condition.ConditionAst
 
-        assertEquals(expected = ruleengine.dsl.ast.BooleanLiteral(value = true), actual = first.value)
-        assertEquals(expected = ruleengine.dsl.ast.BooleanLiteral(value = false), actual = second.value)
+        assertEquals(expected = ruleengine.dsl.ast.literal.BooleanLiteral(value = true), actual = first.value)
+        assertEquals(expected = ruleengine.dsl.ast.literal.BooleanLiteral(value = false), actual = second.value)
     }
 
     @Test
@@ -184,9 +184,9 @@ class ParserTest {
         """.trimIndent()
 
         val comparison = Parser(input = txt).parseRules()
-            .single().condition as ruleengine.dsl.ast.ComparisonExpressionAst
-        val right = comparison.right as ruleengine.dsl.ast.LiteralValueAst
-        assertEquals(expected = ruleengine.dsl.ast.BooleanLiteral(value = true), actual = right.literal)
+            .single().condition as ruleengine.dsl.ast.condition.ComparisonExpressionAst
+        val right = comparison.right as ruleengine.dsl.ast.value.LiteralValueAst
+        assertEquals(expected = ruleengine.dsl.ast.literal.BooleanLiteral(value = true), actual = right.literal)
     }
 
     @Test
@@ -200,8 +200,8 @@ class ParserTest {
             }
         """.trimIndent()
 
-        val condition = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.ConditionAst
-        val between = condition.value as ruleengine.dsl.ast.BetweenLiteral
+        val condition = Parser(input = txt).parseRules().single().condition as ruleengine.dsl.ast.condition.ConditionAst
+        val between = condition.value as ruleengine.dsl.ast.literal.BetweenLiteral
         assertEquals(expected = "2024-01-01", actual = between.low)
         assertEquals(expected = "2024-12-31", actual = between.high)
     }

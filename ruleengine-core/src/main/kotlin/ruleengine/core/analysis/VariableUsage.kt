@@ -1,27 +1,28 @@
 package ruleengine.core.analysis
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 
 /**
  * Which variables a rule reads and which it publishes.
@@ -141,6 +142,10 @@ object VariableUsage {
                     // A slice holds a literal count and a sort a literal member name, so neither
                     // can read a variable.
                     is FieldSegmentAst, is SliceSegmentAst, is SortSegmentAst -> Unit
+                    // Each source is a path of its own, and its filters may read variables.
+                    is JoinSegmentAst -> segment.sources.forEach { source ->
+                        collectFromValue(expr = source.path, into = into)
+                    }
                 }
             }
         }

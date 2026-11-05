@@ -5,7 +5,7 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
-import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.compiled.value.result.TextExpressionValue
 import ruleengine.evaluator.context.PreparedRuleContext
@@ -179,13 +179,15 @@ class ComparisonIgnoreCaseTest {
         return compiled.single().expression.evaluate(context = prepared, trace = null)
     }
 
-    private fun rule(condition: String) = """
-        rule "ignore-case" {
-          description "symbolic comparison with the ignoreCase modifier"
-          when
-            $condition
-          then
-            flag "ok"
-        }
-    """.trimIndent()
+    private fun rule(condition: String): String {
+        return """
+            rule "ignore-case" {
+              description "symbolic comparison with the ignoreCase modifier"
+              when
+                $condition
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+    }
 }

@@ -47,10 +47,8 @@ object ExpressionValues {
             // Placed after the text pair, so two strings still compare as text. A date matched
             // against text only reaches here when one side really is a date, and then the ISO
             // reading is the only one that could have been meant.
-            left is DateExpressionValue || right is DateExpressionValue -> {
-                val leftDate = asDate(value = left)
-                leftDate != null && leftDate == asDate(value = right)
-            }
+            left is DateExpressionValue || right is DateExpressionValue ->
+                compareDates(left = left, right = right) == 0
 
             else -> false
         }
@@ -72,6 +70,24 @@ object ExpressionValues {
     }
 
     /**
+     * Order of two date values, or null when either is not one.
+     *
+     * Time precision when both sides carry a time of day (two `date_time` fields, or one and a literal
+     * read under its declaration); otherwise by calendar day, so a `date` compared with a `date_time`
+     * truncates the time as RULE-SPEC describes. Text is read as an ISO date, see [asDate].
+     */
+    fun compareDates(left: ExpressionValue, right: ExpressionValue): Int? {
+        val leftDate = asDate(value = left) ?: return null
+        val rightDate = asDate(value = right) ?: return null
+        val leftTime = (left as? DateExpressionValue)?.timeOfDay
+        val rightTime = (right as? DateExpressionValue)?.timeOfDay
+        if (leftTime != null && rightTime != null) {
+            return leftDate.atTime(leftTime).compareTo(rightDate.atTime(rightTime))
+        }
+        return leftDate.compareTo(rightDate)
+    }
+
+    /**
      * Order of two scalars, the counterpart to [equalsByValue] and what `sortBy` orders elements by.
      *
      * Total, so a list holding more than one kind of value still comes out in a defined order rather
@@ -88,10 +104,9 @@ object ExpressionValues {
      */
     fun compareByValue(left: ExpressionValue, right: ExpressionValue): Int {
         if (left is DateExpressionValue || right is DateExpressionValue) {
-            val leftDate = asDate(value = left)
-            val rightDate = asDate(value = right)
-            if (leftDate != null && rightDate != null) {
-                return leftDate.compareTo(rightDate)
+            val byDate = compareDates(left = left, right = right)
+            if (byDate != null) {
+                return byDate
             }
         }
         val byKind = orderRank(value = left).compareTo(orderRank(value = right))

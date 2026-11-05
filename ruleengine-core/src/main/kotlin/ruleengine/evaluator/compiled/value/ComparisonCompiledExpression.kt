@@ -1,7 +1,7 @@
 package ruleengine.evaluator.compiled.value
 
 import ruleengine.core.domain.dto.ConditionVerdict
-import ruleengine.dsl.ast.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
@@ -120,7 +120,8 @@ class ComparisonCompiledExpression(
             is TextExpressionValue -> value.value
             is BooleanExpressionValue -> value.value
             is ArrayExpressionValue -> value.values.map { element -> plainValue(value = element) }
-            is DateExpressionValue -> value.value.toString()
+            is DateExpressionValue -> value.timeOfDay?.let { time -> value.value.atTime(time).toString() }
+                ?: value.value.toString()
             is ObjectExpressionValue, MissingExpressionValue -> null
         }
     }
@@ -211,7 +212,8 @@ class ComparisonCompiledExpression(
     }
 
     /**
-     * Two calendar dates, with either side allowed to arrive as ISO-8601 text.
+     * Two dates — at time precision when both carry a time — with either side allowed to arrive as
+     * ISO-8601 text.
      *
      * A value that is neither is not comparable to a date, so the comparison is undecided rather than
      * an error — the same answer a missing operand gives.
@@ -221,9 +223,7 @@ class ComparisonCompiledExpression(
         operator: ComparisonOperatorAst,
         rightValue: ExpressionValue
     ): Boolean? {
-        val left = ExpressionValues.asDate(value = leftValue) ?: return null
-        val right = ExpressionValues.asDate(value = rightValue) ?: return null
-        val cmp = left.compareTo(right)
+        val cmp = ExpressionValues.compareDates(left = leftValue, right = rightValue) ?: return null
         return when (operator) {
             ComparisonOperatorAst.EQ -> cmp == 0
             ComparisonOperatorAst.NEQ -> cmp != 0

@@ -1,5 +1,6 @@
 package ui
 
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -42,8 +43,9 @@ class SyntaxHighlighterTest {
     private val schema = FieldSchemaLoader.loadFromString(content = SCHEMA_TEXT, nameHint = "transaction-v1")
     private val actions = ActionSchemaLoader.loadFromString(content = ACTIONS_TEXT)
 
-    private fun annotate(text: String, diagnostics: List<ValidationDiagnostic> = emptyList()) =
-        annotateRule(text = text, schema = schema, actions = actions, diagnostics = diagnostics)
+    private fun annotate(text: String, diagnostics: List<ValidationDiagnostic> = emptyList()): AnnotatedString {
+        return annotateRule(text = text, schema = schema, actions = actions, diagnostics = diagnostics)
+    }
 
     /** Every style whose range covers the first occurrence of [token]. */
     private fun stylesOn(annotated: AnnotatedString, token: String): List<SpanStyle> {
@@ -52,8 +54,10 @@ class SyntaxHighlighterTest {
         return annotated.spanStyles.filter { at >= it.start && at < it.end }.map { it.item }
     }
 
-    private fun colorOf(annotated: AnnotatedString, token: String) =
-        stylesOn(annotated = annotated, token = token).firstNotNullOfOrNull { it.color.takeIf { c -> c.alpha > 0f } }
+    private fun colorOf(annotated: AnnotatedString, token: String): Color? {
+        return stylesOn(annotated = annotated, token = token)
+            .firstNotNullOfOrNull { it.color.takeIf { c -> c.alpha > 0f } }
+    }
 
     @Test
     fun `empty text is returned unstyled`() {
@@ -137,6 +141,18 @@ class SyntaxHighlighterTest {
         val result = annotate(text = "rule \"r\" {\n  when\n    amount >= 500\n  then\n    label \"x\"\n}")
 
         assertTrue(actual = colorOf(annotated = result, token = "500") != colorOf(annotated = result, token = "\"r\""))
+    }
+
+    /** The token holds the decoded value; the colour has to cover what was typed, quotes and escapes included. */
+    @Test
+    fun `a string with escapes is coloured up to its closing quote`() {
+        val literal = "\"a\\\"b\\\\\""
+        val src = "rule \"r\" {\n  when\n    purpose equals $literal\n  then\n    label \"x\"\n}"
+        val result = annotate(text = src)
+
+        val start = src.indexOf(literal)
+        val stringSpan = result.spanStyles.single { span -> span.start == start }
+        assertEquals(expected = start + literal.length, actual = stringSpan.end)
     }
 
     @Test

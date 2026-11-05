@@ -5,6 +5,7 @@ import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.RuleEditorState
 import ui.workbench.export.RuleOverviewExport
 import java.io.ByteArrayInputStream
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDate
 import java.util.zip.ZipInputStream
@@ -25,14 +26,14 @@ class RuleOverviewExportTest {
         Path.of("../ruleengine-core/src/test/resources/warehouse-shipments").toAbsolutePath().normalize()
 
     /** A state loaded the way the workbench loads it, with one rule file open. */
-    private fun loadedState(): RuleEditorState {
+    private fun loadedState(dir: Path = projectDir): RuleEditorState {
         val state = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
-        state.manifestBaseDir.value = projectDir.absolutePathString()
+        state.manifestBaseDir.value = dir.absolutePathString()
         state.parsedManifest.value = ruleengine.manifest.ManifestLoader.load(
-            path = projectDir.resolve("manifest.yaml")
+            path = dir.resolve("manifest.yaml")
         )
         state.selectedManifestEntry.value = "shipment-assessment"
-        state.parsedSchema.value = FieldSchemaLoader.load(path = projectDir.resolve("schema.yaml"))
+        state.parsedSchema.value = FieldSchemaLoader.load(path = dir.resolve("schema.yaml"))
         state.loadSingleManifestRuleFile("rules/route-risk.rule")
 
         return state
@@ -146,6 +147,46 @@ class RuleOverviewExportTest {
 
         assertIs<RuleOverviewExport.Result.Unavailable>(value = result)
         assertTrue(actual = result.reason.contains(other = "no rules"), message = result.reason)
+    }
+
+    @Test
+    fun `exports the saved files, not edits held in the working copy`() {
+        val state = loadedState()
+        state.loadAllRuleFilesForCurrentEntry()
+        // An edit left in memory: route-risk emptied but never saved.
+        state.inMemoryRuleFiles.value = state.inMemoryRuleFiles.value + ("rules/route-risk.rule" to "")
+
+        val result = RuleOverviewExport.export(state = state, format = RuleOverviewExport.Format.MARKDOWN)
+
+        assertEquals(expected = 16, actual = assertIs<RuleOverviewExport.Result.Ready>(value = result).ruleCount)
+    }
+
+    @Test
+    fun `a rule file that does not parse makes the export unavailable instead of dropping its rules`() {
+        val copy = Files.createTempDirectory("overview-broken")
+        projectDir.toFile().copyRecursively(target = copy.toFile(), overwrite = true)
+        Files.writeString(copy.resolve("rules/route-risk.rule"), "rule \"broken\" {\n  when\n")
+
+        val result = RuleOverviewExport.export(
+            state = loadedState(dir = copy),
+            format = RuleOverviewExport.Format.MARKDOWN,
+        )
+
+        val unavailable = assertIs<RuleOverviewExport.Result.Unavailable>(value = result)
+        assertEquals(expected = "rules/route-risk.rule does not parse", actual = unavailable.reason)
+    }
+
+    @Test
+    fun `a rule file missing on disk makes the export unavailable instead of leaving it out`() {
+        val copy = Files.createTempDirectory("overview-missing")
+        projectDir.toFile().copyRecursively(target = copy.toFile(), overwrite = true)
+        val state = loadedState(dir = copy)
+        Files.delete(copy.resolve("rules/route-risk.rule"))
+
+        val result = RuleOverviewExport.export(state = state, format = RuleOverviewExport.Format.MARKDOWN)
+
+        val unavailable = assertIs<RuleOverviewExport.Result.Unavailable>(value = result)
+        assertEquals(expected = "rules/route-risk.rule is not saved yet", actual = unavailable.reason)
     }
 
     @Test

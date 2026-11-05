@@ -208,7 +208,98 @@ class AggregateSemanticsTest {
         )
     }
 
+    // ── a collection nested in a present object ───────────────────────────────
+
+    /**
+     * `account.orders` with `account` present: an absent `orders` is missing exactly as an absent
+     * root is, and an empty one is empty. Reading the nested absent case as empty used to answer
+     * `0` / `true` and let a rule pass on data it never had.
+     */
+    @Test
+    fun `a nested collection that did not arrive is missing, not empty`() {
+        assertNested(expression = "count(account.orders)", absent = null, empty = BigDecimal.ZERO)
+        assertNested(expression = "count(account.orders.amount)", absent = null, empty = BigDecimal.ZERO)
+        assertNested(expression = "sum(account.orders.amount)", absent = null, empty = BigDecimal.ZERO)
+        assertNested(expression = "every(account.orders[amount > 0])", absent = null, empty = true)
+        assertNested(expression = "any(account.orders[amount > 0])", absent = null, empty = false)
+        assertNested(expression = "isAvailable(account.orders)", absent = false, empty = false)
+        assertNested(expression = "isEmpty(account.orders)", absent = false, empty = true)
+    }
+
+    @Test
+    fun `a nested null collection is missing`() {
+        assertEquals(
+            expected = null,
+            actual = valueOf(
+                expression = "count(account.orders)",
+                fields = arrayOf("account" to mapOf("orders" to null)),
+            ),
+        )
+    }
+
+    /**
+     * Past a collection, an element without the member contributes nothing: the record does carry
+     * the orders, so a projection over them is empty rather than missing.
+     */
+    @Test
+    fun `a projection across a collection still flattens`() {
+        val withoutAmounts: Array<Pair<String, Any?>> = arrayOf("orders" to listOf(mapOf("other" to 1)))
+
+        assertEquals(
+            expected = BigDecimal.ZERO,
+            actual = valueOf(expression = "count(orders.amount)", fields = withoutAmounts),
+        )
+        assertEquals(
+            expected = BigDecimal.ZERO,
+            actual = valueOf(expression = "sum(orders.amount)", fields = withoutAmounts),
+        )
+        assertEquals(
+            expected = true,
+            actual = valueOf(expression = "isEmpty(orders.amount)", fields = withoutAmounts),
+        )
+    }
+
     // ── the harness ───────────────────────────────────────────────────────────
+
+    /** A member arrives as the text the record held; every aggregate reads it as `sumByKey` does. */
+    @Test
+    fun `aggregates read numeric text members as numbers`() {
+        val textAmounts: Array<Pair<String, Any?>> =
+            arrayOf("orders" to listOf(mapOf("amount" to "10"), mapOf("amount" to "20"), mapOf("amount" to "n/a")))
+        val expected = mapOf(
+            "sum(orders.amount)" to BigDecimal(30),
+            "avg(orders.amount)" to BigDecimal(15),
+            "median(orders.amount)" to BigDecimal(15),
+            "max(orders.amount)" to BigDecimal(20),
+            "min(orders.amount)" to BigDecimal(10),
+            "subtract(orders.amount)" to BigDecimal(-10),
+        )
+        expected.forEach { (expression, value) ->
+            assertEquals(
+                expected = value.stripTrailingZeros(),
+                actual = valueOf(expression = expression, fields = textAmounts),
+                message = expression
+            )
+        }
+        val single: Array<Pair<String, Any?>> = arrayOf("orders" to listOf(mapOf("amount" to "10")))
+        assertEquals(
+            expected = BigDecimal.TEN.stripTrailingZeros(),
+            actual = valueOf(expression = "sum(orders.amount)", fields = single)
+        )
+    }
+
+    private fun assertNested(expression: String, absent: Any?, empty: Any?) {
+        assertEquals(
+            expected = absent,
+            actual = valueOf(expression = expression, fields = NESTED_ABSENT),
+            message = "$expression / nested absent",
+        )
+        assertEquals(
+            expected = empty,
+            actual = valueOf(expression = expression, fields = NESTED_EMPTY),
+            message = "$expression / nested empty",
+        )
+    }
 
     private fun assertShapes(
         expression: String,
@@ -263,6 +354,22 @@ class AggregateSemanticsTest {
                         )
                     )
                 ),
+                FieldId(value = "account") to FieldDefinition(
+                    id = FieldId(value = "account"),
+                    type = FieldType.OBJECT,
+                    fields = mapOf(
+                        FieldId(value = "orders") to FieldDefinition(
+                            id = FieldId(value = "orders"),
+                            type = FieldType.COLLECTION,
+                            fields = mapOf(
+                                FieldId(value = "amount") to FieldDefinition(
+                                    id = FieldId(value = "amount"),
+                                    type = FieldType.DECIMAL,
+                                )
+                            )
+                        )
+                    )
+                ),
                 FieldId(value = "gate") to FieldDefinition(
                     id = FieldId(value = "gate"),
                     type = FieldType.BOOLEAN,
@@ -275,5 +382,7 @@ class AggregateSemanticsTest {
         val SINGLE: Array<Pair<String, Any?>> = arrayOf("orders" to listOf(mapOf("amount" to 5)))
         val SEVERAL: Array<Pair<String, Any?>> =
             arrayOf("orders" to listOf(mapOf("amount" to 5), mapOf("amount" to 7)))
+        val NESTED_ABSENT: Array<Pair<String, Any?>> = arrayOf("account" to mapOf("id" to 1))
+        val NESTED_EMPTY: Array<Pair<String, Any?>> = arrayOf("account" to mapOf("orders" to emptyList<Any>()))
     }
 }

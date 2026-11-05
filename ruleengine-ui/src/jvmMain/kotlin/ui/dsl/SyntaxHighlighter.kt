@@ -94,23 +94,25 @@ fun annotateRule(
  * Used twice: to style the comments, and to stop the token pass recolouring keywords that happen to
  * sit inside one. An unterminated comment runs to the end of the text.
  */
-private fun commentRangesOf(text: String): List<IntRange> = buildList {
-    var inComment = false
-    var start = 0
-    text.forEachIndexed { idx, ch ->
-        when {
-            ch == '#' && !inComment -> {
-                inComment = true
-                start = idx
-            }
+private fun commentRangesOf(text: String): List<IntRange> {
+    return buildList {
+        var inComment = false
+        var start = 0
+        text.forEachIndexed { idx, ch ->
+            when {
+                ch == '#' && !inComment -> {
+                    inComment = true
+                    start = idx
+                }
 
-            ch == '\n' && inComment -> {
-                add(start until idx)
-                inComment = false
+                ch == '\n' && inComment -> {
+                    add(start until idx)
+                    inComment = false
+                }
             }
         }
+        if (inComment) add(start until text.length)
     }
-    if (inComment) add(start until text.length)
 }
 
 private fun AnnotatedString.Builder.styleComments(text: String, commentRanges: List<IntRange>) {
@@ -136,7 +138,8 @@ private fun AnnotatedString.Builder.styleTokens(
     known: KnownNames,
 ) {
     val lineStarts = lineStartOffsetsOf(text = text)
-    try {
+    // Partial or invalid text during editing: the failure is ignored, see above.
+    runCatching {
         Lexer(input = text).tokenize()
             .takeWhile { it.type != TokenType.EOF }
             .forEach { tok ->
@@ -148,8 +151,6 @@ private fun AnnotatedString.Builder.styleTokens(
                     known = known,
                 )
             }
-    } catch (_: Exception) {
-        // partial / invalid text during editing – ignore
     }
 }
 
@@ -161,33 +162,58 @@ private fun AnnotatedString.Builder.styleToken(
     known: KnownNames,
 ) {
     val start = absOffset(lineStarts = lineStarts, textLength = text.length, line = tok.line, col = tok.col)
-    val end = (start + tok.text.length).coerceAtMost(maximumValue = text.length)
+    val end = if (tok.type == TokenType.STRING) {
+        stringLiteralEnd(text = text, openingQuote = start)
+    } else {
+        (start + tok.text.length).coerceAtMost(maximumValue = text.length)
+    }
     if (start !in 0..<end) return
     if (commentRanges.any { start in it }) return // inside comment – skip
     val style = tokenStyle(tok = tok, known = known) ?: return
     addStyle(style, start, end)
 }
 
+/**
+ * The end of the string literal opening at [openingQuote], in the source.
+ *
+ * A string token carries its decoded value, which is shorter than what was typed — the quotes and
+ * every escape are gone — so its length would leave the tail of the literal uncoloured. A backslash
+ * always takes the next character with it, mirroring the lexer, so `\"` never ends the literal.
+ */
+private fun stringLiteralEnd(text: String, openingQuote: Int): Int {
+    var index = openingQuote + 1
+    while (index < text.length) {
+        when (text[index]) {
+            '\\' -> index += 2
+            '"' -> return index + 1
+            else -> index++
+        }
+    }
+    return text.length
+}
+
 /** The colour for one token, or null for token types that are left as-is. */
-private fun tokenStyle(tok: Token, known: KnownNames): SpanStyle? = when (tok.type) {
-    TokenType.STRING -> SpanStyle(color = ColorString)
-    TokenType.NUMBER -> SpanStyle(color = ColorNumber)
-    TokenType.LBRACE, TokenType.RBRACE,
-    TokenType.LPAREN, TokenType.RPAREN,
-    TokenType.LBRACKET, TokenType.RBRACKET,
-    TokenType.COMMA,
-    -> SpanStyle(color = TextSecondary)
+private fun tokenStyle(tok: Token, known: KnownNames): SpanStyle? {
+    return when (tok.type) {
+        TokenType.STRING -> SpanStyle(color = ColorString)
+        TokenType.NUMBER -> SpanStyle(color = ColorNumber)
+        TokenType.LBRACE, TokenType.RBRACE,
+        TokenType.LPAREN, TokenType.RPAREN,
+        TokenType.LBRACKET, TokenType.RBRACKET,
+        TokenType.COMMA, TokenType.COLON,
+        -> SpanStyle(color = TextSecondary)
 
-    TokenType.PLUS, TokenType.MINUS,
-    TokenType.STAR, TokenType.SLASH,
-    TokenType.EQEQ, TokenType.BANGEQ,
-    TokenType.GT, TokenType.GTE,
-    TokenType.LT, TokenType.LTE,
-    -> SpanStyle(color = ColorOp)
+        TokenType.PLUS, TokenType.MINUS,
+        TokenType.STAR, TokenType.SLASH,
+        TokenType.EQEQ, TokenType.BANGEQ,
+        TokenType.GT, TokenType.GTE,
+        TokenType.LT, TokenType.LTE,
+        -> SpanStyle(color = ColorOp)
 
-    TokenType.IDENT -> identifierStyle(word = tok.text, known = known)
+        TokenType.IDENT -> identifierStyle(word = tok.text, known = known)
 
-    else -> null
+        else -> null
+    }
 }
 
 /**
@@ -196,16 +222,18 @@ private fun tokenStyle(tok: Token, known: KnownNames): SpanStyle? = when (tok.ty
  * Order matters: the DSL's own vocabulary wins over schema names, so a field unluckily called `and`
  * still reads as the logic keyword it will be parsed as.
  */
-private fun identifierStyle(word: String, known: KnownNames): SpanStyle = when {
-    word in DSL_STRUCTURE -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
-    word in DSL_LOGIC -> SpanStyle(color = ColorLogic, fontWeight = FontWeight.Medium)
-    word in DSL_BOOL -> SpanStyle(color = ColorNumber)
-    word.all { it in OP_CHARS } -> SpanStyle(color = ColorOp)
-    word in known.fields -> SpanStyle(color = ColorField)
-    word in DSL_NAMED_OPS -> SpanStyle(color = ColorOp)
-    word in DSL_FUNCTIONS -> SpanStyle(color = ColorOp, fontWeight = FontWeight.Medium)
-    word in known.actions -> SpanStyle(color = ColorAction)
-    else -> SpanStyle(color = TextPrimary)
+private fun identifierStyle(word: String, known: KnownNames): SpanStyle {
+    return when {
+        word in DSL_STRUCTURE -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
+        word in DSL_LOGIC -> SpanStyle(color = ColorLogic, fontWeight = FontWeight.Medium)
+        word in DSL_BOOL -> SpanStyle(color = ColorNumber)
+        word.all { it in OP_CHARS } -> SpanStyle(color = ColorOp)
+        word in known.fields -> SpanStyle(color = ColorField)
+        word in DSL_NAMED_OPS -> SpanStyle(color = ColorOp)
+        word in DSL_FUNCTIONS -> SpanStyle(color = ColorOp, fontWeight = FontWeight.Medium)
+        word in known.actions -> SpanStyle(color = ColorAction)
+        else -> SpanStyle(color = TextPrimary)
+    }
 }
 
 /** Underlines each positioned diagnostic from its column to the end of its line. */
@@ -243,9 +271,11 @@ private fun AnnotatedString.Builder.underlineDiagnostic(
 }
 
 /** Line start offsets, for fast (line, col) → absolute offset mapping. */
-private fun lineStartOffsetsOf(text: String): List<Int> = buildList {
-    add(0)
-    text.forEachIndexed { idx, ch -> if (ch == '\n') add(idx + 1) }
+private fun lineStartOffsetsOf(text: String): List<Int> {
+    return buildList {
+        add(0)
+        text.forEachIndexed { idx, ch -> if (ch == '\n') add(idx + 1) }
+    }
 }
 
 private fun absOffset(lineStarts: List<Int>, textLength: Int, line: Int, col: Int): Int {

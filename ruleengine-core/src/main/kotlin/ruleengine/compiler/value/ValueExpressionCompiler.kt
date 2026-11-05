@@ -1,29 +1,32 @@
 package ruleengine.compiler.value
 
+import ruleengine.compiler.value.ValueExpressionCompiler.compileCollectionPredicate
 import ruleengine.core.domain.FieldPathResolver
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.isMultiValued
 import ruleengine.core.errors.CompilationException
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.CompiledExpression
+import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CollectionEmptyCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CollectionPredicateCompiledValueExpression
@@ -35,6 +38,7 @@ import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.VariableRefCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
+import ruleengine.evaluator.compiled.value.path.CompiledJoinSegment
 import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSliceSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSortSegment
@@ -135,15 +139,20 @@ internal object ValueExpressionCompiler {
                     compiledSegments += CompiledFilterSegment(expression = compiler(segment.expression, scope))
                 }
 
-                is SliceSegmentAst -> {
-                    // Validation reports a bad count as a diagnostic; reaching the compiler with one
-                    // means the rule was compiled without being validated first.
-                    val count = segment.count.toIntOrNull()?.takeIf { value -> value >= 0 }
-                        ?: throw CompilationException(
-                            ruleId = ruleId,
-                            details = "Slice size must be a non-negative whole number, but was '${segment.count}'"
-                        )
-                    compiledSegments += CompiledSliceSegment(fromEnd = segment.fromEnd, count = count)
+                is SliceSegmentAst -> compiledSegments += compileSlice(segment = segment, ruleId = ruleId)
+
+                // The rows declare the key and one decimal per alias, so a filter on them resolves
+                // its members — and the key's normalizers — exactly as validation checked them.
+                is JoinSegmentAst -> {
+                    compiledSegments += compileJoin(
+                        segment = segment,
+                        schema = schema,
+                        ruleId = ruleId,
+                        filterCompiler = filterCompiler
+                    )
+                    definition = JoinedRowSchema.of(segment = segment, schema = schema)
+                    multiValued = true
+                    fields = definition.fields
                 }
 
                 // The member is resolved here and nowhere later: this is the last stage that still
@@ -166,6 +175,17 @@ internal object ValueExpressionCompiler {
                 segment !is CompiledFieldSegment
             }
         )
+    }
+
+    private fun compileSlice(segment: SliceSegmentAst, ruleId: String?): CompiledSliceSegment {
+        // Validation reports a bad count as a diagnostic; reaching the compiler with one means the
+        // rule was compiled without being validated first.
+        val count = segment.count.toIntOrNull()?.takeIf { value -> value >= 0 }
+            ?: throw CompilationException(
+                ruleId = ruleId,
+                details = "Slice size must be a non-negative whole number, but was '${segment.count}'"
+            )
+        return CompiledSliceSegment(fromEnd = segment.fromEnd, count = count)
     }
 
     /**
@@ -330,24 +350,79 @@ internal object ValueExpressionCompiler {
                         "sumByKey(\"month\", sales.amount, refunds.amount)"
             )
         val sources = expr.arguments.drop(n = 1).map { argument ->
-            val path = (argument as? FieldAccessAst)?.path
-            val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
-            if (path == null || valueMember == null || path.size < 2) {
-                throw CompilationException(
-                    ruleId = ruleId,
-                    details = "sumByKey() expects each source to name a collection and a numeric " +
-                            "member, such as sales.amount"
-                )
-            }
-            val collection = compileFieldAccess(
-                expr = FieldAccessAst(path = path.dropLast(n = 1)),
+            compileKeyedSource(
+                functionName = CollectionFunctionName.SUM_BY_KEY.dslName,
+                argument = argument,
                 schema = schema,
                 ruleId = ruleId,
                 filterCompiler = filterCompiler
-            ) as FieldAccessCompiledValueExpression
-            KeyedSumCompiledValueExpression.Source(collection = collection, valueMember = valueMember)
+            )
         }
         return KeyedSumCompiledValueExpression(key = key, sources = sources)
+    }
+
+    /**
+     * `joinByKey("period", credit: credits.amount, debit: debits.amount)` — the key plus one source
+     * per alias, each cut exactly as a `sumByKey` source is.
+     */
+    private fun compileJoin(
+        segment: JoinSegmentAst,
+        schema: FieldSchema,
+        ruleId: String?,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledJoinSegment {
+        val functionName = DslFunctions.JOIN_NAMES.single()
+        val key = segment.key ?: throw CompilationException(
+            ruleId = ruleId,
+            details = "$functionName() expects the key member name as its first argument"
+        )
+        val duplicateAlias = segment.sources.groupBy { source -> source.alias }.entries
+            .firstOrNull { (_, sources) -> sources.size > 1 }?.key
+        if (duplicateAlias != null) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "$functionName() names the alias '$duplicateAlias' twice; each source needs its own"
+            )
+        }
+        val sources = segment.sources.associate { source ->
+            source.alias to compileKeyedSource(
+                functionName = functionName,
+                argument = source.path,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+        }
+        return CompiledJoinSegment(key = key, sources = sources)
+    }
+
+    /**
+     * Cuts one `<collection>.<member>` source at its last field segment: everything before it
+     * selects the collection, and that segment names the member holding the number.
+     */
+    private fun compileKeyedSource(
+        functionName: String,
+        argument: ValueExpressionAst,
+        schema: FieldSchema,
+        ruleId: String?,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): KeyedSumCompiledValueExpression.Source {
+        val path = (argument as? FieldAccessAst)?.path
+        val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
+        if (path == null || valueMember == null || path.size < 2) {
+            throw CompilationException(
+                ruleId = ruleId,
+                details = "$functionName() expects each source to name a collection and a numeric " +
+                        "member, such as sales.amount"
+            )
+        }
+        val collection = compileFieldAccess(
+            expr = FieldAccessAst(path = path.dropLast(n = 1)),
+            schema = schema,
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
+        ) as FieldAccessCompiledValueExpression
+        return KeyedSumCompiledValueExpression.Source(collection = collection, valueMember = valueMember)
     }
 
     /** The declared members of the field a path ends at, or none once the path leaves the schema. */
@@ -357,6 +432,9 @@ internal object ValueExpressionCompiler {
     ): Map<FieldId, FieldDefinition> {
         var fields = schema.fields
         for (segment in path) {
+            if (segment is JoinSegmentAst) {
+                fields = JoinedRowSchema.of(segment = segment, schema = schema).fields
+            }
             if (segment !is FieldSegmentAst) {
                 continue
             }

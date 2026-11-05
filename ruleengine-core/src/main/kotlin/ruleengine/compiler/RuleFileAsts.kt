@@ -1,6 +1,6 @@
 package ruleengine.compiler
 
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * One rule file of a manifest entry: where it came from, and the rules it declares.

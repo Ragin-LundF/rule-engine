@@ -1,11 +1,12 @@
 package ruleengine.dsl
 
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.VariableAssignmentAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
@@ -185,12 +186,14 @@ class ParserAddClauseTest {
         assertNotEquals(illegal = set.hashCode(), actual = add.hashCode())
     }
 
-    private fun parseSingle(body: String) = Parser(
-        input = """
-            rule "r" {
-              description "d"
-              $body
-            }
-        """.trimIndent()
-    ).parseRules().single()
+    private fun parseSingle(body: String): RuleAst {
+        return Parser(
+            input = """
+                rule "r" {
+                  description "d"
+                  $body
+                }
+            """.trimIndent()
+        ).parseRules().single()
+    }
 }

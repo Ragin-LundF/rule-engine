@@ -1,9 +1,9 @@
 package ui.builder
 
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
 import ui.builder.model.BuilderFilter
 import ui.builder.model.pathOperand
 
@@ -22,31 +22,33 @@ import ui.builder.model.pathOperand
  * The engine resolves those names against the element with the document behind it, which is what
  * `OperandRules.filterCatalog` mirrors for the editor.
  */
-internal fun mapFilter(expr: ExpressionAst): BuilderFilter? = when (expr) {
-    is ComparisonExpressionAst -> {
-        val left = mapValueExpression(expr = expr.left)
-        val right = mapValueExpression(expr = expr.right)
-        if (left == null || right == null) {
-            null
-        } else {
+internal fun mapFilter(expr: ExpressionAst): BuilderFilter? {
+    return when (expr) {
+        is ComparisonExpressionAst -> {
+            val left = mapValueExpression(expr = expr.left)
+            val right = mapValueExpression(expr = expr.right)
+            if (left == null || right == null) {
+                null
+            } else {
+                BuilderFilter(
+                    left = left,
+                    operator = ValueExpressionRenderer.symbol(operator = expr.operator),
+                    right = right,
+                )
+            }
+        }
+
+        // The legacy spelling, which the parser produces for every operator that does not force the
+        // modern path. Its left side is a flat field string rather than a path AST, so it becomes a path
+        // operand here — the same shape the modern form arrives in.
+        is ConditionAst -> literalToOperand(lit = expr.value)?.let { right ->
             BuilderFilter(
-                left = left,
-                operator = ValueExpressionRenderer.symbol(operator = expr.operator),
+                left = pathOperand(dotted = expr.field),
+                operator = RuleAstToBuilderMapper.normalizeOperator(operator = expr.operator),
                 right = right,
             )
         }
-    }
 
-    // The legacy spelling, which the parser produces for every operator that does not force the
-    // modern path. Its left side is a flat field string rather than a path AST, so it becomes a path
-    // operand here — the same shape the modern form arrives in.
-    is ConditionAst -> literalToOperand(lit = expr.value)?.let { right ->
-        BuilderFilter(
-            left = pathOperand(dotted = expr.field),
-            operator = RuleAstToBuilderMapper.normalizeOperator(operator = expr.operator),
-            right = right,
-        )
+        else -> null
     }
-
-    else -> null
 }

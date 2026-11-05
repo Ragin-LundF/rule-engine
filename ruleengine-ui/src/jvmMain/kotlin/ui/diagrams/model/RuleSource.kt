@@ -1,6 +1,6 @@
 package ui.diagrams.model
 
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * The rules parsed from one `.rule` file of a manifest entry, together with the file they came from.

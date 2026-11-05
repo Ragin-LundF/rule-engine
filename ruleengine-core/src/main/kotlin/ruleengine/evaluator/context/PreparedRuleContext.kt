@@ -17,7 +17,6 @@ import ruleengine.evaluator.context.dto.PreparedInteger
 import ruleengine.evaluator.context.dto.PreparedStringSet
 import ruleengine.evaluator.context.dto.PreparedText
 import ruleengine.evaluator.context.dto.PreparedValue
-import java.math.BigDecimal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -48,10 +47,27 @@ class PreparedRuleContext(
      * text it reads through [rawContext] the same way. Without it a member of a collection would
      * compare raw while the same field compares normalised when declared at the top level.
      */
-    val normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
+    val normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
+    /** Scalar fields the record carries but [prepare] could not read as their declared type. */
+    private val unreadable: Set<FieldId> = emptySet(),
+    /**
+     * The document-level cache, shared by every [child]. An aggregate that reads only document data —
+     * `avg(transactions.amount)` inside `transactions[...]` — is the same for every element, so it is
+     * memoized here instead of once per element. See [readsFromDocument].
+     */
+    val documentCache: EvaluationCache = cache,
+    private val document: RuleContext = rawContext,
 ) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
+    }
+
+    /**
+     * Whether the record carries [field] in a form its declared type cannot read — `17.9` in an
+     * integer field. Such a field is undecided, so the value path must not fall back to its raw input.
+     */
+    fun isUnreadable(field: FieldId): Boolean {
+        return field in unreadable
     }
 
     /** Drops every variable, so the next evaluation starts from a clean slate. */
@@ -65,7 +81,7 @@ class PreparedRuleContext(
      *
      * It does **not** share [cache]. The cache is keyed by the compiled node alone, so one cache
      * across elements would answer `orders[count(items) > 2]` for every order with the first
-     * order's item count.
+     * order's item count. It does share [documentCache], for values that cannot differ per element.
      *
      * The element reads through to this context for names it does not carry, so a predicate can
      * compare a member against a document-level field.
@@ -80,8 +96,23 @@ class PreparedRuleContext(
             values = emptyMap(),
             rawContext = ElementRuleContext(element = element, fallback = rawContext),
             variables = variables,
-            normalizerRegistry = normalizerRegistry
+            normalizerRegistry = normalizerRegistry,
+            documentCache = documentCache,
+            document = document,
         )
+    }
+
+    /**
+     * Whether [name] resolves to the very value the document holds under it, i.e. no element this
+     * context is scoped to carries a member of that name. Identity, not equality: a member that merely
+     * looks the same is still the element's own.
+     */
+    fun readsFromDocument(name: String): Boolean {
+        if (rawContext === document) {
+            return true
+        }
+        val path = listOf(name)
+        return rawContext.getRaw(fieldPath = path) === document.getRaw(fieldPath = path)
     }
 
     companion object {
@@ -100,7 +131,8 @@ class PreparedRuleContext(
             // already navigates. Collections are left out: projecting a list yields many values, which only
             // the value expression path can compare. A dotted field id declared flat is prepared by the loop
             // above and is not overwritten here.
-            for ((fieldId, def) in FieldPathResolver.scalarPaths(schema = schema)) {
+            val scalarPaths = FieldPathResolver.scalarPaths(schema = schema)
+            for ((fieldId, def) in scalarPaths) {
                 if (!map.containsKey(fieldId)) {
                     prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
                 }
@@ -109,8 +141,21 @@ class PreparedRuleContext(
             return PreparedRuleContext(
                 values = map,
                 rawContext = ctx,
-                normalizerRegistry = normalizerRegistry
+                normalizerRegistry = normalizerRegistry,
+                unreadable = unreadableFields(fields = schema.fields + scalarPaths, ctx = ctx, prepared = map),
             )
+        }
+
+        /** A scalar the record carries that left no prepared value behind could not be read. */
+        private fun unreadableFields(
+            fields: Map<FieldId, FieldDefinition>,
+            ctx: RuleContext,
+            prepared: Map<FieldId, PreparedValue>
+        ): Set<FieldId> {
+            return fields.filter { (fieldId, def) ->
+                def.type != FieldType.COLLECTION && def.type != FieldType.OBJECT &&
+                    fieldId !in prepared && ctx.get(fieldId) != null
+            }.keys
         }
 
         private fun prepareValue(
@@ -158,6 +203,10 @@ class PreparedRuleContext(
             map: MutableMap<FieldId, PreparedValue>,
             registry: NormalizerRegistry
         ) {
+            // A structure has no text of its own; its toString() would compare as if it were data.
+            if (raw is Map<*, *> || raw is Collection<*> || raw is Array<*>) {
+                return
+            }
             val s = raw.toString()
             val normalized = registry.applyAll(value = s, normalizers = def.normalizers)
             map[fieldId] = PreparedText(original = s, normalized = normalized)
@@ -168,7 +217,8 @@ class PreparedRuleContext(
          * resolved at UTC, because the engine compares calendar dates and has no timezone concept.
          *
          * A `String` is read with the field's declared [FieldDefinition.format], or as ISO-8601 when the
-         * field declares none. Already-typed values carry no text, so no format applies to them.
+         * field declares none — an ISO timestamp is cut to its date, an offset resolved at UTC first.
+         * Already-typed values carry no text, so no format applies to them.
          */
         private fun prepareDate(
             fieldId: FieldId,
@@ -180,7 +230,7 @@ class PreparedRuleContext(
                 is LocalDate -> raw
                 is LocalDateTime -> raw.toLocalDate()
                 is Instant -> raw.atZone(ZoneOffset.UTC).toLocalDate()
-                is String -> TemporalFormat.parseDate(text = raw, pattern = def.format) ?: return
+                is String -> TemporalFormat.parseInputDate(text = raw, pattern = def.format) ?: return
                 else -> return
             }
             map[fieldId] = PreparedDate(value = date)
@@ -189,7 +239,7 @@ class PreparedRuleContext(
         /**
          * Reads a date with its time of day. A date-only value starts at midnight, and an `Instant` is
          * resolved at UTC. A `String` is read with the field's declared [FieldDefinition.format], or as
-         * ISO-8601 when the field declares none.
+         * ISO-8601 when the field declares none; an ISO timestamp with an offset is resolved at UTC.
          */
         private fun prepareDateTime(
             fieldId: FieldId,
@@ -201,7 +251,7 @@ class PreparedRuleContext(
                 is LocalDateTime -> raw
                 is LocalDate -> raw.atStartOfDay()
                 is Instant -> LocalDateTime.ofInstant(raw, ZoneOffset.UTC)
-                is String -> TemporalFormat.parseDateTime(text = raw, pattern = def.format) ?: return
+                is String -> TemporalFormat.parseInputDateTime(text = raw, pattern = def.format) ?: return
                 else -> return
             }
             map[fieldId] = PreparedDateTime(value = dateTime)
@@ -222,25 +272,12 @@ class PreparedRuleContext(
         }
 
         private fun prepareInteger(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
-            val num = when (raw) {
-                is Number -> raw.toLong()
-                is String -> raw.toLongOrNull() ?: return
-                else -> return
-            }
+            val num = NumericInput.integerOrNull(raw = raw) ?: return
             map[fieldId] = PreparedInteger(value = num)
         }
 
         private fun prepareDecimal(fieldId: FieldId, raw: Any?, map: MutableMap<FieldId, PreparedValue>) {
-            val bd = when (raw) {
-                is Number -> BigDecimal(raw.toString())
-                is String -> try {
-                    BigDecimal(raw)
-                } catch (_: Exception) {
-                    return
-                }
-
-                else -> return
-            }
+            val bd = NumericInput.decimalOrNull(raw = raw) ?: return
             map[fieldId] = PreparedDecimal(value = bd)
         }
 

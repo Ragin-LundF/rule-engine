@@ -6,10 +6,10 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.schema.FieldSchemaLoader
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

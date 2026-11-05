@@ -2,10 +2,10 @@ package ruleengine.compiler.support
 
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.NumberLiteral
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
 import java.math.BigDecimal
 
 /**

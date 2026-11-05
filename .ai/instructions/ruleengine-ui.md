@@ -423,13 +423,21 @@ Nothing observes them into agreement; sync is imperative and funnels through
 - **Read entry state through `manifestEntrySelection`**, not off the session directly — the session is
   null for a sample, and the parsed manifest is the source that always describes what is on screen.
 
-Three further desyncs are known and not yet fixed: renaming the active entry in the Manifest area
-leaves `selectedManifestEntry` pointing at an id that no longer exists (which empties
-`currentEntryRulePaths()` and lets `loadRuleFiles` wipe `inMemoryRuleFiles` — data loss);
-`onReloadConflict` discards its `ProjectLoadResult`; and a scratch project's first save sets
-`activeEntryId` without ever setting `selectedManifestEntry`. If you touch this area, note that **no
-test asserts `session.activeEntryId == state.selectedManifestEntry`** — that gap is why all four
-survived.
+- **Unsaved work is every rule file of the working copy plus the manifest.** `ProjectWorkspace.isDirty`
+  asks `ProjectDirtyTracker`, which compares each `inMemoryRuleFiles` entry against its baseline
+  (`ProjectLoader` baselines every file it reads) and the session against the last saved one; `ProjectSaver` stashes the open buffer and writes every
+  changed rule file of the active entry. An edited "All files" buffer cannot be written back and is
+  refused; opening a single file from it asks first (`pendingRuleFileSwitch`).
+- **No baseline means "never read": never overwrite such a file unasked.** `ProjectSaver` raises a
+  `DiskConflict` for it, and Save As checks its copies before writing anything.
+  Save As copies nothing until every question is answered; a Save As that does not end in `Saved`
+  restores the baselines (`ProjectDirtyState.snapshot` / `restore`) and the buffers' old links.
+- **Write files through `AtomicFiles`** (sibling temp file, then an atomic move), never `Files.writeString`
+  / `File.writeBytes` directly.
+
+`ManifestSessionSyncTest` asserts `session.activeEntryId == state.selectedManifestEntry` after open,
+rename, add and switch; a reload after a disk conflict (`onReloadConflict`) goes back to the
+entry that was open. Any new path that changes the active entry needs a case there.
 
 ## When to also read core instructions
 

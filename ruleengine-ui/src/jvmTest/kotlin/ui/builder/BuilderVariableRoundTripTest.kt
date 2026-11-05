@@ -7,7 +7,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathStep

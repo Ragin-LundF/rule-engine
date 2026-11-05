@@ -5,6 +5,241 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.14.0
+
+### Added
+- **`joinByKey` — a per-key check across collections in one rule.**
+  `joinByKey("period", credit: credits.amount, debit: debits.amount)` joins two or more collections on a
+  key and yields one row per key, holding the key and each source's total under its alias. The rows are
+  a collection, so filters, `count`, `every` / `any`, `isEmpty` / `isAvailable`, `take` / `takeLast`,
+  `sortBy` and member reads work on them unchanged:
+  `count(joinByKey(...)[period in periods and credit > debit]) >= count(periods) * 0.5`.
+  This replaces the workaround of one helper rule per position, with no upper limit on keys.
+  - Outer join with `0` for a key a source does not mention, duplicate keys summed, first-seen row
+    order — the same summing `sumByKey` uses.
+  - A missing source makes the join missing (undecided → `else` / `not_exists`); an empty source gives
+    `0` in every row.
+  - Checked at load time: fewer than two sources, no key literal, an unknown or non-numeric value
+    member, key types that disagree, and an alias that repeats, equals the key's name or equals a schema
+    field. A source without `alias:` is a parse error. The filter's `[` must be on the line the join's
+    `)` closes on, as for every path.
+  - The DSL gains the `:` token for the `alias:` spelling. The editor highlights and completes
+    `joinByKey`; the visual Builder locks a rule that uses it and leaves its text untouched. Catalog
+    exports describe it as "the rows joined by … of … as …".
+
+### Changed
+- **The AST classes moved into subpackages of `ruleengine.dsl.ast` (source-breaking for code using them).**
+  Each sealed hierarchy now has its own package (`JoinSegmentAst` and `JoinSourceAst` are new in this
+  release). Rule files, the engine API
+  and evaluation are unchanged — only code that imports AST classes must update its imports:
+
+  | New package (all formerly `ruleengine.dsl.ast`) | Classes |
+  |---|---|
+  | `ruleengine.dsl.ast.condition` | `ExpressionAst`, `AndAst`, `OrAst`, `NotAst`, `ConditionAst`, `ComparisonExpressionAst`, `ComparisonOperatorAst` |
+  | `ruleengine.dsl.ast.value` | `ValueExpressionAst`, `FieldAccessAst`, `FunctionCallValueAst`, `ArithmeticValueAst`, `ArithmeticOperatorAst`, `LiteralValueAst`, `VariableRefAst` |
+  | `ruleengine.dsl.ast.literal` | `LiteralAst`, `StringLiteral`, `NumberLiteral`, `BooleanLiteral`, `ListLiteral`, `BetweenLiteral`, `VariableRefLiteral`, `ExtractionRefLiteral` |
+  | `ruleengine.dsl.ast.path` | `PathSegmentAst`, `FieldSegmentAst`, `FilterSegmentAst`, `SliceSegmentAst`, `SortSegmentAst`, `JoinSegmentAst`, `JoinSourceAst` |
+  | `ruleengine.dsl.ast.rule` | `RuleAst`, `ActionAst`, `ExtractionAst`, `VariableAssignmentAst`, `AssignmentKindAst` |
+
+  `ValueExpressionRenderer` stays in `ruleengine.dsl.ast`.
+  - *Who is affected:* code that imports AST classes, typically through `Parser.parseRules()` results.
+  - *How to adapt:* replace the imports as in the table; nothing else changes.
+- **A collection nested in a present object reads as missing when the object does not carry it.**
+  With `account` present but holding no `orders`, `account.orders` used to read as an empty collection:
+  `count` / `sum` gave `0`, `every` gave `true`, `isEmpty` gave `true`. It now reads as missing, as
+  RULE-SPEC §5.9 always documented and as an absent root already did: `count`, `sum`, `every` and `any`
+  are missing (the comparison is undecided), `isEmpty` is `false`, `isAvailable` stays `false`. An empty
+  `orders: []` is unchanged, and so is a projection past a collection (`orders.tags` over orders with no
+  tags is still empty).
+  - *Who is affected:* rules reading `object.collection` (or a nested `string_set`) for records where the
+    object is present but the collection key is absent.
+  - *How to adapt:* such a rule now takes its `not_exists` branch, or `else` when it has none, instead of
+    passing on a fake `0`. If absent should really count as empty, ask for it explicitly:
+    `not isAvailable(account.orders)` is true for both an absent and an empty collection.
+- **`sumByKey` over a missing source is missing.** It used to treat a source the record does not carry
+  as contributing nothing, so `count(sumByKey(...)) == 0` held for a record with no data at all. The
+  result is now missing as soon as any source is missing; empty sources still give no keys.
+  - *Who is affected:* rules with `sumByKey` where a source collection can be absent from the input.
+  - *How to adapt:* as above — the rule now lands in `not_exists` / `else`; supply the source as `[]`
+    when absent should mean "no amounts".
+- **A number that cannot be read as its declared type is undecided.** The engine converted input
+  numbers loosely: `17.9` in an `integer` field became `17`, an integer above `Long.MAX_VALUE` wrapped to
+  a negative number, and a value whose exponent lies outside ±1000 (such as `1e999999999`) was accepted
+  and could stall evaluation for minutes once arithmetic expanded it. All three are now unreadable — the
+  condition is undecided, as RULE-SPEC §5.12 documents for a value not readable as its type — and an
+  aggregate or `sumByKey` skips such an element. In return, whole-valued text such as `"17.0"` or
+  `"1e3"` in an `integer` field is now read as that integer; it used to be unreadable.
+  - *Who is affected:* integrations sending fractional values to `integer` fields, very large integers,
+    or numbers with extreme exponents. Rules over well-formed data are unchanged.
+- **A structure in a `text` field is undecided.** A map or list where text is declared used to be
+  compared as its `toString()` (`{first=Ann}`); the field now reads as unreadable, so the condition is
+  undecided. Other scalars (numbers, booleans, ids) are still read as their text.
+  - *Who is affected:* records that put an object or array into a field declared `text`.
+- **`regex` tests the whole value, however long, and stops a runaway pattern after 200 ms.** The old
+  10,000-character cap answered `false` for a longer value, so padding a value past the limit slipped it
+  past a blocklist pattern and made `not ... regex` true. The cap is gone: a padded value is matched in
+  full, so padding no longer changes the result. Instead each value gets a 200 ms budget; a pattern that
+  backtracks exponentially (such as `^(\w+\s?)*\1$` on a long word followed by `!`) used to block the
+  evaluating thread and is now stopped; so is a pattern whose recursion overflows the stack (such as
+  `^(a|b)*$` on a very long value), which used to throw `StackOverflowError` out of `evaluate`. Its
+  condition is undecided — a rule with a `not_exists` branch
+  takes it for both `regex` and `not ... regex`; a rule without one still reads `not <undecided>` as
+  true, as for any missing value. `extract … regex(…)` gives no value (`null`) when it runs out of time
+  or stack.
+  - *Who is affected:* rules using `regex` or `extract` on fields that can hold very long text, and rules
+    with patterns that backtrack heavily.
+- **`==`, `!=` and field-to-field comparisons on `date_time` fields keep the time of day.** The
+  value-expression path read a `date_time` as its calendar day, so `bookedAt < registeredAt` was false
+  for 09:00 against 17:00 on the same day, and `bookedAt == "2024-06-15T09:30:00"` was undecided while
+  `bookedAt equals "…"` was true. A text literal compared with a declared `date` / `date_time` field is
+  now read under the field's declaration — ISO or its `format` — as the named operators always did, so
+  `invoiceDate == "31.01.2024"` (with `format: dd.MM.yyyy`) works too. Two `date_time` values compare at
+  time precision; as soon as one side is a `date`, the comparison is by calendar day, as before. A
+  date-only literal on a `date_time` field without a `format` (`bookedAt == "2024-06-15"`) still compares
+  by calendar day.
+  - *Who is affected:* rules comparing `date_time` fields with each other or with `==` / `!=`, and `==` /
+    `!=` on formatted date fields. Such rules used to be undecided or compared by day; they now answer at
+    time precision as RULE-SPEC documents.
+- **A date literal compared with `==` / `!=`, or written left of a comparison, that does not parse under
+  the field's declaration is a load-time error.** `dueDate == "2024-01-31"` on a field with
+  `format: dd.MM.yyyy` used to be read as an ISO date and compared; it is now rejected by validation with
+  the message the named form gives
+  (`Invalid date '2024-01-31' for field 'dueDate'; expected format 'dd.MM.yyyy' (e.g. "31.01.2024")`).
+  A literal that is no date at all (`createdAt == "tomorrow"`) used to load and never decide; it is
+  rejected too. A date-only literal on a `date_time` field without a `format` (`bookedAt == "2024-06-15"`)
+  stays valid and compares by calendar day. A literal inside a filter predicate is not affected: the
+  element is read as written there, so its literal stays text.
+  - *Who is affected:* rule files with such a literal — they **stop loading**.
+  - *How to adapt:* write the literal in the field's `format` (or ISO when it declares none).
+- **A date-only literal on a `date_time` field is accepted by every operator.** `bookedAt lt "2024-06-16"`,
+  `bookedAt >= "2024-06-15"`, `bookedAt between "2024-06-01" "2024-06-30"` and `bookedAt in ["2024-06-15"]`
+  were rejected at load time (the message asked for `YYYY-MM-DDTHH:MM:SS`), while `bookedAt == "2024-06-15"`
+  was accepted. All spellings now accept it and compare by calendar day: `bookedAt lt "2024-06-16"` is true
+  for 23:59 on the 15th. A field with a `format` still accepts only literals in that format.
+  - *Who is affected:* rule files with such a literal — they failed to load and now load.
+- **Inside a string, only `\"` and `\\` are escapes.** Every other backslash used to swallow itself, so
+  `regex "^DE\d{20}$"` tested `^DEd{20}$`. It is now kept as written; `"^DE\\d{20}$"` still means the same.
+  The editor writes strings it generates with both escapes, so they read back unchanged.
+  - *Who is affected:* rules with a backslash before any character other than `"` or `\` in a string —
+    almost always a regex that silently matched something else. Such a rule now tests the pattern as
+    written, so its result can change.
+- **`sum`, `avg`, `median`, `min`, `max` and `subtract` read numeric text.** A collection member arrives
+  as the text the record held; `orders: [{amount: "10"}, {amount: "20"}]` summed to `0` and averaged to
+  missing, while `sumByKey` read `30`. All aggregates now read members the way `sumByKey` and declared
+  fields do: `"10"` is `10`; text that is no number is still skipped.
+  - *Who is affected:* integrations sending numbers as JSON strings inside collections.
+- **A division that divides evenly is exact.** `0.123456789012 / 2` gave `0.0617283945` (always ten
+  places); it now gives `0.061728394506`, and `10 / 4` gives `2.5` instead of `2.5000000000`, as RULE-SPEC
+  §5.9 documents. A division that does not terminate is still rounded to ten places, half-up.
+  - *Who is affected:* rules comparing a quotient against a literal with more than ten places, and
+    consumers reading a quotient from `variables` or an action argument (its text no longer carries
+    trailing zeros).
+- **A manifest may reference files above its own folder.** `../shared/schema.yaml` used to fail with
+  "escapes base directory" in the engine and for rule files in the editor, while the editor accepted it
+  for schema and action links. Engine and editor now resolve every path the same way: `../` is allowed
+  for schema, action and rule files, on the filesystem and on the classpath (down to the classpath
+  root), and an absolute filesystem path is used as it is. See *Security*.
+  - *Who is affected:* manifests that share files between projects — they now load. Save As in the editor
+    does not copy a rule file outside the project.
+- **Editor: the project is unsaved while any rule file or the manifest has unsaved changes.** The Save
+  button, Cmd+S and the close prompt used to look only at the file on screen, the schema and the
+  actions. An entry added, renamed or relinked, or a rule file edited and then left for another file,
+  now counts too. Showing "All files" without editing it no longer counts as a change. Switching entries
+  still asks only about edited files, since manifest changes travel with the switch.
+  - *Who is affected:* editor users working with several rule files or manifest entries.
+
+### Fixed
+- **Editor: Save wrote only the rule file on screen.** Editing `a.rule`, switching to `b.rule` and saving
+  wrote `b.rule`, reported "Saved", and lost the edit to `a.rule` on close. Save now writes every rule
+  file of the active entry whose working copy differs from what was last read or written. An edit made in
+  the joined "All files" view cannot be attributed to its files; Save now refuses it with "Switch to a
+  single file to save" instead of reporting success.
+  - *Who is affected:* editor users with entries of more than one rule file.
+- **Editor: "Reload" after a disk conflict could write one entry's content into another's files.** The
+  reload read the project back with its first entry on screen while the save target stayed on the entry
+  that was open. It now keeps the session in step and returns to that entry; a project that can no
+  longer be read shows an error instead of silently keeping stale buffers.
+  - *Who is affected:* editor users answering a disk conflict with "Reload" on any entry but the first.
+- **A JSON number that overflows a double no longer fails evaluation.** `1e400` arrives from Jackson as
+  infinity, and reading it threw `NumberFormatException` out of `evaluate`. It is now unreadable like any
+  other value that is not a number.
+  - *Who is affected:* integrations whose input can carry out-of-range numbers.
+- **An ISO timestamp string on a field without a `format` is readable.** `"2024-06-15T09:00:00"` on a
+  `date` field was unreadable, though RULE-SPEC says a value carrying a time is cut to its date; and
+  `"2024-06-15T09:00:00Z"` on a `date_time` field was unreadable while the same `Instant` worked. Both
+  are now read — an offset is resolved at UTC first. Literals in rules keep their strict spelling.
+  - *Who is affected:* integrations sending ISO timestamps as strings; such conditions used to be undecided.
+- **`1.2.3` is a syntax error with its line.** It passed validation and then failed compilation with a
+  bare `NumberFormatException`. A number now ends at its second dot, and the parser reports the position.
+- **Catalog exports name `take`, `takeLast` and `sortBy` outside an aggregate.**
+  `take(priorityCustomerIds, 1) contains "acme"` was described as if it read every id; it now reads
+  "the first 1 priorityCustomerIds includes "acme"". A slice or sort also marks where the measured member
+  starts, so `count(take(customer.orders, 3))` names `customer.orders` instead of splitting it.
+- **Markdown export: rule text renders literally, and the glance table lists the missing-data outcome.**
+  `` \ ` * _ [ ] < > `` in descriptions and condition sentences are escaped, so `regex "^A*B*$"` no longer
+  turns into emphasis and `"<b>"` into HTML. The "At a glance" outcome cell now includes "when missing …"
+  outcomes, as the Word export already did; both share one helper.
+- **Editor: Save and Save As no longer replace a file this session never read.** Save As into a folder
+  holding another project's `rules/pricing.rule` replaced it silently, and two entries whose ids slug to
+  the same default path (`eu` / `EU`) wrote the same `schemas/eu-schema.yaml`. Both now ask with the
+  "Changed on disk" dialog before overwriting. Save As copies nothing until every question is answered,
+  and a Save As that is cancelled or fails leaves the open project as it was, with nothing unsaved that
+  was saved before.
+- **Editor: a save waiting for an answer creates no folders.** Save and Save As created empty `rules/` and
+  `schemas/` folders before asking; folders are now created only when a file is written into them.
+- **Editor: Save As copies the schema and actions of every entry.** Only the open entry's were written to
+  the new folder, so the new manifest named the other entries' `schemas/…` files without them existing.
+- **Editor: a link that leaves the project through `..` later in its path counts as shared.**
+  `rules/../../shared/x.rule`, `./../x.rule` and `..\x.rule` were treated as inside the project: Save As
+  copied them outside the new folder and Save wrote them without asking.
+- **Editor: saving through a symbolic link keeps the link.** The atomic write replaced the link with a
+  plain file; it now writes the file at the end of the link chain, creating it if it does not exist yet.
+  Save As writes its copies the same way.
+- **Editor: Save As asks before replacing a shared file that changed on disk.** A rule, schema or actions
+  file linked from outside the project lost the version it was read with, so after approving the
+  "outside the project" question Save As wrote the old content over a teammate's change. It now shows
+  "Changed on disk" first, as Save does.
+- **Editor: an answer given for one save is not reused by the next.** Approving an overwrite and then
+  cancelling the following question kept the approval, so a later Save replaced the file without asking
+  even after it changed again on disk. Cancelling a question or a failed save now forgets the answers.
+- **Editor: Save As re-points rule files linked from outside the project.** `../shared/x.rule` kept its
+  old relative path and broke at the new depth; it is now rewritten like schema and action links.
+- **Editor: files are written atomically.** Project files, exported shared files, rule overviews and
+  PNGs go to a hidden sibling first and are then moved into place, so a failed write leaves the old file
+  intact.
+- **Editor: removing an entry compares paths, not text.** With `rules/common.rule` in one entry and
+  `./rules/common.rule` in another, removing the first deleted the second's file.
+- **Editor: a failed manifest write after removing an entry is reported.** It used to show "Removed …"
+  while the manifest on disk still named the entry; it now shows "Manifest not updated".
+- **Editor: the rule overview export reads the saved files.** It read the working copy despite saying it
+  excluded unsaved edits, and a file that did not parse silently dropped its rules; the export now reads
+  from disk and refuses with "<file> does not parse", or with "<file> is not saved yet" for a file the
+  manifest names that is not on disk. After a save or Save As, files are read from the project's new
+  location.
+- **Editor: cancelling the PNG export no longer reports "Diagram exported as PNG".**
+- **Editor: saving a sample writes its rule files and leaves it clean.** Only the schema, actions and
+  manifest were written, and the sample stayed "unsaved".
+- **Editor: leaving an edited "All files" view asks first.** Opening a single file dropped the edit
+  silently; the editor now asks to discard it or stay.
+- **Editor: a string with escapes is highlighted up to its closing quote.**
+- **An aggregate over document data inside a filter is computed once.**
+  `transactions[amount > avg(transactions.amount) * 3]` recomputed the average for every element, which
+  made the filter quadratic in the collection's size. Such an aggregate is now shared by all elements;
+  results are unchanged.
+  - *Who is affected:* rules filtering large collections against an aggregate of the same data.
+
+### Security
+- **A runaway `regex` no longer blocks the evaluating thread (ReDoS).** A rule-authored pattern that
+  backtracks exponentially could hold a thread for minutes on a short value. Each `regex` test and
+  `extract … regex(…)` now has a 200 ms budget; past it the condition is undecided and the extraction
+  gives no value. See *Changed*.
+- **Manifests can reference any file the process can read.** With `../` and absolute paths allowed, a
+  manifest decides which files the engine and the editor read (and the editor writes, on save). Load
+  manifests only from trusted sources — never from user uploads or other untrusted input.
+  `ManifestPathResolver.resolveWithinBase` remains for callers that want to check containment themselves.
+  - *Who is affected:* applications that loaded manifests from untrusted sources and relied on the old
+    "escapes base directory" check.
+
 ## 1.13.0
 
 ### Changed

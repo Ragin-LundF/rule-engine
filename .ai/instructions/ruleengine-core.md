@@ -14,7 +14,12 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.core.normalizer` | **Lives in `ruleengine-model`.** `Normalizer` functional interface, `NormalizerProfile`, and the `NormalizerRegistry` singleton (`ids` enumerates the built-ins). |
 | `ruleengine.dsl.lexer` | `Lexer`, `Token`, `TokenType`; raw tokenisation of the rule DSL. |
 | `ruleengine.dsl.parser` | `Parser`; converts token stream into AST nodes. |
-| `ruleengine.dsl.ast` | Immutable AST data classes such as `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, and literals. Stays a single flat package despite its size: almost every type is a direct subclass of the `ExpressionAst` / `LiteralAst` / `ValueExpressionAst` / `PathSegmentAst` sealed hierarchies, and Kotlin requires those to share one package. Do not try to split it. |
+| `ruleengine.dsl.ast` | `ValueExpressionRenderer` only; the immutable AST data classes live in one subpackage per sealed hierarchy, since a sealed type and its direct subclasses must share a package. |
+| `ruleengine.dsl.ast.condition` | `ExpressionAst` and its nodes: `AndAst`, `OrAst`, `NotAst`, `ConditionAst`, `ComparisonExpressionAst`, plus `ComparisonOperatorAst`. |
+| `ruleengine.dsl.ast.value` | `ValueExpressionAst` and its nodes: `FieldAccessAst`, `FunctionCallValueAst`, `ArithmeticValueAst`, `LiteralValueAst`, `VariableRefAst`, plus `ArithmeticOperatorAst`. |
+| `ruleengine.dsl.ast.literal` | `LiteralAst` and its literals: `StringLiteral`, `NumberLiteral`, `BooleanLiteral`, `ListLiteral`, `BetweenLiteral`, `VariableRefLiteral`, `ExtractionRefLiteral`. Full at 8 files. |
+| `ruleengine.dsl.ast.path` | `PathSegmentAst` and its segments: `FieldSegmentAst`, `FilterSegmentAst`, `SliceSegmentAst`, `SortSegmentAst`, `JoinSegmentAst`, plus `JoinSourceAst`. |
+| `ruleengine.dsl.ast.rule` | `RuleAst`, `ActionAst`, `ExtractionAst`, `VariableAssignmentAst`, `AssignmentKindAst`. |
 | `ruleengine.dsl.diagnostics` | `ParseException`. |
 | `ruleengine.compiler` | The public entry points only: `Compiler`, `Validator`, `ValidationResult`, plus `EntryValidator` and its `RuleFileAsts` input for validating a manifest entry file by file. |
 | `ruleengine.compiler.support` | Internal helpers: `OperatorSupport` (which operators a type accepts), `LiteralValidation`, `Suggestions`, `FieldPathMessages`. |
@@ -90,7 +95,7 @@ clause in any of them touches, in order:
    action name). Every branch shares this one function; `Parser.parseOptionalBranchBlock` calls it once
    per optional block, and `ThenBlockParser.BLOCK_TERMINATORS` is what stops a block at the next
    branch keyword.
-2. A node in the flat `dsl/ast` package, plus `RuleAst`'s **hand-written** `equals`/`hashCode` — they
+2. A node in `dsl/ast/rule`, plus `RuleAst`'s **hand-written** `equals`/`hashCode` — they
    exclude `line`/`column` deliberately, so a new field has to be added to both by hand.
 3. `Validator.validateRule`, which calls the branch-agnostic `validateBranch` once per block. Never
    validate `rule.actions` directly, or the other two blocks go unchecked.
@@ -115,7 +120,7 @@ lets them compose with projection, filtering and each other for free. A new one 
    segment and hands off to `parsePathContinuation`. **Also `isModernExpression`**, or a path carrying
    only the new segment falls back to the legacy named-operator path and the whole call is reported as
    an unknown field.
-2. A node in `dsl/ast` and a compiled counterpart in `evaluator/compiled/value/path`. Both interfaces
+2. A node in `dsl/ast/path` and a compiled counterpart in `evaluator/compiled/value/path`. Both interfaces
    are sealed, so `ValueExpressionCompiler`, `ValueExpressionValidator`, `ValueExpressionRenderer`,
    `FieldUsage`, `VariableUsage` and `FieldAccessCompiledValueExpression` become compile errors.
 3. `DslFunctions` — add the spelling to `SORT_NAMES` / `SLICE_NAMES` and to `pathFunctionNames()`, or
@@ -142,9 +147,9 @@ Both need the UI's side too — see `.ai/instructions/ruleengine-ui.md`.
 load-bearing:
 
 - **`UNKNOWN` is born in exactly two places** — a leaf whose prepared value is absent, and
-  `ComparisonCompiledExpression` with a `MissingExpressionValue` operand. Functions keep their own
-  contract (`count` over a missing collection is still `0`, `every` still vacuously true), so do not
-  "fix" one to propagate missing.
+  `ComparisonCompiledExpression` with a `MissingExpressionValue` operand. `count`/`sum`/`every`/`any`
+  over a missing collection return missing (§5.9), which the comparison turns into `UNKNOWN`;
+  `isEmpty`/`isAvailable` never return missing.
 - **`NotExpression.unknownAware` is why no existing rule changed behaviour.** `not` is the only
   operator where two- and three-valued logic disagree once an unknown collapses to false at the top of a
   rule. The compiler passes `unknownAware = ast.hasNotExistsBranch`, so a rule that never asked about

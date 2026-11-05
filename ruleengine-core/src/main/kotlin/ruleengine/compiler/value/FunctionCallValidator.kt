@@ -7,14 +7,14 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.DslFunctions
@@ -185,6 +185,7 @@ internal object FunctionCallValidator {
         var keyType: FieldType? = null
         for (argument in expr.arguments.drop(n = 1)) {
             keyType = validateKeyedSumSource(
+                functionName = CollectionFunctionName.SUM_BY_KEY.dslName,
                 argument = argument,
                 key = key,
                 keyType = keyType,
@@ -195,9 +196,15 @@ internal object FunctionCallValidator {
         return ValueKind.ARRAY
     }
 
-    /** Checks one `<collection>.<member>` source and returns the key type agreed on so far. */
+    /**
+     * Checks one `<collection>.<member>` source and returns the key type agreed on so far.
+     *
+     * Shared by `sumByKey` and `joinByKey`, which read their sources the same way; [functionName]
+     * is what the diagnostics name.
+     */
     @Suppress("ReturnCount")
-    private fun validateKeyedSumSource(
+    fun validateKeyedSumSource(
+        functionName: String,
         argument: ValueExpressionAst,
         key: String,
         keyType: FieldType?,
@@ -209,7 +216,7 @@ internal object FunctionCallValidator {
         if (path == null || valueMember == null || path.size < 2) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "sumByKey() expects each source to name a collection and a numeric " +
+                message = "$functionName() expects each source to name a collection and a numeric " +
                         "member, such as sales.amount"
             )
             return keyType
@@ -225,7 +232,7 @@ internal object FunctionCallValidator {
         if (declaredKey == null) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "sumByKey() joins on '$key', which " +
+                message = "$functionName() joins on '$key', which " +
                         "'${ValueExpressionValidator.pathText(path = path.dropLast(n = 1))}' does not declare"
             )
             return keyType
@@ -233,7 +240,7 @@ internal object FunctionCallValidator {
         if (keyType != null && declaredKey.type != keyType) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "sumByKey() joins on '$key', but the sources declare it as " +
+                message = "$functionName() joins on '$key', but the sources declare it as " +
                         "${keyType.name.lowercase()} and ${declaredKey.type.name.lowercase()}"
             )
         }
@@ -241,7 +248,7 @@ internal object FunctionCallValidator {
         if (declaredValue != null && ValueExpressionValidator.kindOf(definition = declaredValue) != ValueKind.NUMERIC) {
             diagnostics += ValidationDiagnostic(
                 severity = Severity.ERROR,
-                message = "sumByKey() sums '$valueMember', which is declared " +
+                message = "$functionName() sums '$valueMember', which is declared " +
                         "${declaredValue.type.name.lowercase()} rather than a number"
             )
         }
@@ -249,7 +256,7 @@ internal object FunctionCallValidator {
     }
 
     /** The declared members of the field a path ends at, or none once the path leaves the schema. */
-    private fun memberFields(
+    fun memberFields(
         path: List<PathSegmentAst>,
         schema: FieldSchema
     ): Map<FieldId, FieldDefinition> {

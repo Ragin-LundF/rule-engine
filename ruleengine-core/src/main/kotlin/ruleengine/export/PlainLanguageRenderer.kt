@@ -7,33 +7,34 @@ import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isTemporal
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticOperatorAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.export.dto.PlainAll
@@ -264,6 +265,7 @@ object PlainLanguageRenderer {
             segments = split.containerSegments,
             filters = split.filters,
             decorations = split.decorations,
+            join = split.join,
         )
 
         return "${aggregatePhrase(function = function, name = call.name, measure = measure)} of $container"
@@ -294,6 +296,7 @@ object PlainLanguageRenderer {
             segments = split.containerSegments,
             filters = split.filters,
             decorations = split.decorations,
+            join = split.join,
         )
         val lead = if (function == CollectionFunctionName.EVERY) "every one of" else "at least one of"
         return "$lead $container"
@@ -350,14 +353,17 @@ object PlainLanguageRenderer {
          * than the rule does — the very thing including them at all was meant to prevent.
          */
         val decorations: List<PathSegmentAst> = emptyList(),
+        /** The keyed join the path starts from, which then is the collection being read. */
+        val join: JoinSegmentAst? = null,
     )
 
     /**
-     * Everything up to and including the last filter is the container; whatever follows is measured.
+     * Everything up to and including the last filter, slice or sort is the container; whatever follows
+     * is measured.
      *
-     * A filter can only apply to a collection, so it marks the boundary exactly. With no filter the
-     * split falls back to "last segment is the measure", which is what a bare `sum(parcels.weightKg)`
-     * means.
+     * Those segments only apply to a collection, so they mark the boundary exactly. With none of them
+     * the split falls back to "last segment is the measure", which is what a bare
+     * `sum(parcels.weightKg)` means.
      */
     private fun splitAggregatePath(path: List<PathSegmentAst>): AggregatePath {
         val filters = path.filterIsInstance<FilterSegmentAst>().map { segment -> segment.expression }
@@ -367,7 +373,12 @@ object PlainLanguageRenderer {
         val decorations = path.filter { segment ->
             segment is SliceSegmentAst || segment is SortSegmentAst
         }
-        val lastFilterIndex = path.indexOfLast { segment -> segment is FilterSegmentAst }
+        val lastFilterIndex = path.indexOfLast { segment ->
+            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst
+        }
+        // A join names no collection of its own: it *is* the container, and every member read after
+        // it is measured. Dropping it would make the prose describe "the collection" instead.
+        val join = path.firstOrNull() as? JoinSegmentAst
 
         if (lastFilterIndex >= 0) {
             val container = path.take(n = lastFilterIndex + 1).fieldNames()
@@ -377,10 +388,20 @@ object PlainLanguageRenderer {
                 measure = measure.ifEmpty { null },
                 filters = filters,
                 decorations = decorations,
+                join = join,
             )
         }
 
         val names = path.fieldNames()
+        if (join != null) {
+            return AggregatePath(
+                containerSegments = emptyList(),
+                measure = names.ifEmpty { null },
+                filters = filters,
+                decorations = decorations,
+                join = join,
+            )
+        }
         if (names.size < 2) {
             return AggregatePath(
                 containerSegments = names,
@@ -415,11 +436,13 @@ object PlainLanguageRenderer {
     private fun describeContainer(
         segments: List<String>,
         filters: List<ExpressionAst>,
-        decorations: List<PathSegmentAst> = emptyList()
+        decorations: List<PathSegmentAst> = emptyList(),
+        join: JoinSegmentAst? = null,
     ): String {
         // Left as written rather than title-cased: the container reads as a noun mid-sentence
         // ("of parcels where …"), where "of Parcels" would look like a proper name.
-        val plain = segments.joinToString(separator = ".").ifEmpty { "the collection" }
+        val plain = join?.let { segment -> describeJoin(join = segment) }
+            ?: segments.joinToString(separator = ".").ifEmpty { "the collection" }
         // Folded in written order, so each decoration wraps what the ones before it produced: a
         // sort then a slice reads as "the first 3 orders by highest total", which is both the order
         // the two are almost always written in and what the engine actually does.
@@ -447,17 +470,34 @@ object PlainLanguageRenderer {
         return "$name where $conditions"
     }
 
+    /** "the rows joined by period of Credits › Amount as credit and Debits › Amount as debit". */
+    private fun describeJoin(join: JoinSegmentAst): String {
+        val sources = join.sources.joinToString(separator = " and ") { source ->
+            "${operand(expr = source.path, schema = null)} as ${source.alias}"
+        }
+        return "the rows joined by ${join.key} of $sources"
+    }
+
     // ── field paths outside an aggregate ──────────────────────────────────────
 
     private fun fieldOperand(path: List<PathSegmentAst>, schema: FieldSchema?): String {
-        val filters = path.filterIsInstance<FilterSegmentAst>().map { segment -> segment.expression }
-        if (filters.isEmpty()) {
+        // A plain path is just the field; a filter, slice, sort or join narrows a collection, and the
+        // sentence has to say so — "Priority Customer Ids" for `take(priorityCustomerIds, 1)` overclaims.
+        val narrowsCollection = path.any { segment ->
+            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst
+        }
+        if (!narrowsCollection && path.firstOrNull() !is JoinSegmentAst) {
             return FieldLabels.forPath(path = path.fieldNames().joinToString(separator = "."), schema = schema)
         }
 
         val split = splitAggregatePath(path = path)
         val measure = split.measure?.let { segments -> FieldLabels.forSegments(segments = segments) }
-        val container = describeContainer(segments = split.containerSegments, filters = split.filters)
+        val container = describeContainer(
+            segments = split.containerSegments,
+            filters = split.filters,
+            decorations = split.decorations,
+            join = split.join,
+        )
 
         if (measure == null) {
             return container

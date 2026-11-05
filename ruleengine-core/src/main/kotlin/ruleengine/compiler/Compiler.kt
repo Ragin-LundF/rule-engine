@@ -28,28 +28,28 @@ import ruleengine.core.domain.dto.field.FieldType.TEXT
 import ruleengine.core.domain.dto.field.isMultiValued
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
-import ruleengine.dsl.ast.VariableAssignmentAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.ExtractionAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
 import ruleengine.evaluator.CompiledAction
 import ruleengine.evaluator.CompiledAddAssignment
 import ruleengine.evaluator.CompiledAssignment
@@ -312,7 +312,15 @@ object Compiler {
         ruleId: String?
     ): CompiledExpression {
         return when (expr) {
-            is ComparisonExpressionAst -> compileComparisonExpression(expr = expr, schema = schema, ruleId = ruleId)
+            // A filter element is read raw — the child context prepares nothing — so a date member is
+            // the input's text and its literal must stay text too.
+            is ComparisonExpressionAst -> compileComparisonExpression(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                readsPreparedDates = false
+            )
+
             is ConditionAst -> compileFilterCondition(cond = expr, schema = schema, ruleId = ruleId)
 
             is AndAst -> AndExpression(
@@ -462,7 +470,8 @@ object Compiler {
     private fun compileComparisonExpression(
         expr: ComparisonExpressionAst,
         schema: FieldSchema,
-        ruleId: String?
+        ruleId: String?,
+        readsPreparedDates: Boolean = true
     ): CompiledExpression {
         val filterCompiler = { filterExpr: ExpressionAst, filterSchema: FieldSchema ->
             compileFilterExpression(expr = filterExpr, schema = filterSchema, ruleId = ruleId)
@@ -485,8 +494,13 @@ object Compiler {
         // `lowercase`, `status equals "PAID"` matched — the named-operator path has always normalized
         // its literal — while `status == "PAID"` did not.
         val normalizers = normalizersOf(compiled = compiledLeft).ifEmpty { normalizersOf(compiled = compiledRight) }
-        val left = normalizedLiteral(expr = expr.left, normalizers = normalizers, ruleId = ruleId) ?: compiledLeft
-        val right = normalizedLiteral(expr = expr.right, normalizers = normalizers, ruleId = ruleId) ?: compiledRight
+        val dateSchema = schema.takeIf { readsPreparedDates }
+        val left = temporalLiteral(expr = expr.left, other = expr.right, schema = dateSchema)
+            ?: normalizedLiteral(expr = expr.left, normalizers = normalizers, ruleId = ruleId)
+            ?: compiledLeft
+        val right = temporalLiteral(expr = expr.right, other = expr.left, schema = dateSchema)
+            ?: normalizedLiteral(expr = expr.right, normalizers = normalizers, ruleId = ruleId)
+            ?: compiledRight
 
         val cost = maxOf(left.cost, right.cost)
         return ComparisonCompiledExpression(
@@ -503,8 +517,9 @@ object Compiler {
     }
 
     /** The normalizers a compiled operand declares, or none when it does not read a field. */
-    private fun normalizersOf(compiled: CompiledValueExpression): List<NormalizerId> =
-        (compiled as? FieldAccessCompiledValueExpression)?.normalizers.orEmpty()
+    private fun normalizersOf(compiled: CompiledValueExpression): List<NormalizerId> {
+        return (compiled as? FieldAccessCompiledValueExpression)?.normalizers.orEmpty()
+    }
 
     /**
      * Recompiles a **text** literal under [normalizers], or null when this operand is not one.
@@ -527,6 +542,30 @@ object Compiler {
             return null
         }
         return compileLiteralValue(literal = literal, normalizers = normalizers, ruleId = ruleId)
+    }
+
+    /**
+     * Reads a text literal compared with a declared `date` / `date_time` field under that field's
+     * declaration — ISO or its `format` — or null when this operand is not such a literal.
+     *
+     * The named operators have always done this; without it `bookedAt == "2024-06-15T09:30:00"` and
+     * `invoiceDate == "31.01.2024"` (with `format: dd.MM.yyyy`) stayed text that no date reading
+     * accepted. A literal that does not parse is rejected by the validator; compiled without one it is
+     * left as it was, so it stays undecided at run time.
+     * A null [schema] means the field is read raw (inside a filter), where the literal stays text.
+     */
+    private fun temporalLiteral(
+        expr: ValueExpressionAst,
+        other: ValueExpressionAst,
+        schema: FieldSchema?
+    ): CompiledValueExpression? {
+        if (schema == null) {
+            return null
+        }
+        val text = ((expr as? LiteralValueAst)?.literal as? StringLiteral)?.value ?: return null
+        val definition = DateOperator.declaredTemporalField(expr = other, schema = schema) ?: return null
+        val value = DateOperator.literalValueOrNull(text = text, def = definition) ?: return null
+        return LiteralCompiledValueExpression(value = value)
     }
 
     private fun compileCondition(
