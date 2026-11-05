@@ -1,18 +1,19 @@
 package ui.builder
 
-import ruleengine.dsl.ast.ArithmeticOperatorAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ui.builder.model.BuilderOperand
 import ui.builder.model.BuilderPathDecoration
 import ui.builder.model.BuilderPathStep
@@ -24,18 +25,20 @@ import ui.builder.model.BuilderTerm
 // Top-level in the same package, so every call site inside the mapper resolves unchanged.
 
 /** Maps one side of a comparison. Returns null for shapes the Builder cannot represent. */
-internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? = when (expr) {
-    is LiteralValueAst -> literalToOperand(lit = expr.literal)
+internal fun mapValueExpression(expr: ValueExpressionAst): BuilderOperand? {
+    return when (expr) {
+        is LiteralValueAst -> literalToOperand(lit = expr.literal)
 
-    is FieldAccessAst -> mapFieldAccess(expr = expr)
+        is FieldAccessAst -> mapFieldAccess(expr = expr)
 
-    is FunctionCallValueAst -> mapFunctionCall(expr = expr)
+        is FunctionCallValueAst -> mapFunctionCall(expr = expr)
 
-    is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
+        is ArithmeticValueAst -> mapArithmetic(expr = expr, parenthesized = false)
 
-    // A variable read rides on the existing path operand: `OperandText.pathToDsl` writes a
-    // single unfiltered segment out verbatim, so `$total` survives the round-trip as itself.
-    is VariableRefAst -> BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "\$${expr.name}")))
+        // A variable read rides on the existing path operand: `OperandText.pathToDsl` writes a
+        // single unfiltered segment out verbatim, so `$total` survives the round-trip as itself.
+        is VariableRefAst -> BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "\$${expr.name}")))
+    }
 }
 
 /**
@@ -60,8 +63,9 @@ internal fun mapFunctionCall(expr: FunctionCallValueAst): BuilderOperand? {
 }
 
 /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
-internal fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? =
-    mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
+internal fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? {
+    return mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
+}
 
 /**
  * Folds a path of any length into [BuilderPathStep]s: every [FieldSegmentAst] opens a step, and each
@@ -103,6 +107,9 @@ internal fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
                     )
                 )
             }
+            // The Builder has no step for joined rows. Mapping nothing locks the rule as Unsupported,
+            // which leaves its text untouched instead of rewriting it without the join.
+            is JoinSegmentAst -> return null
         }
     }
     return steps.ifEmpty { null }
@@ -142,17 +149,21 @@ internal fun flattenArithmetic(
 }
 
 /** Maps a term of an arithmetic chain, parenthesizing a nested chain of different precedence. */
-internal fun mapOperandTerm(expr: ValueExpressionAst): BuilderOperand? =
-    if (expr is ArithmeticValueAst) {
+internal fun mapOperandTerm(expr: ValueExpressionAst): BuilderOperand? {
+    return if (expr is ArithmeticValueAst) {
         mapArithmetic(expr = expr, parenthesized = true)
     } else {
         mapValueExpression(expr = expr)
     }
+}
 
-internal fun samePrecedence(a: ArithmeticOperatorAst, b: ArithmeticOperatorAst): Boolean =
-    precedence(operator = a) == precedence(operator = b)
+internal fun samePrecedence(a: ArithmeticOperatorAst, b: ArithmeticOperatorAst): Boolean {
+    return precedence(operator = a) == precedence(operator = b)
+}
 
-internal fun precedence(operator: ArithmeticOperatorAst): Int = when (operator) {
-    ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
-    ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
+internal fun precedence(operator: ArithmeticOperatorAst): Int {
+    return when (operator) {
+        ArithmeticOperatorAst.ADD, ArithmeticOperatorAst.SUBTRACT -> 1
+        ArithmeticOperatorAst.MULTIPLY, ArithmeticOperatorAst.DIVIDE -> 2
+    }
 }

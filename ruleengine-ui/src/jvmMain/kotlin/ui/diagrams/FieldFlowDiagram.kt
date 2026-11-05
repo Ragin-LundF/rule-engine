@@ -24,7 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ui.diagrams.model.FieldNode
 import ui.diagrams.model.FlowModel
 import ui.diagrams.render.DiagramEyebrow

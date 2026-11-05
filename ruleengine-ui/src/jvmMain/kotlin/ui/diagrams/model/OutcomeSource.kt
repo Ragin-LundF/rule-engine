@@ -1,7 +1,7 @@
 package ui.diagrams.model
 
 import ruleengine.core.domain.dto.RuleBranch
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * One rule, and the branch of it that produces an outcome.

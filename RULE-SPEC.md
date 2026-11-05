@@ -176,6 +176,13 @@ The `operators` list restricts which comparison operations rule authors may use 
 > use: bare numbers for a number, quoted values in the field's declared `format` for a date. A bare
 > literal is accepted as a list of one, so `sepaCode in "CCRD"` means the same as `["CCRD"]`.
 > A `string_set` is the exception: it asks membership with `containsAny` / `containsAll` instead.
+>
+> **`regex` has a time budget of 200 ms per value.** The whole value is tested, however long, so
+> padding cannot hide a match. A pattern that backtracks so badly that it does not finish within the
+> budget (such as `^(\w+\s?)*\1$` on a long word followed by `!`) is stopped, and so is one whose
+> recursion overflows the stack (such as `^(a|b)*$` on a very long value). The condition is then
+> undecided, exactly like one over a missing field (§5.12): in a rule with a `not_exists` branch both
+> `regex` and `not ... regex` take that branch.
 
 #### Integer field operators (`integer`)
 
@@ -232,12 +239,30 @@ Both types use the same seven operators. There is no separate "before" or "after
 "before" and `gt` is "after"**.
 
 Literals are always **quoted**. By default they are ISO-8601 — `"2024-01-31"` for a `date`,
-`"2024-06-15T09:30:00"` for a `date_time` — and any other spelling is rejected at load time. A field
-that declares a [`format`](#the-format-key) uses that pattern instead.
+`"2024-06-15T09:30:00"` for a `date_time` — and any other spelling is rejected at load time. A `date_time`
+field also accepts a date-only literal (`"2024-06-15"`) with every operator; it is compared by calendar day,
+so `bookedAt lt "2024-06-16"` is true for any time on the 15th and `bookedAt equals "2024-06-15"` for any
+time on that day. A field that declares a [`format`](#the-format-key) uses that pattern instead and accepts
+no other spelling.
 
 A `date` comparison is by calendar date: a value carrying a time is truncated to its date. A
 `date_time` comparison keeps the time, so `bookedAt gt "2024-06-15T09:00:00"` is false for a value at
 exactly 09:00:00 and true one second later.
+
+The symbolic aliases mean exactly what the named operators mean. `bookedAt == "2024-06-15T09:30:00"` is
+`bookedAt equals "2024-06-15T09:30:00"`, and the literal is read in the field's `format` when it has
+one (`dueDate == "31.01.2024"`). A literal that does not parse is rejected at load time with the same
+message as the named form — `dueDate == "2024-01-31"` on a `dd.MM.yyyy` field and `createdAt < "tomorrow"`
+are validation errors; a date-only literal on a `date_time` field without a `format` is valid and compares
+by calendar day, as above. Inside a filter (`orders[placedOn == "…"]`) the element is read as written, so its
+literal stays text and is not checked. Comparing two fields keeps the time when both are `date_time`
+(`bookedAt < registeredAt` is true for 09:00 against 17:00 on the same day); a `date` compared with a
+`date_time` is compared by calendar day.
+
+An input **string** on a field without a `format` may also be an ISO timestamp: on a `date` field
+`"2024-06-15T09:00:00"` is cut to `2024-06-15`, and a timestamp with an offset (`"2024-06-15T09:00:00Z"`,
+`"2024-06-15T11:00:00+02:00"`) is resolved at UTC first, on both types. This applies to record values
+only; literals in rules keep the strict spelling above.
 
 | Operator | Symbolic alias | Meaning | Example in a rule |
 |---|---|---|---|
@@ -732,6 +757,10 @@ You may define any action names that fit the domain. These are widely used conve
 - Lines starting with `#` are **comments** and are ignored.
 - All matching rules fire; there is no implicit priority. A rule can suppress the rules after it only by ending its branch with `stop` (§5.11).
 - Order is **fixed and guaranteed**: rules are evaluated in manifest `rules:` file order, then in declaration order within each file, and matches are returned in that order. `set` (§5.6) and `stop` (§5.11) both depend on it, so the order is part of the meaning.
+- Text is written in double quotes. Inside a string only two escapes exist: `\"` for a quote and `\\` for a
+  backslash. Any other backslash is kept as written, so a regular expression needs no doubling:
+  `iban regex "^DE\d{20}$"` tests `^DE\d{20}$`. (`"^DE\\d{20}$"` means the same, since `\\` is one backslash.)
+- A number is digits with at most one decimal point. `1.2.3` is a syntax error reported at its line.
 
 ### 5.2 Rule structure
 
@@ -863,7 +892,7 @@ dueDate lt "31.01.2024"
 ```
 
 > Date values are always quoted. Without a `format` they are ISO — `YYYY-MM-DD` for a `date`,
-> `YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
+> `YYYY-MM-DDTHH:MM:SS` (or a plain `YYYY-MM-DD`, compared by day) for a `date_time` — so `bookingDate > 20240101` and
 > `bookingDate equals "15.06.2024"` are both rejected at load time. A field that declares a
 > [`format`](#the-format-key) uses that pattern instead, which is why `dueDate` above is written
 > `"31.01.2024"`.
@@ -1050,6 +1079,7 @@ For `purpose = "RENT-98765"` the rule matches and returns `label` with the argum
 |---|---|
 | Source field | Must be declared `text`. Any other type is an error. |
 | No match | The action is still produced, with the argument unresolved (`null`). |
+| Time budget | The same 200 ms per value as the `regex` operator. A pattern that runs out of time, or overflows the stack, extracts nothing (`null`), like no match. |
 | Where it is allowed | Every output block — `then`, `else` and `not_exists` — since all three share one grammar. |
 
 ### 5.6 Variables — the `set` clause
@@ -1397,7 +1427,8 @@ any(alerts[severity == "high"])
 ```
 
 **Empty collections:** `every` is **true** (there is no element that fails) and `any` is **false**
-(there is no element that succeeds). A missing collection behaves like an empty one.
+(there is no element that succeeds). A missing collection makes both missing — the condition is
+undecided (§5.12).
 
 Both are ordinary boolean conditions, so they combine with `and`, `or` and `not`, and they work over
 raw, filtered, sliced and joined collections:
@@ -1420,6 +1451,34 @@ min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
 - **Duplicate keys** within one source are summed, so the total is preserved.
 - **Key order** is first-seen, reading the sources left to right.
 - The result is an ordinary list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
+- A **missing** source makes the whole result missing; an empty source simply contributes nothing.
+
+#### Joining collections into rows — `joinByKey`
+
+`joinByKey(key, alias: source, alias: source, ...)` aligns two or more collections on a shared member
+and returns **one row per key**. Each row holds the key under its own name and, under each alias, that
+source's total for the key. The first argument is the key member's name as a string literal; each
+source is `alias: <collection>.<numericMember>`.
+
+```
+count(joinByKey("period", credit: credits.amount, debit: debits.amount)[period in periods and credit > debit])
+    >= count(periods) * 0.5
+```
+
+The rows are a collection, so a filter, `count`, `every` / `any`, `isEmpty` / `isAvailable`, `take` /
+`takeLast`, `sortBy` and a member read (`joinByKey(...).credit`) all work on them. Inside a filter, the
+key and the aliases name the row's members; any other name is a document field, as in every filter.
+
+- **Outer join:** every key any source mentions has a row; a source that does not mention it gives `0`.
+- **Duplicate keys** within one source are summed, exactly as `sumByKey` does.
+- **Row order** is first-seen, reading the sources left to right.
+- An element with no key, or whose value member is not a number, is skipped.
+- A **missing** source makes the join missing, so a condition over it is undecided (§5.12); an
+  **empty** source is valid data and gives `0` in every row.
+- A filter on the rows must start on the line the closing `)` is on, as for every path:
+  `joinByKey(...)[credit > debit]`, not `joinByKey(...)` followed by `[credit > debit]` on the next line.
+- An alias must not repeat, must not be the key's name, and must not be a field of the schema — inside
+  a filter on the rows, such an alias would hide that field.
 
 #### Field paths
 
@@ -1501,6 +1560,8 @@ nothing and there is no value left for the function to reduce:
 | `any` | `false` | missing |
 | `isAvailable` | `false` | `false` |
 | `isEmpty` | `true` | `false` |
+| `sumByKey` | no keys | missing (any source missing) |
+| `joinByKey` | that source's alias is `0` in every row | missing (any source missing) |
 
 The empty column is the operation's identity where it has one — summing nothing is `0`, and every one
 of nothing satisfies any predicate. `avg`, `median`, `max` and `min` have no identity to fall back on,
@@ -1522,6 +1583,12 @@ it guard a rule (§5.12).
 
 Both columns read the same whether the argument is the collection itself (`sum(transactions)`) or a
 projection off it (`sum(transactions.amount)`).
+
+**Nested collections.** A collection inside a present `object` is missing when the object does not
+carry it: with `account` present but holding no `orders`, `count(account.orders)` is missing, not `0`,
+and `isEmpty(account.orders)` is `false`. Only once a path has passed through a collection does an
+element without the member simply contribute nothing — `count(orders.tags)` over orders that carry no
+tags is `0`, because the record does carry the orders.
 
 #### Arithmetic operators
 
@@ -1558,6 +1625,10 @@ sum(transactions.amount) * 0.03
 - `every` / `any` without a condition, e.g. `every(orders)` → error.
 - `sumByKey` without a key literal, with fewer than two sources, joining on a member a source does not
   declare, on members whose types disagree, or summing a member that is not numeric → error.
+- `joinByKey` with the same source errors as `sumByKey` — no key literal, fewer than two sources, an
+  unknown member, a key a source does not declare, key types that disagree, a value member that is
+  not numeric — or with an alias that repeats, equals the key's name, or equals a schema field → error.
+  A source without its `alias:`, or one that is not a path, is a parse error.
 
 #### Worked example
 
@@ -2019,6 +2090,10 @@ entries:
 ```
 
 > All paths are **relative to the manifest file itself**. This means the entire project folder can be moved without changing any paths.
+>
+> A path may leave the manifest's folder — `../shared/schema.yaml` shares one schema between projects —
+> for schema, action and rule files alike, on the filesystem and on the classpath. A manifest can
+> therefore point at any file the process can read: **load manifests only from trusted sources.**
 
 ### 6.1 Top-level manifest fields
 
@@ -2469,8 +2544,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | List literal on a non-`in` / non-`containsAny/All` operator | `purpose equals ["a", "b"]` |
 | Quoted or non-boolean value on a boolean field | `isActive equals "true"`, `isActive equals 1` |
 | Non-ISO date literal on a field with no `format` | `bookingDate equals "15.06.2024"` (use `"2024-06-15"`) |
-| ISO literal on a field that declares a `format` | `dueDate equals "2024-01-31"` when `dueDate` declares `format: "dd.MM.yyyy"` (use `"31.01.2024"`) |
-| Date-only literal on a `date_time` field | `bookedAt equals "2024-06-15"` (use `"2024-06-15T00:00:00"`) |
+| ISO literal on a field that declares a `format` | `dueDate equals "2024-01-31"` or `dueDate == "2024-01-31"` when `dueDate` declares `format: "dd.MM.yyyy"` (use `"31.01.2024"`) |
+| Unparseable date literal in a comparison | `createdAt < "tomorrow"` — outside a filter the literal is read as a date |
+| Date-only literal on a `date_time` field that declares a `format` | `eventAt equals "15.06.2024"` with `format: dd.MM.yyyy HH:mm` (write `"15.06.2024 00:00"`) |
 | Comparing a structure directly | `transactions equals "x"` — navigate into it or aggregate over it |
 | Unknown member of a declared structure | `orders.totl` when `orders` declares `total` |
 | `between` or a text-matching operator inside a filter | `transactions[amount between 1 5]`, `transactions[label startsWith "r"]` |
@@ -2481,6 +2557,8 @@ The engine validates everything at load time and rejects the following. Never ge
 | `sortBy` given no member for a collection of objects | `sortBy(orders, desc)` when `orders` declares members |
 | `sortBy` ordering by an unknown or structural member | `sortBy(orders, "totl", desc)`, `sortBy(orders, "lines", asc)` |
 | A `sortBy` direction other than `asc` / `desc`, or an unquoted member | `sortBy(orders, "total", upwards)`, `sortBy(orders, total, desc)` — both are parse errors |
+| `joinByKey` with an unknown or non-numeric value member, or key types that disagree | `joinByKey("period", credit: credits.amount, debit: debits.missing)`, `credit: credits.period` |
+| `joinByKey` with a repeated alias, an alias named like the key, or an alias named like a schema field | `credit: credits.amount, credit: debits.amount`, `period: …`, `periods: …` when `periods` is a field |
 | Reading a variable no earlier rule assigns | `$turnover >= 100` with no preceding `set turnover = …` (typo, or the setter is listed later) |
 | Naming a variable like a schema field | `set amount = 1` when `amount` is declared in the field schema |
 | Writing `$` on the left of `set` | `set $turnover = …` (the name is written bare after `set`) |
@@ -2637,7 +2715,8 @@ which is how you find out *why* a rule did not fire.
 - [ ] `between` is only used on `integer`, `decimal`, `date` or `date_time` fields — two numeric bounds
       without quotes, or two quoted date values.
 - [ ] Boolean values are the bare words `true` / `false`; date values are quoted, in the field's
-      declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise.
+      declared `format` when it has one and `YYYY-MM-DD` / `YYYY-MM-DDTHH:MM:SS` otherwise (a `date_time`
+      also takes a plain `YYYY-MM-DD`, compared by calendar day).
 - [ ] `in` / `containsAny` / `containsAll` use a JSON-style list: `["a", "b"]`.
 - [ ] Filters inside `[...]` use only `==`, `!=`, `>`, `>=`, `<`, `<=` and contain no `and` / `or`.
 - [ ] Every action in every `then`, `else` and `not_exists` block is defined in the action schema, with a matching argument count.

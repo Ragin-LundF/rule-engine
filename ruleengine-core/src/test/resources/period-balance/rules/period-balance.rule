@@ -1,0 +1,17 @@
+# A period is positive when its credit exceeds its debit. The check passes when at least half of
+# the listed periods are positive. One rule, no upper limit on periods: `joinByKey` builds one row
+# per period from both collections, and the filter on those rows must start on the line the join
+# closes on.
+rule "period-balance" {
+  description "Credit exceeds debit in at least half of the periods."
+  when
+    count(periods) > 0
+    and count(joinByKey("period", credit: credits.amount, debit: debits.amount)[period in periods and credit > debit])
+        >= count(periods) * 0.5
+  then
+    outcome "PASS"
+  else
+    outcome "FAIL"
+  not_exists
+    outcome "MISSING"
+}

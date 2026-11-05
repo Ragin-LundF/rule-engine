@@ -1,0 +1,11 @@
+{
+  "periods": ["P1", "P2", "P3"],
+  "credits": [
+    { "period": "P1", "amount": 100 }, { "period": "P2", "amount": 100 },
+    { "period": "P3", "amount": 100 }, { "period": "P4", "amount": 999 }
+  ],
+  "debits": [
+    { "period": "P1", "amount": 120 }, { "period": "P2", "amount": 80 },
+    { "period": "P3", "amount": 50 }
+  ]
+}

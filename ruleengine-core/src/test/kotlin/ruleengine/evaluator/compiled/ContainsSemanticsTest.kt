@@ -3,7 +3,7 @@ package ruleengine.evaluator.compiled
 import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
 import ruleengine.evaluator.compiled.logic.AndExpression
 import ruleengine.evaluator.compiled.logic.NotExpression
 import ruleengine.evaluator.compiled.text.TextContainsExpression
@@ -39,19 +39,28 @@ class ContainsSemanticsTest {
         schema = FieldSchema(name = "empty", fields = emptyMap()),
     )
 
-    private fun text(value: String) = TextExpressionValue(value = value)
-    private fun number(value: String) = NumberExpressionValue(value = BigDecimal(value))
-    private fun list(vararg values: ExpressionValue) = ArrayExpressionValue(values = values.toList())
+    private fun text(value: String): TextExpressionValue {
+        return TextExpressionValue(value = value)
+    }
+    private fun number(value: String): NumberExpressionValue {
+        return NumberExpressionValue(value = BigDecimal(value))
+    }
+    private fun list(vararg values: ExpressionValue): ArrayExpressionValue {
+        return ArrayExpressionValue(values = values.toList())
+    }
 
-    private fun contains(left: ExpressionValue, right: ExpressionValue): Boolean =
-        comparison(left = left, right = right).evaluate(context = context, trace = null).isTrue()
+    private fun contains(left: ExpressionValue, right: ExpressionValue): Boolean {
+        return comparison(left = left, right = right).evaluate(context = context, trace = null).isTrue()
+    }
 
-    private fun comparison(left: ExpressionValue, right: ExpressionValue) = ComparisonCompiledExpression(
-        left = LiteralCompiledValueExpression(value = left),
-        operator = ComparisonOperatorAst.CONTAINS,
-        right = LiteralCompiledValueExpression(value = right),
-        cost = EvaluationCost.CHEAP,
-    )
+    private fun comparison(left: ExpressionValue, right: ExpressionValue): ComparisonCompiledExpression {
+        return ComparisonCompiledExpression(
+            left = LiteralCompiledValueExpression(value = left),
+            operator = ComparisonOperatorAst.CONTAINS,
+            right = LiteralCompiledValueExpression(value = right),
+            cost = EvaluationCost.CHEAP,
+        )
+    }
 
     // ── list membership ───────────────────────────────────────────────────────
 

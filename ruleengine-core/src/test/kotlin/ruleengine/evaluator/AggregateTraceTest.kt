@@ -37,6 +37,10 @@ class AggregateTraceTest {
             FieldId(value = "budget") to FieldDefinition(
                 id = FieldId(value = "budget"),
                 type = FieldType.DECIMAL
+            ),
+            FieldId(value = "bookedAt") to FieldDefinition(
+                id = FieldId(value = "bookedAt"),
+                type = FieldType.DATE_TIME
             )
         )
     )
@@ -70,6 +74,17 @@ class AggregateTraceTest {
             actual = node.actual,
             message = "The trace must say what the sum really was, or a red row cannot explain itself",
         )
+    }
+
+    @Test
+    fun `a date_time operand is recorded with its time of day`() {
+        val node = conditionsOf(
+            condition = "bookedAt == \"2024-06-15T09:30:00\"",
+            extraFields = arrayOf("bookedAt" to "2024-06-15T09:30:00"),
+        ).single()
+
+        assertEquals(expected = "2024-06-15T09:30", actual = node.actual)
+        assertEquals(expected = "2024-06-15T09:30", actual = node.expected)
     }
 
     /**

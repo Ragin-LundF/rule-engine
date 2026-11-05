@@ -2,6 +2,7 @@ package ui.project
 
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.CoroutineScope
+import ruleengine.manifest.ManifestLoader
 import ui.editor.rules.RuleEditorState
 import ui.project.model.ProjectEntry
 import ui.project.model.ProjectSession
@@ -158,6 +159,49 @@ class ProjectWorkspaceSampleTest {
         )
     }
 
+    @Test
+    fun `saving a sample writes its rule files and leaves it clean`() {
+        val state = cleanState()
+        val savedTo = Files.createTempDirectory("sample-with-rules")
+        val workspace = ProjectWorkspace(
+            state = state,
+            chooseManifestToSave = { savedTo.resolve("manifest.yaml") },
+        )
+        val sampleManifest = """
+            entries:
+              - id: sample
+                rules:
+                  - rules/first.rule
+                  - rules/second.rule
+        """.trimIndent()
+
+        workspace.loadSample {
+            state.reset()
+            state.schemaText.value = SAMPLE_SCHEMA
+            state.parsedManifest.value = ManifestLoader.loadFromString(content = sampleManifest)
+            state.selectedManifestEntry.value = "sample"
+            state.inMemoryRuleFiles.value = mapOf(
+                "rules/first.rule" to ruleText(ruleId = "first"),
+                "rules/second.rule" to ruleText(ruleId = "second"),
+            )
+            state.loadAllRuleFilesForCurrentEntry()
+        }
+        assertTrue(actual = workspace.saveProject())
+
+        assertEquals(
+            expected = ruleText(ruleId = "first"),
+            actual = Files.readString(savedTo.resolve("rules/first.rule")),
+        )
+        assertEquals(
+            expected = ruleText(ruleId = "second"),
+            actual = Files.readString(savedTo.resolve("rules/second.rule")),
+        )
+        assertTrue(
+            actual = Files.readString(savedTo.resolve("manifest.yaml")).contains(other = "rules/second.rule"),
+        )
+        assertFalse(actual = workspace.isDirty, message = "everything the sample holds is now on disk")
+    }
+
     /** Opening a project makes its own files the buffers' home again, so the guard must let go. */
     @Test
     fun `opening a project after a sample restores it as the save target`() {
@@ -178,13 +222,17 @@ class ProjectWorkspaceSampleTest {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun cleanState() = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+    private fun cleanState(): RuleEditorState {
+        return RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
+    }
 
-    private fun workspaceFor(state: RuleEditorState, project: Path) = ProjectWorkspace(
-        state = state,
-        chooseManifestToOpen = { project.resolve("manifest.yaml") },
-        chooseManifestToSave = { throw AssertionError("the save dialog should not have been opened") },
-    )
+    private fun workspaceFor(state: RuleEditorState, project: Path): ProjectWorkspace {
+        return ProjectWorkspace(
+            state = state,
+            chooseManifestToOpen = { project.resolve("manifest.yaml") },
+            chooseManifestToSave = { throw AssertionError("the save dialog should not have been opened") },
+        )
+    }
 
     private fun createProject(): Path {
         val root = Files.createTempDirectory("workspace-project")
@@ -204,12 +252,14 @@ class ProjectWorkspaceSampleTest {
         return root
     }
 
-    private fun ruleText(ruleId: String): String = """
-        rule "$ruleId" {
-          when purpose equals "rent"
-          then label "rent"
-        }
-    """.trimIndent()
+    private fun ruleText(ruleId: String): String {
+        return """
+            rule "$ruleId" {
+              when purpose equals "rent"
+              then label "rent"
+            }
+        """.trimIndent()
+    }
 
     private companion object {
         val PROJECT_SCHEMA: String = """

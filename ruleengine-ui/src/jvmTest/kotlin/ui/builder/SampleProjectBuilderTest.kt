@@ -3,14 +3,14 @@ package ui.builder
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.ScopedEvaluation
 import ruleengine.manifest.ManifestLoader
@@ -36,7 +36,9 @@ class SampleProjectBuilderTest {
 
     private val samplesDir: Path = Path.of("src/commonMain/composeResources/files/samples")
 
-    private fun sample(name: String): Path = samplesDir.resolve(name)
+    private fun sample(name: String): Path {
+        return samplesDir.resolve(name)
+    }
 
     /**
      * The sample's rule files in manifest order, which is the order the engine evaluates them in.
@@ -73,12 +75,14 @@ class SampleProjectBuilderTest {
      * [RuleAstToBuilderMapper.normalizeOperator] — and is the one difference a faithful round-trip is
      * allowed to introduce. Everything else must survive untouched.
      */
-    private fun canonical(expr: ExpressionAst): ExpressionAst = when (expr) {
-        is ConditionAst -> expr.copy(operator = RuleAstToBuilderMapper.normalizeOperator(expr.operator))
-        is AndAst -> AndAst(children = expr.children.map { canonical(expr = it) })
-        is OrAst -> OrAst(children = expr.children.map { canonical(expr = it) })
-        is NotAst -> NotAst(child = canonical(expr = expr.child))
-        is ComparisonExpressionAst -> expr
+    private fun canonical(expr: ExpressionAst): ExpressionAst {
+        return when (expr) {
+            is ConditionAst -> expr.copy(operator = RuleAstToBuilderMapper.normalizeOperator(expr.operator))
+            is AndAst -> AndAst(children = expr.children.map { canonical(expr = it) })
+            is OrAst -> OrAst(children = expr.children.map { canonical(expr = it) })
+            is NotAst -> NotAst(child = canonical(expr = expr.child))
+            is ComparisonExpressionAst -> expr
+        }
     }
 
     /**
@@ -166,8 +170,9 @@ class SampleProjectBuilderTest {
         ).joinToString(separator = " | ")
     }
 
-    private fun assignmentShape(assignment: VariableAssignmentAst): String =
-        "${assignment.kind}:${assignment.name}"
+    private fun assignmentShape(assignment: VariableAssignmentAst): String {
+        return "${assignment.kind}:${assignment.name}"
+    }
 
     @Test
     fun `sample schema declares nested collection members`() {

@@ -180,7 +180,9 @@ bookedAt between "2024-06-15T09:00:00" "2024-06-15T17:00:00"
 
 Dates are always quoted. Without a declared format they are ISO — `YYYY-MM-DD` for a `date`,
 `YYYY-MM-DDTHH:MM:SS` for a `date_time` — so `bookingDate > 20240101` and
-`bookingDate equals "15.06.2024"` are both rejected when the rules load.
+`bookingDate equals "15.06.2024"` are both rejected when the rules load. A `date_time` without a format
+also accepts a plain `YYYY-MM-DD`, compared by calendar day: `bookedAt lt "2024-06-16"` is true for any
+time on the 15th.
 
 When the schema declares a [`format`](field-schema.md#date-formats) for the field, that pattern is what
 the rule must use instead:
@@ -602,9 +604,7 @@ and `stop`.
 | A field whose value cannot be read as its declared type | yes |
 | A variable no earlier rule published | yes |
 | `avg`, `median`, `min`, `max` over a missing or empty collection | yes — they produce no value |
-| `count` and `sum` over a missing collection | no — they produce `0` |
-| `every` over a missing collection | no — vacuously true |
-| `any` over a missing collection | no — nothing satisfied it |
+| `count`, `sum`, `every` and `any` over a missing collection — also one nested in a present object | yes — missing |
 | A field that is present and simply does not match | no — that is an ordinary false |
 
 ### How it combines with `and`, `or` and `not`

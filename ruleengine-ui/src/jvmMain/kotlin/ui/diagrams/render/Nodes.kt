@@ -22,8 +22,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ui.diagrams.BorderActions
 import ui.diagrams.BorderRule
 import ui.diagrams.LabelActionName

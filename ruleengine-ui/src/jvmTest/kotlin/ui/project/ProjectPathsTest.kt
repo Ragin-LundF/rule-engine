@@ -34,5 +34,10 @@ class ProjectPathsTest {
         assertTrue(actual = ProjectPaths.isExternal(relativePath = "../shared/common.yaml"))
         assertTrue(actual = ProjectPaths.isExternal(relativePath = "/absolute/common.yaml"))
         assertFalse(actual = ProjectPaths.isExternal(relativePath = "schemas/schema.yaml"))
+        assertTrue(actual = ProjectPaths.isExternal(relativePath = "rules/../../shared/x.rule"))
+        assertTrue(actual = ProjectPaths.isExternal(relativePath = "./../x.rule"))
+        assertTrue(actual = ProjectPaths.isExternal(relativePath = "..\\x.rule"))
+        assertFalse(actual = ProjectPaths.isExternal(relativePath = "rules/../schemas/schema.yaml"))
+        assertFalse(actual = ProjectPaths.isExternal(relativePath = "..rules/x.rule"))
     }
 }

@@ -23,6 +23,6 @@ sealed interface ManifestFile {
     /** [nameHint] is the file name a loader falls back to when the content declares none. */
     data class InMemory(val content: String, val nameHint: String) : Available
 
-    /** Not found, or refused because it escapes the manifest's base location. */
+    /** Not found, or not a resource name a manifest can reference (classpath: absolute or above the root). */
     data class Unavailable(val message: String) : ManifestFile
 }

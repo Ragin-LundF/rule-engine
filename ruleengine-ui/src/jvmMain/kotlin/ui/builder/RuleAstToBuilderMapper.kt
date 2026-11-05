@@ -2,22 +2,22 @@ package ui.builder
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.OperatorNames
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
-import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.ExtractionAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderExtraction
@@ -110,27 +110,29 @@ object RuleAstToBuilderMapper {
     private fun collectNodes(
         expr: ExpressionAst,
         joinToPrevious: String,
-    ): List<BuilderConditionNode>? = when (expr) {
-        is ConditionAst -> mapConditionAst(condition = expr, joinToPrevious = joinToPrevious)?.let { listOf(it) }
+    ): List<BuilderConditionNode>? {
+        return when (expr) {
+            is ConditionAst -> mapConditionAst(condition = expr, joinToPrevious = joinToPrevious)?.let { listOf(it) }
 
-        is ComparisonExpressionAst -> mapComparisonAst(
-            comparison = expr,
-            joinToPrevious = joinToPrevious,
-        )?.let { listOf(it) }
+            is ComparisonExpressionAst -> mapComparisonAst(
+                comparison = expr,
+                joinToPrevious = joinToPrevious,
+            )?.let { listOf(it) }
 
-        is NotAst -> mapNot(expr = expr, joinToPrevious = joinToPrevious)
+            is NotAst -> mapNot(expr = expr, joinToPrevious = joinToPrevious)
 
-        is AndAst -> collectGroupedChildren(
-            children = expr.children,
-            groupJoin = "and",
-            parentJoin = joinToPrevious,
-        )
+            is AndAst -> collectGroupedChildren(
+                children = expr.children,
+                groupJoin = "and",
+                parentJoin = joinToPrevious,
+            )
 
-        is OrAst -> collectGroupedChildren(
-            children = expr.children,
-            groupJoin = "or",
-            parentJoin = joinToPrevious,
-        )
+            is OrAst -> collectGroupedChildren(
+                children = expr.children,
+                groupJoin = "or",
+                parentJoin = joinToPrevious,
+            )
+        }
     }
 
     /**
@@ -158,16 +160,20 @@ object RuleAstToBuilderMapper {
         )
     }
 
-    private fun negate(node: BuilderConditionNode): BuilderConditionNode = when (node) {
-        is BuilderConditionNode.Condition -> node.copy(negated = !node.negated)
-        is BuilderConditionNode.Comparison -> node.copy(negated = !node.negated)
-        is BuilderConditionNode.Group -> node.copy(negated = !node.negated)
+    private fun negate(node: BuilderConditionNode): BuilderConditionNode {
+        return when (node) {
+            is BuilderConditionNode.Condition -> node.copy(negated = !node.negated)
+            is BuilderConditionNode.Comparison -> node.copy(negated = !node.negated)
+            is BuilderConditionNode.Group -> node.copy(negated = !node.negated)
+        }
     }
 
-    private fun withJoin(node: BuilderConditionNode, join: String): BuilderConditionNode = when (node) {
-        is BuilderConditionNode.Condition -> node.copy(joinToPrevious = join)
-        is BuilderConditionNode.Comparison -> node.copy(joinToPrevious = join)
-        is BuilderConditionNode.Group -> node.copy(joinToPrevious = join)
+    private fun withJoin(node: BuilderConditionNode, join: String): BuilderConditionNode {
+        return when (node) {
+            is BuilderConditionNode.Condition -> node.copy(joinToPrevious = join)
+            is BuilderConditionNode.Comparison -> node.copy(joinToPrevious = join)
+            is BuilderConditionNode.Group -> node.copy(joinToPrevious = join)
+        }
     }
 
     /**
@@ -259,13 +265,15 @@ object RuleAstToBuilderMapper {
      * form added later has to be a compile error here, not an extraction that quietly disappears from
      * the author's file the first time they touch the rule in the Builder.
      */
-    private fun mapExtraction(extraction: ExtractionAst?): BuilderExtraction? = when (extraction) {
-        null -> null
-        is ExtractionAst.RegexExtraction -> BuilderExtraction(
-            sourceField = extraction.sourceField,
-            pattern = extraction.pattern,
-            groupIndex = extraction.groupIndex,
-        )
+    private fun mapExtraction(extraction: ExtractionAst?): BuilderExtraction? {
+        return when (extraction) {
+            null -> null
+            is ExtractionAst.RegexExtraction -> BuilderExtraction(
+                sourceField = extraction.sourceField,
+                pattern = extraction.pattern,
+                groupIndex = extraction.groupIndex,
+            )
+        }
     }
 
     // ── literals ──────────────────────────────────────────────────────────────
@@ -312,17 +320,19 @@ object RuleAstToBuilderMapper {
         return "Rule uses $construct, which the Builder cannot edit yet."
     }
 
-    private fun findUnmappable(expr: ExpressionAst): String? = when (expr) {
-        is AndAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
-        is OrAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
-        is NotAst -> findUnmappable(expr = expr.child)
-        is ConditionAst -> if (literalToValue(lit = expr.value) == null) {
-            "an unsupported literal value"
-        } else {
-            null
+    private fun findUnmappable(expr: ExpressionAst): String? {
+        return when (expr) {
+            is AndAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
+            is OrAst -> expr.children.firstNotNullOfOrNull { findUnmappable(expr = it) }
+            is NotAst -> findUnmappable(expr = expr.child)
+            is ConditionAst -> if (literalToValue(lit = expr.value) == null) {
+                "an unsupported literal value"
+            } else {
+                null
+            }
+            is ComparisonExpressionAst -> describeUnmappableOperand(expr = expr.left)
+                ?: describeUnmappableOperand(expr = expr.right)
         }
-        is ComparisonExpressionAst -> describeUnmappableOperand(expr = expr.left)
-            ?: describeUnmappableOperand(expr = expr.right)
     }
 
     private fun describeUnmappableOperand(expr: ValueExpressionAst): String? {
@@ -338,5 +348,7 @@ object RuleAstToBuilderMapper {
     // eventually move to commonMain without a JVM dependency.
     private var idCounter = 0
 
-    private fun nextId(prefix: String): String = "$prefix-${idCounter++}"
+    private fun nextId(prefix: String): String {
+        return "$prefix-${idCounter++}"
+    }
 }

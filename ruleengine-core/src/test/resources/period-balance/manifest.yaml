@@ -1,0 +1,7 @@
+name: period-balance
+entries:
+  - id: period-balance
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/period-balance.rule

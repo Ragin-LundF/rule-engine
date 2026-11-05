@@ -1,6 +1,6 @@
 package ruleengine.export.dto
 
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * One `.rule` file's parsed rules, paired with the path the manifest lists it under.

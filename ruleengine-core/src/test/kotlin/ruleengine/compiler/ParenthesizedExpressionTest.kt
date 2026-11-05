@@ -7,8 +7,8 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.OrAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.OrAst
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext

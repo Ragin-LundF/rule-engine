@@ -1,11 +1,11 @@
 package ui.diagrams
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.ActionAst
 
 /**
  * The output identity of an action, as the engine sees it and as a reader groups it.

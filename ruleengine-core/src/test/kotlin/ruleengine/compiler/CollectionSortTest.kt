@@ -5,10 +5,12 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.SortSegmentAst
+import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.RuleEngine
@@ -253,7 +255,7 @@ class CollectionSortTest {
     @Test
     fun `the parsed path carries a sort segment`() {
         val asts = Parser(input = rule(condition = "count(sortBy(orders, \"total\", desc)) > 0")).parseRules()
-        val argument = ((asts[0].condition as ComparisonExpressionAst).left as ruleengine.dsl.ast.FunctionCallValueAst)
+        val argument = ((asts[0].condition as ComparisonExpressionAst).left as FunctionCallValueAst)
             .arguments.single() as FieldAccessAst
         assertEquals(
             expected = listOf(SortSegmentAst(member = "total", descending = true)),
@@ -422,18 +424,22 @@ class CollectionSortTest {
         return ValueExpressionRenderer.render(expr = (asts[0].condition as ComparisonExpressionAst).left)
     }
 
-    private fun validate(condition: String) = Validator.validate(
-        asts = Parser(input = rule(condition = condition)).parseRules(),
-        schema = schema
-    ).diagnostics
+    private fun validate(condition: String): List<ValidationDiagnostic> {
+        return Validator.validate(
+            asts = Parser(input = rule(condition = condition)).parseRules(),
+            schema = schema
+        ).diagnostics
+    }
 
-    private fun rule(condition: String): String = """
-        rule "sort-test" {
-          description "orders a collection"
-          when
-            $condition
-          then
-            flag "ok"
-        }
-    """.trimIndent()
+    private fun rule(condition: String): String {
+        return """
+            rule "sort-test" {
+              description "orders a collection"
+              when
+                $condition
+              then
+                flag "ok"
+            }
+        """.trimIndent()
+    }
 }

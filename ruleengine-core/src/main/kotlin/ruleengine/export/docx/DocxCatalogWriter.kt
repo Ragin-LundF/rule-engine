@@ -222,16 +222,12 @@ object DocxCatalogWriter {
      * `label:high` would read as two outcomes the rule produces together instead of one or the other.
      */
     private fun outcomeSummary(rule: CatalogRule): String {
-        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty() && rule.notExistsOutcomes.isEmpty()) {
-            return "—"
+        val lines = CatalogText.outcomeSummary(rule = rule).flatMap { (prefix, outcomes) ->
+            outcomes.map { outcome ->
+                listOfNotNull(prefix, CatalogText.label(outcome = outcome)).joinToString(separator = " ")
+            }
         }
-
-        val lines = rule.outcomes.map { outcome -> CatalogText.label(outcome = outcome) } +
-                rule.elseOutcomes.map { outcome -> "otherwise ${CatalogText.label(outcome = outcome)}" } +
-                rule.notExistsOutcomes.map { outcome ->
-                    "when missing ${CatalogText.label(outcome = outcome)}"
-                }
-        return lines.joinToString(separator = "\n")
+        return lines.joinToString(separator = "\n").ifEmpty { "—" }
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────

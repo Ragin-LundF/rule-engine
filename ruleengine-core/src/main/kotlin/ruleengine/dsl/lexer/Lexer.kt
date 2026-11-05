@@ -109,8 +109,14 @@ class Lexer(private val input: String) {
                     column = startCol,
                     messageText = "Unterminated escape in string"
                 )
-                sb.append(nxt)
-                advance()
+                // Only `\\` and `\"` are escapes. Any other backslash is kept, so a regex such as
+                // `"^DE\d{20}$"` reaches the pattern as written instead of losing its `\d`.
+                if (nxt == '"' || nxt == '\\') {
+                    sb.append(nxt)
+                    advance()
+                } else {
+                    sb.append(c)
+                }
             } else {
                 sb.append(c)
                 advance()
@@ -148,13 +154,8 @@ class Lexer(private val input: String) {
 
         // '-' followed by a digit is a negative number literal
         if (first == '-' && next != null && next.isDigit()) {
-            val sb = StringBuilder()
-            sb.append('-')
-            while (current()?.let { it.isDigit() || it == '.' } == true) {
-                sb.append(current())
-                advance()
-            }
-            return Token(type = TokenType.NUMBER, text = sb.toString(), line = startLine, col = startCol)
+            val digits = readNumber()
+            return Token(type = TokenType.NUMBER, text = "-${digits.text}", line = startLine, col = startCol)
         }
 
         if (first == '-') {
@@ -225,9 +226,13 @@ class Lexer(private val input: String) {
         val startLine = line
         val startCol = col
         val sb = StringBuilder()
+        var seenDot = false
         while (true) {
             val c = current() ?: break
-            if (c.isDigit() || c == '.') {
+            // A second dot ends the number, so `1.2.3` reaches the parser as `1.2` `.` `3` and is
+            // reported there with its position instead of failing later as a bare NumberFormatException.
+            if (c.isDigit() || (c == '.' && !seenDot)) {
+                seenDot = seenDot || c == '.'
                 sb.append(c)
                 advance()
             } else {
@@ -247,7 +252,7 @@ class Lexer(private val input: String) {
             '{' to TokenType.LBRACE, '}' to TokenType.RBRACE,
             '(' to TokenType.LPAREN, ')' to TokenType.RPAREN,
             '[' to TokenType.LBRACKET, ']' to TokenType.RBRACKET,
-            ',' to TokenType.COMMA, '.' to TokenType.DOT,
+            ',' to TokenType.COMMA, '.' to TokenType.DOT, ':' to TokenType.COLON,
             '+' to TokenType.PLUS, '*' to TokenType.STAR, '/' to TokenType.SLASH
         )
     }

@@ -1,6 +1,6 @@
 package ui.builder.model
 
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 
 /**
  * A single assignment row rendered in a branch: `set <name> = <expression>` or

@@ -17,7 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ruleengine.core.domain.dto.RuleBranch
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.AccentGreen
 import ui.AccentOrange
 import ui.AccentPurple

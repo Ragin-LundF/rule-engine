@@ -1,7 +1,7 @@
 package ui.editor.rules
 
 import ruleengine.core.analysis.VariableUsage
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.diagrams.model.RuleSource
 
 /**

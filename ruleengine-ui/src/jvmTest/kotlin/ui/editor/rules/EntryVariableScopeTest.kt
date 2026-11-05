@@ -1,6 +1,6 @@
 package ui.editor.rules
 
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ruleengine.dsl.parser.Parser
 import ui.diagrams.model.RuleSource
 import kotlin.test.Test

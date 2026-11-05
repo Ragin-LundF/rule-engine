@@ -253,6 +253,298 @@ class ProjectSaverTest {
         assertTrue(actual = Files.exists(target.resolve("rules/other.rule")))
     }
 
+    @Test
+    fun `save as asks before replacing a different file already in the target folder`() {
+        val parent = Files.createTempDirectory("save-as-clash")
+        val origin = Files.createDirectories(parent.resolve("origin/rules")).parent
+        Files.writeString(origin.resolve("rules/pricing.rule"), ruleText(ruleId = "ours"))
+        val target = Files.createDirectories(parent.resolve("other/rules")).parent
+        val theirs = ruleText(ruleId = "theirs")
+        Files.writeString(target.resolve("rules/pricing.rule"), theirs)
+        val session = ProjectSession(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "primary"),
+                ProjectEntry(id = "secondary", ruleFiles = listOf("rules/pricing.rule")),
+            ),
+            activeEntryId = "primary",
+        )
+        val saver = ProjectSaver(dirtyState = ProjectDirtyState())
+
+        val first = saver.saveAs(
+            state = newState(ruleId = "discount"),
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        val needed = assertIs<ProjectSaveOutcome.NeedsConfirmation>(value = first)
+        assertEquals(
+            expected = ProjectSaveConfirmation.DiskConflict(
+                kind = ProjectFileKind.RULE,
+                relativePath = "rules/pricing.rule",
+            ),
+            actual = needed.request,
+        )
+        assertEquals(expected = theirs, actual = Files.readString(target.resolve("rules/pricing.rule")))
+        assertTrue(actual = Files.notExists(target.resolve("manifest.yaml")))
+
+        val approved = saver.saveAs(
+            state = newState(ruleId = "discount"),
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+            approvals = ProjectSaveApprovals(overwrittenConflicts = setOf("rules/pricing.rule")),
+        )
+
+        assertIs<ProjectSaveOutcome.Saved>(value = approved)
+        assertEquals(
+            expected = ruleText(ruleId = "ours"),
+            actual = Files.readString(target.resolve("rules/pricing.rule")),
+        )
+    }
+
+    @Test
+    fun `a save waiting for an answer creates no folders`() {
+        val parent = Files.createTempDirectory("save-pending-folders")
+        Files.writeString(Files.createDirectories(parent.resolve("shared")).resolve("common.yaml"), schemaYaml())
+        val root = Files.createDirectories(parent.resolve("project"))
+        val state = newState(ruleId = "discount")
+        state.schemaText.value = schemaYaml() + "\n# edited\n"
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(
+            state = state,
+            session = scratchSession(root = root).withActive { it.copy(schemaLink = "../shared/common.yaml") },
+        )
+
+        assertIs<ProjectSaveOutcome.NeedsConfirmation>(value = outcome)
+        assertTrue(actual = Files.notExists(root.resolve("rules")))
+        assertTrue(actual = Files.notExists(root.resolve("schemas")))
+    }
+
+    /** `eu` and `EU` slug to the same default schema path; the second save must not replace the first. */
+    @Test
+    fun `saving onto a file this session never read needs confirmation`() {
+        val root = Files.createTempDirectory("unread-default")
+        Files.createDirectories(root.resolve("schemas"))
+        val other = "schema: other\nfields: {}\n"
+        Files.writeString(root.resolve("schemas/eu-schema.yaml"), other)
+        val session = ProjectSession(
+            root = root,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "eu", schemaLink = "schemas/eu-schema.yaml"),
+                ProjectEntry(id = "EU"),
+            ),
+            activeEntryId = "EU",
+        )
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).save(
+            state = newState(ruleId = "x"),
+            session = session,
+        )
+
+        val needed = assertIs<ProjectSaveOutcome.NeedsConfirmation>(value = outcome)
+        assertEquals(
+            expected = ProjectSaveConfirmation.DiskConflict(
+                kind = ProjectFileKind.SCHEMA,
+                relativePath = "schemas/eu-schema.yaml",
+            ),
+            actual = needed.request,
+        )
+        assertEquals(expected = other, actual = Files.readString(root.resolve("schemas/eu-schema.yaml")))
+    }
+
+    @Test
+    fun `save as re-points a rule file linked from outside the project`() {
+        val parent = Files.createTempDirectory("save-as-external-rule")
+        val shared = Files.createDirectories(parent.resolve("shared"))
+        val sharedRule = ruleText(ruleId = "shared")
+        Files.writeString(shared.resolve("x.rule"), sharedRule)
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        val session = ProjectSession.singleEntry(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entry = ProjectEntry(id = "default", ruleFiles = listOf("../shared/x.rule")),
+        )
+        val state = newState(ruleId = "shared")
+        state.selectedManifestRuleFile.value = "../shared/x.rule"
+        state.inMemoryRuleFiles.value = mapOf("../shared/x.rule" to sharedRule)
+        val target = Files.createDirectories(parent.resolve("nested").resolve("copy"))
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).saveAs(
+            state = state,
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        val saved = assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertEquals(expected = listOf("../../shared/x.rule"), actual = saved.session.ruleFiles)
+        assertEquals(expected = "../../shared/x.rule", actual = state.selectedManifestRuleFile.value)
+        assertEquals(expected = sharedRule, actual = Files.readString(shared.resolve("x.rule")))
+    }
+
+    @Test
+    fun `save as waiting for an answer copies nothing and keeps the old baselines`() {
+        val parent = Files.createTempDirectory("save-as-pending")
+        Files.writeString(Files.createDirectories(parent.resolve("shared")).resolve("common.yaml"), schemaYaml())
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        val dirtyState = ProjectDirtyState()
+        val saver = ProjectSaver(dirtyState = dirtyState)
+        val state = newState(ruleId = "discount")
+        val saved = assertIs<ProjectSaveOutcome.Saved>(
+            value = saver.save(
+                state = state,
+                session = scratchSession(root = origin).withActive { it.copy(schemaLink = "../shared/common.yaml") },
+                approvals = ProjectSaveApprovals(externalWrites = setOf(ProjectFileKind.SCHEMA)),
+            ),
+        )
+        val baselines = dirtyState.snapshot()
+        // An edited shared schema: writing it leaves the project, so the save stops to ask.
+        state.schemaText.value = schemaYaml() + "\n# edited\n"
+        val target = Files.createDirectories(parent.resolve("copy"))
+
+        val outcome = saver.saveAs(
+            state = state,
+            session = saved.session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        val needed = assertIs<ProjectSaveOutcome.NeedsConfirmation>(value = outcome)
+        assertIs<ProjectSaveConfirmation.ExternalWrite>(value = needed.request)
+        assertTrue(actual = Files.notExists(target.resolve("rules")))
+        assertTrue(actual = Files.notExists(target.resolve("schemas")))
+        assertEquals(expected = baselines, actual = dirtyState.snapshot())
+    }
+
+    @Test
+    fun `save as that fails while writing restores the buffers and baselines`() {
+        val parent = Files.createTempDirectory("save-as-throws")
+        val sharedRule = ruleText(ruleId = "shared")
+        Files.writeString(Files.createDirectories(parent.resolve("shared")).resolve("x.rule"), sharedRule)
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        val session = ProjectSession.singleEntry(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entry = ProjectEntry(id = "default", ruleFiles = listOf("../shared/x.rule")),
+        )
+        val state = newState(ruleId = "shared")
+        state.selectedManifestRuleFile.value = "../shared/x.rule"
+        state.inMemoryRuleFiles.value = mapOf("../shared/x.rule" to sharedRule)
+        val dirtyState = ProjectDirtyState()
+        dirtyState.markClean(key = ProjectDirtyState.ruleKey(relativePath = "../shared/x.rule"), content = sharedRule)
+        val baselines = dirtyState.snapshot()
+        val target = Files.createDirectories(parent.resolve("nested").resolve("copy"))
+        // A non-empty directory where the manifest goes: the last write of the save throws.
+        Files.writeString(Files.createDirectories(target.resolve("manifest.yaml")).resolve("keep.txt"), "x")
+
+        val outcome = ProjectSaver(dirtyState = dirtyState).saveAs(
+            state = state,
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        assertIs<ProjectSaveOutcome.Failed>(value = outcome)
+        assertEquals(expected = "../shared/x.rule", actual = state.selectedManifestRuleFile.value)
+        assertEquals(expected = setOf("../shared/x.rule"), actual = state.inMemoryRuleFiles.value.keys)
+        assertEquals(expected = baselines, actual = dirtyState.snapshot())
+    }
+
+    @Test
+    fun `save as copies the schema and actions of every entry`() {
+        val parent = Files.createTempDirectory("save-as-schemas")
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        Files.createDirectories(origin.resolve("schemas"))
+        Files.writeString(origin.resolve("schemas/second-schema.yaml"), schemaYaml())
+        Files.writeString(origin.resolve("schemas/second-actions.yaml"), actionsYaml())
+        val session = ProjectSession(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "first"),
+                ProjectEntry(
+                    id = "second",
+                    schemaLink = "schemas/second-schema.yaml",
+                    actionsLink = "schemas/second-actions.yaml",
+                ),
+            ),
+            activeEntryId = "first",
+        )
+        val target = Files.createDirectories(parent.resolve("copy"))
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).saveAs(
+            state = newState(ruleId = "discount"),
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+        )
+
+        assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertEquals(expected = schemaYaml(), actual = Files.readString(target.resolve("schemas/second-schema.yaml")))
+        assertEquals(expected = actionsYaml(), actual = Files.readString(target.resolve("schemas/second-actions.yaml")))
+    }
+
+    @Test
+    fun `save as asks before replacing a shared rule file that changed on disk`() {
+        val parent = Files.createTempDirectory("save-as-shared-changed")
+        val shared = Files.createDirectories(parent.resolve("shared"))
+        val readVersion = ruleText(ruleId = "shared")
+        Files.writeString(shared.resolve("x.rule"), readVersion)
+        val origin = Files.createDirectories(parent.resolve("origin"))
+        val session = ProjectSession.singleEntry(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entry = ProjectEntry(id = "default", ruleFiles = listOf("../shared/x.rule")),
+        )
+        val state = newState(ruleId = "shared")
+        state.selectedManifestRuleFile.value = "../shared/x.rule"
+        state.inMemoryRuleFiles.value = mapOf("../shared/x.rule" to readVersion)
+        val dirtyState = ProjectDirtyState()
+        dirtyState.markClean(key = ProjectDirtyState.ruleKey(relativePath = "../shared/x.rule"), content = readVersion)
+        val teammateVersion = ruleText(ruleId = "teammate")
+        Files.writeString(shared.resolve("x.rule"), teammateVersion)
+        val target = Files.createDirectories(parent.resolve("nested").resolve("copy"))
+
+        val outcome = ProjectSaver(dirtyState = dirtyState).saveAs(
+            state = state,
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+            approvals = ProjectSaveApprovals(externalWrites = setOf(ProjectFileKind.RULE)),
+        )
+
+        val needed = assertIs<ProjectSaveOutcome.NeedsConfirmation>(value = outcome)
+        assertIs<ProjectSaveConfirmation.DiskConflict>(value = needed.request)
+        assertEquals(expected = teammateVersion, actual = Files.readString(shared.resolve("x.rule")))
+    }
+
+    @Test
+    fun `save as writes a copy through a symlink already at the target`() {
+        val parent = Files.createTempDirectory("save-as-symlink")
+        val origin = Files.createDirectories(parent.resolve("origin/rules")).parent
+        Files.writeString(origin.resolve("rules/pricing.rule"), ruleText(ruleId = "ours"))
+        val elsewhere = Files.writeString(parent.resolve("elsewhere.rule"), ruleText(ruleId = "theirs"))
+        val target = Files.createDirectories(parent.resolve("copy/rules")).parent
+        val link = Files.createSymbolicLink(target.resolve("rules/pricing.rule"), elsewhere)
+        val session = ProjectSession(
+            root = origin,
+            manifestFileName = "manifest.yaml",
+            entries = listOf(
+                ProjectEntry(id = "primary"),
+                ProjectEntry(id = "secondary", ruleFiles = listOf("rules/pricing.rule")),
+            ),
+            activeEntryId = "primary",
+        )
+
+        val outcome = ProjectSaver(dirtyState = ProjectDirtyState()).saveAs(
+            state = newState(ruleId = "discount"),
+            session = session,
+            newManifestPath = target.resolve("manifest.yaml"),
+            approvals = ProjectSaveApprovals(overwrittenConflicts = setOf("rules/pricing.rule")),
+        )
+
+        assertIs<ProjectSaveOutcome.Saved>(value = outcome)
+        assertTrue(actual = Files.isSymbolicLink(link))
+        assertEquals(expected = ruleText(ruleId = "ours"), actual = Files.readString(elsewhere))
+    }
+
     /** Writing the index alone, for when files were just deleted and it must stop naming them. */
     @Test
     fun `save manifest writes only the manifest`() {
@@ -273,11 +565,13 @@ class ProjectSaverTest {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private fun scratchSession(root: Path) = ProjectSession.singleEntry(
-        root = root,
-        manifestFileName = "manifest.yaml",
-        entry = ProjectEntry(id = "default"),
-    )
+    private fun scratchSession(root: Path): ProjectSession {
+        return ProjectSession.singleEntry(
+            root = root,
+            manifestFileName = "manifest.yaml",
+            entry = ProjectEntry(id = "default"),
+        )
+    }
 
     private fun newState(ruleId: String): RuleEditorState {
         val state = RuleEditorState(scope = CoroutineScope(context = EmptyCoroutineContext))
@@ -287,27 +581,33 @@ class ProjectSaverTest {
         return state
     }
 
-    private fun schemaYaml(): String = """
-        schema: sample
-        fields:
-          purpose:
-            type: text
-            normalizers:
-              - trim
-            operators:
-              - equals
-    """.trimIndent()
+    private fun schemaYaml(): String {
+        return """
+            schema: sample
+            fields:
+              purpose:
+                type: text
+                normalizers:
+                  - trim
+                operators:
+                  - equals
+        """.trimIndent()
+    }
 
-    private fun actionsYaml(): String = """
-        actions:
-          label:
-            argTypes: [string]
-    """.trimIndent()
+    private fun actionsYaml(): String {
+        return """
+            actions:
+              label:
+                argTypes: [string]
+        """.trimIndent()
+    }
 
-    private fun ruleText(ruleId: String): String = """
-        rule "$ruleId" {
-          when purpose equals "rent"
-          then label "rent"
-        }
-    """.trimIndent()
+    private fun ruleText(ruleId: String): String {
+        return """
+            rule "$ruleId" {
+              when purpose equals "rent"
+              then label "rent"
+            }
+        """.trimIndent()
+    }
 }

@@ -1,9 +1,9 @@
 package ui.diagrams.model
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.parser.Parser
 import ui.diagrams.OutcomeKey
 import kotlin.test.Test

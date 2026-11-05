@@ -2,30 +2,30 @@ package ruleengine.dsl.parser
 
 import ruleengine.compiler.operators.OperatorUtils
 import ruleengine.core.domain.OperatorNames
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticOperatorAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ComparisonOperatorAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.PathSegmentAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.value.ArithmeticOperatorAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
@@ -46,6 +46,10 @@ class Parser(private val input: String) {
     private val thenBlockParser = ThenBlockParser(
         cursor = cursor,
         literals = literals,
+        parseValueExpression = { parseValueExpression() },
+    )
+    private val joinParser = JoinByKeyParser(
+        cursor = cursor,
         parseValueExpression = { parseValueExpression() },
     )
 
@@ -83,17 +87,26 @@ class Parser(private val input: String) {
         val TAKE: String = DslFunctions.SLICE_NAMES[0]
         val TAKE_LAST: String = DslFunctions.SLICE_NAMES[1]
         val SORT_BY: String = DslFunctions.SORT_NAMES.single()
+        val JOIN_BY_KEY: String = DslFunctions.JOIN_NAMES.single()
         const val ASC = "asc"
         const val DESC = "desc"
     }
 
-    private fun current(): Token = cursor.current()
+    private fun current(): Token {
+        return cursor.current()
+    }
 
-    private fun advance() = cursor.advance()
+    private fun advance() {
+        cursor.advance()
+    }
 
-    private fun expect(type: TokenType): Token = cursor.expect(type = type)
+    private fun expect(type: TokenType): Token {
+        return cursor.expect(type = type)
+    }
 
-    private fun previousLine(): Int = cursor.previousLine()
+    private fun previousLine(): Int {
+        return cursor.previousLine()
+    }
 
     fun parseRules(): List<RuleAst> {
         val rules = mutableListOf<RuleAst>()
@@ -587,6 +600,9 @@ class Parser(private val input: String) {
         if (nameTok.text.equals(other = SORT_BY, ignoreCase = true)) {
             return parseSort(nameTok = nameTok)
         }
+        if (nameTok.text.equals(other = JOIN_BY_KEY, ignoreCase = true)) {
+            return parseJoinByKey(nameTok = nameTok)
+        }
         advance()
         val args = mutableListOf<ValueExpressionAst>()
         while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
@@ -707,6 +723,15 @@ class Parser(private val input: String) {
         }
         advance()
         return descending
+    }
+
+    /**
+     * Reads `joinByKey(...)` as the first segment of a path. As with every path, a filter on the rows
+     * has to start on the line the closing parenthesis is on.
+     */
+    private fun parseJoinByKey(nameTok: Token): ValueExpressionAst {
+        val join = joinParser.parse(nameTok = nameTok)
+        return parsePathContinuation(segments = mutableListOf(join))
     }
 
     /**

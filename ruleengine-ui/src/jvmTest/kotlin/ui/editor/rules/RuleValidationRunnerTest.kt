@@ -1,7 +1,7 @@
 package ui.editor.rules
 
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ruleengine.schema.ActionSchemaLoader
 import ruleengine.schema.FieldSchemaLoader
 import ui.editor.rules.model.RuleValidationOutcome
@@ -50,7 +50,9 @@ class RuleValidationRunnerTest {
     private val schema = FieldSchemaLoader.loadFromString(content = SCHEMA_TEXT, nameHint = "transaction-v1")
     private val actions = ActionSchemaLoader.loadFromString(content = ACTIONS_TEXT)
 
-    private fun run(rule: String) = RuleValidationRunner.run(ruleText = rule, schema = schema, actions = actions)
+    private fun run(rule: String): RuleValidationOutcome {
+        return RuleValidationRunner.run(ruleText = rule, schema = schema, actions = actions)
+    }
 
     @Test
     fun `a correct rule validates with no error diagnostics`() {

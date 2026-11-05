@@ -1,11 +1,13 @@
 package ruleengine.evaluator.compiled
 
 import ruleengine.compiler.Compiler
+import ruleengine.core.domain.dto.EvaluationResult
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.dsl.parser.Parser
+import ruleengine.evaluator.CompiledRule
 import ruleengine.evaluator.RuleEngine
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
@@ -111,9 +113,87 @@ class EvaluationCacheScopeTest {
         )
     }
 
-    private fun evaluate(orders: List<Map<String, Any?>>) = RuleEngine(compiledRules = compile()).evaluate(
-        prepared = PreparedRuleContext.prepare(ctx = RuleContext.of("orders" to orders), schema = schema)
-    )
+    private fun evaluate(orders: List<Map<String, Any?>>): EvaluationResult {
+        return RuleEngine(compiledRules = compile()).evaluate(
+            prepared = PreparedRuleContext.prepare(ctx = RuleContext.of("orders" to orders), schema = schema)
+        )
+    }
 
-    private fun compile() = Compiler.compileRules(asts = Parser(input = rule).parseRules(), schema = schema)
+    private fun compile(): List<CompiledRule> {
+        return Compiler.compileRules(asts = Parser(input = rule).parseRules(), schema = schema)
+    }
+
+    /**
+     * `avg(transactions.amount)` reads only document data, so it is computed once and shared by every
+     * element rather than recomputed per element (quadratic). Counted as passes over the collection:
+     * the filter itself is one pass, the average another, whatever the collection's size.
+     */
+    @Test
+    fun `a document-level aggregate inside a filter is computed once`() {
+        val small = passesOverTransactions(size = 5)
+        val large = passesOverTransactions(size = 50)
+
+        assertEquals(expected = true, actual = small.matched, message = "the outlier is three times the average")
+        assertEquals(expected = true, actual = large.matched, message = "the outlier is three times the average")
+        assertEquals(expected = small.passes, actual = large.passes, message = "passes must not grow with size")
+    }
+
+    private data class Outcome(val matched: Boolean, val passes: Int)
+
+    private fun passesOverTransactions(size: Int): Outcome {
+        val transactionSchema = FieldSchema(
+            name = "outliers",
+            fields = mapOf(
+                FieldId(value = "transactions") to FieldDefinition(
+                    id = FieldId(value = "transactions"),
+                    type = FieldType.COLLECTION,
+                    fields = mapOf(
+                        FieldId(value = "amount") to FieldDefinition(
+                            id = FieldId(value = "amount"),
+                            type = FieldType.DECIMAL
+                        )
+                    )
+                )
+            )
+        )
+        val outlierRule = """
+            rule "outlier" {
+              when
+                count(transactions[amount > avg(transactions.amount) * 3]) > 0
+              then
+                flag "outlier"
+            }
+        """.trimIndent()
+        val amounts = List(size = size - 1) { mapOf("amount" to 1) } + mapOf("amount" to 1000)
+        val transactions = CountingList(items = amounts)
+        val compiled = Compiler.compileRules(
+            asts = Parser(input = outlierRule).parseRules(),
+            schema = transactionSchema
+        )
+        val result = RuleEngine(compiledRules = compiled).evaluate(
+            prepared = PreparedRuleContext.prepare(
+                ctx = RuleContext.of("transactions" to transactions),
+                schema = transactionSchema
+            )
+        )
+        return Outcome(matched = result.matches.isNotEmpty(), passes = transactions.iterations)
+    }
+
+    /** A list that counts how often it is walked. */
+    private class CountingList(private val items: List<Map<String, Any>>) : AbstractList<Map<String, Any>>() {
+        var iterations = 0
+            private set
+
+        override val size: Int
+            get() = items.size
+
+        override fun get(index: Int): Map<String, Any> {
+            return items[index]
+        }
+
+        override fun iterator(): Iterator<Map<String, Any>> {
+            iterations++
+            return items.iterator()
+        }
+    }
 }

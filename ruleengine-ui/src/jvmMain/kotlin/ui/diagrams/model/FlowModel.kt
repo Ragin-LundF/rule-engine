@@ -1,6 +1,6 @@
 package ui.diagrams.model
 
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * The bipartite edges, precomputed once per rule set.

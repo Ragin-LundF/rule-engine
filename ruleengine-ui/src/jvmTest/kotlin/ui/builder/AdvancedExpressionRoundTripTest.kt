@@ -35,12 +35,13 @@ import kotlin.test.assertTrue
  */
 class AdvancedExpressionRoundTripTest {
 
-    private fun field(name: String, type: FieldType, nested: List<FieldDefinition> = emptyList()) =
-        FieldDefinition(
+    private fun field(name: String, type: FieldType, nested: List<FieldDefinition> = emptyList()): FieldDefinition {
+        return FieldDefinition(
             id = FieldId(value = name),
             type = type,
             fields = nested.associateBy { it.id },
         )
+    }
 
     /**
      * orders: collection { status: text, total: decimal, origin: object { hub: text },
@@ -96,20 +97,22 @@ class AdvancedExpressionRoundTripTest {
         ).associateBy { it.id },
     )
 
-    private fun wrap(condition: String): String = """
-        rule "advanced" {
-          when
-            $condition
-          then
-            flag "hit"
-        }
-    """.trimIndent()
+    private fun wrap(condition: String): String {
+        return """
+            rule "advanced" {
+              when
+                $condition
+              then
+                flag "hit"
+            }
+        """.trimIndent()
+    }
 
     /**
      * Parses [condition], maps it into the Builder, renders it back out, and returns the re-parsed
      * rule together with the generated text.
      */
-    private fun roundTrip(condition: String): Pair<ruleengine.dsl.ast.RuleAst, String> {
+    private fun roundTrip(condition: String): Pair<ruleengine.dsl.ast.rule.RuleAst, String> {
         val originalDsl = wrap(condition = condition)
         val originalAst = Parser(input = originalDsl).parseRules().single()
 
@@ -440,9 +443,8 @@ class AdvancedExpressionRoundTripTest {
      * An extraction used to lock the rule, because `BuilderAction` had no slot for a regex and
      * regenerating the DSL without one would have deleted it from the file. It now round-trips.
      *
-     * Note what the AST carries: `Lexer.readString` treats a backslash as a generic escape, so the
-     * `\d` written here reaches the parser as a plain `d`. That is pre-existing and unrelated — the
-     * point of this test is that whatever the AST holds survives the trip unchanged.
+     * The `\d` written here reaches the AST as `\d`: only `\\` and `\"` are escapes. The point of
+     * this test is that whatever the AST holds survives the trip unchanged.
      */
     @Test
     fun `extraction rules round-trip`() {
@@ -518,6 +520,24 @@ class AdvancedExpressionRoundTripTest {
         assertRoundTrips(
             condition = """min(sumByKey("month", sales.amount, refunds.amount)) >= 0"""
         )
+    }
+
+    /**
+     * The Builder has no step for joined rows. Locking the rule is what keeps the join in the file:
+     * a locked rule generates no text, so the editor leaves what the author wrote untouched.
+     */
+    @Test
+    fun `a row join locks the rule and leaves its text untouched`() {
+        val condition = """count(joinByKey("month", sale: sales.amount, refund: refunds.amount)""" +
+            """[sale > refund]) >= 1"""
+        val ast = Parser(input = wrap(condition = condition)).parseRules().single()
+
+        val rule = RuleAstToBuilderMapper.map(rule = ast)
+
+        assertTrue(actual = rule is BuilderRule.Unsupported, message = "a join must lock the rule, got $rule")
+        val state = BuilderEditorState.fromBuilderRule(rule = rule)
+        assertTrue(actual = state.isLocked)
+        assertEquals(expected = null, actual = BuilderToRuleDsl.generate(state = state))
     }
 
     /** A bare predicate is desugared to `== true` by the parser; the Builder must not lose that. */
@@ -674,7 +694,7 @@ class AdvancedExpressionRoundTripTest {
     @Test
     fun `the path functions are offered by the breadcrumb, not the call editor`() {
         assertEquals(
-            expected = listOf("sortBy", "take", "takeLast").sorted(),
+            expected = listOf("joinByKey", "sortBy", "take", "takeLast").sorted(),
             actual = DslFunctions.pathFunctionNames().sorted(),
             message = "a call editor filtering on this list would start offering the new name",
         )

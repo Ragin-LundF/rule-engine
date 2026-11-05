@@ -1,14 +1,16 @@
 package ruleengine.evaluator.compiled.value.result
 
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
- * A calendar date.
+ * A calendar date, with the time of day when it was read from a declared `date_time` field.
  *
- * Time of day is dropped on the way in, matching `PreparedDate`: the DSL's date arithmetic and
- * comparisons are calendar-day based, so keeping a time would make two values that name the same day
- * compare unequal.
+ * Two values that both carry a time compare at time precision; as soon as one side is a plain date
+ * the comparison is by calendar day, so a date never compares unequal to a timestamp on the same day.
+ * Values read from undeclared input (collection members) carry no time, matching `PreparedDate`.
  */
 data class DateExpressionValue(
-    val value: LocalDate
+    val value: LocalDate,
+    val timeOfDay: LocalTime? = null
 ) : ExpressionValue

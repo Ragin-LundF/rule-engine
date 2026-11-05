@@ -1,7 +1,7 @@
 package ui.diagrams.model
 
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 
 /**
  * Everything the diagram views read, gathered once by the host.

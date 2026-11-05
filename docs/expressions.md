@@ -283,7 +283,7 @@ any(alerts[severity == "high"])
 |---|---|---|
 | some elements | true when all satisfy | true when one satisfies |
 | empty | **true** | **false** |
-| missing | **true** | **false** |
+| missing | missing | missing |
 
 Both are boolean conditions, so they combine with `and`, `or` and `not`, and work over raw,
 filtered, sliced and joined collections.
@@ -302,6 +302,29 @@ min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
 - **Duplicate keys** within one source are summed, so the overall total is preserved.
 - **Key order** is first-seen, reading the sources left to right.
 - The result is a list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
+- A **missing** source makes the result missing; an empty source simply contributes nothing.
+
+### `joinByKey` — one row per key
+
+`joinByKey(key, alias: source, alias: source, ...)` joins the same way but keeps the key and gives each
+source a name. The result is a collection of rows — `{ period: "P1", credit: 100, debit: 120 }` — so
+filters, `count`, `every` / `any`, `take` / `takeLast`, `sortBy` and member reads work on it, and a
+per-key comparison needs no helper rules:
+
+```
+count(joinByKey("period", credit: credits.amount, debit: debits.amount)[period in periods and credit > debit])
+    >= count(periods) * 0.5
+```
+
+- Inside the filter, the key and the aliases are the row's members; every other name is a document field.
+- A key a source does not mention gives `0` for that source; duplicate keys are summed; rows come in
+  first-seen order — all exactly as `sumByKey`.
+- A **missing** source makes the join missing (undecided, so `else` / `not_exists`); an **empty** source
+  gives `0` in every row.
+- The `[` of a filter must be on the line the closing `)` is on.
+- Rejected at load time: fewer than two sources, no key literal, an unknown or non-numeric value
+  member, key types that disagree, and an alias that repeats, equals the key's name or equals a
+  schema field.
 
 ---
 
@@ -461,6 +484,8 @@ inputs, and the functions answer them differently.
 | `isEmpty` | `true` | `false` |
 | `take` / `takeLast` | empty slice | missing |
 | `sortBy` | empty result | missing |
+| `sumByKey` | no keys — `count(...) == 0`, `min`/`max` missing | missing (any source missing) |
+| `joinByKey` | no rows from that source — its alias is `0` in every row | missing (any source missing) |
 
 The empty column is the operation's identity where it has one. `avg`, `median`, `max` and `min` have
 none, so they produce no value.
@@ -473,7 +498,10 @@ The missing column is one rule:
 A comparison with a missing operand is undecided, so the rule takes its `not_exists` branch if it
 declares one and its `else` branch otherwise — which is what a `false` did, so a rule set that never
 used `not_exists` is unaffected.
-| `sumByKey` | no keys | `count(...) == 0`; `min`/`max` are missing |
+
+A collection nested in a present object follows the same table: with `account` present but holding no
+`orders`, `account.orders` is **missing**, not empty. Only past a collection does an element without the
+member contribute nothing — `orders.tags` over orders that carry no tags is empty.
 
 A missing value on either side of a comparison leaves the comparison **undecided**. For a rule with no
 `not_exists` branch that reads as `false`, exactly as it always did; a rule that declares the branch

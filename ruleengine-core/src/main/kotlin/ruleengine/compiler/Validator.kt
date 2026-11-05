@@ -2,6 +2,7 @@ package ruleengine.compiler
 
 import ruleengine.compiler.operators.DateOperator
 import ruleengine.compiler.operators.OperatorUtils
+import ruleengine.compiler.support.ComparisonDateLiteralValidation
 import ruleengine.compiler.support.FieldPathMessages
 import ruleengine.compiler.support.LiteralValidation
 import ruleengine.compiler.support.OperatorSupport
@@ -19,24 +20,24 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.VariableAssignmentAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.ExtractionAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
 
 object Validator {
 
@@ -321,11 +322,10 @@ object Validator {
             is NotAst -> validateExpression(expr = expr.child, schema = schema, diagnostics = diagnostics)
             is ConditionAst -> validateCondition(cond = expr, schema = schema, diagnostics = diagnostics)
 
-            is ComparisonExpressionAst -> ValueExpressionValidator.validate(
-                expr = expr,
-                schema = schema,
-                diagnostics = diagnostics
-            )
+            is ComparisonExpressionAst -> {
+                ValueExpressionValidator.validate(expr = expr, schema = schema, diagnostics = diagnostics)
+                ComparisonDateLiteralValidation.validate(expr = expr, schema = schema, diagnostics = diagnostics)
+            }
         }
     }
 

@@ -1,6 +1,7 @@
 package ruleengine.export
 
 import ruleengine.export.dto.CatalogOutcome
+import ruleengine.export.dto.CatalogRule
 import ruleengine.export.dto.PlainAll
 import ruleengine.export.dto.PlainAny
 import ruleengine.export.dto.PlainCondition
@@ -53,6 +54,20 @@ object CatalogText {
         }
 
         return "${outcome.action} ${outcome.arguments.joinToString(separator = ", ")}"
+    }
+
+    /**
+     * A rule's outcomes for an index cell, grouped by the branch that produces them: no prefix for
+     * `then`, "otherwise" for `else`, "when missing" for `not_exists`. Empty branches are left out.
+     *
+     * Shared so the Markdown and the Word index can never disagree about which branches they list.
+     */
+    fun outcomeSummary(rule: CatalogRule): List<Pair<String?, List<CatalogOutcome>>> {
+        return listOf(
+            null to rule.outcomes,
+            "otherwise" to rule.elseOutcomes,
+            "when missing" to rule.notExistsOutcomes,
+        ).filter { (_, outcomes) -> outcomes.isNotEmpty() }
     }
 
     /** `1 rule` / `4 rules` — pluralised by appending `s`, which fits every noun the catalog uses. */

@@ -14,9 +14,11 @@ import ruleengine.evaluator.context.PreparedRuleContext
  * not tell "carries nothing" from "carries an empty list" — and `isAvailable` answers `false` to
  * both. Asking the raw walk keeps the two apart:
  *
- * - root absent → `resolveRawListOrNull` is `null` → **false**, there is no empty collection here
- * - root present, no elements → `emptyList()` → **true**
- * - root present with elements → **false**
+ * - absent → `resolveRawListOrNull` is `null` → **false**, there is no empty collection here. That
+ *   covers an absent root and an absent nested collection on a present object (`account.orders`
+ *   with `account` carrying no `orders`) alike
+ * - present, no elements → `emptyList()` → **true**
+ * - present with elements → **false**
  *
  * Answers a real boolean in every case, never
  * [ruleengine.core.domain.dto.ConditionVerdict.UNKNOWN], so a rule can guard on emptiness without the

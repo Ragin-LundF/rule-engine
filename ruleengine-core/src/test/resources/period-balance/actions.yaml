@@ -1,0 +1,3 @@
+actions:
+  outcome:
+    argTypes: [string]

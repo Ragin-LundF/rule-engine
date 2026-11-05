@@ -8,6 +8,8 @@ import ruleengine.evaluator.compiled.value.result.ExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValues
 import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
+import ruleengine.evaluator.compiled.value.result.TextExpressionValue
+import ruleengine.evaluator.context.NumericInput
 import ruleengine.evaluator.context.PreparedRuleContext
 import java.math.BigDecimal
 import java.math.MathContext
@@ -19,8 +21,28 @@ class FunctionCallCompiledValueExpression(
 ) : CompiledValueExpression {
     override val cost: EvaluationCost = EvaluationCost.EXPENSIVE
 
+    /**
+     * The root names the arguments read, decided at compile time; null when an argument may read the
+     * current element of a filter in any other way (a filter, a variable, arithmetic, …).
+     */
+    private val readRoots: List<String>? = rootsReadBy(arguments = arguments)
+
     override fun evaluate(context: PreparedRuleContext): ExpressionValue {
-        return context.cache.getOrPut(key = this) { computeValue(context = context) }
+        // Inside `transactions[amount > avg(transactions.amount) * 3]` the average is the same for
+        // every element; memoizing it per element made the filter quadratic.
+        val sharedAcrossElements = readRoots?.all { root -> context.readsFromDocument(name = root) } == true
+        val cache = if (sharedAcrossElements) context.documentCache else context.cache
+        return cache.getOrPut(key = this) { computeValue(context = context) }
+    }
+
+    private fun rootsReadBy(arguments: List<CompiledValueExpression>): List<String>? {
+        return arguments.flatMap { argument ->
+            when (argument) {
+                is LiteralCompiledValueExpression -> emptyList()
+                is FieldAccessCompiledValueExpression -> listOf(argument.plainRootName ?: return null)
+                else -> return null
+            }
+        }
     }
 
     /**
@@ -62,10 +84,10 @@ class FunctionCallCompiledValueExpression(
      * can guard a rule whose other conditions would otherwise be undecidable, and why they have to be
      * the only exceptions: a rule needs somewhere to stand that is never itself undecidable.
      *
-     * An empty collection is unavailable too. A projected path already reduces the empty case to
-     * `MissingExpressionValue` on its own, but a whole collection read by name arrives here as an
-     * empty [ArrayExpressionValue] — without this arm `isAvailable(transactions)` and
-     * `isAvailable(account.transactions)` would answer differently for the same absent data.
+     * An empty collection is unavailable too: it arrives here as an empty [ArrayExpressionValue],
+     * whether read whole (`transactions`) or projected (`transactions.amount`). An absent one —
+     * at the root or nested, such as `account.transactions` with `account` present — arrives as
+     * `MissingExpressionValue`. Both answer `false`; `isEmpty` is what tells them apart.
      */
     private fun evaluateIsAvailable(argValue: ExpressionValue): ExpressionValue {
         val available = when (argValue) {
@@ -116,20 +138,14 @@ class FunctionCallCompiledValueExpression(
     }
 
     private fun evaluateSum(argValue: ExpressionValue): ExpressionValue {
-        return when (argValue) {
-            is ArrayExpressionValue -> {
-                var total = BigDecimal.ZERO
-                for (element in argValue.values) {
-                    if (element is NumberExpressionValue) {
-                        total = total.add(element.value)
-                    }
-                }
-                NumberExpressionValue(value = total)
+        if (argValue is ArrayExpressionValue) {
+            val total = toNumericList(argValue = argValue).fold(initial = BigDecimal.ZERO) { sum, number ->
+                sum.add(number)
             }
-
-            is NumberExpressionValue -> argValue
-            else -> MissingExpressionValue
+            return NumberExpressionValue(value = total)
         }
+        return numberOf(value = argValue)?.let { number -> NumberExpressionValue(value = number) }
+            ?: MissingExpressionValue
     }
 
     /**
@@ -212,9 +228,20 @@ class FunctionCallCompiledValueExpression(
 
     private fun toNumericList(argValue: ExpressionValue): List<BigDecimal> {
         return when (argValue) {
-            is ArrayExpressionValue -> argValue.values.filterIsInstance<NumberExpressionValue>().map { it.value }
-            is NumberExpressionValue -> listOf(argValue.value)
-            else -> emptyList()
+            is ArrayExpressionValue -> argValue.values.mapNotNull { element -> numberOf(value = element) }
+            else -> listOfNotNull(numberOf(value = argValue))
+        }
+    }
+
+    /**
+     * A value read as a number the way `sumByKey` and declared fields read input: a collection member
+     * arrives as the text the record held, so `"10"` counts as `10`. Anything else is skipped.
+     */
+    private fun numberOf(value: ExpressionValue): BigDecimal? {
+        return when (value) {
+            is NumberExpressionValue -> value.value
+            is TextExpressionValue -> NumericInput.decimalOrNull(raw = value.value)
+            else -> null
         }
     }
 }

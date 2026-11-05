@@ -6,8 +6,8 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.errors.Severity
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.StringLiteral
 import kotlin.test.assertTrue
 
 class ValidatorAliasResolutionTest {
@@ -28,9 +28,9 @@ class ValidatorAliasResolutionTest {
         val condition = ConditionAst(
             field = "age",
             operator = "equals",
-            value = ruleengine.dsl.ast.NumberLiteral("25")
+            value = ruleengine.dsl.ast.literal.NumberLiteral("25")
         )
-        val rule = ruleengine.dsl.ast.RuleAst(
+        val rule = ruleengine.dsl.ast.rule.RuleAst(
             id = "rule1",
             condition = condition,
             actions = emptyList()
@@ -58,7 +58,7 @@ class ValidatorAliasResolutionTest {
             operator = "equals",
             value = StringLiteral("25")
         )
-        val rule = ruleengine.dsl.ast.RuleAst(
+        val rule = ruleengine.dsl.ast.rule.RuleAst(
             id = "rule1",
             condition = condition,
             actions = emptyList()

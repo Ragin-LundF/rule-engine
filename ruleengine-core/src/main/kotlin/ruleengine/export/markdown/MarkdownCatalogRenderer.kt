@@ -20,6 +20,9 @@ object MarkdownCatalogRenderer {
 
     private const val INDENT = "  "
 
+    private val MARKDOWN_SPECIALS = listOf("`", "*", "_", "[", "]", "<", ">")
+    private val BACKTICK_RUN = Regex(pattern = "`+")
+
     /** The heading the missing-data branch is written under, in prose rather than in DSL terms. */
     private const val MISSING_DATA_LABEL = "When the data is missing"
 
@@ -122,7 +125,7 @@ object MarkdownCatalogRenderer {
         catalog.rules.forEach { rule ->
             val link = "[`${rule.id}`](#${anchor(text = rule.id)})"
             out.append("| ").append(link)
-                .append(" | ").append(cell(text = summaryOf(rule = rule)))
+                .append(" | ").append(cell(text = escape(text = summaryOf(rule = rule))))
                 .append(" | ").append(cell(text = outcomeSummary(rule = rule)))
                 .append(" |\n")
         }
@@ -141,22 +144,13 @@ object MarkdownCatalogRenderer {
      * to `label:high` would read as two outcomes the rule produces together instead of one or the other.
      */
     private fun outcomeSummary(rule: CatalogRule): String {
-        if (rule.outcomes.isEmpty() && rule.elseOutcomes.isEmpty()) {
-            return "—"
+        val parts = CatalogText.outcomeSummary(rule = rule).map { (prefix, outcomes) ->
+            val labels = outcomes.joinToString(separator = ", ") { outcome ->
+                code(text = CatalogText.label(outcome = outcome))
+            }
+            listOfNotNull(prefix, labels).joinToString(separator = " ")
         }
-
-        val then = rule.outcomes.joinToString(separator = ", ") { outcome ->
-            "`${CatalogText.label(outcome = outcome)}`"
-        }
-        if (rule.elseOutcomes.isEmpty()) {
-            return then
-        }
-
-        val otherwise = rule.elseOutcomes.joinToString(separator = ", ") { outcome ->
-            "`${CatalogText.label(outcome = outcome)}`"
-        }
-        return listOf(then, "otherwise $otherwise").filter { part -> part.isNotEmpty() }
-            .joinToString(separator = "; ")
+        return parts.joinToString(separator = "; ").ifEmpty { "—" }
     }
 
     // ── outcome summary ───────────────────────────────────────────────────────
@@ -181,8 +175,8 @@ object MarkdownCatalogRenderer {
                 "[`${rule.id}`](#${anchor(text = rule.id)})"
             }
             val value = outcome.arguments.joinToString(separator = ", ").ifEmpty { "—" }
-            out.append("| `").append(cell(text = outcome.action)).append("`")
-                .append(" | `").append(cell(text = value)).append("`")
+            out.append("| ").append(code(text = cell(text = outcome.action)))
+                .append(" | ").append(code(text = cell(text = value)))
                 .append(" | ").append(producers).append(" |\n")
         }
         out.append("\n")
@@ -206,11 +200,11 @@ object MarkdownCatalogRenderer {
         // reviewer quotes. A prose title would read better but could not do either.
         out.append("### ").append(rule.id).append("\n\n")
 
-        rule.description?.let { description -> out.append(description).append("\n\n") }
+        rule.description?.let { description -> out.append(escape(text = description)).append("\n\n") }
 
         out.append("**").append(CatalogText.intro(condition = rule.condition)).append(":**\n\n")
         CatalogText.walk(condition = rule.condition, depth = 0, unwrapRoot = true) { text, depth ->
-            out.append(INDENT.repeat(n = depth)).append("- ").append(text).append("\n")
+            out.append(INDENT.repeat(n = depth)).append("- ").append(escape(text = text)).append("\n")
         }
         out.append("\n")
 
@@ -241,7 +235,7 @@ object MarkdownCatalogRenderer {
             stops = rule.stopsOnNotExists,
         )
 
-        out.append("In the rule language: `").append(rule.technicalCondition).append("`\n\n")
+        out.append("In the rule language: ").append(code(text = rule.technicalCondition)).append("\n\n")
     }
 
     @Suppress("LongParameterList")
@@ -260,7 +254,7 @@ object MarkdownCatalogRenderer {
 
         if (outcomes.isNotEmpty()) {
             val text = outcomes.joinToString(separator = ", ") { outcome ->
-                "`${CatalogText.label(outcome = outcome)}`"
+                code(text = CatalogText.label(outcome = outcome))
             }
             out.append("**").append(label).append(":** ").append(text).append("\n\n")
         }
@@ -283,6 +277,29 @@ object MarkdownCatalogRenderer {
     }
 
     // ── shared formatting ─────────────────────────────────────────────────────
+
+    /**
+     * Makes prose render as written: a regex such as `^A*B*$` would otherwise turn into emphasis and
+     * a literal `"<b>"` into HTML. The backslash goes first so the escapes added here stay escapes.
+     */
+    private fun escape(text: String): String {
+        val backslashesEscaped = text.replace(oldValue = "\\", newValue = "\\\\")
+        return MARKDOWN_SPECIALS.fold(initial = backslashesEscaped) { escaped, special ->
+            escaped.replace(oldValue = special, newValue = "\\$special")
+        }
+    }
+
+    /**
+     * [text] as inline code. Outcome arguments and string literals are free text and may hold backticks,
+     * so the fence is one backtick longer than the longest run inside, with a space against a backtick
+     * at either end — CommonMark strips exactly that one space again.
+     */
+    private fun code(text: String): String {
+        val longestRun = BACKTICK_RUN.findAll(input = text).maxOfOrNull { run -> run.value.length } ?: 0
+        val fence = "`".repeat(n = longestRun + 1)
+        val padding = if (text.startsWith(prefix = "`") || text.endsWith(suffix = "`")) " " else ""
+        return "$fence$padding$text$padding$fence"
+    }
 
     /**
      * Makes [text] safe inside a table cell.

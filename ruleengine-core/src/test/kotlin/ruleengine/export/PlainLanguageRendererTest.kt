@@ -413,6 +413,23 @@ class PlainLanguageRendererTest {
         )
     }
 
+    /** Outside an aggregate a slice or sort narrows the collection just the same, so it is named too. */
+    @Test
+    fun `a slice or sort outside an aggregate is not dropped`() {
+        assertEquals(
+            expected = "the first 1 priorityCustomerIds includes \"acme\"",
+            actual = prose(condition = """take(priorityCustomerIds, 1) contains "acme""""),
+        )
+        assertEquals(
+            expected = "Amount of the last 2 orders by highest amount includes 5",
+            actual = prose(condition = """takeLast(sortBy(orders, "amount", desc), 2).amount contains 5"""),
+        )
+        assertEquals(
+            expected = "the first 2 customer.tags includes \"vip\"",
+            actual = prose(condition = """take(customer.tags, 2) contains "vip""""),
+        )
+    }
+
     /** A bare predicate is desugared to `== true`; spelling that out adds nothing. */
     @Test
     fun `a collection predicate reads as a sentence`() {
@@ -431,6 +448,30 @@ class PlainLanguageRendererTest {
         assertEquals(
             expected = "the lowest (the per-month totals of Sales › Amount and Refunds › Amount) is at least 0",
             actual = prose(condition = """min(sumByKey("month", sales.amount, refunds.amount)) >= 0"""),
+        )
+    }
+
+    /** Dropping the join would leave "the number of the collection" — a sentence about nothing. */
+    @Test
+    fun `a row join names its key, sources and aliases`() {
+        assertEquals(
+            expected = "the number of the rows joined by period of Credits › Amount as credit and " +
+                "Debits › Amount as debit where Credit is more than Debit is at least 1",
+            actual = prose(
+                condition = """count(joinByKey("period", credit: credits.amount, debit: debits.amount)""" +
+                    """[credit > debit]) >= 1"""
+            ),
+        )
+    }
+
+    @Test
+    fun `a member read from joined rows is measured`() {
+        assertEquals(
+            expected = "the total Credit of the rows joined by period of Credits › Amount as credit and " +
+                "Debits › Amount as debit is more than 0",
+            actual = prose(
+                condition = """sum(joinByKey("period", credit: credits.amount, debit: debits.amount).credit) > 0"""
+            ),
         )
     }
 

@@ -62,17 +62,20 @@ private class DslScan {
             TokenType.IDENT -> identifier(word = tok.text)
             TokenType.STRING, TokenType.NUMBER -> literal()
             TokenType.RBRACKET -> closeBracket()
+            TokenType.COLON -> colon()
             else -> Unit
         }
     }
 
-    fun toContext(): DslCursorContext = DslCursorContext(
-        section = section,
-        precedingField = precedingField,
-        precedingOperator = precedingOperator,
-        afterAction = afterAction,
-        expectsListName = expectsListName,
-    )
+    fun toContext(): DslCursorContext {
+        return DslCursorContext(
+            section = section,
+            precedingField = precedingField,
+            precedingOperator = precedingOperator,
+            afterAction = afterAction,
+            expectsListName = expectsListName,
+        )
+    }
 
     private fun openBrace() {
         braceDepth++
@@ -197,6 +200,17 @@ private class DslScan {
 
             section.isBranch() -> afterAction = null
             else -> Unit
+        }
+    }
+
+    /**
+     * The `alias:` label of a `joinByKey` source names a row member, not a field, so the word after
+     * it starts a new path rather than taking the operator slot of a comparison.
+     */
+    private fun colon() {
+        if (section == DslSection.WHEN) {
+            precedingField = null
+            precedingOperator = null
         }
     }
 

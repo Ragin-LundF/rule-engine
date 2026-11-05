@@ -7,7 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import ruleengine.core.domain.dto.RuleBranch
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.builder.OperatorOptions
 import ui.builder.model.BuilderAction
 import ui.builder.model.BuilderConditionNode
@@ -17,15 +17,17 @@ import ui.builder.model.BuilderRule
 import ui.builder.model.BuilderVariable
 
 /** Converts a [MutableConditionNode] tree to an immutable [BuilderConditionNode] tree. */
-fun MutableConditionNode.toImmutable(): BuilderConditionNode = when (this) {
-    is MutableConditionNode.Leaf -> inner.toImmutable()
-    is MutableConditionNode.ComparisonLeaf -> inner.toImmutable()
-    is MutableConditionNode.Group -> BuilderConditionNode.Group(
-        nodeId = id,
-        nodes = nodes.map { it.toImmutable() },
-        negated = negated,
-        joinToPrevious = joinToPrevious,
-    )
+fun MutableConditionNode.toImmutable(): BuilderConditionNode {
+    return when (this) {
+        is MutableConditionNode.Leaf -> inner.toImmutable()
+        is MutableConditionNode.ComparisonLeaf -> inner.toImmutable()
+        is MutableConditionNode.Group -> BuilderConditionNode.Group(
+            nodeId = id,
+            nodes = nodes.map { it.toImmutable() },
+            negated = negated,
+            joinToPrevious = joinToPrevious,
+        )
+    }
 }
 
 @Suppress("LongParameterList")
@@ -134,60 +136,62 @@ class BuilderEditorState private constructor(
     }
 
     companion object {
-        fun fromBuilderRule(rule: BuilderRule): BuilderEditorState = when (rule) {
-            is BuilderRule.Supported -> BuilderEditorState(
-                ruleId = rule.id,
-                description = rule.description,
-                conditionNodes = rule.conditionNodes.map { it.toMutable() }.toMutableStateList(),
-                actions = rule.actions.toMutableActions(),
-                variables = rule.variables.toMutableVariables(),
-                elseActions = rule.elseActions.toMutableActions(),
-                elseVariables = rule.elseVariables.toMutableVariables(),
-                notExistsActions = rule.notExistsActions.toMutableActions(),
-                notExistsVariables = rule.notExistsVariables.toMutableVariables(),
-                stopOnThen = rule.stopOnThen,
-                stopOnElse = rule.stopOnElse,
-                stopOnNotExists = rule.stopOnNotExists,
-                isLocked = false,
-                lockReason = "",
-                lockKind = BuilderLockKind.NONE,
-            )
+        fun fromBuilderRule(rule: BuilderRule): BuilderEditorState {
+            return when (rule) {
+                is BuilderRule.Supported -> BuilderEditorState(
+                    ruleId = rule.id,
+                    description = rule.description,
+                    conditionNodes = rule.conditionNodes.map { it.toMutable() }.toMutableStateList(),
+                    actions = rule.actions.toMutableActions(),
+                    variables = rule.variables.toMutableVariables(),
+                    elseActions = rule.elseActions.toMutableActions(),
+                    elseVariables = rule.elseVariables.toMutableVariables(),
+                    notExistsActions = rule.notExistsActions.toMutableActions(),
+                    notExistsVariables = rule.notExistsVariables.toMutableVariables(),
+                    stopOnThen = rule.stopOnThen,
+                    stopOnElse = rule.stopOnElse,
+                    stopOnNotExists = rule.stopOnNotExists,
+                    isLocked = false,
+                    lockReason = "",
+                    lockKind = BuilderLockKind.NONE,
+                )
 
-            is BuilderRule.Unsupported -> BuilderEditorState(
-                ruleId = rule.id,
-                description = "",
-                conditionNodes = mutableStateListOf(),
-                actions = mutableStateListOf(),
-                variables = mutableStateListOf(),
-                elseActions = mutableStateListOf(),
-                elseVariables = mutableStateListOf(),
-                notExistsActions = mutableStateListOf(),
-                notExistsVariables = mutableStateListOf(),
-                stopOnThen = false,
-                stopOnElse = false,
-                stopOnNotExists = false,
-                isLocked = true,
-                lockReason = rule.reason,
-                lockKind = BuilderLockKind.UNSUPPORTED_SYNTAX,
-            )
+                is BuilderRule.Unsupported -> BuilderEditorState(
+                    ruleId = rule.id,
+                    description = "",
+                    conditionNodes = mutableStateListOf(),
+                    actions = mutableStateListOf(),
+                    variables = mutableStateListOf(),
+                    elseActions = mutableStateListOf(),
+                    elseVariables = mutableStateListOf(),
+                    notExistsActions = mutableStateListOf(),
+                    notExistsVariables = mutableStateListOf(),
+                    stopOnThen = false,
+                    stopOnElse = false,
+                    stopOnNotExists = false,
+                    isLocked = true,
+                    lockReason = rule.reason,
+                    lockKind = BuilderLockKind.UNSUPPORTED_SYNTAX,
+                )
 
-            BuilderRule.None -> BuilderEditorState(
-                ruleId = "",
-                description = "",
-                conditionNodes = mutableStateListOf(),
-                actions = mutableStateListOf(),
-                variables = mutableStateListOf(),
-                elseActions = mutableStateListOf(),
-                elseVariables = mutableStateListOf(),
-                notExistsActions = mutableStateListOf(),
-                notExistsVariables = mutableStateListOf(),
-                stopOnThen = false,
-                stopOnElse = false,
-                stopOnNotExists = false,
-                isLocked = true,
-                lockReason = "No rule selected.",
-                lockKind = BuilderLockKind.NO_RULE_SELECTED,
-            )
+                BuilderRule.None -> BuilderEditorState(
+                    ruleId = "",
+                    description = "",
+                    conditionNodes = mutableStateListOf(),
+                    actions = mutableStateListOf(),
+                    variables = mutableStateListOf(),
+                    elseActions = mutableStateListOf(),
+                    elseVariables = mutableStateListOf(),
+                    notExistsActions = mutableStateListOf(),
+                    notExistsVariables = mutableStateListOf(),
+                    stopOnThen = false,
+                    stopOnElse = false,
+                    stopOnNotExists = false,
+                    isLocked = true,
+                    lockReason = "No rule selected.",
+                    lockKind = BuilderLockKind.NO_RULE_SELECTED,
+                )
+            }
         }
 
         private fun List<BuilderAction>.toMutableActions(): SnapshotStateList<MutableBuilderAction> {
@@ -451,8 +455,9 @@ class BuilderEditorState private constructor(
      * Replaces the node with the given [id] anywhere in the tree, preserving its position.
      * Returns true when a node was replaced.
      */
-    fun replaceNode(id: String, replacement: MutableConditionNode): Boolean =
-        replaceIn(nodes = conditionNodes, id = id, replacement = replacement)
+    fun replaceNode(id: String, replacement: MutableConditionNode): Boolean {
+        return replaceIn(nodes = conditionNodes, id = id, replacement = replacement)
+    }
 
     private fun replaceIn(
         nodes: SnapshotStateList<MutableConditionNode>,

@@ -1,13 +1,13 @@
 package ui.diagrams
 
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.ExtractionRefLiteral
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.LiteralAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.ExtractionRefLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.LiteralAst
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.literal.VariableRefLiteral
 
 /** Formats a [LiteralAst] for display inside a condition row. */
 internal fun formatLiteral(lit: LiteralAst): String {

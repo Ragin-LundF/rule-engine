@@ -2,7 +2,7 @@ package ruleengine.evaluator.compiled
 
 import ruleengine.core.domain.dto.ConditionVerdict
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.ComparisonOperatorAst
+import ruleengine.dsl.ast.condition.ComparisonOperatorAst
 import ruleengine.evaluator.compiled.value.ComparisonCompiledExpression
 import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
@@ -37,9 +37,15 @@ class IncomparableOperandsTest {
         schema = FieldSchema(name = "empty", fields = emptyMap()),
     )
 
-    private fun text(value: String) = TextExpressionValue(value = value)
-    private fun number(value: String) = NumberExpressionValue(value = BigDecimal(value))
-    private fun list(vararg values: ExpressionValue) = ArrayExpressionValue(values = values.toList())
+    private fun text(value: String): TextExpressionValue {
+        return TextExpressionValue(value = value)
+    }
+    private fun number(value: String): NumberExpressionValue {
+        return NumberExpressionValue(value = BigDecimal(value))
+    }
+    private fun list(vararg values: ExpressionValue): ArrayExpressionValue {
+        return ArrayExpressionValue(values = values.toList())
+    }
 
     // ── the regression: inequality across kinds must not claim equality ───────
 
@@ -178,10 +184,12 @@ class IncomparableOperandsTest {
         left: ExpressionValue,
         operator: ComparisonOperatorAst,
         right: ExpressionValue
-    ): ConditionVerdict = ComparisonCompiledExpression(
-        left = LiteralCompiledValueExpression(value = left),
-        operator = operator,
-        right = LiteralCompiledValueExpression(value = right),
-        cost = EvaluationCost.CHEAP,
-    ).evaluate(context = context, trace = null)
+    ): ConditionVerdict {
+        return ComparisonCompiledExpression(
+            left = LiteralCompiledValueExpression(value = left),
+            operator = operator,
+            right = LiteralCompiledValueExpression(value = right),
+            cost = EvaluationCost.CHEAP,
+        ).evaluate(context = context, trace = null)
+    }
 }

@@ -1,7 +1,7 @@
 package ruleengine.dsl.parser
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
 
 /**
  * The parsed contents of a `then` or `else` block: its actions and its `set` clauses, each in source

@@ -4,18 +4,18 @@ import ruleengine.core.analysis.FieldUsage
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.BooleanLiteral
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableAssignmentAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.literal.BooleanLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.OperatorOptions
@@ -168,24 +168,26 @@ private fun MutableMap<String, CatalogFieldInfo>.putVariable(assignment: Variabl
  * the schema walk the engine already does, and the engine puts no type restriction on a variable
  * anyway, so the wider operator list is the honest answer rather than a guess.
  */
-private fun inferredVariableType(expr: ValueExpressionAst): String = when (expr) {
-    // Not every call is numeric: `every`/`any` answer true or false and `sumByKey` answers a list,
-    // and offering ordering comparisons against either would produce rules that never match.
-    is FunctionCallValueAst -> when (DslFunctions.resultKindOf(name = expr.name)) {
-        FunctionResultKind.BOOLEAN -> "boolean"
-        FunctionResultKind.ARRAY -> OperatorOptions.LIST_VARIABLE_TYPE
-        else -> "decimal"
-    }
+private fun inferredVariableType(expr: ValueExpressionAst): String {
+    return when (expr) {
+        // Not every call is numeric: `every`/`any` answer true or false and `sumByKey` answers a list,
+        // and offering ordering comparisons against either would produce rules that never match.
+        is FunctionCallValueAst -> when (DslFunctions.resultKindOf(name = expr.name)) {
+            FunctionResultKind.BOOLEAN -> "boolean"
+            FunctionResultKind.ARRAY -> OperatorOptions.LIST_VARIABLE_TYPE
+            else -> "decimal"
+        }
 
-    is ArithmeticValueAst -> "decimal"
-    is LiteralValueAst -> when (expr.literal) {
-        is NumberLiteral -> "decimal"
-        is StringLiteral -> "text"
-        is BooleanLiteral -> "boolean"
-        else -> OperatorOptions.VARIABLE_TYPE
-    }
+        is ArithmeticValueAst -> "decimal"
+        is LiteralValueAst -> when (expr.literal) {
+            is NumberLiteral -> "decimal"
+            is StringLiteral -> "text"
+            is BooleanLiteral -> "boolean"
+            else -> OperatorOptions.VARIABLE_TYPE
+        }
 
-    is FieldAccessAst, is VariableRefAst -> OperatorOptions.VARIABLE_TYPE
+        is FieldAccessAst, is VariableRefAst -> OperatorOptions.VARIABLE_TYPE
+    }
 }
 
 /**

@@ -5,8 +5,8 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
 import ruleengine.core.normalizer.NormalizerRegistry
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.StringLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.text.TextContainsExpression
 import ruleengine.evaluator.compiled.text.TextEndsWithExpression

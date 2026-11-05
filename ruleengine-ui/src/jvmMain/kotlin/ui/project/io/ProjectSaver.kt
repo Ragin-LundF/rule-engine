@@ -1,7 +1,6 @@
 package ui.project.io
 
 import ruleengine.dsl.parser.Parser
-import ruleengine.manifest.ManifestPathResolution
 import ruleengine.manifest.ManifestPathResolver
 import ui.editor.rules.RuleEditorState
 import ui.manifest.ManifestYamlBridge
@@ -15,7 +14,6 @@ import ui.project.model.dialog.ProjectSaveConfirmation
 import ui.project.model.io.ProjectSaveOutcome
 import java.nio.file.Files
 import java.nio.file.Path
-import java.nio.file.StandardCopyOption
 
 /**
  * Writes the whole project to disk.
@@ -30,6 +28,11 @@ import java.nio.file.StandardCopyOption
  */
 class ProjectSaver(private val dirtyState: ProjectDirtyState) {
 
+    private companion object {
+        /** What [Files.mismatch] answers for two files with the same bytes. */
+        const val NO_MISMATCH = -1L
+    }
+
     private data class PlannedWrite(
         val kind: ProjectFileKind,
         val relativePath: String,
@@ -39,7 +42,8 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
     )
 
     /**
-     * Writes the open buffers and the manifest.
+     * Writes the open buffers, every rule file of the active entry edited in the working copy, and the
+     * manifest.
      *
      * Only the active entry has buffers, so only its files are written; the other entries are carried
      * through untouched and re-emitted into the manifest, which is the whole point of holding them in
@@ -71,8 +75,12 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
      * Copies the project to a new root and saves it there.
      *
      * Rule files and any schema kept inside the project are copied, because they are part of the
-     * project. A schema linked from outside stays where it is and only its relative path is
-     * rewritten for the new depth — copying it would fork a file whose whole purpose is being shared.
+     * project. A schema, actions or rule file linked from outside stays where it is and only its
+     * relative path is rewritten for the new depth — copying it would fork a file whose whole purpose
+     * is being shared. A different file already at a copy's target is replaced only after confirmation.
+     *
+     * Nothing is copied or written until every question is answered. A save that does not go through
+     * leaves the editor exactly as it was: buffers keyed by the old links, baselines of the old root.
      */
     fun saveAs(
         state: RuleEditorState,
@@ -84,39 +92,194 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
             ?: return ProjectSaveOutcome.Failed(message = "Chosen location has no parent directory")
 
         return runCatching {
-            Files.createDirectories(ProjectPaths.rulesDir(root = newRoot))
-            Files.createDirectories(ProjectPaths.schemasDir(root = newRoot))
+            val copies = planCopies(session = session, newRoot = newRoot)
+            // Asked before anything is copied: the folder may hold another project's file at the same path.
+            copyConflict(copies = copies, approvals = approvals)?.let { conflict ->
+                return ProjectSaveOutcome.NeedsConfirmation(request = conflict)
+            }
 
-            // Every entry, not just the open one: the copy is the whole project or it is broken.
-            session.entries
+            val ruleFileMoves = session.entries
                 .flatMap { entry -> entry.ruleFiles }
-                .distinct()
-                .forEach { relativePath -> copyIntoNewRoot(session, newRoot, relativePath) }
-
-            val relocated = session.copy(
-                root = newRoot,
-                manifestFileName = newManifestPath.fileName.toString(),
-                entries = session.entries.map { entry ->
-                    entry.copy(
-                        schemaLink = relocateLink(session = session, newRoot = newRoot, link = entry.schemaLink),
-                        actionsLink = relocateLink(session = session, newRoot = newRoot, link = entry.actionsLink),
-                    )
-                },
-                missingFiles = emptyList(),
+                .associateWith { link -> relocateLink(session = session, newRoot = newRoot, link = link) ?: link }
+                .filter { (old, new) -> old != new }
+            val relocated = relocateSession(
+                session = session,
+                newManifestPath = newManifestPath,
+                newRoot = newRoot,
+                ruleFileMoves = ruleFileMoves,
             )
-
-            // The copies are new files; their baselines belong to the old root.
-            dirtyState.clear()
-            writeProject(state = state, session = relocated, approvals = approvals)
+            saveIntoNewRoot(
+                state = state,
+                session = session,
+                relocated = relocated,
+                copies = copies,
+                ruleFileMoves = ruleFileMoves,
+                approvals = approvals,
+            )
         }.getOrElse { ex -> ProjectSaveOutcome.Failed(message = ex.message ?: "Save As failed") }
     }
 
-    private fun copyIntoNewRoot(session: ProjectSession, newRoot: Path, relativePath: String) {
-        val source = resolveRulePath(root = session.root, relativePath = relativePath) ?: return
-        val target = resolveRulePath(root = newRoot, relativePath = relativePath) ?: return
-        if (!Files.exists(source) || source == target) return
-        target.parent?.let { parent -> Files.createDirectories(parent) }
-        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING)
+    private fun saveIntoNewRoot(
+        state: RuleEditorState,
+        session: ProjectSession,
+        relocated: ProjectSession,
+        copies: List<PlannedCopy>,
+        ruleFileMoves: Map<String, String>,
+        approvals: ProjectSaveApprovals,
+    ): ProjectSaveOutcome {
+        val oldBaselines = dirtyState.snapshot()
+        // Baselines belong to the old root; a copy's baseline is what it will be once copied.
+        dirtyState.clear()
+        copies.forEach { copy -> copy.dirtyKey?.let { key -> dirtyState.markClean(key = key, content = copy.content) } }
+        carryExternalBaselines(oldBaselines = oldBaselines, session = session, ruleFileMoves = ruleFileMoves)
+        renameRuleBuffers(state = state, moves = ruleFileMoves)
+
+        val outcome = runCatching {
+            writeProject(state = state, session = relocated, approvals = approvals, pendingCopies = copies)
+        }.getOrElse { ex -> ProjectSaveOutcome.Failed(message = ex.message ?: "Save As failed") }
+
+        // Not saved: the session stays at the old root, so the buffers and baselines must stay with it.
+        if (outcome !is ProjectSaveOutcome.Saved) {
+            dirtyState.restore(snapshot = oldBaselines)
+            renameRuleBuffers(state = state, moves = ruleFileMoves.entries.associate { (old, new) -> new to old })
+        }
+        return outcome
+    }
+
+    /**
+     * A shared file outside the project is re-pointed, not copied: it is the same file, so it keeps the
+     * baseline it was read with. Without it a teammate's change on disk would be overwritten unasked.
+     */
+    private fun carryExternalBaselines(
+        oldBaselines: Map<String, String>,
+        session: ProjectSession,
+        ruleFileMoves: Map<String, String>,
+    ) {
+        fun carry(oldKey: String, newKey: String) {
+            oldBaselines[oldKey]?.let { baseline -> dirtyState.markClean(key = newKey, content = baseline) }
+        }
+        ruleFileMoves.forEach { (old, new) ->
+            carry(
+                oldKey = ProjectDirtyState.ruleKey(relativePath = old),
+                newKey = ProjectDirtyState.ruleKey(relativePath = new),
+            )
+        }
+        if (session.schemaLink?.let { link -> ProjectPaths.isExternal(relativePath = link) } == true) {
+            carry(oldKey = ProjectDirtyState.SCHEMA, newKey = ProjectDirtyState.SCHEMA)
+        }
+        if (session.actionsLink?.let { link -> ProjectPaths.isExternal(relativePath = link) } == true) {
+            carry(oldKey = ProjectDirtyState.ACTIONS, newKey = ProjectDirtyState.ACTIONS)
+        }
+    }
+
+    /**
+     * Every file the project owns, of every entry: the copy is the whole project or it is broken.
+     *
+     * The active entry's schema and actions are left out — [writeProject] writes them from their buffers.
+     */
+    private fun planCopies(session: ProjectSession, newRoot: Path): List<PlannedCopy> {
+        val ruleCopies = session.entries
+            .flatMap { entry -> entry.ruleFiles }
+            .distinct()
+            .mapNotNull { relativePath ->
+                planCopy(
+                    session = session,
+                    newRoot = newRoot,
+                    relativePath = relativePath,
+                    kind = ProjectFileKind.RULE,
+                    dirtyKey = ProjectDirtyState.ruleKey(relativePath = relativePath),
+                )
+            }
+        val writtenFromBuffers = setOfNotNull(session.schemaLink, session.actionsLink)
+        val schemaCopies = session.entries
+            .flatMap { entry ->
+                listOfNotNull(
+                    entry.schemaLink?.let { link -> link to ProjectFileKind.SCHEMA },
+                    entry.actionsLink?.let { link -> link to ProjectFileKind.ACTIONS },
+                )
+            }
+            .filter { (link, _) -> link !in writtenFromBuffers }
+            .distinctBy { (link, _) -> link }
+            .mapNotNull { (link, kind) ->
+                planCopy(session = session, newRoot = newRoot, relativePath = link, kind = kind, dirtyKey = null)
+            }
+        return ruleCopies + schemaCopies
+    }
+
+    private fun copyConflict(copies: List<PlannedCopy>, approvals: ProjectSaveApprovals): ProjectSaveConfirmation? {
+        val conflict = copies.firstOrNull { copy ->
+            copy.replacesUnreadFile && !approvals.allowsOverwrite(relativePath = copy.relativePath)
+        } ?: return null
+        return ProjectSaveConfirmation.DiskConflict(kind = conflict.kind, relativePath = conflict.relativePath)
+    }
+
+    private fun relocateSession(
+        session: ProjectSession,
+        newManifestPath: Path,
+        newRoot: Path,
+        ruleFileMoves: Map<String, String>,
+    ): ProjectSession {
+        return session.copy(
+            root = newRoot,
+            manifestFileName = newManifestPath.fileName.toString(),
+            entries = session.entries.map { entry ->
+                entry.copy(
+                    schemaLink = relocateLink(session = session, newRoot = newRoot, link = entry.schemaLink),
+                    actionsLink = relocateLink(session = session, newRoot = newRoot, link = entry.actionsLink),
+                    ruleFiles = entry.ruleFiles.map { link -> ruleFileMoves[link] ?: link },
+                )
+            },
+            missingFiles = emptyList(),
+        )
+    }
+
+    /** [dirtyKey] is null for a file no buffer tracks: the schema or actions of an entry not on screen. */
+    private data class PlannedCopy(
+        val kind: ProjectFileKind,
+        val relativePath: String,
+        val source: Path,
+        val target: Path,
+        val content: String,
+        val dirtyKey: String?,
+        val replacesUnreadFile: Boolean,
+    )
+
+    private fun planCopy(
+        session: ProjectSession,
+        newRoot: Path,
+        relativePath: String,
+        kind: ProjectFileKind,
+        dirtyKey: String?,
+    ): PlannedCopy? {
+        // A file outside the project (`../shared/x.rule`) is shared, not owned: its link is re-pointed
+        // instead, and it is never copied over whatever sits at the same relative spot next to the new root.
+        if (ProjectPaths.isExternal(relativePath = relativePath)) return null
+        val source = resolveRulePath(root = session.root, relativePath = relativePath)
+        val target = resolveRulePath(root = newRoot, relativePath = relativePath)
+        if (!Files.exists(source) || source == target) return null
+        return PlannedCopy(
+            kind = kind,
+            relativePath = relativePath,
+            source = source,
+            target = target,
+            content = Files.readString(source),
+            dirtyKey = dirtyKey,
+            replacesUnreadFile = Files.exists(target) && Files.mismatch(source, target) != NO_MISMATCH,
+        )
+    }
+
+    private fun copyIntoNewRoot(copy: PlannedCopy) {
+        copy.target.parent?.let { parent -> Files.createDirectories(parent) }
+        // Replacing is safe here: a different file at the target was confirmed before anything was copied.
+        // Written like every other project file, so a symlink at the target is written through.
+        AtomicFiles.write(path = copy.target, bytes = Files.readAllBytes(copy.source))
+    }
+
+    /** The open file and the working copy are keyed by link, so they follow a re-pointed rule file. */
+    private fun renameRuleBuffers(state: RuleEditorState, moves: Map<String, String>) {
+        if (moves.isEmpty()) return
+        state.selectedManifestRuleFile.value = state.selectedManifestRuleFile.value?.let { link -> moves[link] ?: link }
+        state.inMemoryRuleFiles.value = state.inMemoryRuleFiles.value.mapKeys { (link, _) -> moves[link] ?: link }
     }
 
     /**
@@ -129,15 +292,31 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
         return ProjectPaths.relativize(root = newRoot, target = absolute)
     }
 
+    /**
+     * [pendingCopies] are Save As copies not made yet: every check treats them as already on disk, and
+     * they are made only once nothing is left to ask.
+     */
     private fun writeProject(
         state: RuleEditorState,
         session: ProjectSession,
         approvals: ProjectSaveApprovals,
+        pendingCopies: List<PlannedCopy> = emptyList(),
     ): ProjectSaveOutcome {
-        Files.createDirectories(ProjectPaths.rulesDir(root = session.root))
-        Files.createDirectories(ProjectPaths.schemasDir(root = session.root))
+        // Refused rather than skipped: reporting "Saved" while the edit stays unwritten is how it got lost.
+        if (state.allFilesBufferHasEdits()) {
+            return ProjectSaveOutcome.Failed(
+                message = "Switch to a single file to save — the All files view joins several files and " +
+                    "cannot be written back to them.",
+            )
+        }
 
+        state.stashOpenBufferInMemory()
         val ruleWrite = planRuleWrite(state = state, session = session)
+        val workingCopyWrites = planWorkingCopyWrites(
+            state = state,
+            session = session,
+            openPath = ruleWrite?.relativePath,
+        )
         val schemaWrite = planSchemaWrite(state = state, session = session)
         val actionsWrite = planActionsWrite(state = state, session = session)
 
@@ -149,16 +328,20 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
             )
         }
 
-        val contentWrites = listOfNotNull(ruleWrite, schemaWrite, actionsWrite)
-            .filter { write -> currentContent(path = write.path) != write.content }
+        val copiedContent = pendingCopies.associate { copy -> copy.target to copy.content }
+        val onDisk = { path: Path -> copiedContent[path] ?: currentContent(path = path) }
+        val plannedWrites = listOfNotNull(ruleWrite, schemaWrite, actionsWrite) + workingCopyWrites
+        val (unchanged, contentWrites) = plannedWrites.partition { write -> onDisk(write.path) == write.content }
 
         contentWrites.forEach { write ->
-            blockingConfirmation(write = write, approvals = approvals)?.let { confirmation ->
-                return ProjectSaveOutcome.NeedsConfirmation(request = confirmation)
-            }
+            blockingConfirmation(write = write, onDisk = onDisk(write.path), approvals = approvals)
+                ?.let { confirmation -> return ProjectSaveOutcome.NeedsConfirmation(request = confirmation) }
         }
 
+        pendingCopies.forEach { copy -> copyIntoNewRoot(copy = copy) }
         contentWrites.forEach { write -> writeFile(write = write) }
+        // Already what is on disk, so that is their baseline now; without it they stayed "unsaved".
+        unchanged.forEach { write -> dirtyState.markClean(key = write.dirtyKey, content = write.content) }
 
         // The buffer now has a file behind it, so later saves update that file rather than creating
         // another one, and switching rule files knows what it is leaving.
@@ -197,7 +380,6 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
             )
 
         val path = resolveRulePath(root = session.root, relativePath = relativePath)
-            ?: return null
 
         return PlannedWrite(
             kind = ProjectFileKind.RULE,
@@ -206,6 +388,34 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
             content = content,
             dirtyKey = ProjectDirtyState.ruleKey(relativePath = relativePath),
         )
+    }
+
+    /**
+     * The active entry's rule files whose working copy differs from their baseline — edited, then left
+     * for another file. The open buffer is planned by [planRuleWrite] and skipped here.
+     */
+    private fun planWorkingCopyWrites(
+        state: RuleEditorState,
+        session: ProjectSession,
+        openPath: String?,
+    ): List<PlannedWrite> {
+        val workingCopy = state.inMemoryRuleFiles.value
+        return session.ruleFiles.filter { relativePath -> relativePath != openPath }.mapNotNull { relativePath ->
+            val content = workingCopy[relativePath]
+            val dirtyKey = ProjectDirtyState.ruleKey(relativePath = relativePath)
+            val path = resolveRulePath(root = session.root, relativePath = relativePath)
+            if (content == null || !dirtyState.isDirty(key = dirtyKey, content = content)) {
+                null
+            } else {
+                PlannedWrite(
+                    kind = ProjectFileKind.RULE,
+                    relativePath = relativePath,
+                    path = path,
+                    content = content,
+                    dirtyKey = dirtyKey,
+                )
+            }
+        }
     }
 
     private fun planSchemaWrite(state: RuleEditorState, session: ProjectSession): PlannedWrite? {
@@ -255,22 +465,27 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
     /**
      * Whether this write needs the user's word first.
      *
-     * Two cases: it leaves the project, or the file moved on underneath us. Both would otherwise
-     * destroy something the user never saw.
+     * Three cases: it leaves the project, the file moved on underneath us, or it replaces a file this
+     * session never read. All would otherwise destroy something the user never saw.
      */
     private fun blockingConfirmation(
         write: PlannedWrite,
+        onDisk: String?,
         approvals: ProjectSaveApprovals,
     ): ProjectSaveConfirmation? {
-        if (ProjectPaths.isExternal(relativePath = write.relativePath) &&
-            !approvals.allowsExternalWrite(kind = write.kind)
-        ) {
+        val external = ProjectPaths.isExternal(relativePath = write.relativePath)
+        if (external && !approvals.allowsExternalWrite(kind = write.kind)) {
             return ProjectSaveConfirmation.ExternalWrite(kind = write.kind, relativePath = write.relativePath)
         }
 
-        val onDisk = currentContent(path = write.path) ?: return null
-        val baseline = dirtyState.baseline(key = write.dirtyKey) ?: return null
-        if (onDisk != baseline && !approvals.allowsOverwrite(relativePath = write.relativePath)) {
+        if (onDisk == null) return null
+        // No baseline means this session never read the file: one already there (another project's,
+        // after Save As, or a second entry's default path) is not ours to replace unasked. An approved
+        // external write has already been answered for that very file.
+        val baseline = dirtyState.baseline(key = write.dirtyKey)
+        val replacesUnread = baseline == null && !external && onDisk != write.content
+        val changedUnderneath = baseline != null && onDisk != baseline
+        if ((replacesUnread || changedUnderneath) && !approvals.allowsOverwrite(relativePath = write.relativePath)) {
             return ProjectSaveConfirmation.DiskConflict(kind = write.kind, relativePath = write.relativePath)
         }
         return null
@@ -278,23 +493,16 @@ class ProjectSaver(private val dirtyState: ProjectDirtyState) {
 
     private fun writeFile(write: PlannedWrite) {
         write.path.parent?.let { parent -> Files.createDirectories(parent) }
-        Files.writeString(write.path, write.content)
+        AtomicFiles.writeString(path = write.path, content = write.content)
         dirtyState.markClean(key = write.dirtyKey, content = write.content)
     }
 
-    private fun currentContent(path: Path): String? = runCatching { Files.readString(path) }.getOrNull()
+    private fun currentContent(path: Path): String? {
+        return runCatching { Files.readString(path) }.getOrNull()
+    }
 
-    private fun resolveRulePath(root: Path, relativePath: String): Path? {
-        return when (
-            val resolution = ManifestPathResolver.resolveWithinBase(
-                baseDir = root,
-                relativePath = relativePath,
-                label = "rule",
-            )
-        ) {
-            is ManifestPathResolution.Accepted -> resolution.path
-            is ManifestPathResolution.Rejected -> null
-        }
+    private fun resolveRulePath(root: Path, relativePath: String): Path {
+        return ManifestPathResolver.resolveAllowingEscape(baseDir = root, relativePath = relativePath)
     }
 
     private fun mergeRuleFiles(existing: List<String>, added: String?): List<String> {

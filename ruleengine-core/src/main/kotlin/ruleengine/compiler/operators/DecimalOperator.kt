@@ -3,10 +3,10 @@ package ruleengine.compiler.operators
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.errors.CompilationException
-import ruleengine.dsl.ast.BetweenLiteral
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.NumberLiteral
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.literal.BetweenLiteral
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.numeric.ComparisonOperator
 import ruleengine.evaluator.compiled.numeric.DecimalBetweenExpression

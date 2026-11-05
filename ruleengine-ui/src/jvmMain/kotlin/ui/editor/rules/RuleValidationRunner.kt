@@ -3,7 +3,7 @@ package ui.editor.rules
 import ruleengine.compiler.Validator
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ruleengine.dsl.parser.Parser
 import ui.editor.rules.model.RuleValidationOutcome
 

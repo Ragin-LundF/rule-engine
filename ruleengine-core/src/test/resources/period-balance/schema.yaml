@@ -1,0 +1,19 @@
+name: period-balance
+fields:
+  # The periods that count. A joined row whose period is not listed here is ignored.
+  periods:
+    type: string_set
+  credits:
+    type: collection
+    fields:
+      period:
+        type: text
+      amount:
+        type: decimal
+  debits:
+    type: collection
+    fields:
+      period:
+        type: text
+      amount:
+        type: decimal

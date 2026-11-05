@@ -5,8 +5,11 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -29,19 +32,9 @@ class ValidatorConstraintsTest {
     fun `validator rejects malformed numeric literals and between bounds`() {
         val asts = Parser(
             input = """
-                rule "bad-decimal-literal" {
-                  when amount gt 1.2.3
-                  then label "x"
-                }
-
                 rule "bad-integer-literal" {
                   when count gt 1.2
                   then label "y"
-                }
-
-                rule "bad-decimal-between" {
-                  when amount between 1.2.3 5
-                  then label "z"
                 }
 
                 rule "bad-integer-between" {
@@ -54,10 +47,19 @@ class ValidatorConstraintsTest {
         val result = Validator.validate(asts = asts, schema = schemaWithoutExplicitOperators)
 
         assertFalse(actual = result.isValid)
-        assertTrue(actual = result.diagnostics.any { it.message.contains(other = "Invalid decimal literal: 1.2.3") })
         assertTrue(actual = result.diagnostics.any { it.message.contains(other = "Invalid integer literal: 1.2") })
-        assertTrue(actual = result.diagnostics.any { it.message.contains(other = "Invalid lower bound: 1.2.3") })
         assertTrue(actual = result.diagnostics.any { it.message.contains(other = "Invalid upper bound: 2.2") })
+    }
+
+    /** A number has at most one dot, so `1.2.3` no longer reaches the validator: it is a syntax error. */
+    @Test
+    fun `a number with two dots is a parse error in a condition and in a between bound`() {
+        listOf("amount gt 1.2.3", "amount between 1.2.3 5").forEach { condition ->
+            val error = assertFailsWith<ParseException> {
+                Parser(input = "rule \"bad\" {\n  when $condition\n  then label \"x\"\n}").parseRules()
+            }
+            assertEquals(expected = 2, actual = error.line, message = condition)
+        }
     }
 
     @Test

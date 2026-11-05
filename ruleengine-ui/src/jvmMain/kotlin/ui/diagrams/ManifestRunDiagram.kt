@@ -22,8 +22,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import ruleengine.dsl.ast.RuleAst
 import ruleengine.dsl.ast.ValueExpressionRenderer
+import ruleengine.dsl.ast.rule.RuleAst
 import ui.diagrams.model.DiagramData
 import ui.diagrams.model.RuleSource
 import ui.diagrams.render.DiagramChip

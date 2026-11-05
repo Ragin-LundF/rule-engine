@@ -14,7 +14,9 @@ class ProjectDirtyState {
         const val ACTIONS: String = "actions"
 
         /** Rule files are keyed by their manifest-relative path, since a project has many. */
-        fun ruleKey(relativePath: String): String = "rule:$relativePath"
+        fun ruleKey(relativePath: String): String {
+            return "rule:$relativePath"
+        }
     }
 
     private val baselines: MutableMap<String, String> = mutableMapOf()
@@ -29,7 +31,9 @@ class ProjectDirtyState {
     }
 
     /** Null when the buffer was never read from disk — a file this session created, for example. */
-    fun baseline(key: String): String? = baselines[key]
+    fun baseline(key: String): String? {
+        return baselines[key]
+    }
 
     fun forget(key: String) {
         baselines.remove(key)
@@ -37,5 +41,15 @@ class ProjectDirtyState {
 
     fun clear() {
         baselines.clear()
+    }
+
+    /** A copy of every baseline, for undoing a save that did not go through. */
+    fun snapshot(): Map<String, String> {
+        return baselines.toMap()
+    }
+
+    fun restore(snapshot: Map<String, String>) {
+        baselines.clear()
+        baselines.putAll(snapshot)
     }
 }

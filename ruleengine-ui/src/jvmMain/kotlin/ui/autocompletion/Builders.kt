@@ -3,7 +3,7 @@ package ui.autocompletion
 import ruleengine.core.domain.dto.action.ActionArgType
 import ruleengine.core.domain.dto.action.ActionSchema
 import ruleengine.core.domain.dto.field.FieldSchema
-import ruleengine.dsl.ast.AssignmentKindAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
 import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
 import ui.dsl.model.DslCursorContext

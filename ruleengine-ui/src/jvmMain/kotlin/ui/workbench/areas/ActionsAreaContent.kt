@@ -5,7 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
-import ruleengine.dsl.ast.RuleAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.schema.ActionSchemaLoader
 import ui.actions.ActionIssues
 import ui.actions.ActionSchemaYamlBridge
@@ -207,22 +207,25 @@ private fun ActionsAreaHeader(
  * Apart from [ActionIssues] for the same reason the schema's is: how many rules emit an action is a
  * property of the rules, which the action schema has never seen.
  */
-private fun unusedActionNotes(emittedBy: Map<String, Int>): List<SchemaIssue> =
-    emittedBy.filterValues { count -> count == 0 }
+private fun unusedActionNotes(emittedBy: Map<String, Int>): List<SchemaIssue> {
+    return emittedBy.filterValues { count -> count == 0 }
         .keys
         .sorted()
         .map { name ->
             SchemaIssue(level = IssueLevel.NOTE, path = name, message = "No loaded rule emits this action.")
         }
+}
 
 /**
  * The outcome map rather than the field flow: in the actions area the question is which rules emit an
  * action and which of them share an output bucket. Moved into the dock, so seeing it no longer replaces
  * the editor.
  */
-private fun outcomeMap(rules: List<RuleAst>): @Composable () -> Unit = {
-    DiagramSurface {
-        OutcomeMapDiagram(rules = rules)
+private fun outcomeMap(rules: List<RuleAst>): @Composable () -> Unit {
+    return {
+        DiagramSurface {
+            OutcomeMapDiagram(rules = rules)
+        }
     }
 }
 

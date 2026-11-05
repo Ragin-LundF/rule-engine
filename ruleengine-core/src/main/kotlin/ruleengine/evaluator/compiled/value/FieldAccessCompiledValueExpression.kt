@@ -5,6 +5,7 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.EvaluationCost
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
+import ruleengine.evaluator.compiled.value.path.CompiledJoinSegment
 import ruleengine.evaluator.compiled.value.path.CompiledPathSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSliceSegment
 import ruleengine.evaluator.compiled.value.path.CompiledSortSegment
@@ -17,6 +18,7 @@ import ruleengine.evaluator.compiled.value.result.MissingExpressionValue
 import ruleengine.evaluator.compiled.value.result.NumberExpressionValue
 import ruleengine.evaluator.compiled.value.result.ObjectExpressionValue
 import ruleengine.evaluator.compiled.value.result.TextExpressionValue
+import ruleengine.evaluator.context.NumericInput
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.dto.PreparedBoolean
 import ruleengine.evaluator.context.dto.PreparedDate
@@ -58,16 +60,25 @@ class FieldAccessCompiledValueExpression(
     val yieldsCollection: Boolean = false
 ) : CompiledValueExpression {
     /**
-     * Reading a path is cheap; ordering one is not. A sorting path is declared expensive so
-     * `AndExpression`'s cost-ordered evaluation leaves it until a cheaper condition has had its
-     * chance to decide the rule. Filtering stays cheap deliberately — reclassifying it would reorder
-     * conditions in rules that exist today.
+     * Reading a path is cheap; ordering or joining one is not. A sorting or joining path is declared
+     * expensive so `AndExpression`'s cost-ordered evaluation leaves it until a cheaper condition has
+     * had its chance to decide the rule. Filtering stays cheap deliberately — reclassifying it would
+     * reorder conditions in rules that exist today.
      */
-    override val cost: EvaluationCost = if (segments.any { segment -> segment is CompiledSortSegment }) {
+    override val cost: EvaluationCost = if (
+        segments.any { segment -> segment is CompiledSortSegment || segment is CompiledJoinSegment }
+    ) {
         EvaluationCost.EXPENSIVE
     } else {
         EvaluationCost.CHEAP
     }
+
+    /**
+     * The root name when the path is plain names only. Such a path reads nothing but what that name
+     * resolves to, which is what lets an aggregate over it be shared across filter elements.
+     */
+    val plainRootName: String? = segments.takeIf { all -> all.all { segment -> segment is CompiledFieldSegment } }
+        ?.let { plain -> (plain.first() as CompiledFieldSegment).name }
 
     override fun evaluate(context: PreparedRuleContext): ExpressionValue {
         // A path of plain names may name a prepared value, including a dotted one: a scalar declared
@@ -79,6 +90,9 @@ class FieldAccessCompiledValueExpression(
             if (prepared != null) {
                 return prepared
             }
+            if (context.isUnreadable(field = FieldId(value = declaredName))) {
+                return MissingExpressionValue
+            }
         }
         val single = segments.singleOrNull() as? CompiledFieldSegment
         if (single != null) {
@@ -87,9 +101,9 @@ class FieldAccessCompiledValueExpression(
             val raw = context.rawContext.getRaw(fieldPath = listOf(single.name))
             return rawToExpressionValue(raw = raw, context = context)
         }
-        // `resolveRawListOrNull` rather than `resolveRawList`, so that a collection the record does
-        // not carry stays distinguishable from one it carries holding nothing. Collapsing both to an
-        // empty list is what used to make `sum(orders.amount)` undecided for `orders: []`.
+        // A collection the record does not carry stays distinguishable from one it carries holding
+        // nothing. Collapsing both to an empty list is what used to make `sum(orders.amount)`
+        // undecided for `orders: []`.
         val elements = resolveRawListOrNull(context = context) ?: return MissingExpressionValue
         return collapse(values = elements, context = context)
     }
@@ -103,36 +117,85 @@ class FieldAccessCompiledValueExpression(
     }
 
     /**
-     * Every raw element the path selects, before any of it is wrapped in an [ExpressionValue].
+     * [resolveRawListOrNull] with a collection the record does not carry read as `emptyList()`.
      *
-     * Slicing, collection predicates and keyed joins need the input elements themselves — a key and
-     * its value live on the same element, and a projection has already separated them. One shared
-     * walk is what keeps those features from each growing their own copy of path resolution.
+     * No caller is left: every reader has to tell a missing collection from an empty one since 1.14.0.
      */
+    @Deprecated(
+        message = "Hides a missing collection behind an empty one; use resolveRawListOrNull.",
+        replaceWith = ReplaceWith(expression = "resolveRawListOrNull(context = context).orEmpty()"),
+    )
     fun resolveRawList(context: PreparedRuleContext): List<Any?> {
         return resolveRawListOrNull(context = context).orEmpty()
     }
 
     /**
-     * The same walk as [resolveRawList], but `null` when the record carries nothing at the root.
+     * Every raw element the path selects, before any of it is wrapped in an [ExpressionValue], or
+     * `null` when the record does not carry what the path names.
      *
-     * [resolveRawList] answers `emptyList()` for both an absent root and a root holding no elements,
-     * which is the right reading for a caller that only wants to iterate what is there — a slice or a
-     * keyed join has nothing to work on either way.
+     * Slicing, collection predicates and keyed joins need the input elements themselves — a key and
+     * its value live on the same element, and a projection has already separated them. One shared
+     * walk is what keeps those features from each growing their own copy of path resolution.
+     *
+     * "Does not carry" means: the root is absent, or a step is absent while the walk is still on one
+     * single object — `account.orders` with `account` present but holding no `orders`. Once the walk
+     * has crossed a collection, an element without the member simply contributes nothing, so
+     * `orders.tags` over orders that carry no tags is empty rather than missing: the record does carry
+     * the orders.
      *
      * Everything that has to *answer* for the difference reads this instead: [evaluate], so an empty
-     * collection becomes an empty array rather than a missing value; `isEmpty`; and the collection
-     * predicates, which are undecided over a collection that never arrived and vacuously decided over
-     * one that arrived empty.
+     * collection becomes an empty array rather than a missing value; `isEmpty`; `sumByKey`; and the
+     * collection predicates, which are undecided over a collection that never arrived and vacuously
+     * decided over one that arrived empty.
      */
     fun resolveRawListOrNull(context: PreparedRuleContext): List<Any?>? {
-        val rootName = (segments[0] as? CompiledFieldSegment)?.name ?: return null
+        val root = segments[0]
+        if (root is CompiledJoinSegment) {
+            val rows = joinRows(join = root, context = context) ?: return null
+            return segments.drop(n = 1).fold(initial = rows) { current, segment ->
+                applySegment(segment = segment, current = current, context = context)
+            }
+        }
+        val rootName = (root as? CompiledFieldSegment)?.name ?: return null
         val rootRaw = context.rawContext.getRaw(fieldPath = listOf(rootName)) ?: return null
+        var single: Any? = rootRaw.takeUnless { raw -> raw is Collection<*> }
         var current = asList(raw = rootRaw)
         for (index in 1 until segments.size) {
-            current = applySegment(segment = segments[index], current = current, context = context)
+            val segment = segments[index]
+            if (single != null && segment is CompiledFieldSegment) {
+                val member = (single as? Map<*, *>)?.get(segment.name) ?: return null
+                single = member.takeUnless { raw -> raw is Collection<*> }
+                current = asList(raw = member)
+                continue
+            }
+            single = null
+            current = applySegment(segment = segment, current = current, context = context)
         }
         return current
+    }
+
+    /**
+     * One row per key, in first-seen order: the key, plus each source's total under its alias, zero
+     * where the source does not mention the key. Null when any source is missing, so a join over data
+     * the record does not carry is undecided rather than a row of zeros.
+     *
+     * The totals come from the same summing `sumByKey` uses, so the two always agree.
+     */
+    private fun joinRows(join: CompiledJoinSegment, context: PreparedRuleContext): List<Any?>? {
+        val totals = KeyedSumCompiledValueExpression.totalsPerSource(
+            key = join.key,
+            sources = join.sources.values.toList(),
+            context = context
+        ) ?: return null
+        val keys = LinkedHashSet<Any>()
+        totals.forEach { sourceTotals -> keys.addAll(sourceTotals.keys) }
+        val aliases = join.sources.keys.toList()
+        return keys.map { keyValue ->
+            val row = LinkedHashMap<String, Any>()
+            row[join.key] = keyValue
+            aliases.forEachIndexed { index, alias -> row[alias] = totals[index][keyValue] ?: BigDecimal.ZERO }
+            row
+        }
     }
 
     /**
@@ -154,7 +217,10 @@ class FieldAccessCompiledValueExpression(
             // The prepared value is the only place the field's declared `format` was applied, so a
             // date written as `dd.MM.yyyy` is only readable as a date from here.
             is PreparedDate -> DateExpressionValue(value = prepared.value)
-            is PreparedDateTime -> DateExpressionValue(value = prepared.value.toLocalDate())
+            is PreparedDateTime -> DateExpressionValue(
+                value = prepared.value.toLocalDate(),
+                timeOfDay = prepared.value.toLocalTime()
+            )
 
             else -> null
         }
@@ -183,6 +249,8 @@ class FieldAccessCompiledValueExpression(
             // desc), 3)` should order raw elements and convert three of them, not convert every
             // order and discard most of the work.
             is CompiledSortSegment -> sort(segment = segment, current = current, context = context)
+            // Only ever the first segment, which `resolveRawListOrNull` turns into rows itself.
+            is CompiledJoinSegment -> current
         }
     }
 
@@ -278,7 +346,10 @@ class FieldAccessCompiledValueExpression(
     private fun rawToExpressionValue(raw: Any?, context: PreparedRuleContext): ExpressionValue {
         return when (raw) {
             null -> MissingExpressionValue
-            is Number -> NumberExpressionValue(value = toBigDecimal(raw = raw))
+            is Number -> NumericInput.decimalOrNull(raw = raw)
+                ?.let { number -> NumberExpressionValue(value = number) }
+                ?: MissingExpressionValue
+
             is String -> TextExpressionValue(
                 value = context.normalizerRegistry.applyAll(value = raw, normalizers = normalizers)
             )
@@ -296,19 +367,6 @@ class FieldAccessCompiledValueExpression(
 
             is Map<*, *> -> ObjectExpressionValue(value = raw)
             else -> MissingExpressionValue
-        }
-    }
-
-    /**
-     * Whole numbers go through [BigDecimal.valueOf] rather than the string constructor: this runs
-     * once per numeric leaf of every projected collection, and the string form allocates twice.
-     * `toString()` stays for the rest, where it is the only conversion that keeps the written value.
-     */
-    private fun toBigDecimal(raw: Number): BigDecimal {
-        return when (raw) {
-            is BigDecimal -> raw
-            is Int, is Long, is Short, is Byte -> BigDecimal.valueOf(raw.toLong())
-            else -> BigDecimal(raw.toString())
         }
     }
 }

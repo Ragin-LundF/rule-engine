@@ -1,22 +1,24 @@
 package ruleengine.core.analysis
 
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ExpressionAst
-import ruleengine.dsl.ast.FieldAccessAst
-import ruleengine.dsl.ast.FieldSegmentAst
-import ruleengine.dsl.ast.FilterSegmentAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.LiteralValueAst
-import ruleengine.dsl.ast.NotAst
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.SliceSegmentAst
-import ruleengine.dsl.ast.SortSegmentAst
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableRefAst
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
+import ruleengine.dsl.ast.condition.NotAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.FilterSegmentAst
+import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.path.SliceSegmentAst
+import ruleengine.dsl.ast.path.SortSegmentAst
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.LiteralValueAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
+import ruleengine.dsl.ast.value.VariableRefAst
 
 /**
  * Which field paths a rule reads.
@@ -95,6 +97,11 @@ object FieldUsage {
      * `parcels.weightKg` is the dependency, not `parcels` as well.
      */
     private fun collectFromPath(expr: FieldAccessAst, prefix: String, into: MutableSet<String>) {
+        val join = expr.path.firstOrNull() as? JoinSegmentAst
+        if (join != null) {
+            collectFromJoin(join = join, rest = expr.path.drop(n = 1), prefix = prefix, into = into)
+            return
+        }
         var current = prefix
         expr.path.forEach { segment ->
             when (segment) {
@@ -110,11 +117,41 @@ object FieldUsage {
                 is SortSegmentAst -> segment.member?.let { member ->
                     into += join(prefix = current, segment = member)
                 }
+                // Only ever first, and read by `collectFromJoin` before this loop is reached.
+                is JoinSegmentAst -> Unit
             }
         }
         if (current.isNotEmpty()) {
             into += current
         }
+    }
+
+    /**
+     * A join reads each source's value member and, from the same collection, its key. The rows it
+     * builds are not input: a member read, a sort or a filter on them names the key or an alias, so
+     * only what a filter reads from the document beyond those counts.
+     */
+    private fun collectFromJoin(
+        join: JoinSegmentAst,
+        rest: List<PathSegmentAst>,
+        prefix: String,
+        into: MutableSet<String>
+    ) {
+        join.sources.forEach { source ->
+            collectFromPath(expr = source.path, prefix = prefix, into = into)
+            join.key?.let { key ->
+                val keyPath = source.path.path.dropLast(n = 1) + FieldSegmentAst(name = key)
+                collectFromPath(expr = FieldAccessAst(path = keyPath), prefix = prefix, into = into)
+            }
+        }
+        val rowMembers = (listOfNotNull(join.key) + join.sources.map { source -> source.alias })
+            .map { member -> join(prefix = prefix, segment = member) }
+            .toSet()
+        val filterReads = mutableSetOf<String>()
+        rest.filterIsInstance<FilterSegmentAst>().forEach { filter ->
+            collectFromExpression(expr = filter.expression, prefix = prefix, into = filterReads)
+        }
+        into += filterReads - rowMembers
     }
 
     private fun join(prefix: String, segment: String): String {

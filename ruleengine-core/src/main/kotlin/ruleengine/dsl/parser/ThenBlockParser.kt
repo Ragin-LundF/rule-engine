@@ -1,10 +1,10 @@
 package ruleengine.dsl.parser
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AssignmentKindAst
-import ruleengine.dsl.ast.ExtractionAst
-import ruleengine.dsl.ast.ValueExpressionAst
-import ruleengine.dsl.ast.VariableAssignmentAst
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.AssignmentKindAst
+import ruleengine.dsl.ast.rule.ExtractionAst
+import ruleengine.dsl.ast.rule.VariableAssignmentAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType

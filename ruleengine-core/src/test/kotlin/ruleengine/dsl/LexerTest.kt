@@ -1,9 +1,9 @@
 package ruleengine.dsl
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.TokenType
+import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class LexerTest {
 
@@ -147,5 +147,32 @@ class LexerTest {
         assert(TokenType.GT in types)
         assert(TokenType.STAR in types)
         assert(TokenType.NUMBER in types)
+    }
+
+    @Test
+    fun `a colon is a token of its own`() {
+        assertEquals(
+            expected = listOf(
+                TokenType.IDENT, TokenType.COLON, TokenType.IDENT, TokenType.DOT, TokenType.IDENT, TokenType.EOF
+            ),
+            actual = tokenTypes("credit: credits.amount")
+        )
+    }
+
+    @Test
+    fun `only a backslash before a quote or a backslash is an escape`() {
+        assertEquals(
+            expected = listOf("^DE\\d{20}$", "say \"hi\"", "C:\\", "a\\.b", ""),
+            actual = tokenTexts(input = """"^DE\d{20}$" "say \"hi\"" "C:\\" "a\.b"""")
+        )
+    }
+
+    @Test
+    fun `a number stops before a second dot`() {
+        assertEquals(
+            expected = listOf(TokenType.NUMBER, TokenType.DOT, TokenType.NUMBER, TokenType.EOF),
+            actual = tokenTypes(input = "1.2.3")
+        )
+        assertEquals(expected = listOf("1.2", ".", "3", ""), actual = tokenTexts(input = "1.2.3"))
     }
 }

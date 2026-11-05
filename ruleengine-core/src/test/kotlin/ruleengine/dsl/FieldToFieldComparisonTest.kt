@@ -1,6 +1,7 @@
 package ruleengine.dsl
 
-import ruleengine.dsl.ast.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.condition.ExpressionAst
 import ruleengine.dsl.parser.Parser
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -38,14 +39,16 @@ class FieldToFieldComparisonTest {
         )
     }
 
-    private fun parse(condition: String) = Parser(
-        input = """
-            rule "field-to-field" {
-              when
-                $condition
-              then
-                flag "ok"
-            }
-        """.trimIndent()
-    ).parseRules().single().condition
+    private fun parse(condition: String): ExpressionAst {
+        return Parser(
+            input = """
+                rule "field-to-field" {
+                  when
+                    $condition
+                  then
+                    flag "ok"
+                }
+            """.trimIndent()
+        ).parseRules().single().condition
+    }
 }

@@ -1,10 +1,11 @@
 package ruleengine.dsl
 
-import ruleengine.dsl.ast.ArithmeticValueAst
-import ruleengine.dsl.ast.ComparisonExpressionAst
-import ruleengine.dsl.ast.FunctionCallValueAst
-import ruleengine.dsl.ast.VariableRefAst
-import ruleengine.dsl.ast.VariableRefLiteral
+import ruleengine.dsl.ast.condition.ComparisonExpressionAst
+import ruleengine.dsl.ast.literal.VariableRefLiteral
+import ruleengine.dsl.ast.rule.RuleAst
+import ruleengine.dsl.ast.value.ArithmeticValueAst
+import ruleengine.dsl.ast.value.FunctionCallValueAst
+import ruleengine.dsl.ast.value.VariableRefAst
 import ruleengine.dsl.diagnostics.ParseException
 import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.TokenType
@@ -168,12 +169,14 @@ class ParserVariableTest {
         )
     }
 
-    private fun parseSingle(body: String) = Parser(
-        input = """
-            rule "r" {
-              description "d"
-              $body
-            }
-        """.trimIndent()
-    ).parseRules().single()
+    private fun parseSingle(body: String): RuleAst {
+        return Parser(
+            input = """
+                rule "r" {
+                  description "d"
+                  $body
+                }
+            """.trimIndent()
+        ).parseRules().single()
+    }
 }

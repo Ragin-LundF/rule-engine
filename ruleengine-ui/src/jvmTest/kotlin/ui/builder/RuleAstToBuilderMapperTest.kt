@@ -1,13 +1,13 @@
 package ui.builder
 
-import ruleengine.dsl.ast.ActionAst
-import ruleengine.dsl.ast.AndAst
-import ruleengine.dsl.ast.ConditionAst
-import ruleengine.dsl.ast.ListLiteral
-import ruleengine.dsl.ast.NumberLiteral
-import ruleengine.dsl.ast.OrAst
-import ruleengine.dsl.ast.RuleAst
-import ruleengine.dsl.ast.StringLiteral
+import ruleengine.dsl.ast.condition.AndAst
+import ruleengine.dsl.ast.condition.ConditionAst
+import ruleengine.dsl.ast.condition.OrAst
+import ruleengine.dsl.ast.literal.ListLiteral
+import ruleengine.dsl.ast.literal.NumberLiteral
+import ruleengine.dsl.ast.literal.StringLiteral
+import ruleengine.dsl.ast.rule.ActionAst
+import ruleengine.dsl.ast.rule.RuleAst
 import ruleengine.dsl.parser.Parser
 import ui.builder.model.BuilderConditionNode
 import ui.builder.model.BuilderOperand
@@ -25,23 +25,29 @@ class RuleAstToBuilderMapperTest {
 
     private fun rule(
         id: String = "test-rule",
-        condition: ruleengine.dsl.ast.ExpressionAst,
+        condition: ruleengine.dsl.ast.condition.ExpressionAst,
         actions: List<ActionAst> = emptyList(),
-    ) = RuleAst(id = id, condition = condition, actions = actions)
+    ): RuleAst {
+        return RuleAst(id = id, condition = condition, actions = actions)
+    }
 
-    private fun cond(field: String, op: String, value: String) =
-        ConditionAst(field = field, operator = op, value = StringLiteral(value))
+    private fun cond(field: String, op: String, value: String): ConditionAst {
+        return ConditionAst(field = field, operator = op, value = StringLiteral(value))
+    }
 
-    private fun numCond(field: String, op: String, value: String) =
-        ConditionAst(field = field, operator = op, value = NumberLiteral(value))
+    private fun numCond(field: String, op: String, value: String): ConditionAst {
+        return ConditionAst(field = field, operator = op, value = NumberLiteral(value))
+    }
 
     /** Unwrap a node as a leaf [BuilderConditionNode.Condition]. */
-    private fun leaf(node: BuilderConditionNode): BuilderConditionNode.Condition =
-        node as BuilderConditionNode.Condition
+    private fun leaf(node: BuilderConditionNode): BuilderConditionNode.Condition {
+        return node as BuilderConditionNode.Condition
+    }
 
     /** Unwrap a node as a [BuilderConditionNode.Group]. */
-    private fun group(node: BuilderConditionNode): BuilderConditionNode.Group =
-        node as BuilderConditionNode.Group
+    private fun group(node: BuilderConditionNode): BuilderConditionNode.Group {
+        return node as BuilderConditionNode.Group
+    }
 
     // ── tests ─────────────────────────────────────────────────────────────────
 
@@ -199,14 +205,16 @@ class RuleAstToBuilderMapperTest {
         )
     }
 
-    private fun parseRule(condition: String): RuleAst = Parser(
-        input = """
-            rule "filtered" {
-              when
-                $condition
-              then
-                flag "hit"
-            }
-        """.trimIndent()
-    ).parseRules().single()
+    private fun parseRule(condition: String): RuleAst {
+        return Parser(
+            input = """
+                rule "filtered" {
+                  when
+                    $condition
+                  then
+                    flag "hit"
+                }
+            """.trimIndent()
+        ).parseRules().single()
+    }
 }

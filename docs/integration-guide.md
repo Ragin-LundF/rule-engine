@@ -202,7 +202,7 @@ The builder fails fast instead of handing out a half-initialised engine. It rais
 - an entry declares no `schema` or no rule files
 - a referenced schema, action or rule file does not exist — the message names both the relative path
   from the manifest and the resolved absolute path
-- a referenced path escapes the manifest directory (for example `../../etc/passwd`)
+- a classpath resource name is absolute or climbs above the classpath root
 - a schema or rule file cannot be loaded or parsed
 - rule validation reports an `ERROR`
 
@@ -252,7 +252,7 @@ Rules for resource names after the prefix:
 
 - Always `/`-separated, and never starting with `/` (a leading slash is accepted and ignored).
 - Resolved relative to the manifest resource's own directory, exactly like the filesystem variant. A
-  path that leaves that directory (`../shared/schema.yaml`) is rejected.
+  path may leave that directory (`../shared/schema.yaml`); it may not climb above the classpath root.
 - `getResourceAsStream` returns the **first** match on the classpath. If two jars both ship
   `rules/manifest.yaml`, which one wins depends on classpath order — namespace the prefix
   (`com/acme/rules/manifest.yaml`) when the rules are published as a library.
@@ -343,9 +343,10 @@ for (match in result.matches) {
 }
 ```
 
-> **Note:** Unlike the builder, this hand-written version does not check that referenced paths stay
-> inside the manifest directory. Use `ManifestPathResolver.resolveWithinBase` from
-> `ruleengine.manifest` when the manifest is not fully under your control.
+> **Note:** The builder resolves paths the same way, with `ManifestPathResolver.resolveAllowingEscape`
+> from `ruleengine.manifest`: a path may leave the manifest directory (`../shared/schema.yaml`), and an
+> absolute path is used as it is. A manifest can therefore make the engine read any file the process can
+> read — **load manifests only from trusted sources**, never from user uploads or other untrusted input.
 
 ### 4.2 Loading a Field Schema
 
@@ -1065,7 +1066,9 @@ fields:
 | `ruleengine.core.normalizer` | `NormalizerRegistry`, `NormalizerProfile`, built-in normalizers |
 | `ruleengine.core.errors` | `RuleEngineException`, `RuleEngineBuildException`, `SchemaLoadException`, `CompilationException`, `ValidationDiagnostic` |
 | `ruleengine.dsl.parser` | `Parser` — parses `.rule` text into `List<RuleAst>` |
-| `ruleengine.dsl.ast` | AST node types: `RuleAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, `ActionAst`, etc. |
+| `ruleengine.dsl.ast.rule` | AST of a rule: `RuleAst`, `ActionAst`, `ExtractionAst`, `VariableAssignmentAst` |
+| `ruleengine.dsl.ast.condition` | Condition nodes: `ExpressionAst`, `ConditionAst`, `AndAst`, `OrAst`, `NotAst`, `ComparisonExpressionAst` |
+| `ruleengine.dsl.ast.value` / `.literal` / `.path` | Value expressions, literals and path segments; `ruleengine.dsl.ast` itself holds `ValueExpressionRenderer` |
 | `ruleengine.dsl.diagnostics` | `ParseException` |
 | `ruleengine.compiler` | `Validator`, `Compiler` |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule` |
