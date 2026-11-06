@@ -112,14 +112,14 @@ intellijPlatform {
     }
 }
 
-// A custom plugin repository instead of the JetBrains Marketplace: the release workflow attaches the
-// zip and this file to the GitHub release, and the IDE reads
-// https://github.com/Ragin-LundF/rule-engine/releases/latest/download/updatePlugins.xml for updates.
+// A custom plugin repository instead of the JetBrains Marketplace. The file is committed, and the IDE
+// reads it from https://raw.githubusercontent.com/Ragin-LundF/rule-engine/main/ruleengine-intellij/updatePlugins.xml.
+// Rerun this task after bumping the version; the release workflow attaches the zip it points to.
 val releaseTag = providers.gradleProperty("releaseTag").orElse("v$version")
-val updatePluginsXml by tasks.registering {
+tasks.register("updatePluginsXml") {
     group = "intellij platform"
     description = "Writes updatePlugins.xml, the custom plugin repository file the IDE reads for updates."
-    val output = layout.buildDirectory.file("distributions/updatePlugins.xml")
+    val output = layout.projectDirectory.file("updatePlugins.xml")
     val zipName = tasks.buildPlugin.flatMap { task -> task.archiveFileName }
     val pluginVersion = version.toString()
     val tag = releaseTag
@@ -129,7 +129,7 @@ val updatePluginsXml by tasks.registering {
     outputs.file(output)
     doLast {
         val url = "https://github.com/Ragin-LundF/rule-engine/releases/download/${tag.get()}/${zipName.get()}"
-        output.get().asFile.writeText(
+        output.asFile.writeText(
             """
             <?xml version="1.0" encoding="UTF-8"?>
             <plugins>

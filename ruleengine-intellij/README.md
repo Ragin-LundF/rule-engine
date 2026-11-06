@@ -28,8 +28,12 @@ Without the JetBrains Marketplace, either way:
   [GitHub release](https://github.com/Ragin-LundF/rule-engine/releases), then Settings → Plugins →
   ⚙ → *Install Plugin from Disk…*.
 - **With updates:** Settings → Plugins → ⚙ → *Manage Plugin Repositories…*, add
-  `https://github.com/Ragin-LundF/rule-engine/releases/latest/download/updatePlugins.xml`, then
-  install *Rule Engine DSL* from the Marketplace tab.
+  `https://raw.githubusercontent.com/Ragin-LundF/rule-engine/main/ruleengine-intellij/updatePlugins.xml`,
+  then install *Rule Engine DSL* from the Marketplace tab.
+
+`updatePlugins.xml` is committed and names the release zip of the current version. After bumping the
+version in `gradle.properties`, regenerate it with `./gradlew -p ruleengine-intellij updatePluginsXml`
+and commit it; IntelliJ offers the update once it is on `main` and the release is published.
 
 ## Build
 

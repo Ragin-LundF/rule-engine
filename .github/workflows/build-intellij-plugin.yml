@@ -37,6 +37,6 @@ jobs:
         with:
           files: |
             ruleengine-intellij/build/distributions/*.zip
-            ruleengine-intellij/build/distributions/updatePlugins.xml
+            ruleengine-intellij/updatePlugins.xml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
