@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+- **A release is uploaded to Maven Central as one deployment.** JReleaser now runs only in the root
+  project: `ruleengine-model`, `ruleengine-core` and `ruleengine-ui` are staged into the root
+  `build/staging-deploy` and sent in a single upload, instead of one deployment per module. The release
+  workflow is unchanged (`publish`, then `jreleaserDeploy`).
+
 ## 1.15.0
 
 ### Added
