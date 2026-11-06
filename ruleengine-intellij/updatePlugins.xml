@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plugins>
+    <plugin id="io.github.ragin-lundf.ruleengine" url="https://github.com/Ragin-LundF/rule-engine/releases/download/v1.15.0/ruleengine-intellij-1.15.0.zip" version="1.15.0">
+        <idea-version since-build="263"/>
+        <name>Rule Engine DSL</name>
+    </plugin>
+</plugins>
