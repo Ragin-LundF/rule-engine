@@ -43,6 +43,8 @@ private val OP_CHARS = setOf('>', '<', '=', '!')
 private val DSL_NAMED_OPS = setOf(
     *OperatorNames.ALL.toTypedArray(),
     "ignoreCase",
+    // The keyed-source marker. Checked after schema fields, so a field named `optional` stays a field.
+    "optional",
 )
 
 /** Aggregate function names recognized in value expressions. */

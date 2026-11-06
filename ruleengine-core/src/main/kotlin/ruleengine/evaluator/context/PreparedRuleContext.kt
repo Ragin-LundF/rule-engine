@@ -57,6 +57,12 @@ class PreparedRuleContext(
      */
     val documentCache: EvaluationCache = cache,
     private val document: RuleContext = rawContext,
+    /**
+     * `missingCollections: empty` on the manifest entry: a collection or `string_set` nested in a
+     * present object that does not carry it reads as empty, as it did before 1.14.0. A transition aid
+     * that hides real gaps; `false` is the strict default.
+     */
+    val missingCollectionsAsEmpty: Boolean = false,
 ) {
     fun get(field: FieldId): PreparedValue? {
         return values[field]
@@ -99,6 +105,7 @@ class PreparedRuleContext(
             normalizerRegistry = normalizerRegistry,
             documentCache = documentCache,
             document = document,
+            missingCollectionsAsEmpty = missingCollectionsAsEmpty,
         )
     }
 
@@ -119,12 +126,15 @@ class PreparedRuleContext(
         fun prepare(
             ctx: RuleContext,
             schema: FieldSchema,
-            normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
+            normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
+            missingCollectionsAsEmpty: Boolean = false,
         ): PreparedRuleContext {
             val map = mutableMapOf<FieldId, PreparedValue>()
+            // A field declared `missing: empty` reads as empty for every reader, so it is filled in here.
+            val input = MissingAsEmptyRuleContext.wrapIfNeeded(context = ctx, schema = schema)
 
             for ((fieldId, def) in schema.fields) {
-                prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
+                prepareValue(fieldId = fieldId, def = def, ctx = input, map = map, registry = normalizerRegistry)
             }
 
             // A scalar declared inside an `object` is read by its dotted path, which `RuleContext.get`
@@ -134,15 +144,16 @@ class PreparedRuleContext(
             val scalarPaths = FieldPathResolver.scalarPaths(schema = schema)
             for ((fieldId, def) in scalarPaths) {
                 if (!map.containsKey(fieldId)) {
-                    prepareValue(fieldId = fieldId, def = def, ctx = ctx, map = map, registry = normalizerRegistry)
+                    prepareValue(fieldId = fieldId, def = def, ctx = input, map = map, registry = normalizerRegistry)
                 }
             }
 
             return PreparedRuleContext(
                 values = map,
-                rawContext = ctx,
+                rawContext = input,
                 normalizerRegistry = normalizerRegistry,
-                unreadable = unreadableFields(fields = schema.fields + scalarPaths, ctx = ctx, prepared = map),
+                unreadable = unreadableFields(fields = schema.fields + scalarPaths, ctx = input, prepared = map),
+                missingCollectionsAsEmpty = missingCollectionsAsEmpty,
             )
         }
 

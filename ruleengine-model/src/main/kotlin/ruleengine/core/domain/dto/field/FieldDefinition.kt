@@ -23,5 +23,12 @@ data class FieldDefinition(
      * is unbounded. Empty for scalar fields, and also empty for structures whose members are not
      * declared — in that case path validation stays permissive (see `ValueExpressionValidator`).
      */
-    val fields: Map<FieldId, FieldDefinition> = emptyMap()
+    val fields: Map<FieldId, FieldDefinition> = emptyMap(),
+    /**
+     * `missing: empty` in the schema: a record that does not carry this field, or carries `null`,
+     * reads as an empty value — `[]` for a [FieldType.COLLECTION] / [FieldType.STRING_SET], `{}` for a
+     * [FieldType.OBJECT]. Only legal on those three types. `false` keeps the strict default, where an
+     * absent field is missing.
+     */
+    val missingAsEmpty: Boolean = false
 )

@@ -24,6 +24,7 @@ fields:
       - <normalizer>
     operators:
       - <operator>
+    missing: empty  # Optional, only on collection / string_set / object: absent or null reads as empty.
 ```
 
 ---
@@ -276,6 +277,41 @@ A few limits worth knowing:
 
 These two types hold structure rather than a value, so they have **no operators of their own**. Rules
 navigate into them or aggregate over them instead — see [Nested Data](#nested-data).
+
+---
+
+## Missing Means Empty
+
+A field the record does not carry, or carries as `null`, is **missing** by default, and a condition
+over it is undecided. When an input simply leaves a list out because there is nothing to report,
+declare `missing: empty` and every rule sees an empty value instead:
+
+```yaml
+schema: fees-v1
+
+fields:
+  fees:
+    type: object
+    fields:
+      rows:
+        type: collection
+        missing: empty      # absent or null reads as []
+        fields:
+          period: { type: text }
+          amount: { type: decimal }
+```
+
+- Legal on `collection` and `string_set` (read as `[]`) and on `object` (read as `{}`), at any depth.
+  On any other type, or with any other value than `empty`, the schema fails to load.
+- Every reader sees the empty value: aggregates (`count` is `0`, `sum` is `0`), filters, keyed joins,
+  `every` / `any`, `isAvailable` / `isEmpty` / `isMissing` / `isPresent` and `extract`. Such a field is
+  never missing.
+- The members of an `object` follow their own settings: inside an absent object declared
+  `missing: empty`, a member without the setting is still missing.
+- Leaving the key out keeps the strict reading; older engines ignore the key.
+
+To read a collection as empty in a single rule only, write `orEmpty(fees.rows)` there instead — see
+[expressions.md](expressions.md#5g-missing-means-empty--orempty-and-optional).
 
 ---
 

@@ -59,6 +59,9 @@ internal fun FieldTokens(field: EditableField) {
         if (field.format.isNotBlank()) {
             Crumb(text = "fmt ${field.format}", color = PrimaryBlueLight)
         }
+        if (field.missingAsEmpty) {
+            Crumb(text = "missing: empty", color = PrimaryBlueLight)
+        }
         if (field.normalizers.isNotEmpty()) {
             // Joined with arrows because the order *is* the meaning: the engine applies the chain left
             // to right, and a comma would read as a set.

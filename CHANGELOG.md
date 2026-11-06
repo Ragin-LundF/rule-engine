@@ -5,6 +5,65 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 1.15.0
+
+### Added
+- **IntelliJ plugin (`ruleengine-intellij`), installed without the JetBrains Marketplace.** Highlighting,
+  completion and a single-rule diagram for `.rule` files, Ctrl/Cmd+click into the field and action
+  schemas, and completion and validation in manifest, schema and action YAML. A rule is linked to the
+  manifest that lists it, without loading the other rules. Each GitHub release carries the plugin zip
+  and an `updatePlugins.xml` for automatic updates. Needs IntelliJ IDEA 2026.3 or later; see
+  `ruleengine-intellij/README.md`.
+- **`orEmpty(path)` — a missing collection read as empty, in one rule.** It yields the collection when
+  the record carries it, and an empty one when the collection, or any object on the way to it, is absent
+  or `null`: `sum(orEmpty(fees.rows)[period in periods].amount)` is `0` when `fees.rows` is missing. It is
+  part of the path, so filters, projections, `every` / `any`, `in` and keyed-join sources work on it, and
+  it accepts a `string_set`. Rejected at load time on a single value, an `object`, a variable and a
+  `sumByKey` / `joinByKey` result.
+- **`default(value, fallback)`** returns `fallback` when `value` is missing (or unreadable as its
+  declared type): `default(account.limit, 0) >= 500`. `value` must be a single value and `fallback` of the
+  same kind; both are checked at load time.
+- **`isMissing(x)` / `isPresent(x)`** name the states `isAvailable` / `isEmpty` only tell apart in
+  combination: present is "carried, empty or not". Both always answer `true` or `false`.
+  `isPresent(fees) and sum(orEmpty(fees.rows).amount) ...` keeps a parent strict and a child lenient.
+- **`optional` on a `sumByKey` / `joinByKey` source.** `sumByKey("period", a.count, optional b.count)`
+  and `joinByKey("period", credit: credits.amount, optional debit: debits.amount)` let that one source be
+  missing; it then contributes nothing. Anywhere else `optional` is a load-time error.
+- **`missing: empty` on a `collection`, `string_set` or `object` schema field.** Every rule sees `[]` /
+  `{}` when the record does not carry the field; the members of an object follow their own settings.
+  Any other type or value fails to load. The schema editor has a toggle for it and keeps the key.
+- **`missingCollections: empty` on a manifest entry — a transition aid.** Restores the 1.13 reading of a
+  collection nested in a present object that does not carry it (empty instead of missing), so plain
+  rules written for 1.13 keep their results. An absent root stays missing. It hides real gaps in the
+  data; prefer `orEmpty`, `optional` or `missing: empty`. Read by `RuleEngineBuilder` and the
+  `--manifest` CLIs; the manifest editor keeps and completes it.
+- The rule editor highlights and completes `orEmpty`, `default`, `isMissing`, `isPresent` and
+  `optional`, and the visual Builder keeps `orEmpty` and `optional` when it rewrites a rule. Catalog
+  exports describe each of them in plain language.
+
+### Changed
+- **New entries in the public enums `AggregateFunctionName` (`DEFAULT`) and `CollectionFunctionName`
+  (`IS_MISSING`, `IS_PRESENT`) in `ruleengine-model`.** Client code with an exhaustive `when` over either
+  enum no longer compiles; add the new entries or an `else` branch.
+- **`FieldDefinition` has a new property `missingAsEmpty`** (default `false`). Source compatible for
+  callers using named or default arguments; the constructor signature changed, so recompile.
+- New defaulted parameters, source compatible but changing signatures: `FieldAccessAst.optional`,
+  `ManifestEntry.missingCollections`, `LoadedRuleEngine.missingCollectionsAsEmpty`, and
+  `missingCollectionsAsEmpty` on `PreparedRuleContext.prepare` and `ScopedEvaluation.evaluate`. The new
+  path segment `OrEmptySegmentAst` makes an exhaustive `when` over `PathSegmentAst` incomplete.
+
+### Fixed
+- **An aggregate no longer turns missing when its path selects exactly one unreadable element.**
+  `sum(fees.rows[period == "P1"].amount)` over a single P1 row with `"amount": "abc"` was missing (the
+  rule undecided), while the same row next to others was skipped. It is now skipped either way: `sum` /
+  `subtract` give `0`, `count` counts it, `avg` / `median` / `max` / `min` are missing as for an empty
+  selection. A plain comparison against that value, and an aggregate over a declared scalar field, are
+  unchanged.
+- **Catalog export: `isEmpty(x)` reads "x is empty".** It used to read "at least one of x".
+- **Editor: picking an operator or a value no longer writes the field twice.** After `amount ` the
+  operator suggestions inserted `amount >= 0`, which gave `amount amount >= 0`; after `amount gte ` the
+  value suggestion repeated field and operator. They now insert only what follows the typed text.
+
 ## 1.14.0
 
 ### Added

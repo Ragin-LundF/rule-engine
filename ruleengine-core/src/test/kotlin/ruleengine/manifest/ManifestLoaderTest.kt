@@ -4,6 +4,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
@@ -52,5 +53,26 @@ class ManifestLoaderTest {
 
         assertEquals(expected = "accounts", actual = manifest.entries.single().scope)
     }
-}
 
+    private fun entryYaml(extra: String): String {
+        return "entries:\n  - id: e\n    schema: s.yaml\n    rules: [r.rule]\n    $extra\n"
+    }
+
+    @Test
+    fun `missingCollections empty is read from the entry and absent means strict`() {
+        val lenient = ManifestLoader.loadFromString(content = entryYaml(extra = "missingCollections: empty"))
+        val strict = ManifestLoader.loadFromString(content = entryYaml(extra = "scope: null"))
+
+        assertEquals(expected = "empty", actual = lenient.entries.single().missingCollections)
+        assertEquals(expected = null, actual = strict.entries.single().missingCollections)
+    }
+
+    @Test
+    fun `another missingCollections value fails to load`() {
+        val other = assertFailsWith<IllegalArgumentException> {
+            ManifestLoader.loadFromString(content = entryYaml(extra = "missingCollections: other"))
+        }
+
+        assertTrue(actual = other.message.orEmpty().contains(other = "the only value is 'empty'"))
+    }
+}

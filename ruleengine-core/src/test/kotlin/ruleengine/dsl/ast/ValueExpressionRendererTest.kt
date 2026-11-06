@@ -210,4 +210,31 @@ class ValueExpressionRendererTest {
 
         assertEquals(expected = written, actual = rendered)
     }
+
+    /** orEmpty, default, the presence predicates and the `optional` marker read back as written. */
+    @Test
+    fun `renders the missing-value spellings exactly as written`() {
+        listOf(
+            """sum(orEmpty(fees.rows)[period in periods].amount)""",
+            """sum(orEmpty(fees.rows.amount))""",
+            """sumByKey("period", events.confirmed[period in periods].count, """ +
+                """optional events.unclassified[period in periods].count)""",
+            """count(joinByKey("period", credit: credits.amount, optional debit: debits.amount))""",
+            """default(account.limit, 0)""",
+            """isPresent(fees)""",
+            """isMissing(fees.rows)""",
+        ).forEach { written ->
+            val rule = """
+                rule "r" {
+                  when
+                    $written == 0
+                  then
+                    flag "ok"
+                }
+            """.trimIndent()
+            val condition = Parser(input = rule).parseRules().single().condition as ComparisonExpressionAst
+
+            assertEquals(expected = written, actual = ValueExpressionRenderer.render(expr = condition.left))
+        }
+    }
 }

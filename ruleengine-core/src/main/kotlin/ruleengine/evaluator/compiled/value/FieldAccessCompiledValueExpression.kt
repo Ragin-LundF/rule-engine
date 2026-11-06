@@ -57,7 +57,13 @@ class FieldAccessCompiledValueExpression(
      * selection of exactly one element to a scalar, so a path that yields many values for one record
      * and one value for the next would otherwise change what `contains` means between them.
      */
-    val yieldsCollection: Boolean = false
+    val yieldsCollection: Boolean = false,
+    /**
+     * Written as `orEmpty(...)` (or as an `optional` keyed source): a collection the record does not
+     * carry — absent or `null`, at the end of the path or on the way to it — reads as an empty one.
+     * A value the record does carry reads exactly as it would without the flag.
+     */
+    private val missingAsEmpty: Boolean = false
 ) : CompiledValueExpression {
     /**
      * Reading a path is cheap; ordering or joining one is not. A sorting or joining path is declared
@@ -99,7 +105,11 @@ class FieldAccessCompiledValueExpression(
             // A whole collection read by name stays one array, even when it holds a single element:
             // collapsing it would turn `tags contains "x"` into a text comparison.
             val raw = context.rawContext.getRaw(fieldPath = listOf(single.name))
-            return rawToExpressionValue(raw = raw, context = context)
+            return if (raw == null && missingAsEmpty) {
+                ArrayExpressionValue(values = emptyList())
+            } else {
+                rawToExpressionValue(raw = raw, context = context)
+            }
         }
         // A collection the record does not carry stays distinguishable from one it carries holding
         // nothing. Collapsing both to an empty list is what used to make `sum(orders.amount)`
@@ -149,6 +159,10 @@ class FieldAccessCompiledValueExpression(
      * decided over one that arrived empty.
      */
     fun resolveRawListOrNull(context: PreparedRuleContext): List<Any?>? {
+        return walkRaw(context = context) ?: emptyList<Any?>().takeIf { missingAsEmpty }
+    }
+
+    private fun walkRaw(context: PreparedRuleContext): List<Any?>? {
         val root = segments[0]
         if (root is CompiledJoinSegment) {
             val rows = joinRows(join = root, context = context) ?: return null
@@ -163,7 +177,7 @@ class FieldAccessCompiledValueExpression(
         for (index in 1 until segments.size) {
             val segment = segments[index]
             if (single != null && segment is CompiledFieldSegment) {
-                val member = (single as? Map<*, *>)?.get(segment.name) ?: return null
+                val member = (single as? Map<*, *>)?.get(segment.name) ?: return nestedMissing(context = context)
                 single = member.takeUnless { raw -> raw is Collection<*> }
                 current = asList(raw = member)
                 continue
@@ -172,6 +186,15 @@ class FieldAccessCompiledValueExpression(
             current = applySegment(segment = segment, current = current, context = context)
         }
         return current
+    }
+
+    /**
+     * What a collection nested in a present object reads as when the object does not carry it:
+     * missing, unless the manifest entry asks for the 1.13 reading with `missingCollections: empty`.
+     * A single-valued path stays missing either way.
+     */
+    private fun nestedMissing(context: PreparedRuleContext): List<Any?>? {
+        return emptyList<Any?>().takeIf { context.missingCollectionsAsEmpty && yieldsCollection }
     }
 
     /**

@@ -29,6 +29,7 @@ import ui.builder.model.BuilderPathStep
 import ui.builder.model.filters
 import ui.builder.model.mutable.MutableBuilderComparison
 import ui.builder.model.mutable.MutableBuilderCondition
+import ui.builder.model.orEmpty
 import ui.builder.model.selection.SelectionStep
 import ui.builder.model.slice
 import ui.builder.model.sort
@@ -287,6 +288,9 @@ private fun PathTokens(
             selected = selectedSteps == segmentSteps,
             onClick = { onSelect(segmentSteps) },
         )
+        if (segment.orEmpty) {
+            DecorationBadge(text = "or empty")
+        }
         segment.sort?.let { ordering ->
             DecorationBadge(
                 text = "↕${ordering.member ?: "values"}${if (ordering.descending) "↓" else "↑"}",

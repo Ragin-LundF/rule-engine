@@ -106,6 +106,7 @@ fields:
       - <normalizer>           # zero or more values from the normalizer table below, applied in order
     operators:                 # OPTIONAL — if omitted, all operators valid for the type are allowed
       - <operator>             # one or more values from the operator tables below
+    missing: empty             # OPTIONAL — only on collection, string_set and object; see 3.7
 ```
 
 ### 3.1 Field Types — Exhaustive List
@@ -645,6 +646,60 @@ fields:
 
 > **Rule:** Declare an alias only when it earns its place. When in doubt, omit `alias:` and write the full
 > dotted path in the rule — that always works and is never ambiguous.
+
+### 3.7 Missing means empty — `missing: empty`
+
+By default a field the record does not carry, or carries as `null`, is **missing**, and a condition
+over it is undecided (§5.12). For a list that inputs leave out when there is simply nothing to report,
+declare `missing: empty`: every rule then sees an empty value instead.
+
+```yaml
+schema: activity-v1
+
+fields:
+  periods:
+    type: string_set
+  events:
+    type: object
+    fields:
+      confirmed:
+        type: collection
+        fields:
+          period: { type: text }
+          count: { type: integer }
+      unclassified:
+        type: collection
+        missing: empty          # absent or null reads as []
+        fields:
+          period: { type: text }
+          count: { type: integer }
+  fees:
+    type: object
+    fields:
+      rows:
+        type: collection
+        fields:
+          period: { type: text }
+          amount: { type: decimal }
+  income:
+    type: object
+    fields:
+      rows:
+        type: collection
+        fields:
+          period: { type: text }
+          amount: { type: decimal }
+```
+
+| Aspect | Behaviour |
+|---|---|
+| Legal on | `collection`, `string_set` and `object` fields, at any depth. Any other type, or any other value than `empty`, fails to load. |
+| What a rule sees | `[]` for a collection or `string_set`, `{}` for an object — for **every** reader: aggregates, filters, `sumByKey` / `joinByKey`, `every` / `any`, `isAvailable` / `isEmpty` / `isMissing` / `isPresent`, `extract`. |
+| Never missing | `isMissing(x)` is `false`, `isEmpty(x)` is `true` for an absent collection, and an absent object is present but empty. |
+| Members of an object | Follow their own settings: inside an absent `object` declared `missing: empty`, a member without the setting is still missing. |
+| Default | Leaving the key out keeps the strict reading. Older engines ignore the key. |
+
+A rule that should read missing as empty only in one place uses `orEmpty(...)` instead (§5.9).
 
 ---
 
@@ -1327,6 +1382,10 @@ Each takes exactly **one argument** — a field path that resolves to a collecti
 | `max(path)` | Maximum value |
 | `min(path)` | Minimum value |
 
+A value that cannot be read as a number is skipped, however many elements the path selects:
+`sum(fees.rows[period == "P1"].amount)` is `0` when the only P1 row has `"amount": "abc"`, and `avg`,
+`median`, `max` and `min` are missing, exactly as for an empty selection.
+
 #### Value functions
 
 These do not reduce a collection; they transform values.
@@ -1337,6 +1396,18 @@ These do not reduce a collection; they transform values.
 | `daysBetween(from, to)` | Whole calendar days from `from` to `to`, **signed** — a `to` that comes first is negative. |
 | `isAvailable(value)` | Whether the record carries the value at all — `true` or `false`, never missing. Accepts a field, a nested path, a whole `object` or `collection`, an aggregate or a variable. See §5.12. |
 | `isEmpty(collection)` | Whether the record carries the collection **and** it holds no elements — `true` or `false`, never missing. Takes a path only; a decorated one is allowed. See §5.12. |
+| `isMissing(value)` | Whether the record does **not** carry the value — absent or `null`. Always `not isPresent(value)`; never missing. See §5.12. |
+| `isPresent(value)` | Whether the record carries the value, empty or not. For a path it is `isAvailable(x) or isEmpty(x)`, for anything else `isAvailable(x)`; never missing. See §5.12. |
+| `default(value, fallback)` | `value`, or `fallback` when `value` is missing. A value that cannot be read as its declared type counts as missing. `value` must be a single value — for a collection use `orEmpty`. |
+
+`default` takes a field, an aggregate, arithmetic, a call or a variable as `value`. `fallback` must be of
+the same kind (number, text, boolean, date); a mismatch, or a collection as `value`, is rejected at load
+time. If `fallback` is missing too, the result is missing.
+
+```
+default(account.limit, 0) >= 500
+default($feeTotal, 0) / sum(income.rows.amount) < 0.05
+```
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable:
 
@@ -1398,6 +1469,26 @@ Order matters. `take(sortBy(orders, "total", desc), 3)` is **the three largest**
 `sortBy` accepts a `collection` or a `string_set`. A collection of objects requires the member name;
 a `string_set` or a collection of plain values must not be given one.
 
+#### Reading a missing collection as empty — `orEmpty`
+
+`orEmpty(path)` yields the collection when the record carries it, and an **empty** collection when the
+collection — or any object on the way to it — is absent or `null`. It is part of the path, like `take`
+and `sortBy`, so filters, projections and the aggregates continue from it:
+
+```
+sum(orEmpty(fees.rows)[period in periods].amount) < 50
+count(orEmpty(events.unclassified)) == 0
+```
+
+- For a collection the record carries, `orEmpty(x)` reads exactly what `x` reads.
+- It works wherever a path works — aggregates, filters, `every` / `any`, `in`, and as a `sumByKey` /
+  `joinByKey` source — and on a `string_set`.
+- The aggregates then give their empty answers (see "Empty and missing collections" below): `count` and
+  `sum` are `0`, `every` is `true`, `any` is `false`, `avg` / `median` / `max` / `min` stay missing.
+- `isAvailable(orEmpty(x))` is `false` and `isEmpty(orEmpty(x))` is `true` for a missing `x`.
+- It is rejected at load time on a single value, an `object`, a variable, and a `sumByKey` / `joinByKey`
+  result.
+
 #### Membership — the `in` operator
 
 `element in source` is true when the source holds a value equal to the element. The source may be a
@@ -1452,6 +1543,13 @@ min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
 - **Key order** is first-seen, reading the sources left to right.
 - The result is an ordinary list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
 - A **missing** source makes the whole result missing; an empty source simply contributes nothing.
+- **`optional`** before a source lets that source be missing: it then contributes nothing, exactly as
+  if it were empty. `optional src.member` means `orEmpty(src).member`. The other sources stay strict,
+  and every source may be optional.
+
+```
+min(sumByKey("period", events.confirmed.count, optional events.unclassified.count)) < 1
+```
 
 #### Joining collections into rows — `joinByKey`
 
@@ -1475,6 +1573,9 @@ key and the aliases name the row's members; any other name is a document field, 
 - An element with no key, or whose value member is not a number, is skipped.
 - A **missing** source makes the join missing, so a condition over it is undecided (§5.12); an
   **empty** source is valid data and gives `0` in every row.
+- **`optional`** before the alias lets that source be missing — it then gives `0` in every row:
+  `joinByKey("period", credit: credits.amount, optional debit: debits.amount)`. `optional` is legal
+  only before a `sumByKey` or `joinByKey` source; anywhere else it is a load-time error.
 - A filter on the rows must start on the line the closing `)` is on, as for every path:
   `joinByKey(...)[credit > debit]`, not `joinByKey(...)` followed by `[credit > debit]` on the next line.
 - An alias must not repeat, must not be the key's name, and must not be a field of the schema — inside
@@ -1560,6 +1661,8 @@ nothing and there is no value left for the function to reduce:
 | `any` | `false` | missing |
 | `isAvailable` | `false` | `false` |
 | `isEmpty` | `true` | `false` |
+| `isMissing` | `false` | `true` |
+| `isPresent` | `true` | `false` |
 | `sumByKey` | no keys | missing (any source missing) |
 | `joinByKey` | that source's alias is `0` in every row | missing (any source missing) |
 
@@ -1569,8 +1672,9 @@ so an empty collection leaves them with no value.
 
 The missing column is one rule, and it holds everywhere in the language:
 
-> **A missing value propagates as undecided through every expression. `isAvailable()` and `isEmpty()`
-> are the only two that consume it and answer a plain boolean.**
+> **A missing value propagates as undecided through every expression. `isAvailable()`, `isEmpty()`,
+> `isMissing()` and `isPresent()` consume it and answer a plain boolean; `default()` replaces it with
+> its fallback.**
 
 No function invents a value for data the record does not carry. Answering `0` for `count(transactions)`
 on a record with no `transactions` would make *counted nothing* indistinguishable from *had nothing to
@@ -1589,6 +1693,12 @@ carry it: with `account` present but holding no `orders`, `count(account.orders)
 and `isEmpty(account.orders)` is `false`. Only once a path has passed through a collection does an
 element without the member simply contribute nothing — `count(orders.tags)` over orders that carry no
 tags is `0`, because the record does carry the orders.
+
+**Missing means empty, on request.** Four ways turn a missing collection into an empty one, and only
+these four: `orEmpty(x)` in a rule (above), `optional` on a `sumByKey` / `joinByKey` source, `missing:
+empty` on the schema field (§3.7), and `missingCollections: empty` on the manifest entry (§6.2, a
+transition aid). They only ever turn missing into empty, so any one of them that applies is enough and
+they never conflict. A rule that uses none of them reads missing data strictly.
 
 #### Arithmetic operators
 
@@ -1944,7 +2054,9 @@ Two things, and only two:
 | `count` / `sum` / `subtract` over a collection that arrived **empty** | ⬜ — `0`, the operation's identity |
 | `every(...)` over a collection that arrived **empty** | ⬜ — vacuously `true` |
 | `any(...)` over a collection that arrived **empty** | ⬜ — `false`, no element satisfied it |
-| `isAvailable(...)` or `isEmpty(...)`, whatever the record carries | ⬜ — the only two that consume a missing value |
+| `isAvailable(...)`, `isEmpty(...)`, `isMissing(...)` or `isPresent(...)`, whatever the record carries | ⬜ — they consume a missing value |
+| `default(x, fallback)` with `x` missing | ⬜ — the fallback, unless it is missing too |
+| An aggregate over `orEmpty(x)` with `x` missing | as for an empty `x` — `count` / `sum` decide, `avg` / `min` / `max` do not |
 | A field that is present but simply does not match | ⬜ — that is an ordinary `false` |
 
 The dividing line is **absent** versus **present but empty**, not which function was called. A
@@ -2041,6 +2153,63 @@ An aggregate, a literal or a variable is rejected, because by then the empty cas
 have already become the same value. A decorated path is accepted, so `isEmpty(orders[total > 100])`
 asks whether the filter selected nothing.
 
+#### `isMissing()` and `isPresent()`
+
+The two plain names for the states the table above tells apart by combination. Both answer `true` or
+`false`, never undecided, and accept whatever `isAvailable` accepts.
+
+| the record carries | `isMissing` | `isPresent` |
+|---|---|---|
+| nothing at all (absent or `null`) | `true` | `false` |
+| an empty collection | `false` | `true` |
+| one or more elements | `false` | `true` |
+
+For a path, `isPresent(x)` is `isAvailable(x) or isEmpty(x)`; for any other argument it is
+`isAvailable(x)`. `isMissing(x)` is always `not isPresent(x)`. A filter does not make a carried collection
+missing: `isPresent(fees.rows[amount < 0])` is `true` when `fees.rows` is carried. `isAvailable` and
+`isEmpty` keep their meaning.
+
+`isPresent` is how a rule keeps a parent strict while reading a child leniently — a missing `fees`
+object fails the check below, while a `fees` object without `rows` counts as a fee total of `0`.
+
+#### Worked example — missing means empty
+
+Two checks over the schema of §3.7, each one rule. A missing `confirmed` or `unclassified` list means
+"no events"; a missing `fees.rows` means a fee total of `0`, but a missing `fees` object fails.
+
+```yaml
+actions:
+  outcome:
+    argTypes: [string]
+```
+
+```
+rule "events" {
+  description "Every period has at most one event, and not every period has one."
+  when
+    count(periods) > 0
+    and count(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) == count(periods)
+    and max(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) <= 1
+    and min(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) < 1
+  then outcome "PASS"
+  else outcome "FAIL"
+}
+
+rule "fee-ratio" {
+  description "Fees are below five percent of income over the periods."
+  when
+    count(periods) > 0
+    and isPresent(fees)
+    and abs(sum(orEmpty(fees.rows)[period in periods].amount)) / sum(income.rows[period in periods].amount) < 0.05
+  then outcome "PASS"
+  else outcome "FAIL"
+}
+```
+
+Without `orEmpty` the same rules are undecided for a record that leaves a list out, and take `else` (or
+`not_exists`). With `events: {}` the first rule *fails* rather than being undecided: no period has a
+total, so the count is `0`.
+
 #### Rules
 
 | Aspect | Behaviour |
@@ -2087,6 +2256,8 @@ entries:
     rules:               # REQUIRED; list of relative paths to .rule files
       - <path-to-rule-file.rule>
       - <path-to-another-rule-file.rule>
+    scope: <collection>  # optional; evaluate once per member of this collection
+    missingCollections: empty   # optional; transition aid, see 6.2
 ```
 
 > All paths are **relative to the manifest file itself**. This means the entire project folder can be moved without changing any paths.
@@ -2111,6 +2282,7 @@ entries:
 | `actions` | optional | Relative path to the action schema YAML file |
 | `rules` | ✅ | List of relative paths to `.rule` files |
 | `scope` | optional | Name of a declared `collection`. The rules run **once per member** of it instead of once for the whole document. |
+| `missingCollections` | optional | `empty` restores the pre-1.14 reading of nested collections. A **transition aid** only — see below. |
 
 > **No other keys are valid** at the entry level. Do not add keys like `version`, `description`, `priority`, or `enabled`.
 
@@ -2136,6 +2308,33 @@ The result reports every match with the member it came from, plus one entry per 
 member's own variables and `stoppedBy` — a `stop` ends one member's run, not the whole fan-out.
 
 The scope is rejected at load time when it names no field, or names a field that is not a collection.
+
+#### Transition aid — `missingCollections: empty`
+
+1.14.0 made missing data strict. An entry that is not migrated yet can ask for the older reading of
+collections:
+
+```yaml
+entries:
+  - id: legacy-checks
+    schema: schema.yaml
+    missingCollections: empty
+    rules:
+      - rules/legacy.rule
+```
+
+It restores exactly two things, and nothing more:
+
+- a `collection` or `string_set` nested in a **present** object that does not carry it reads as empty;
+- therefore a `sumByKey` / `joinByKey` source missing in that way contributes nothing.
+
+An absent root collection, or a collection inside an absent object, stays missing. Number readability,
+`text` structures and `regex` are not affected. The only legal value is `empty`; leaving the key out
+means strict. It is read from the manifest entry only — `RuleEngineBuilder`, `ValidatorCli --manifest`
+and `EvaluateCli --manifest`; there is no programmatic option and no `--schema` / `--rules` flag.
+
+> **It hides real gaps in the data.** Prefer `orEmpty(...)`, `optional` or `missing: empty` (§3.7, §5.9),
+> which say where missing should mean empty; use this key only while migrating.
 
 ### 6.3 Single-entry manifest example
 
@@ -2489,6 +2688,7 @@ The engine validates everything at load time and rejects the following. Never ge
 | Empty `format` | `format: ""` — omit the key instead to get ISO |
 | Duplicate alias | two fields both declaring `alias: amount`, at any depth |
 | Blank alias | `alias: ""` — omit the key instead |
+| `missing` on a type without an empty form, or another value than `empty` | `amount: {type: decimal, missing: empty}`, `rows: {type: collection, missing: none}` |
 
 > **Operator names must be canonical.** Write the spelling from the operator tables in
 > [3.3](#33-operators--exhaustive-list-by-type). The engine accepts these aliases so older schemas keep
@@ -2570,6 +2770,9 @@ The engine validates everything at load time and rejects the following. Never ge
 | `else` after `not_exists` | the blocks are written `then`, `else`, `not_exists`, in that order |
 | An action named `else`, `not_exists` or `stop` in the action schema | `else:`, `not_exists:` or `stop:` declared under `actions:` — all three are rule keywords |
 | Anything written after `stop` in the same block | `stop` followed by another action or a `set` clause |
+| `orEmpty` on something that is not a collection or `string_set` | `orEmpty(amount)`, `orEmpty(customer)` (an `object`), `orEmpty($total)`, `orEmpty(sumByKey(...))`, `orEmpty(joinByKey(...))` |
+| `default` over a collection, or with a fallback of another kind | `default(fees.rows.amount, 0)` (use `orEmpty`), `default(amount, "none")` |
+| `optional` anywhere but before a `sumByKey` / `joinByKey` source | `count(optional orders)` |
 
 > **One warning, not an error:** a multi-segment path whose **root** is not declared in the schema
 > produces a warning and the rule still loads, because the root may be an undeclared structure read
@@ -2587,6 +2790,7 @@ The engine validates everything at load time and rejects the following. Never ge
 | Missing `id` in an entry | An entry without an `id` field |
 | Missing `rules` in an entry | An entry with no `rules` list |
 | Unknown key in an entry | Adding `priority: 1` or `enabled: true` to an entry |
+| `missingCollections` with another value than `empty` | `missingCollections: lenient` |
 | Non-existent file path | A `schema:` path that does not resolve to an actual file |
 
 ---

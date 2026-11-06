@@ -52,14 +52,16 @@ object ScopedEvaluation {
         memberSchema: FieldSchema,
         scope: String,
         includeTrace: Boolean = false,
-        normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
+        normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
+        missingCollectionsAsEmpty: Boolean = false
     ): EvaluationResult {
         val members = document.getRaw(fieldPath = listOf(scope)) as? Collection<*> ?: emptyList<Any?>()
         val evaluations = members.filterIsInstance<Map<*, *>>().mapIndexed { index, member ->
             val prepared = PreparedRuleContext.prepare(
                 ctx = ScopedRuleContext(member = member, document = document),
                 schema = memberSchema,
-                normalizerRegistry = normalizerRegistry
+                normalizerRegistry = normalizerRegistry,
+                missingCollectionsAsEmpty = missingCollectionsAsEmpty
             )
             val key = memberKey(member = member, schema = schema, scope = scope, index = index)
             MemberEvaluation(

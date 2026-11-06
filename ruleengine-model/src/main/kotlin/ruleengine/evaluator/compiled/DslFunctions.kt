@@ -29,6 +29,12 @@ object DslFunctions {
      */
     val JOIN_NAMES: List<String> = listOf("joinByKey")
 
+    /**
+     * `orEmpty(path)`, absent from every registry for the same reason as [SLICE_NAMES]: the parser
+     * turns it into a path segment that reads a missing collection as an empty one.
+     */
+    val OR_EMPTY_NAMES: List<String> = listOf("orEmpty")
+
     /** Every function name the DSL accepts, in declaration order. */
     fun allNames(): List<String> {
         return AggregateFunctionName.dslNames() + CollectionFunctionName.dslNames() + pathFunctionNames()
@@ -42,7 +48,7 @@ object DslFunctions {
      * as something else entirely.
      */
     fun pathFunctionNames(): List<String> {
-        return SLICE_NAMES + SORT_NAMES + JOIN_NAMES
+        return SLICE_NAMES + SORT_NAMES + JOIN_NAMES + OR_EMPTY_NAMES
     }
 
     /** The reductions over a collection, i.e. what an aggregate picker should offer. */

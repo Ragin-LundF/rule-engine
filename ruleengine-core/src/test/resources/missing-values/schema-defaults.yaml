@@ -1,0 +1,36 @@
+# schema.yaml with `missing: empty` on events.unclassified and on the object fees.
+name: missing-values-defaults
+fields:
+  periods:
+    type: string_set
+  events:
+    type: object
+    fields:
+      confirmed:
+        type: collection
+        fields:
+          period: { type: text }
+          count: { type: integer }
+      unclassified:
+        type: collection
+        missing: empty
+        fields:
+          period: { type: text }
+          count: { type: integer }
+  fees:
+    type: object
+    missing: empty
+    fields:
+      rows:
+        type: collection
+        fields:
+          period: { type: text }
+          amount: { type: decimal }
+  income:
+    type: object
+    fields:
+      rows:
+        type: collection
+        fields:
+          period: { type: text }
+          amount: { type: decimal }

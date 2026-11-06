@@ -48,9 +48,14 @@ class Parser(private val input: String) {
         literals = literals,
         parseValueExpression = { parseValueExpression() },
     )
+    private val argumentParser = CallArgumentParser(
+        cursor = cursor,
+        parseValueExpression = { parseValueExpression() },
+    )
     private val joinParser = JoinByKeyParser(
         cursor = cursor,
         parseValueExpression = { parseValueExpression() },
+        arguments = argumentParser,
     )
 
     private var pos: Int
@@ -88,6 +93,7 @@ class Parser(private val input: String) {
         val TAKE_LAST: String = DslFunctions.SLICE_NAMES[1]
         val SORT_BY: String = DslFunctions.SORT_NAMES.single()
         val JOIN_BY_KEY: String = DslFunctions.JOIN_NAMES.single()
+        val OR_EMPTY: String = DslFunctions.OR_EMPTY_NAMES.single()
         const val ASC = "asc"
         const val DESC = "desc"
     }
@@ -603,14 +609,10 @@ class Parser(private val input: String) {
         if (nameTok.text.equals(other = JOIN_BY_KEY, ignoreCase = true)) {
             return parseJoinByKey(nameTok = nameTok)
         }
-        advance()
-        val args = mutableListOf<ValueExpressionAst>()
-        while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
-            args += parseValueExpression()
-            if (current().type == TokenType.COMMA) advance()
+        if (nameTok.text.equals(other = OR_EMPTY, ignoreCase = true)) {
+            return parsePathContinuation(segments = argumentParser.parseOrEmpty(nameTok = nameTok))
         }
-        expect(type = TokenType.RPAREN)
-        return FunctionCallValueAst(name = nameTok.text, arguments = args)
+        return FunctionCallValueAst(name = nameTok.text, arguments = argumentParser.parseArguments(nameTok = nameTok))
     }
 
     private fun isSliceFunction(name: String): Boolean {

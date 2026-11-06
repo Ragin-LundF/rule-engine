@@ -78,8 +78,11 @@ Rules are stored as plain `.rule` files, validated against a field schema, and e
 - **Nested data** — `collection` and `object` field types describe lists of records and nested records to any depth
 - **Action schema** — defines what outcomes a rule can produce
 - **Aggregate functions** — `sum`, `count`, `avg`, `median`, `max`, `min`, `subtract` over nested lists
-- **Value functions** — `abs`, `daysBetween` for magnitudes and calendar-day arithmetic, `isAvailable` and `isEmpty`
-  to ask whether a record carries a value at all
+- **Value functions** — `abs`, `daysBetween` for magnitudes and calendar-day arithmetic, `isAvailable`,
+  `isEmpty`, `isMissing` and `isPresent` to ask whether a record carries a value at all, and `default` to
+  replace a missing value
+- **Missing means empty, on request** — `orEmpty(path)` in a rule, `optional` on a keyed-join source,
+  or `missing: empty` on a schema field reads an absent list as empty; the default stays strict
 - **Missing data as an outcome** — a rule may declare a `not_exists` branch for the case where the
   record carries no data to decide its condition, instead of silently reading it as "false"
 - **Collection tools** — `sortBy` ordering, `take` / `takeLast` slicing, `in` membership filters,

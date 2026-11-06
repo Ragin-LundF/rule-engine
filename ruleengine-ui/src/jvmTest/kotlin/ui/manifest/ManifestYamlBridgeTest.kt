@@ -144,4 +144,25 @@ class ManifestYamlBridgeTest {
         val parsed = ManifestYamlBridge.fromYaml(yaml = "this is not: valid: [")
         assertTrue(actual = parsed.isReadOnly)
     }
+
+    /** Written key by key like `scope`, so it has to be carried or a save drops it. */
+    @Test
+    fun `missingCollections survives the round trip`() {
+        val state = ManifestEditorState(
+            name = "billing",
+            entries = listOf(
+                EditableManifestEntry(
+                    id = "compat",
+                    schemaPath = "schema.yaml",
+                    rulePaths = listOf("rules/a.rule"),
+                    missingCollections = "empty",
+                ),
+            ),
+        )
+
+        val yaml = ManifestYamlBridge.toYaml(state = state)
+
+        assertTrue(actual = yaml.contains(other = "missingCollections: empty"), message = yaml)
+        assertEquals(expected = state, actual = ManifestYamlBridge.fromYaml(yaml = yaml))
+    }
 }

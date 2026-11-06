@@ -261,4 +261,34 @@ class FieldSchemaYamlBridgeTest {
         assertFalse(yaml.contains("format"))
         assertFalse(FieldSchemaYamlBridge.fromYaml(yaml).isReadOnly, "emitted yaml must still load")
     }
+
+    /** The editor writes the schema key by key, so a key it does not carry is dropped on save. */
+    @Test
+    fun `missing empty survives a load and save at any depth`() {
+        val yaml = """
+            schema: s
+            fields:
+              periods:
+                type: string_set
+                missing: empty
+              fees:
+                type: object
+                missing: empty
+                fields:
+                  rows:
+                    type: collection
+                    missing: empty
+        """.trimIndent()
+
+        val saved = FieldSchemaYamlBridge.toYaml(state = FieldSchemaYamlBridge.fromYaml(yaml = yaml))
+        val reloaded = FieldSchemaYamlBridge.fromYaml(yaml = saved)
+
+        assertEquals(
+            expected = 3,
+            actual = Regex(pattern = "missing: empty").findAll(input = saved).count(),
+            message = saved,
+        )
+        assertTrue(actual = reloaded.fields.all { field -> field.missingAsEmpty })
+        assertTrue(actual = reloaded.fields.single { field -> field.path == "fees" }.fields.single().missingAsEmpty)
+    }
 }

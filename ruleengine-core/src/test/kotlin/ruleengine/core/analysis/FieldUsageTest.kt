@@ -184,6 +184,23 @@ class FieldUsageTest {
         )
     }
 
+    /** orEmpty and the optional marker change how a missing value reads, not which fields are read. */
+    @Test
+    fun `orEmpty and optional sources report the paths they wrap`() {
+        assertEquals(
+            // A filter's names are prefixed with the collection, as for every filter.
+            expected = setOf(
+                "fees.rows.amount", "fees.rows.period", "fees.rows.periods", "credits.amount", "debits.amount",
+            ),
+            actual = FieldUsage.fieldsOf(
+                rule = inlineRule(
+                    condition = """sum(orEmpty(fees.rows)[period in periods].amount) + """ +
+                        """count(sumByKey("period", credits.amount, optional debits.amount)) > 0"""
+                ),
+            ),
+        )
+    }
+
     private fun inlineRule(condition: String): RuleAst {
         return Parser(
             input = """

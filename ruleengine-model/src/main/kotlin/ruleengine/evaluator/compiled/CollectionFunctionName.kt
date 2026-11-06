@@ -50,7 +50,20 @@ enum class CollectionFunctionName(
      * [ruleengine.core.domain.dto.ConditionVerdict.UNKNOWN], so it can guard a rule whose other
      * conditions would be undecidable.
      */
-    IS_EMPTY(dslName = "isEmpty", arity = 1..1, resultKind = FunctionResultKind.BOOLEAN);
+    IS_EMPTY(dslName = "isEmpty", arity = 1..1, resultKind = FunctionResultKind.BOOLEAN),
+
+    /**
+     * Whether the record does not carry its argument at all — absent or `null`. Always
+     * `not isPresent(x)`, and like it never [ruleengine.core.domain.dto.ConditionVerdict.UNKNOWN].
+     */
+    IS_MISSING(dslName = "isMissing", arity = 1..1, resultKind = FunctionResultKind.BOOLEAN),
+
+    /**
+     * Whether the record carries its argument, empty or not. For a path it is
+     * `isAvailable(x) or isEmpty(x)`, for anything else `isAvailable(x)`. It needs the argument's
+     * shape for the same reason [IS_EMPTY] does, which is why it lives here.
+     */
+    IS_PRESENT(dslName = "isPresent", arity = 1..1, resultKind = FunctionResultKind.BOOLEAN);
 
     companion object {
 

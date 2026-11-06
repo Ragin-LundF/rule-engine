@@ -34,4 +34,10 @@ sealed interface BuilderPathDecoration {
      * engine's validator has the last word on which members can be ordered by.
      */
     data class Sort(val member: String?, val descending: Boolean) : BuilderPathDecoration
+
+    /**
+     * `orEmpty(path)` — the path so far reads as empty when the record does not carry it. Kept where it
+     * was written so the rule text survives a Builder edit; the Builder offers no control for it.
+     */
+    data object OrEmpty : BuilderPathDecoration
 }

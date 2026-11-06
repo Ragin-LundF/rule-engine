@@ -4,6 +4,7 @@ import ruleengine.dsl.ast.ValueExpressionRenderer
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -64,7 +65,7 @@ internal fun mapFunctionCall(expr: FunctionCallValueAst): BuilderOperand? {
 
 /** Any path — plain, dotted, or filtered — becomes a [BuilderOperand.FieldRef] over path steps. */
 internal fun mapFieldAccess(expr: FieldAccessAst): BuilderOperand? {
-    return mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it) }
+    return mapPath(segments = expr.path)?.let { BuilderOperand.FieldRef(path = it, optional = expr.optional) }
 }
 
 /**
@@ -106,6 +107,10 @@ internal fun mapPath(segments: List<PathSegmentAst>): List<BuilderPathStep>? {
                         descending = segment.descending,
                     )
                 )
+            }
+            is OrEmptySegmentAst -> {
+                val target = steps.lastOrNull() ?: return null
+                steps[steps.lastIndex] = target.copy(decorations = target.decorations + BuilderPathDecoration.OrEmpty)
             }
             // The Builder has no step for joined rows. Mapping nothing locks the rule as Unsupported,
             // which leaves its text untouched instead of rewriting it without the join.

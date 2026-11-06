@@ -23,6 +23,8 @@ import ruleengine.evaluator.context.RuleContext
  * @property actions action schema, or `null` when the manifest entry declares none
  * @property warnings non-fatal validation diagnostics; errors would have failed the build
  * @property scope collection to evaluate once per member, or `null` for whole-document evaluation
+ * @property missingCollectionsAsEmpty the entry's `missingCollections: empty`, a transition aid that
+ *   reads a collection nested in a present object as empty when the object does not carry it
  */
 data class LoadedRuleEngine(
     val entryId: String,
@@ -31,6 +33,7 @@ data class LoadedRuleEngine(
     val actions: ActionSchema? = null,
     val warnings: List<ValidationDiagnostic> = emptyList(),
     val scope: String? = null,
+    val missingCollectionsAsEmpty: Boolean = false,
 ) {
     /**
      * The schema a scoped rule set resolves its paths against.
@@ -66,12 +69,14 @@ data class LoadedRuleEngine(
                 scope = scope,
                 includeTrace = includeTrace,
                 normalizerRegistry = normalizerRegistry,
+                missingCollectionsAsEmpty = missingCollectionsAsEmpty,
             )
         }
         val prepared = PreparedRuleContext.prepare(
             ctx = ruleContext,
             schema = schema,
             normalizerRegistry = normalizerRegistry,
+            missingCollectionsAsEmpty = missingCollectionsAsEmpty,
         )
 
         return engine.evaluate(prepared = prepared, includeTrace = includeTrace)

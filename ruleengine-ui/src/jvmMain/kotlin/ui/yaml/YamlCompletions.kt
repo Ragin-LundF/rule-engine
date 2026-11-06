@@ -27,7 +27,15 @@ private val FIELD_SCHEMA_TOP_KEYS = listOf("schema", "fields")
 
 private val ACTION_SCHEMA_TOP_KEYS = listOf("actions")
 
-private val FIELD_DEF_KEYS = listOf("type", "alias", "format", "normalizers", "operators", "fields")
+private val FIELD_DEF_KEYS = listOf("type", "alias", "format", "missing", "normalizers", "operators", "fields")
+
+/** The keys of one manifest entry, offered under `- id:`. */
+private val MANIFEST_ENTRY_KEYS = listOf("schema", "actions", "rules", "scope", "missingCollections")
+
+/** The one value of `missing` (schema) and `missingCollections` (manifest). */
+private val MISSING_VALUES = listOf("empty")
+
+private val MISSING_KEYS = setOf("missing", "missingCollections")
 
 private val ACTION_DEF_KEYS = listOf("argTypes")
 
@@ -38,6 +46,9 @@ private val ACTION_DEF_KEYS = listOf("argTypes")
  */
 /** Depth of a definition's own properties: `fields:` (0) → field name (2) → property (4). */
 private const val DEFINITION_KEY_INDENT = 4
+
+/** Depth of an entry's keys under `  - id:`. */
+private const val MANIFEST_ENTRY_KEY_INDENT = 4
 
 /** Depth of a field's own name, directly under `fields:`. */
 private const val FIELD_NAME_INDENT = 2
@@ -56,6 +67,8 @@ fun buildYamlCompletions(
 private fun valueCompletions(context: YamlCursorContext): List<CompletionItem>? = when {
     context.isValue && context.currentKey == "type" -> literals(values = FIELD_TYPE_VALUES, hint = "field type")
     context.isValue && context.currentKey == "format" -> literals(values = FORMAT_VALUES, hint = "date format")
+    context.isValue && context.currentKey in MISSING_KEYS ->
+        literals(values = MISSING_VALUES, hint = "missing reads as empty")
     context.isListItem && context.parentKey == "normalizers" ->
         literals(values = NORMALIZER_VALUES, hint = "normalizer")
 
@@ -71,6 +84,10 @@ private fun valueCompletions(context: YamlCursorContext): List<CompletionItem>? 
 /** Completions for a key position, which depend on nesting depth and which document is open. */
 private fun keyCompletions(context: YamlCursorContext, editorType: YamlEditorType): List<CompletionItem>? {
     val isFieldSchema = editorType == YamlEditorType.FIELD_SCHEMA
+    if (editorType == YamlEditorType.PROJECT_MANIFEST) {
+        return keys(names = MANIFEST_ENTRY_KEYS, suffix = ": ", hint = "entry key")
+            .takeIf { context.currentIndent == MANIFEST_ENTRY_KEY_INDENT }
+    }
     return when {
         context.currentIndent == DEFINITION_KEY_INDENT && isFieldSchema ->
             keys(names = FIELD_DEF_KEYS, suffix = ":", hint = "field property")

@@ -18,4 +18,6 @@ data class EditableManifestEntry(
      * time the project is saved.
      */
     val scope: String = "",
+    /** `missingCollections: empty`, carried for the same reason as [scope]; null means strict. */
+    val missingCollections: String? = null,
 )

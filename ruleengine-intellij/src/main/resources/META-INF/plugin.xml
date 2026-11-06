@@ -1,0 +1,44 @@
+<idea-plugin>
+    <id>io.github.ragin-lundf.ruleengine</id>
+    <name>Rule Engine DSL</name>
+    <vendor>Ragin-LundF</vendor>
+    <description><![CDATA[
+        Editor support for rule engine projects:
+        <ul>
+            <li>highlighting and completion for <code>.rule</code> files, linked to the manifest that lists them;</li>
+            <li>Ctrl+click (Cmd+click on macOS) from a field, alias or action into the field and action schemas;</li>
+            <li>a diagram of the rule at the caret;</li>
+            <li>completion and validation in the manifest, schema and action YAML files.</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.yaml</depends>
+    <depends>com.intellij.modules.compose</depends>
+    <depends>com.intellij.modules.json</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType name="Rule DSL" language="RuleDsl" extensions="rule"
+                  implementationClass="ruleengine.intellij.lang.RuleFileType" fieldName="INSTANCE"/>
+        <lang.parserDefinition language="RuleDsl" implementationClass="ruleengine.intellij.lang.RuleParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="RuleDsl"
+                                       implementationClass="ruleengine.intellij.highlight.RuleSyntaxHighlighterFactory"/>
+        <lang.commenter language="RuleDsl" implementationClass="ruleengine.intellij.lang.RuleCommenter"/>
+        <lang.braceMatcher language="RuleDsl" implementationClass="ruleengine.intellij.lang.RuleBraceMatcher"/>
+        <colorSettingsPage implementation="ruleengine.intellij.highlight.RuleColorSettingsPage"/>
+        <annotator language="RuleDsl" implementationClass="ruleengine.intellij.highlight.RuleSchemaAnnotator"/>
+        <completion.contributor language="RuleDsl" implementationClass="ruleengine.intellij.completion.RuleCompletionContributor"/>
+        <typedHandler implementation="ruleengine.intellij.completion.RuleTypedHandler"/>
+        <gotoDeclarationHandler implementation="ruleengine.intellij.navigation.RuleGotoDeclarationHandler"/>
+        <gotoDeclarationHandler implementation="ruleengine.intellij.navigation.ManifestGotoDeclarationHandler"/>
+        <toolWindow id="Rule Diagram" anchor="right" icon="AllIcons.Toolwindows.ToolWindowHierarchy"
+                    factoryClass="ruleengine.intellij.diagram.RuleDiagramToolWindowFactory"/>
+        <editorNotificationProvider implementation="ruleengine.intellij.manifest.ManifestNotificationProvider"/>
+        <toolWindow id="Rule Manifest" anchor="right" icon="AllIcons.Nodes.ModuleGroup"
+                    factoryClass="ruleengine.intellij.manifest.toolwindow.ManifestToolWindowFactory"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="JavaScript">
+        <JsonSchema.ProviderFactory implementation="ruleengine.intellij.yaml.RuleSchemaProviderFactory"/>
+    </extensions>
+</idea-plugin>

@@ -388,7 +388,7 @@ val schema = FieldSchemaLoader.loadFromReader(reader = reader, nameHint = "my-sc
 
 The returned `FieldSchema` contains:
 - `schema.name` — the schema name
-- `schema.fields` — a `Map<FieldId, FieldDefinition>`, each with `.type`, `.alias`, `.normalizers`, `.operators`, and `.fields`
+- `schema.fields` — a `Map<FieldId, FieldDefinition>`, each with `.type`, `.alias`, `.normalizers`, `.operators`, `.fields` and `.missingAsEmpty` (`missing: empty`)
 - `.fields` on a definition holds the nested members of a `COLLECTION` or `OBJECT` field, recursively.
   It is empty for scalar fields, and also empty for a structure whose members were not declared. The
   `FieldType.isStructure` extension property tells the two structure types apart from the rest.

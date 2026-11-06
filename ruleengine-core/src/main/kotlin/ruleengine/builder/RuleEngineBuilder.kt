@@ -307,6 +307,7 @@ object RuleEngineBuilder {
             actions = actions,
             warnings = validationResult.diagnostics.filter { it.severity != Severity.ERROR },
             scope = entry.scope,
+            missingCollectionsAsEmpty = entry.missingCollections == ManifestEntry.MISSING_COLLECTIONS_EMPTY,
         )
     }
 

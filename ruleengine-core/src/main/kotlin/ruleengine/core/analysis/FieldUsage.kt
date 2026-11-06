@@ -9,6 +9,7 @@ import ruleengine.dsl.ast.condition.OrAst
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -117,8 +118,9 @@ object FieldUsage {
                 is SortSegmentAst -> segment.member?.let { member ->
                     into += join(prefix = current, segment = member)
                 }
-                // Only ever first, and read by `collectFromJoin` before this loop is reached.
-                is JoinSegmentAst -> Unit
+                // Only ever first, and read by `collectFromJoin` before this loop is reached. An
+                // orEmpty changes what a missing value reads as, not which field is read.
+                is JoinSegmentAst, is OrEmptySegmentAst -> Unit
             }
         }
         if (current.isNotEmpty()) {

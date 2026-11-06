@@ -16,12 +16,14 @@ import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.core.domain.dto.field.isNormalizable
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
+import ui.builder.inspector.InspectorToggle
 import ui.components.input.OrderedListEditor
 import ui.components.input.ReasonedChipRow
 import ui.components.input.model.OrderedListOption
 import ui.components.input.model.ReasonedChip
 import ui.schema.KnownNormalizers
 import ui.schema.model.EditableField
+import ui.schema.model.hasEmptyForm
 import ui.schema.operatorsFor
 import ui.schema.yamlValue
 import ui.util.Plurals
@@ -73,6 +75,7 @@ fun FieldInspector(
             IdentitySection(field = field, editable = editable, wide = wide, onFieldChange = onFieldChange)
             TypeSection(field = field, editable = editable, onFieldChange = onFieldChange)
             FormatSection(field = field, editable = editable, wide = wide, onFieldChange = onFieldChange)
+            MissingSection(field = field, editable = editable, onFieldChange = onFieldChange)
             NormalizerSection(field = field, editable = editable, onFieldChange = onFieldChange)
             OperatorSection(field = field, editable = editable, onFieldChange = onFieldChange)
             MemberSection(
@@ -139,6 +142,24 @@ private fun FormatSection(
 
 @Suppress("FunctionNaming")
 @Composable
+private fun MissingSection(
+    field: EditableField,
+    editable: Boolean,
+    onFieldChange: (EditableField) -> Unit,
+) {
+    if (!field.type.hasEmptyForm) return
+    InspectorGroup(title = "When missing")
+    InspectorToggle(
+        label = "missing: empty",
+        checked = field.missingAsEmpty,
+        enabled = editable,
+        hint = "Absent or null reads as empty instead of missing, for every rule.",
+        onCheckedChange = { checked -> onFieldChange(field.copy(missingAsEmpty = checked)) },
+    )
+}
+
+@Suppress("FunctionNaming")
+@Composable
 private fun UsageSection(usages: Int?) {
     val count = usages ?: return
     InspectorGroup(title = "Read by", note = "$count rule${Plurals.suffix(count = count)}")
@@ -168,7 +189,13 @@ private fun TypeSection(
             FieldType.entries.firstOrNull { type -> type.yamlValue == value }?.let { picked ->
                 // A format only means something on a temporal type; carrying a stale one over emits
                 // YAML the loader rejects.
-                onFieldChange(field.copy(type = picked, format = if (picked.isTemporal) field.format else ""))
+                onFieldChange(
+                    field.copy(
+                        type = picked,
+                        format = if (picked.isTemporal) field.format else "",
+                        missingAsEmpty = field.missingAsEmpty && picked.hasEmptyForm,
+                    )
+                )
             }
         },
     )

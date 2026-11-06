@@ -7,6 +7,8 @@ data class RawFieldDefinition(
     val format: String? = null,
     val normalizers: List<String>? = null,
     val operators: List<String>? = null,
+    /** `empty` reads an absent or `null` collection, string_set or object as empty. */
+    val missing: String? = null,
     /** Nested members of a `collection` / `object` field. Recursive, so nesting depth is unbounded. */
     val fields: Map<String, RawFieldDefinition>? = null
 )

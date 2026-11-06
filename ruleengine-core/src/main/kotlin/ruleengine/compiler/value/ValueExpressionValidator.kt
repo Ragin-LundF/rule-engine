@@ -28,6 +28,7 @@ import ruleengine.dsl.ast.literal.StringLiteral
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -169,7 +170,7 @@ internal object ValueExpressionValidator {
      * type, so `orders[].shippedAt` is text as far as the schema knows, and the comparison reads it
      * as an ISO-8601 date at evaluation time.
      */
-    private fun compatible(leftKind: ValueKind, rightKind: ValueKind): Boolean {
+    fun compatible(leftKind: ValueKind, rightKind: ValueKind): Boolean {
         if (leftKind == rightKind) {
             return true
         }
@@ -311,6 +312,11 @@ internal object ValueExpressionValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): ValueKind {
+        expr.path.forEachIndexed { index, segment ->
+            if (segment is OrEmptySegmentAst) {
+                validateOrEmpty(wrapped = expr.path.take(n = index), schema = schema, diagnostics = diagnostics)
+            }
+        }
         val root = expr.path.firstOrNull()
         if (root is JoinSegmentAst) {
             val rows = JoinByKeyValidator.validate(segment = root, schema = schema, diagnostics = diagnostics)
@@ -381,12 +387,39 @@ internal object ValueExpressionValidator {
                     current = (step as? MemberStep.Declared)?.definition
                 }
 
-                // The parser only ever puts a join first, which the root handling above has read.
-                is JoinSegmentAst -> Unit
+                // The parser only ever puts a join first, which the root handling above has read; an
+                // orEmpty changes what a missing value reads as, not what the path is, and
+                // `validateOrEmpty` has checked it.
+                is JoinSegmentAst, is OrEmptySegmentAst -> Unit
             }
         }
 
         return kindOf(definition = current)
+    }
+
+    /**
+     * `orEmpty` only means something for a path that holds many values: a single value has no empty
+     * form, and a `joinByKey` result is missing only through a missing source, which `optional` marks.
+     */
+    private fun validateOrEmpty(
+        wrapped: List<PathSegmentAst>,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ) {
+        if (wrapped.firstOrNull() is JoinSegmentAst) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "orEmpty() cannot wrap a joinByKey result; mark a source that may be missing " +
+                        "with optional instead, such as optional debit: debits.amount"
+            )
+            return
+        }
+        val single = PathShape.singleValuedEnd(path = wrapped, schema = schema) ?: return
+        diagnostics += ValidationDiagnostic(
+            severity = Severity.ERROR,
+            message = "orEmpty() expects a collection or string set, but '${pathText(path = wrapped)}' is " +
+                    single.type.name.lowercase()
+        )
     }
 
     /**

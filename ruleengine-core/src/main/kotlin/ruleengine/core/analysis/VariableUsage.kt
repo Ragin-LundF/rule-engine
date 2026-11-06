@@ -12,6 +12,7 @@ import ruleengine.dsl.ast.literal.VariableRefLiteral
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
 import ruleengine.dsl.ast.rule.ActionAst
@@ -140,8 +141,8 @@ object VariableUsage {
                 when (segment) {
                     is FilterSegmentAst -> collectFromExpression(expr = segment.expression, into = into)
                     // A slice holds a literal count and a sort a literal member name, so neither
-                    // can read a variable.
-                    is FieldSegmentAst, is SliceSegmentAst, is SortSegmentAst -> Unit
+                    // can read a variable; an orEmpty holds nothing at all.
+                    is FieldSegmentAst, is SliceSegmentAst, is SortSegmentAst, is OrEmptySegmentAst -> Unit
                     // Each source is a path of its own, and its filters may read variables.
                     is JoinSegmentAst -> segment.sources.forEach { source ->
                         collectFromValue(expr = source.path, into = into)

@@ -132,7 +132,9 @@ All aggregate functions take exactly **one argument**, which must be a field pat
 | `max(path)` | Maximum value | missing | missing |
 | `min(path)` | Minimum value | missing | missing |
 
-Non-numeric elements in the collection are silently skipped during numeric aggregation.
+Non-numeric elements in the collection are silently skipped during numeric aggregation — also when the
+path selects exactly one element: `sum(fees.rows[period == "P1"].amount)` is `0` when that one row holds
+`"amount": "abc"`.
 
 ### Examples
 
@@ -154,6 +156,9 @@ These transform values rather than reducing a collection.
 | `daysBetween(from, to)` | Signed whole calendar days from `from` to `to` | missing |
 | `isAvailable(value)` | Whether the record carries the value at all | `false` — never missing |
 | `isEmpty(collection)` | Whether the record carries the collection and it holds no elements | `false` — never missing |
+| `isMissing(value)` | Whether the record does not carry the value (absent or `null`) | `true` — never missing |
+| `isPresent(value)` | Whether the record carries the value, empty or not | `false` — never missing |
+| `default(value, fallback)` | `value`, or `fallback` when `value` is missing or unreadable | the fallback |
 
 `abs` accepts a field, an aggregate, an arithmetic expression or a variable, and preserves integer
 and decimal precision:
@@ -187,6 +192,51 @@ It accepts a field, a nested path, a whole `object` or `collection`, an aggregat
 **empty** collection is not available: an absent collection and an empty one are the same answer to
 *does the record carry this at all*, so use `count(path) == 0` to test for emptiness. Missing data and the `not_exists` branch are covered in
 [rules.md](rules.md#missing-data--the-not_exists-branch).
+
+`isMissing` and `isPresent` name the two states plainly. For a path, `isPresent(x)` is
+`isAvailable(x) or isEmpty(x)` — an empty collection is present — and `isMissing(x)` is always
+`not isPresent(x)`. Both always decide:
+
+| the record carries | `isMissing` | `isPresent` |
+|---|---|---|
+| nothing (absent or `null`) | `true` | `false` |
+| `[]` | `false` | `true` |
+| one or more elements | `false` | `true` |
+
+`default(value, fallback)` replaces a missing single value. `value` is a field, an aggregate, arithmetic,
+a call or a variable; `fallback` must be of the same kind. A collection as `value` is rejected — use
+`orEmpty` for that.
+
+```
+default(account.limit, 0) >= 500
+default(max(sumByKey("period", credits.amount, debits.amount)), 0) <= 1
+```
+
+## 5g. Missing Means Empty — `orEmpty` and `optional`
+
+`orEmpty(path)` reads a collection the record does not carry — absent or `null`, the collection itself
+or any object on the way to it — as an **empty** collection. A carried collection reads exactly as
+without it. It is part of the path, so filters and projections continue after it:
+
+```
+sum(orEmpty(fees.rows)[period in periods].amount) < 50
+```
+
+It works wherever a path works (aggregates, filters, `every` / `any`, `in`, keyed-join sources) and on a
+`string_set`. The aggregates then answer as for an empty collection (section 9). It is rejected at load
+time on a single value, an `object`, a variable, or a `sumByKey` / `joinByKey` result.
+
+`optional` before a `sumByKey` or `joinByKey` source is the same for one source:
+
+```
+min(sumByKey("period", events.confirmed.count, optional events.unclassified.count)) < 1
+count(joinByKey("period", credit: credits.amount, optional debit: debits.amount)[credit > debit]) > 0
+```
+
+`optional src.member` means `orEmpty(src).member`; the other sources stay strict. Anywhere else
+`optional` is a load-time error. A schema can also declare `missing: empty` on a field
+([field-schema.md](field-schema.md#missing-means-empty)), and a manifest entry can ask for
+`missingCollections: empty` as a transition aid ([manifest.md](manifest.md#transition-aid--missingcollections-empty)).
 
 ## 5b. Slicing — `take` and `takeLast`
 
@@ -302,7 +352,8 @@ min(sumByKey("month", salesByMonth.amount, refundsByMonth.amount)) >= 0
 - **Duplicate keys** within one source are summed, so the overall total is preserved.
 - **Key order** is first-seen, reading the sources left to right.
 - The result is a list of numbers, so `min`, `max`, `sum`, `count` and `every` apply to it.
-- A **missing** source makes the result missing; an empty source simply contributes nothing.
+- A **missing** source makes the result missing; an empty source simply contributes nothing — unless
+  the source is marked `optional` (section 5g).
 
 ### `joinByKey` — one row per key
 
@@ -482,6 +533,7 @@ inputs, and the functions answer them differently.
 | `any` | `false` — no element succeeds | missing |
 | `isAvailable` | `false` | `false` |
 | `isEmpty` | `true` | `false` |
+| `isMissing` / `isPresent` | `false` / `true` | `true` / `false` |
 | `take` / `takeLast` | empty slice | missing |
 | `sortBy` | empty result | missing |
 | `sumByKey` | no keys — `count(...) == 0`, `min`/`max` missing | missing (any source missing) |
@@ -492,8 +544,12 @@ none, so they produce no value.
 
 The missing column is one rule:
 
-> A missing value propagates as undecided through every expression. `isAvailable()` and `isEmpty()`
-> are the only two that consume it and answer a plain boolean.
+> A missing value propagates as undecided through every expression. `isAvailable()`, `isEmpty()`,
+> `isMissing()` and `isPresent()` consume it and answer a plain boolean; `default()` replaces it.
+
+Where missing should mean empty, say so: `orEmpty(x)`, an `optional` keyed source, `missing: empty` in
+the schema, or `missingCollections: empty` on the manifest entry. Over such a collection the functions
+answer from the empty column.
 
 A comparison with a missing operand is undecided, so the rule takes its `not_exists` branch if it
 declares one and its `else` branch otherwise — which is what a `false` did, so a rule set that never

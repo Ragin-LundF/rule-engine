@@ -204,7 +204,7 @@ private fun resolveKeyStyle(
         return when (key) {
             "name", "entries" -> SpanStyle(color = ColorKeyword, fontWeight = FontWeight.SemiBold)
             "id" -> SpanStyle(color = ColorAction, fontWeight = FontWeight.SemiBold)
-            "schema", "actions", "rules" -> SpanStyle(color = ColorKeyword)
+            "schema", "actions", "rules", "missingCollections" -> SpanStyle(color = ColorKeyword)
             "scope" -> SpanStyle(color = ColorField)
             else -> SpanStyle(color = TextSecondary)
         }
@@ -221,7 +221,7 @@ private fun resolveKeyStyle(
         indent == 2 && parentKey == "actions" -> SpanStyle(color = ColorAction)
 
         // Sub-keys of field definitions (`type`, `format`, `normalizers`, `operators`, `alias`).
-        key in setOf("type", "format", "normalizers", "operators", "alias") ->
+        key in setOf("type", "format", "missing", "normalizers", "operators", "alias") ->
             SpanStyle(color = ColorKeyword)
 
         else -> SpanStyle(color = TextSecondary)

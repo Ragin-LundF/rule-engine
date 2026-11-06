@@ -29,6 +29,10 @@ val BuilderPathStep.slice: BuilderPathDecoration.Slice?
 val BuilderPathStep.sort: BuilderPathDecoration.Sort?
     get() = decorations.filterIsInstance<BuilderPathDecoration.Sort>().firstOrNull()
 
+/** True when the step carries an `orEmpty(...)` around the path up to it. */
+val BuilderPathStep.orEmpty: Boolean
+    get() = decorations.any { it is BuilderPathDecoration.OrEmpty }
+
 /**
  * Replaces the step's filters, leaving everything else where it sits relative to them.
  *

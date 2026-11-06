@@ -20,7 +20,11 @@ sealed interface BuilderOperand {
      * Uses the same [BuilderPathStep] list as [Aggregate] so plain and filtered paths render through
      * one code path at any depth. Use [field] for the common single-segment case.
      */
-    data class FieldRef(val path: List<BuilderPathStep>) : BuilderOperand
+    data class FieldRef(
+        val path: List<BuilderPathStep>,
+        /** Written with the `optional` marker as a `sumByKey` source; kept so the text survives an edit. */
+        val optional: Boolean = false,
+    ) : BuilderOperand
 
     /** A literal value. [numeric] decides whether the DSL renders it quoted. */
     data class Literal(val text: String, val numeric: Boolean = false) : BuilderOperand

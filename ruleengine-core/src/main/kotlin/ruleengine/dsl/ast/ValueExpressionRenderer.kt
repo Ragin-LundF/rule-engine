@@ -18,6 +18,7 @@ import ruleengine.dsl.ast.literal.VariableRefLiteral
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -48,7 +49,7 @@ object ValueExpressionRenderer {
     /** Renders an operand of a comparison, e.g. `count(orders[status == "paid"])` or `a.b + 1`. */
     fun render(expr: ValueExpressionAst): String {
         return when (expr) {
-            is FieldAccessAst -> renderPath(path = expr.path)
+            is FieldAccessAst -> optionalMarker(path = expr) + renderPath(path = expr.path)
             is LiteralValueAst -> renderLiteral(literal = expr.literal)
             is VariableRefAst -> $$"$$${expr.name}"
             is FunctionCallValueAst -> {
@@ -118,14 +119,28 @@ object ValueExpressionRenderer {
                     builder.append("sortBy(").append(inner).append(", ").append(member)
                         .append(direction).append(')')
                 }
+                // Wraps what came before it, like a slice: `orEmpty(fees.rows)[...]` reads back the
+                // same path from this text.
+                is OrEmptySegmentAst -> {
+                    val inner = builder.toString()
+                    builder.setLength(0)
+                    builder.append("orEmpty(").append(inner).append(')')
+                }
             }
         }
         return builder.toString()
     }
 
+    /** `optional ` before a keyed source written with the marker, so the text reads back the same. */
+    private fun optionalMarker(path: FieldAccessAst): String {
+        return if (path.optional) "optional " else ""
+    }
+
     private fun renderJoin(segment: JoinSegmentAst): String {
         val key = listOfNotNull(segment.key?.let { name -> "\"$name\"" })
-        val sources = segment.sources.map { source -> "${source.alias}: ${render(expr = source.path)}" }
+        val sources = segment.sources.map { source ->
+            "${optionalMarker(path = source.path)}${source.alias}: ${renderPath(path = source.path.path)}"
+        }
         return (key + sources).joinToString(separator = ", ", prefix = "joinByKey(", postfix = ")")
     }
 
