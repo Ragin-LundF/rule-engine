@@ -605,7 +605,14 @@ and `stop`.
 | A variable no earlier rule published | yes |
 | `avg`, `median`, `min`, `max` over a missing or empty collection | yes — they produce no value |
 | `count`, `sum`, `every` and `any` over a missing collection — also one nested in a present object | yes — missing |
+| `isAvailable`, `isEmpty`, `isMissing`, `isPresent`, whatever the record carries | no — they always answer true or false |
+| `default(x, fallback)` with `x` missing | no — the fallback, unless it is missing too |
+| An aggregate over `orEmpty(x)`, or over a field declared `missing: empty`, with `x` missing | as for an empty `x` — `count` / `sum` decide, `avg` / `min` / `max` do not |
 | A field that is present and simply does not match | no — that is an ordinary false |
+
+Where missing should mean empty, say so: `orEmpty(x)` in the rule, `optional` on a `sumByKey` /
+`joinByKey` source, or `missing: empty` on the schema field — see
+[expressions.md](expressions.md#5g-missing-means-empty--orempty-and-optional).
 
 ### How it combines with `and`, `or` and `not`
 

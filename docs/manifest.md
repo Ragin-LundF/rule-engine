@@ -53,6 +53,7 @@ This means you can move the entire project folder without changing any paths.
 | `actions` | optional | Relative path to the action schema YAML file |
 | `rules` | ✅ | List of relative paths to `.rule` files. **The list order defines execution order** — rules are evaluated file by file in this order, then in declaration order within each file, and matches are returned in that order. |
 | `scope` | optional | Name of a declared `collection`. The entry's rules run **once per member** of it instead of once for the whole document. |
+| `missingCollections` | optional | `empty` restores the pre-1.14 reading of nested collections. A **transition aid** only — see below. |
 
 #### Evaluating once per collection member
 
@@ -77,6 +78,35 @@ from, and adds one `members` entry per member carrying that member's own `variab
 `stoppedBy` — a `stop` ends one member's run, not the fan-out.
 
 Rejected at load time when `scope` names no field, or names a field that is not a collection.
+
+#### Transition aid — `missingCollections: empty`
+
+Since 1.14.0 a collection nested in a present object that does not carry it is **missing**, and so is a
+`sumByKey` / `joinByKey` over it. An entry not yet migrated can ask for the older reading:
+
+```yaml
+entries:
+  - id: legacy-checks
+    schema: schema.yaml
+    missingCollections: empty
+    rules:
+      - rules/legacy.rule
+```
+
+- Once the **root** of a path is present, any step inside it the record does not carry reads as empty for
+  a path that holds many values: `count(account.orders)` is `0` with `account: {}`, and so is
+  `count(account.profile.tags)` with no `profile`. A keyed-join source missing that way contributes
+  nothing.
+- An absent root stays missing, and so does a `sumByKey` / `joinByKey` source under an absent root.
+- Number readability, `text` structures and `regex` are not affected.
+- The only value is `empty`; any other value fails to load. Leaving the key out means strict.
+- Read from the manifest entry only (`RuleEngineBuilder`, `ValidatorCli --manifest`,
+  `EvaluateCli --manifest`); there is no programmatic option and no `--schema` / `--rules` flag.
+
+**It hides real gaps in the data.** Prefer saying where missing should mean empty — `orEmpty(...)` or an
+`optional` keyed source in the rule ([expressions.md](expressions.md#5g-missing-means-empty--orempty-and-optional)),
+or `missing: empty` in the schema ([field-schema.md](field-schema.md#missing-means-empty)) — and drop
+this key once the rules are migrated.
 
 ---
 
@@ -253,6 +283,8 @@ entries:
 ## Validation
 
 When the engine loads a manifest, it performs the following checks:
+- The manifest holds only known keys, at the top level and in every entry — a misspelt key fails with
+  a message naming the entry and the key.
 - All referenced files exist.
 - The field schema is valid YAML and contains correctly typed fields.
 - The action schema (if provided) is valid.

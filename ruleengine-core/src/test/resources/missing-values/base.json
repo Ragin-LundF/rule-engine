@@ -1,0 +1,5 @@
+{ "periods": ["P1", "P2", "P3"],
+  "events":  { "confirmed":    [ {"period": "P1", "count": 1}, {"period": "P2", "count": 0}, {"period": "P3", "count": 0} ],
+               "unclassified": [ {"period": "P2", "count": 0} ] },
+  "fees":    { "rows":   [ {"period": "P1", "amount": -5.00} ] },
+  "income":  { "rows":   [ {"period": "P1", "amount": 1000}, {"period": "P2", "amount": 1000}, {"period": "P3", "amount": 1000} ] } }

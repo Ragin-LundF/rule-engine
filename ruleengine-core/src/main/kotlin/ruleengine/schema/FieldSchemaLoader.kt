@@ -8,6 +8,7 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.hasEmptyForm
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.core.errors.SchemaLoadException
@@ -22,6 +23,8 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 object FieldSchemaLoader {
+
+    private const val MISSING_EMPTY = "empty"
 
     @Throws(SchemaLoadException::class)
     fun load(path: Path): FieldSchema {
@@ -79,6 +82,7 @@ object FieldSchemaLoader {
         validateOperators(fieldName = fieldName, operators = operators)
         validateFormat(fieldName = fieldName, type = type, format = raw.format)
         validateAlias(fieldName = fieldName, alias = raw.alias)
+        validateMissing(fieldName = fieldName, type = type, missing = raw.missing)
 
         // Recurse into nested members; a nested structure carries its own `fields`, so depth is unbounded.
         val nested = raw.fields?.let { rawNested ->
@@ -101,7 +105,8 @@ object FieldSchemaLoader {
             format = raw.format,
             normalizers = normalizers,
             operators = operators,
-            fields = nested
+            fields = nested,
+            missingAsEmpty = raw.missing != null
         )
     }
 
@@ -146,6 +151,30 @@ object FieldSchemaLoader {
                 path = Path.of(fieldName.value),
                 details = "field '${fieldName.value}' declares a blank alias; omit the key instead"
             )
+        }
+    }
+
+    /**
+     * `missing: empty` is the only spelling, and only a collection, string_set or object has an empty
+     * form. Checked because Jackson drops unknown values silently: a typo would look accepted and leave
+     * the field strict.
+     */
+    private fun validateMissing(fieldName: FieldId, type: FieldType, missing: String?) {
+        if (missing == null) {
+            return
+        }
+        val problem = when {
+            missing != MISSING_EMPTY -> "field '${fieldName.value}' declares 'missing: $missing'; " +
+                "the only value is '$MISSING_EMPTY'"
+
+            !type.hasEmptyForm -> "field '${fieldName.value}' declares " +
+                "'missing: $MISSING_EMPTY' but its type is '${type.name.lowercase()}'; it is only valid on " +
+                "'collection', 'string_set' and 'object' fields"
+
+            else -> null
+        }
+        if (problem != null) {
+            throw SchemaLoadException(path = Path.of(fieldName.value), details = problem)
         }
     }
 

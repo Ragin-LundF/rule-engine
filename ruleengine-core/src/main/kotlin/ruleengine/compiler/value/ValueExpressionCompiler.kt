@@ -14,6 +14,7 @@ import ruleengine.dsl.ast.literal.StringLiteral
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -28,14 +29,15 @@ import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
-import ruleengine.evaluator.compiled.value.CollectionEmptyCompiledValueExpression
-import ruleengine.evaluator.compiled.value.CollectionPredicateCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CompiledValueExpression
 import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
-import ruleengine.evaluator.compiled.value.FunctionCallCompiledValueExpression
-import ruleengine.evaluator.compiled.value.KeyedSumCompiledValueExpression
 import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.VariableRefCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.CollectionEmptyCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.CollectionPredicateCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.FunctionCallCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.KeyedSumCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.PresenceCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledJoinSegment
@@ -110,15 +112,12 @@ internal object ValueExpressionCompiler {
         // collection-valued afterwards: `orders.total` projects one member out of many elements and
         // the member's own type says nothing about that.
         var multiValued = false
+        var missingAsEmpty = false
         var fields = schema.fields
         for ((index, segment) in expr.path.withIndex()) {
             when (segment) {
                 is FieldSegmentAst -> {
-                    val names = if (index == 0) {
-                        FieldPathResolver.expandRoot(name = segment.name, schema = schema)
-                    } else {
-                        listOf(FieldPathResolver.resolveName(identifier = segment.name, fields = fields))
-                    }
+                    val names = segmentNames(segment = segment, index = index, schema = schema, fields = fields)
                     for (name in names) {
                         compiledSegments += CompiledFieldSegment(name = name)
                         definition = fields[FieldId(value = name)]
@@ -164,17 +163,42 @@ internal object ValueExpressionCompiler {
                     },
                     descending = segment.descending
                 )
+
+                // Covers the whole path rather than a position in it, so it compiles to a flag.
+                // Validation has made sure the path is collection-valued.
+                is OrEmptySegmentAst -> missingAsEmpty = true
             }
         }
         return FieldAccessCompiledValueExpression(
             segments = compiledSegments,
             normalizers = definition?.normalizers ?: emptyList(),
-            // A filter, a slice and a sort each select from a collection, so any of them settles the
-            // question even when the walk could not resolve the declared type.
-            yieldsCollection = multiValued || compiledSegments.any { segment ->
-                segment !is CompiledFieldSegment
-            }
+            yieldsCollection = yieldsCollection(
+                multiValued = multiValued || missingAsEmpty,
+                segments = compiledSegments
+            ),
+            missingAsEmpty = missingAsEmpty
         )
+    }
+
+    /** A root name may be an alias spelling out several segments; a member is one name. */
+    private fun segmentNames(
+        segment: FieldSegmentAst,
+        index: Int,
+        schema: FieldSchema,
+        fields: Map<FieldId, FieldDefinition>
+    ): List<String> {
+        if (index == 0) {
+            return FieldPathResolver.expandRoot(name = segment.name, schema = schema)
+        }
+        return listOf(FieldPathResolver.resolveName(identifier = segment.name, fields = fields))
+    }
+
+    /**
+     * A filter, a slice and a sort each select from a collection, so any of them settles the question
+     * even when the walk could not resolve the declared type.
+     */
+    private fun yieldsCollection(multiValued: Boolean, segments: List<CompiledPathSegment>): Boolean {
+        return multiValued || segments.any { segment -> segment !is CompiledFieldSegment }
     }
 
     private fun compileSlice(segment: SliceSegmentAst, ruleId: String?): CompiledSliceSegment {
@@ -210,39 +234,12 @@ internal object ValueExpressionCompiler {
         ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): CompiledValueExpression {
-        when (CollectionFunctionName.fromName(name = expr.name)) {
-            CollectionFunctionName.EVERY -> return compileCollectionPredicate(
-                function = CollectionFunctionName.EVERY,
-                expr = expr,
-                schema = schema,
-                ruleId = ruleId,
-                filterCompiler = filterCompiler
-            )
-
-            CollectionFunctionName.ANY -> return compileCollectionPredicate(
-                function = CollectionFunctionName.ANY,
-                expr = expr,
-                schema = schema,
-                ruleId = ruleId,
-                filterCompiler = filterCompiler
-            )
-
-            CollectionFunctionName.SUM_BY_KEY -> return compileKeyedSum(
-                expr = expr,
-                schema = schema,
-                ruleId = ruleId,
-                filterCompiler = filterCompiler
-            )
-
-            CollectionFunctionName.IS_EMPTY -> return compileCollectionEmpty(
-                expr = expr,
-                schema = schema,
-                ruleId = ruleId,
-                filterCompiler = filterCompiler
-            )
-
-            null -> Unit
-        }
+        compileCollectionFunction(
+            expr = expr,
+            schema = schema,
+            ruleId = ruleId,
+            filterCompiler = filterCompiler
+        )?.let { compiled -> return compiled }
         val functionName = AggregateFunctionName.fromName(name = expr.name) ?: throw CompilationException(
             ruleId = ruleId,
             details = "Unknown function '${expr.name}'"
@@ -257,6 +254,55 @@ internal object ValueExpressionCompiler {
             compile(expr = argument, schema = schema, ruleId = ruleId, filterCompiler = filterCompiler)
         }
         return FunctionCallCompiledValueExpression(function = functionName, arguments = compiledArgs)
+    }
+
+    /** The functions that read the shape of their argument, or null when [expr] calls none of them. */
+    private fun compileCollectionFunction(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        ruleId: String?,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression? {
+        return when (CollectionFunctionName.fromName(name = expr.name)) {
+            CollectionFunctionName.EVERY -> compileCollectionPredicate(
+                function = CollectionFunctionName.EVERY,
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            CollectionFunctionName.ANY -> compileCollectionPredicate(
+                function = CollectionFunctionName.ANY,
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            CollectionFunctionName.SUM_BY_KEY -> compileKeyedSum(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            CollectionFunctionName.IS_EMPTY -> compileCollectionEmpty(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            CollectionFunctionName.IS_MISSING, CollectionFunctionName.IS_PRESENT -> compilePresence(
+                expr = expr,
+                schema = schema,
+                ruleId = ruleId,
+                filterCompiler = filterCompiler
+            )
+
+            null -> null
+        }
     }
 
     /**
@@ -291,6 +337,34 @@ internal object ValueExpressionCompiler {
             filterCompiler = filterCompiler
         ) as FieldAccessCompiledValueExpression
         return CollectionEmptyCompiledValueExpression(source = source)
+    }
+
+    /**
+     * `isPresent(x)` is `isAvailable(x) or isEmpty(x)` for a path and `isAvailable(x)` otherwise;
+     * `isMissing(x)` is its negation.
+     */
+    private fun compilePresence(
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        ruleId: String?,
+        filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
+    ): CompiledValueExpression {
+        val argument = expr.arguments.singleOrNull() ?: throw CompilationException(
+            ruleId = ruleId,
+            details = "Function '${expr.name}' requires exactly one argument"
+        )
+        val compiled = compile(expr = argument, schema = schema, ruleId = ruleId, filterCompiler = filterCompiler)
+        val empty = (compiled as? FieldAccessCompiledValueExpression)?.let { source ->
+            CollectionEmptyCompiledValueExpression(source = source)
+        }
+        return PresenceCompiledValueExpression(
+            available = FunctionCallCompiledValueExpression(
+                function = AggregateFunctionName.IS_AVAILABLE,
+                arguments = listOf(compiled)
+            ),
+            empty = empty,
+            missing = CollectionFunctionName.fromName(name = expr.name) == CollectionFunctionName.IS_MISSING
+        )
     }
 
     private fun compileCollectionPredicate(
@@ -407,7 +481,7 @@ internal object ValueExpressionCompiler {
         ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): KeyedSumCompiledValueExpression.Source {
-        val path = (argument as? FieldAccessAst)?.path
+        val path = PathShape.keyedSourcePath(argument = argument)
         val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
         if (path == null || valueMember == null || path.size < 2) {
             throw CompilationException(
@@ -416,8 +490,11 @@ internal object ValueExpressionCompiler {
                         "member, such as sales.amount"
             )
         }
+        // `optional src.member` reads exactly like `orEmpty(src).member`.
+        val optional = PathShape.isOptionalSource(argument = argument)
+        val collectionPath = path.dropLast(n = 1) + listOfNotNull(OrEmptySegmentAst.takeIf { optional })
         val collection = compileFieldAccess(
-            expr = FieldAccessAst(path = path.dropLast(n = 1)),
+            expr = FieldAccessAst(path = collectionPath),
             schema = schema,
             ruleId = ruleId,
             filterCompiler = filterCompiler

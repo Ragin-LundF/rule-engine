@@ -209,6 +209,41 @@ class JvmRuleSimulationServiceTest {
         assertTrue(actual = ruleResult.actions.any { it.contains(other = "rent") })
     }
 
+    /** The entry's `missingCollections: empty` reaches evaluation, so the tester matches production. */
+    @Test
+    fun `missingCollections empty reads a nested missing collection as empty`() {
+        val schema = """
+            fields:
+              account:
+                type: object
+                fields:
+                  orders: { type: collection, fields: { total: { type: decimal } } }
+        """.trimIndent()
+        val rule = """
+            rule "no-orders" {
+              description "the account holds no orders"
+              when
+                count(account.orders) == 0
+              then
+                flag "none"
+            }
+        """.trimIndent()
+
+        val matched = listOf(false, true).map { lenient ->
+            val result = service.simulate(
+                schemaText = schema,
+                actionsText = "",
+                ruleText = rule,
+                ruleId = "no-orders",
+                inputJson = """{"account": {}}""",
+                missingCollectionsAsEmpty = lenient,
+            )
+            assertIs<SimulationOutcome.Completed>(value = result.outcome).ruleResults.single().matched
+        }
+
+        assertEquals(expected = listOf(false, true), actual = matched)
+    }
+
     @Test
     fun `negative no-match still reports the rule, with no actions`() {
         val result = service.simulate(

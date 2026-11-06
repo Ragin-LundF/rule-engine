@@ -33,6 +33,12 @@ private val FUNCTION_COMPLETIONS: List<Triple<String, String, String>> = listOf(
     // The complement of isAvailable, not its negation: it answers true only for a collection that
     // arrived carrying no elements, and false for one that did not arrive at all.
     Triple("isEmpty", "isEmpty(orders)", "check"),
+    // The three states without combining isAvailable and isEmpty: carried (empty or not) or not.
+    Triple("isMissing", "isMissing(orders)", "check"),
+    Triple("isPresent", "isPresent(orders)", "check"),
+    Triple("default", "default(amount, 0)", "function"),
+    // A path, not a reduction: a missing collection reads as empty, so count and sum answer 0.
+    Triple("orEmpty", "orEmpty(orders)", "missing"),
     Triple("take", "take(orders, 3)", "slice"),
     Triple("takeLast", "takeLast(orders, 3)", "slice"),
     // The three-argument form is the one worth inserting: ordering a collection of objects is what
@@ -63,6 +69,10 @@ internal fun buildWhenGeneralCompletions(schema: FieldSchema?): List<CompletionI
         add(CompletionItem(label = "not", insertText = "not", kind = CompletionKind.LOGIC, hint = "logic"))
         add(CompletionItem(label = "true", insertText = "true", kind = CompletionKind.LITERAL, hint = "boolean"))
         add(CompletionItem(label = "false", insertText = "false", kind = CompletionKind.LITERAL, hint = "boolean"))
+        // Marks a sumByKey / joinByKey source that may be missing; legal only there.
+        add(
+            CompletionItem(label = "optional", insertText = "optional ", kind = CompletionKind.KEYWORD, hint = "source")
+        )
         addAll(buildAggregateFunctionCompletions())
         val offered = mutableSetOf<String>()
         fun offer(label: String, type: FieldType) {
@@ -119,7 +129,8 @@ internal fun buildOperatorCompletions(
         val displayId = def.getDisplayId()
         CompletionItem(
             label = "$op $displayId",
-            insertText = "$displayId $op $placeholder",
+            // Offered once the field is typed, so only what follows it is inserted.
+            insertText = "$op $placeholder",
             kind = CompletionKind.OPERATOR,
             hint = def.type.name.lowercase()
         )
@@ -138,7 +149,7 @@ private fun variableOperatorCompletions(variableName: String): List<CompletionIt
     return operators.map { op ->
         CompletionItem(
             label = "$op $variableName",
-            insertText = "$variableName $op ",
+            insertText = "$op ",
             kind = CompletionKind.OPERATOR,
             hint = "variable"
         )
@@ -161,7 +172,8 @@ internal fun buildValuePlaceholderCompletions(
     return listOf(
         CompletionItem(
             label = "${def.getDisplayId()} $placeholder",
-            insertText = "${def.getDisplayId()} $operator $placeholder",
+            // Offered once the field and operator are typed, so only the value is inserted.
+            insertText = placeholder,
             kind = CompletionKind.LITERAL,
             hint = def.type.name.lowercase()
         )

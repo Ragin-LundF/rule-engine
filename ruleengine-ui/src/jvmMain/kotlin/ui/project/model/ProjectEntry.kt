@@ -13,4 +13,6 @@ data class ProjectEntry(
     val ruleFiles: List<String> = emptyList(),
     /** Collection this entry evaluates once per member, or null for whole-document evaluation. */
     val scope: String? = null,
+    /** The entry's `missingCollections` value (`empty`), or null for the strict default. */
+    val missingCollections: String? = null,
 )

@@ -496,6 +496,28 @@ class PlainLanguageRendererTest {
         )
     }
 
+    /** The missing-value features say what they decide, so the prose never claims a strict check. */
+    @Test
+    fun `the missing-value features read as plain language`() {
+        assertEquals(
+            expected = "the total Amount of fees.rows (none when missing) where Period is one of Periods " +
+                "is less than 5",
+            actual = prose(condition = "sum(orEmpty(fees.rows)[period in periods].amount) < 5"),
+        )
+        assertEquals(
+            expected = "Account › Limit, or 0 when that is missing is at least 500",
+            actual = prose(condition = "default(account.limit, 0) >= 500"),
+        )
+        assertEquals(expected = "Fees is present", actual = prose(condition = "isPresent(fees)"))
+        assertEquals(expected = "Fees › Rows is missing", actual = prose(condition = "isMissing(fees.rows)"))
+        assertEquals(expected = "Orders is empty", actual = prose(condition = "isEmpty(orders)"))
+        assertEquals(
+            expected = "the number (the per-period totals of Credits › Amount and Debits › Amount, or nothing " +
+                "when it is missing) is 0",
+            actual = prose(condition = """count(sumByKey("period", credits.amount, optional debits.amount)) == 0"""),
+        )
+    }
+
     private fun prose(condition: String): String {
         val rule = """
             rule "prose" {

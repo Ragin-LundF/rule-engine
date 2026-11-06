@@ -33,6 +33,7 @@ object ManifestYamlBridge {
                     actionsPath = entry.actions ?: "",
                     rulePaths = entry.rules,
                     scope = entry.scope ?: "",
+                    missingCollections = entry.missingCollections,
                 )
             },
         )
@@ -53,6 +54,7 @@ object ManifestYamlBridge {
                     actions = it.actionsPath.trim().takeIf { path -> path.isNotBlank() },
                     rules = it.rulePaths.map { path -> path.trim() }.filter { path -> path.isNotBlank() },
                     scope = it.scope.trim().takeIf { scope -> scope.isNotBlank() },
+                    missingCollections = it.missingCollections,
                 )
             },
         )
@@ -71,6 +73,9 @@ object ManifestYamlBridge {
                     appendLine("    actions: ${YamlScalars.quoteIfNeeded(value = actions)}")
                 }
                 entry.scope?.let { scope -> appendLine("    scope: ${YamlScalars.quoteIfNeeded(value = scope)}") }
+                entry.missingCollections?.let { value ->
+                    appendLine("    missingCollections: ${YamlScalars.quoteIfNeeded(value = value)}")
+                }
                 if (entry.rules.isNotEmpty()) {
                     appendLine("    rules:")
                     entry.rules.forEach { rule -> appendLine("      - ${YamlScalars.quoteIfNeeded(value = rule)}") }

@@ -3,6 +3,7 @@ package ui.autocompletion
 import ruleengine.core.domain.OperatorNames
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
+import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
 import ruleengine.evaluator.compiled.DslFunctions
 import ui.autocompletion.model.CompletionItem
@@ -10,6 +11,8 @@ import ui.autocompletion.model.CompletionKind
 import ui.dsl.analyzeDslContext
 import ui.dsl.model.DslCursorContext
 import ui.dsl.model.DslSection
+import ui.editor.CodeEditing
+import ui.util.Words
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -117,6 +120,16 @@ class AutoCompleteTest {
         }
     }
 
+    /** The 1.15.0 missing-value names, the `optional` marker among them, which is no function. */
+    @Test
+    fun `the missing-value names are offered in the when block`() {
+        val labels = whenCompletions().map { item -> item.label }
+
+        listOf("orEmpty(...)", "default(...)", "isMissing(...)", "isPresent(...)", "optional").forEach { name ->
+            assertTrue(actual = name in labels, message = "No completion for '$name', got: $labels")
+        }
+    }
+
     @Test
     fun `aggregate function completions have aggregate hint`() {
         val items = whenCompletions()
@@ -146,6 +159,52 @@ class AutoCompleteTest {
                 message = "Expected OPERATOR kind for ${item.label}, got: ${item.kind}"
             )
         }
+    }
+
+    // --- inserting after a typed field ---
+
+    private val amountSchema = FieldSchema(
+        name = "s",
+        fields = mapOf(
+            FieldId(value = "amount") to FieldDefinition(id = FieldId(value = "amount"), type = FieldType.DECIMAL),
+        ),
+    )
+
+    /** Accepts the first completion at the end of [text], the way the rule editor does. */
+    private fun acceptFirst(text: String): String {
+        val items = buildContextualCompletions(
+            context = analyzeDslContext(text = text, cursorPos = text.length),
+            schema = amountSchema,
+            actionSchema = null,
+        )
+        return CodeEditing.applySuggestion(
+            text = text,
+            wordStart = Words.wordStart(text = text, cursorPos = text.length),
+            cursor = text.length,
+            insertText = items.first().insertText,
+        ).text
+    }
+
+    /** The operator items used to insert `amount >= 0` after `amount `, which wrote the field twice. */
+    @Test
+    fun `an operator after a typed field does not repeat the field`() {
+        val result = acceptFirst(text = "rule \"r\" {\n  when\n    amount ")
+
+        assertEquals(expected = "rule \"r\" {\n  when\n    amount equals 0.0", actual = result)
+    }
+
+    @Test
+    fun `a value after a typed named operator does not repeat field and operator`() {
+        val result = acceptFirst(text = "rule \"r\" {\n  when\n    amount gte ")
+
+        assertEquals(expected = "rule \"r\" {\n  when\n    amount gte 0.0", actual = result)
+    }
+
+    @Test
+    fun `an operator after a variable does not repeat the variable`() {
+        val result = acceptFirst(text = "rule \"r\" {\n  when\n    \$total ")
+
+        assertEquals(expected = "rule \"r\" {\n  when\n    \$total == ", actual = result)
     }
 
     // --- value placeholders ---

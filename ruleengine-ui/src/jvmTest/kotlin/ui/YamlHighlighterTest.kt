@@ -1,17 +1,17 @@
 package ui
 
-import ui.autocompletion.model.CompletionItem
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.font.FontStyle
+import ui.autocompletion.model.CompletionItem
 import ui.autocompletion.model.CompletionKind
+import ui.yaml.annotateYaml
+import ui.yaml.buildYamlCompletions
+import ui.yaml.model.YamlCursorContext
+import ui.yaml.model.YamlEditorType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import ui.yaml.model.YamlCursorContext
-import ui.yaml.model.YamlEditorType
-import ui.yaml.annotateYaml
-import ui.yaml.buildYamlCompletions
 
 /**
  * Characterization tests for YAML completions and highlighting, neither of which had any.
@@ -198,5 +198,29 @@ class YamlHighlighterTest {
         val result = annotateYaml(text = "fields:", editorType = YamlEditorType.FIELD_SCHEMA)
 
         assertEquals(expected = 2, actual = result.spanStyles.size, message = "key + colon")
+    }
+
+    // ── missing values (1.15.0) ───────────────────────────────────────────────
+
+    @Test
+    fun `a field definition offers missing and its one value`() {
+        assertTrue(actual = "missing" in labels(items = completions(indent = 4)))
+        assertEquals(
+            expected = listOf("empty"),
+            actual = labels(items = completions(currentKey = "missing", isValue = true)),
+        )
+    }
+
+    @Test
+    fun `a manifest entry offers missingCollections and its one value`() {
+        val keys = labels(items = completions(indent = 4, editorType = YamlEditorType.PROJECT_MANIFEST))
+        val values = completions(
+            currentKey = "missingCollections",
+            isValue = true,
+            editorType = YamlEditorType.PROJECT_MANIFEST,
+        )
+
+        assertTrue(actual = "missingCollections" in keys, message = "$keys")
+        assertEquals(expected = listOf("empty"), actual = labels(items = values))
     }
 }

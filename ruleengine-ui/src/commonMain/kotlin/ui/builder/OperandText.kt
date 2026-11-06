@@ -7,6 +7,7 @@ import ui.builder.model.BuilderPathDecoration
 import ui.builder.model.BuilderPathStep
 import ui.builder.model.filters
 import ui.builder.model.namesAField
+import ui.builder.model.orEmpty
 import ui.builder.model.slice
 import ui.builder.model.sort
 
@@ -33,7 +34,7 @@ object OperandText {
     // ── DSL ───────────────────────────────────────────────────────────────────
 
     fun toDsl(operand: BuilderOperand): String = when (operand) {
-        is BuilderOperand.FieldRef -> pathToDsl(path = operand.path)
+        is BuilderOperand.FieldRef -> (if (operand.optional) "optional " else "") + pathToDsl(path = operand.path)
         is BuilderOperand.Literal -> literalToDsl(literal = operand)
         is BuilderOperand.ListLiteral -> operand.items.joinToString(
             separator = ", ",
@@ -107,6 +108,13 @@ object OperandText {
                         member?.let { name -> builder.append('"').append(name).append("\", ") }
                         builder.append(direction).append(')')
                     }
+
+                    // Wraps what came before it, as `Parser` reads `orEmpty(fees.rows)` back.
+                    is BuilderPathDecoration.OrEmpty -> {
+                        val inner = builder.toString()
+                        builder.setLength(0)
+                        builder.append("orEmpty(").append(inner).append(')')
+                    }
                 }
             }
         }
@@ -158,6 +166,7 @@ object OperandText {
             val sliced = step.slice != null
             val ordered = step.sort != null
             step.name +
+                (if (step.orEmpty) "∅" else "") +
                 (if (restricted) "*" else "") +
                 (if (ordered) "↕" else "") +
                 (if (sliced) "⋯" else "")

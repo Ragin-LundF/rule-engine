@@ -1,0 +1,22 @@
+rule "events" {
+  description "Every period has at most one event, and not every period has one."
+  when
+    count(periods) > 0
+    and count(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) == count(periods)
+    and max(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) <= 1
+    and min(sumByKey("period", orEmpty(events.confirmed)[period in periods].count, orEmpty(events.unclassified)[period in periods].count)) < 1
+  then outcome "PASS"
+  else outcome "FAIL"
+  not_exists outcome "MISSING"
+}
+
+rule "fee-ratio" {
+  description "Fees are below five percent of income over the periods."
+  when
+    count(periods) > 0
+    and isPresent(fees)
+    and abs(sum(orEmpty(fees.rows)[period in periods].amount)) / sum(income.rows[period in periods].amount) < 0.05
+  then outcome "PASS"
+  else outcome "FAIL"
+  not_exists outcome "MISSING"
+}

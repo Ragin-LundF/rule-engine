@@ -1,7 +1,10 @@
-package ruleengine.evaluator.compiled.value
+package ruleengine.evaluator.compiled.value.function
 
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.CompiledValueExpression
+import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue
@@ -26,6 +29,15 @@ class FunctionCallCompiledValueExpression(
      * current element of a filter in any other way (a filter, a variable, arithmetic, …).
      */
     private val readRoots: List<String>? = rootsReadBy(arguments = arguments)
+
+    /**
+     * True for an aggregate over a path that is collection-valued by its declared shape. Such a path
+     * collapses a selection of one element to a scalar, so the aggregate reads it back as a
+     * one-element collection — otherwise a single unreadable value made `sum` missing, while the same
+     * value next to other elements was skipped.
+     */
+    private val aggregatesCollection: Boolean = function.isAggregate &&
+        (arguments.singleOrNull() as? FieldAccessCompiledValueExpression)?.yieldsCollection == true
 
     override fun evaluate(context: PreparedRuleContext): ExpressionValue {
         // Inside `transactions[amount > avg(transactions.amount) * 3]` the average is the same for
@@ -52,13 +64,13 @@ class FunctionCallCompiledValueExpression(
      */
     private fun computeValue(context: PreparedRuleContext): ExpressionValue {
         return when (function) {
-            AggregateFunctionName.COUNT -> evaluateCount(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.SUM -> evaluateSum(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.SUBTRACT -> evaluateSubtract(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.AVG -> evaluateAvg(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.MEDIAN -> evaluateMedian(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.MAX -> evaluateMax(argValue = argumentAt(index = 0, context = context))
-            AggregateFunctionName.MIN -> evaluateMin(argValue = argumentAt(index = 0, context = context))
+            AggregateFunctionName.COUNT -> evaluateCount(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.SUM -> evaluateSum(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.SUBTRACT -> evaluateSubtract(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.AVG -> evaluateAvg(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.MEDIAN -> evaluateMedian(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.MAX -> evaluateMax(argValue = aggregatedArgument(context = context))
+            AggregateFunctionName.MIN -> evaluateMin(argValue = aggregatedArgument(context = context))
             AggregateFunctionName.ABS -> evaluateAbs(argValue = argumentAt(index = 0, context = context))
             AggregateFunctionName.DAYS_BETWEEN -> evaluateDaysBetween(
                 first = argumentAt(index = 0, context = context),
@@ -68,7 +80,30 @@ class FunctionCallCompiledValueExpression(
             AggregateFunctionName.IS_AVAILABLE -> evaluateIsAvailable(
                 argValue = argumentAt(index = 0, context = context)
             )
+
+            AggregateFunctionName.DEFAULT -> evaluateDefault(context = context)
         }
+    }
+
+    private fun aggregatedArgument(context: PreparedRuleContext): ExpressionValue {
+        val value = argumentAt(index = 0, context = context)
+        if (!aggregatesCollection || value is ArrayExpressionValue || value is MissingExpressionValue) {
+            return value
+        }
+        return ArrayExpressionValue(values = listOf(value))
+    }
+
+    /**
+     * The value, or the fallback when the value is missing — including a value the record carries in
+     * a form its declared type cannot read, which the engine reads as missing everywhere. A missing
+     * fallback leaves the result missing. The fallback is only evaluated when it is needed.
+     */
+    private fun evaluateDefault(context: PreparedRuleContext): ExpressionValue {
+        val value = argumentAt(index = 0, context = context)
+        if (value !is MissingExpressionValue) {
+            return value
+        }
+        return argumentAt(index = 1, context = context)
     }
 
     private fun argumentAt(index: Int, context: PreparedRuleContext): ExpressionValue {

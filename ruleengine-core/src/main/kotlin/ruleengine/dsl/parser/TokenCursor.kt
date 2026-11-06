@@ -17,6 +17,11 @@ internal class TokenCursor(private val tokens: List<Token>) {
 
     fun current(): Token = tokens.getOrElse(index = pos) { tokens.last() }
 
+    /** The token after [current], without consuming anything. */
+    fun peek(): Token {
+        return tokens.getOrElse(index = pos + 1) { tokens.last() }
+    }
+
     fun advance() {
         if (pos < tokens.size) {
             pos++

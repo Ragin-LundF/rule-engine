@@ -25,6 +25,7 @@ import ruleengine.dsl.ast.literal.VariableRefLiteral
 import ruleengine.dsl.ast.path.FieldSegmentAst
 import ruleengine.dsl.ast.path.FilterSegmentAst
 import ruleengine.dsl.ast.path.JoinSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
 import ruleengine.dsl.ast.path.SliceSegmentAst
 import ruleengine.dsl.ast.path.SortSegmentAst
@@ -212,7 +213,8 @@ object PlainLanguageRenderer {
     private fun operand(expr: ValueExpressionAst, schema: FieldSchema?): String {
         return when (expr) {
             is LiteralValueAst -> literal(value = expr.literal)
-            is FieldAccessAst -> fieldOperand(path = expr.path, schema = schema)
+            is FieldAccessAst -> fieldOperand(path = expr.path, schema = schema) +
+                if (expr.optional) ", or nothing when it is missing" else ""
             is FunctionCallValueAst -> aggregate(call = expr, schema = schema)
             is ArithmeticValueAst -> arithmetic(expr = expr, schema = schema)
             is VariableRefAst -> "the value of ${expr.name}"
@@ -251,6 +253,10 @@ object PlainLanguageRenderer {
         }
         val argument = call.arguments.singleOrNull()
         val function = AggregateFunctionName.fromName(name = call.name)
+        if (function == AggregateFunctionName.DEFAULT && call.arguments.size == 2) {
+            val (value, fallback) = call.arguments.map { arg -> operand(expr = arg, schema = schema) }
+            return "$value, or $fallback when that is missing"
+        }
 
         if (argument !is FieldAccessAst) {
             val rendered = call.arguments.joinToString(separator = ", ") { arg ->
@@ -291,6 +297,14 @@ object PlainLanguageRenderer {
         val argument = call.arguments.singleOrNull() as? FieldAccessAst
             ?: return "${call.name.lowercase()} of " +
                 call.arguments.joinToString(separator = ", ") { arg -> operand(expr = arg, schema = schema) }
+        // These ask about the whole path rather than measuring a member of it.
+        val subject = fieldOperand(path = argument.path, schema = schema)
+        when (function) {
+            CollectionFunctionName.IS_EMPTY -> return "$subject is empty"
+            CollectionFunctionName.IS_MISSING -> return "$subject is missing"
+            CollectionFunctionName.IS_PRESENT -> return "$subject is present"
+            else -> Unit
+        }
         val split = splitAggregatePath(path = argument.path)
         val container = describeContainer(
             segments = split.containerSegments,
@@ -319,7 +333,8 @@ object PlainLanguageRenderer {
             AggregateFunctionName.ABS -> "the magnitude of"
             AggregateFunctionName.DAYS_BETWEEN -> "the days between"
             AggregateFunctionName.IS_AVAILABLE -> "the presence of"
-            null -> "the ${name.lowercase()}"
+            // `default` has its own sentence in `aggregate`; this only serves a call with the wrong arity.
+            AggregateFunctionName.DEFAULT, null -> "the ${name.lowercase()}"
         }
 
         if (measure == null) {
@@ -371,10 +386,11 @@ object PlainLanguageRenderer {
         // events that failed" instead of "…of the last 10 login events", or "the total of order
         // totals" for a rule that only ever looks at the largest three.
         val decorations = path.filter { segment ->
-            segment is SliceSegmentAst || segment is SortSegmentAst
+            segment is SliceSegmentAst || segment is SortSegmentAst || segment is OrEmptySegmentAst
         }
         val lastFilterIndex = path.indexOfLast { segment ->
-            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst
+            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst ||
+                segment is OrEmptySegmentAst
         }
         // A join names no collection of its own: it *is* the container, and every member read after
         // it is measured. Dropping it would make the prose describe "the collection" instead.
@@ -456,6 +472,9 @@ object PlainLanguageRenderer {
                         "the first ${decoration.count} $described"
                     }
 
+                // Said, because the rule then decides where it would otherwise be undecided.
+                is OrEmptySegmentAst -> "$described (none when missing)"
+
                 else -> described
             }
         }
@@ -484,7 +503,8 @@ object PlainLanguageRenderer {
         // A plain path is just the field; a filter, slice, sort or join narrows a collection, and the
         // sentence has to say so — "Priority Customer Ids" for `take(priorityCustomerIds, 1)` overclaims.
         val narrowsCollection = path.any { segment ->
-            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst
+            segment is FilterSegmentAst || segment is SliceSegmentAst || segment is SortSegmentAst ||
+                segment is OrEmptySegmentAst
         }
         if (!narrowsCollection && path.firstOrNull() !is JoinSegmentAst) {
             return FieldLabels.forPath(path = path.fieldNames().joinToString(separator = "."), schema = schema)

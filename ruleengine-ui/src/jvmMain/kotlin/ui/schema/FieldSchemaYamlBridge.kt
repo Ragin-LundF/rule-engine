@@ -2,6 +2,7 @@ package ui.schema
 
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.hasEmptyForm
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.schema.FieldSchemaLoader
@@ -62,6 +63,20 @@ object FieldSchemaYamlBridge {
         return sb.toString()
     }
 
+    /** The one-line properties of a field: alias, date format and `missing`. */
+    private fun appendScalarProperties(sb: StringBuilder, field: EditableField, body: String) {
+        if (field.alias.isNotBlank()) {
+            sb.appendLine("${body}alias: ${field.alias}")
+        }
+        // Quoted: a pattern can contain ':' (HH:mm) and quoted literals, which bare YAML would misread.
+        if (field.type.isTemporal && field.format.isNotBlank()) {
+            sb.appendLine("${body}format: \"${field.format}\"")
+        }
+        if (field.missingAsEmpty && field.type.hasEmptyForm) {
+            sb.appendLine("${body}missing: empty")
+        }
+    }
+
     /** Writes a list of fields, recursing into nested members with deeper indentation. */
     private fun appendFields(sb: StringBuilder, fields: List<EditableField>, indent: String) {
         for (field in fields) {
@@ -69,13 +84,7 @@ object FieldSchemaYamlBridge {
             val body = "$indent  "
             sb.appendLine("$indent${field.path}:")
             sb.appendLine("${body}type: ${field.type.yamlValue}")
-            if (field.alias.isNotBlank()) {
-                sb.appendLine("${body}alias: ${field.alias}")
-            }
-            // Quoted: a pattern can contain ':' (HH:mm) and quoted literals, which bare YAML would misread.
-            if (field.type.isTemporal && field.format.isNotBlank()) {
-                sb.appendLine("${body}format: \"${field.format}\"")
-            }
+            appendScalarProperties(sb = sb, field = field, body = body)
             if (field.normalizers.isNotEmpty()) {
                 sb.appendLine("${body}normalizers:")
                 field.normalizers.forEach { sb.appendLine("$body  - $it") }
@@ -104,4 +113,5 @@ private fun FieldDefinition.toEditableField(): EditableField = EditableField(
     normalizers = normalizers.map { it.value },
     operators = operators.map { it.value },
     fields = fields.values.map { it.toEditableField() },
+    missingAsEmpty = missingAsEmpty,
 )

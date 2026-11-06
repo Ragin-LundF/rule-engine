@@ -149,6 +149,53 @@ class UnreadableValueTest {
         )
     }
 
+    /**
+     * T26: a filter that selects exactly one element with an unreadable amount is skipped by the
+     * aggregates, as the same element already was next to others — before 1.15.0 `sum` was missing.
+     */
+    @Test
+    fun `an aggregate skips the only selected element when its amount is unreadable`() {
+        val record = arrayOf<Pair<String, Any?>>(
+            "lines" to listOf(mapOf("period" to "P1", "amount" to "abc"), mapOf("period" to "P2", "amount" to 7))
+        )
+        val expectations = mapOf(
+            """sum(lines[period == "P1"].amount) == 0""" to ConditionVerdict.TRUE,
+            """subtract(lines[period == "P1"].amount) == 0""" to ConditionVerdict.TRUE,
+            """count(lines[period == "P1"].amount) == 1""" to ConditionVerdict.TRUE,
+            """avg(lines[period == "P1"].amount) == 0""" to ConditionVerdict.UNKNOWN,
+            """median(lines[period == "P1"].amount) == 0""" to ConditionVerdict.UNKNOWN,
+            """max(lines[period == "P1"].amount) == 0""" to ConditionVerdict.UNKNOWN,
+            """min(lines[period == "P1"].amount) == 0""" to ConditionVerdict.UNKNOWN,
+            """sum(lines[period == "P2"].amount) == 7""" to ConditionVerdict.TRUE,
+        )
+
+        expectations.forEach { (condition, expected) ->
+            assertEquals(
+                expected = expected,
+                actual = verdict(condition = condition, fields = record),
+                message = condition,
+            )
+        }
+    }
+
+    /** T26: a plain comparison against the single value, and an aggregate over a declared scalar, are unchanged. */
+    @Test
+    fun `a comparison with the single unreadable value and a sum over an unreadable scalar stay as before`() {
+        val record = arrayOf<Pair<String, Any?>>(
+            "lines" to listOf(mapOf("period" to "P1", "amount" to "abc")),
+            "amount" to "abc",
+        )
+
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = verdict(condition = """lines[period == "P1"].amount > 5""", fields = record),
+        )
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = verdict(condition = "sum(amount) == 0", fields = record),
+        )
+    }
+
     @Test
     fun `a structure where text is declared is undecided rather than its toString`() {
         assertEquals(

@@ -250,6 +250,35 @@ class OperandRulesTest {
         assertEquals(expected = listOf(previous), actual = call.args)
     }
 
+    /** Re-picking Field for an `optional` keyed source keeps the marker, or the rewrite drops it. */
+    @Test
+    fun `switching an optional source to a field keeps the marker`() {
+        val previous = BuilderOperand.FieldRef(path = listOf(BuilderPathStep(name = "amount")), optional = true)
+
+        val operand = OperandRules.defaultOperand(
+            kind = OperandRules.OperandKind.FIELD,
+            fields = fields,
+            previous = previous,
+        )
+
+        assertEquals(expected = previous, actual = operand)
+    }
+
+    /** `default` has the kind of its value, so a numeric one offers the ordering operators. */
+    @Test
+    fun `a default call is typed by its arguments`() {
+        val numericDefault = BuilderOperand.Call(
+            function = "default",
+            args = listOf(fieldOperand(name = "amount"), BuilderOperand.Literal(text = "0", numeric = true)),
+        )
+        val booleanDefault = BuilderOperand.Call(
+            function = "default",
+            args = listOf(fieldOperand(name = "amount"), BuilderOperand.Literal(text = "true")),
+        )
+
+        assertTrue(actual = OperandRules.canBeNumeric(operand = numericDefault, fields = fields))
+        assertEquals(expected = false, actual = OperandRules.canBeNumeric(operand = booleanDefault, fields = fields))
+    }
 
     @Test
     fun `an undeclared segment offers nothing`() {

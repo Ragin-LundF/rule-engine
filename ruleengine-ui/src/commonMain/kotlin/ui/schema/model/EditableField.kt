@@ -26,4 +26,6 @@ data class EditableField(
      * that themselves contain collections is expressible to any depth.
      */
     val fields: List<EditableField> = emptyList(),
+    /** `missing: empty` — absent or `null` reads as `[]` / `{}`. Only for collection, string_set and object. */
+    val missingAsEmpty: Boolean = false,
 )

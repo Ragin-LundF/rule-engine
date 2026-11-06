@@ -6,6 +6,7 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.normalizer.NormalizerRegistry
+import ruleengine.evaluator.context.MissingAsEmptyRuleContext
 import ruleengine.evaluator.context.PreparedRuleContext
 import ruleengine.evaluator.context.RuleContext
 import ruleengine.evaluator.context.ScopedRuleContext
@@ -52,14 +53,19 @@ object ScopedEvaluation {
         memberSchema: FieldSchema,
         scope: String,
         includeTrace: Boolean = false,
-        normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default
+        normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
+        missingCollectionsAsEmpty: Boolean = false
     ): EvaluationResult {
-        val members = document.getRaw(fieldPath = listOf(scope)) as? Collection<*> ?: emptyList<Any?>()
+        // Filled once for the whole run: the members come out of it with their own `missing: empty`
+        // members filled in, so no member pays for copying the document again.
+        val filledDocument = MissingAsEmptyRuleContext.wrapIfNeeded(context = document, schema = schema)
+        val members = filledDocument.getRaw(fieldPath = listOf(scope)) as? Collection<*> ?: emptyList<Any?>()
         val evaluations = members.filterIsInstance<Map<*, *>>().mapIndexed { index, member ->
-            val prepared = PreparedRuleContext.prepare(
-                ctx = ScopedRuleContext(member = member, document = document),
+            val prepared = PreparedRuleContext.prepareFilled(
+                input = ScopedRuleContext(member = member, document = filledDocument),
                 schema = memberSchema,
-                normalizerRegistry = normalizerRegistry
+                normalizerRegistry = normalizerRegistry,
+                missingCollectionsAsEmpty = missingCollectionsAsEmpty
             )
             val key = memberKey(member = member, schema = schema, scope = scope, index = index)
             MemberEvaluation(

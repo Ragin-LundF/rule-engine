@@ -44,6 +44,7 @@ class JvmRuleSimulationService : RuleSimulationService {
         ruleId: String,
         inputJson: String,
         scope: String,
+        missingCollectionsAsEmpty: Boolean,
     ): SimulationResult {
         return try {
             SimulationResult(
@@ -54,6 +55,7 @@ class JvmRuleSimulationService : RuleSimulationService {
                     ruleId = ruleId,
                     inputJson = inputJson,
                     scope = scope,
+                    missingCollectionsAsEmpty = missingCollectionsAsEmpty,
                 ),
             )
         } catch (stopped: PipelineStopped) {
@@ -76,6 +78,7 @@ class JvmRuleSimulationService : RuleSimulationService {
         ruleId: String,
         inputJson: String,
         scope: String,
+        missingCollectionsAsEmpty: Boolean,
     ): SimulationOutcome {
         val factMap = parseFacts(inputJson = inputJson)
         val documentSchema = loadSchema(schemaText = schemaText)
@@ -95,6 +98,7 @@ class JvmRuleSimulationService : RuleSimulationService {
             scope = scope,
             factMap = factMap,
             targetAsts = targetAsts,
+            missingCollectionsAsEmpty = missingCollectionsAsEmpty,
         )
     }
 
@@ -176,6 +180,7 @@ class JvmRuleSimulationService : RuleSimulationService {
         scope: String,
         factMap: Map<String, Any?>,
         targetAsts: List<RuleAst>,
+        missingCollectionsAsEmpty: Boolean,
     ): SimulationOutcome {
         val ctx = MapRuleContext(map = factMap)
         val engine = RuleEngine(compiledRules = compiledRules)
@@ -189,10 +194,15 @@ class JvmRuleSimulationService : RuleSimulationService {
                     memberSchema = memberSchema,
                     scope = scope,
                     includeTrace = true,
+                    missingCollectionsAsEmpty = missingCollectionsAsEmpty,
                 )
             } else {
                 engine.evaluate(
-                    prepared = PreparedRuleContext.prepare(ctx = ctx, schema = documentSchema),
+                    prepared = PreparedRuleContext.prepare(
+                        ctx = ctx,
+                        schema = documentSchema,
+                        missingCollectionsAsEmpty = missingCollectionsAsEmpty,
+                    ),
                     includeTrace = true,
                 )
             }

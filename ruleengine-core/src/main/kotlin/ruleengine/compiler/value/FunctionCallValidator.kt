@@ -46,6 +46,13 @@ internal object FunctionCallValidator {
                 CollectionFunctionName.IS_EMPTY ->
                     validateCollectionEmpty(expr = expr, schema = schema, diagnostics = diagnostics)
 
+                CollectionFunctionName.IS_MISSING, CollectionFunctionName.IS_PRESENT -> validatePresence(
+                    function = collectionFunction,
+                    expr = expr,
+                    schema = schema,
+                    diagnostics = diagnostics
+                )
+
                 CollectionFunctionName.EVERY, CollectionFunctionName.ANY -> validateCollectionPredicate(
                     function = collectionFunction,
                     expr = expr,
@@ -79,7 +86,75 @@ internal object FunctionCallValidator {
                 diagnostics = diagnostics
             )
         }
+        if (function == AggregateFunctionName.DEFAULT) {
+            return validateDefault(expr = expr, argKinds = argKinds, schema = schema, diagnostics = diagnostics)
+        }
         validateArgumentKinds(function = function, expr = expr, argKinds = argKinds, diagnostics = diagnostics)
+        return ValueExpressionValidator.valueKindOf(resultKind = function.resultKind)
+    }
+
+    /**
+     * `default(value, fallback)` is for one value: a missing collection reads as empty through
+     * `orEmpty`, which keeps the empty-collection answers of `count` and `sum`. The fallback must be
+     * comparable with the value, or a missing value would silently change the comparison's kind. The
+     * call has the kind of its value.
+     */
+    private fun validateDefault(
+        expr: FunctionCallValueAst,
+        argKinds: List<ValueKind>,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ): ValueKind {
+        val (valueKind, fallbackKind) = argKinds
+        val value = expr.arguments.first()
+        val collectionValued = valueKind == ValueKind.ARRAY ||
+            (value is FieldAccessAst && PathShape.isCollectionValued(path = value.path, schema = schema))
+        if (collectionValued) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "default() expects a single value, but its first argument is a collection; " +
+                        "read a missing collection as empty with orEmpty(...) instead"
+            )
+            return ValueKind.UNKNOWN
+        }
+        val mismatch = fallbackKind == ValueKind.ARRAY || (
+            valueKind != ValueKind.UNKNOWN && fallbackKind != ValueKind.UNKNOWN &&
+                !ValueExpressionValidator.compatible(leftKind = valueKind, rightKind = fallbackKind)
+            )
+        if (mismatch) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "default() needs a fallback of the same kind as its value, but the value is " +
+                        "${valueKind.name.lowercase()} and the fallback ${fallbackKind.name.lowercase()}"
+            )
+        }
+        return valueKind
+    }
+
+    /**
+     * `isMissing` / `isPresent` accept whatever `isAvailable` accepts: the question is whether the
+     * record carries the argument, which is worth asking of any value.
+     */
+    private fun validatePresence(
+        function: CollectionFunctionName,
+        expr: FunctionCallValueAst,
+        schema: FieldSchema,
+        diagnostics: MutableList<ValidationDiagnostic>
+    ): ValueKind {
+        if (expr.arguments.size !in function.arity) {
+            diagnostics += ValidationDiagnostic(
+                severity = Severity.ERROR,
+                message = "Function '${expr.name}' requires " +
+                        "${ValueExpressionValidator.arityText(arity = function.arity)}, " +
+                        "but got ${expr.arguments.size}"
+            )
+            return ValueKind.UNKNOWN
+        }
+        ValueExpressionValidator.validateValueExpression(
+            expr = expr.arguments.single(),
+            schema = schema,
+            diagnostics = diagnostics
+        )
         return ValueExpressionValidator.valueKindOf(resultKind = function.resultKind)
     }
 
@@ -211,7 +286,7 @@ internal object FunctionCallValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): FieldType? {
-        val path = (argument as? FieldAccessAst)?.path
+        val path = PathShape.keyedSourcePath(argument = argument)
         val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
         if (path == null || valueMember == null || path.size < 2) {
             diagnostics += ValidationDiagnostic(
@@ -221,7 +296,11 @@ internal object FunctionCallValidator {
             )
             return keyType
         }
-        ValueExpressionValidator.validateFieldAccess(expr = argument, schema = schema, diagnostics = diagnostics)
+        ValueExpressionValidator.validateFieldAccess(
+            expr = argument as FieldAccessAst,
+            schema = schema,
+            diagnostics = diagnostics
+        )
 
         val members = memberFields(path = path.dropLast(n = 1), schema = schema)
         if (members.isEmpty()) {
@@ -299,8 +378,9 @@ internal object FunctionCallValidator {
             )
 
             // Deliberately unchecked: the question is whether the argument arrived, which is worth
-            // asking of a text field, a whole structure or a variable alike.
-            AggregateFunctionName.IS_AVAILABLE -> Unit
+            // asking of a text field, a whole structure or a variable alike. `default` is checked by
+            // `validateDefault` before this is reached.
+            AggregateFunctionName.IS_AVAILABLE, AggregateFunctionName.DEFAULT -> Unit
 
             else -> rejectKind(
                 actual = argKinds.firstOrNull(),

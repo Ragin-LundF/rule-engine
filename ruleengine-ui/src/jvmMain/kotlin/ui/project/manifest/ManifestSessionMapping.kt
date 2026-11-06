@@ -23,6 +23,7 @@ fun ProjectSession.toEditorState(): ManifestEditorState {
                 actionsPath = entry.actionsLink.orEmpty(),
                 rulePaths = entry.ruleFiles,
                 scope = entry.scope.orEmpty(),
+                missingCollections = entry.missingCollections,
             )
         },
     )
@@ -38,6 +39,7 @@ fun ManifestEditorState.toProjectEntries(): List<ProjectEntry> {
             actionsLink = entry.actionsPath.trim().takeIf { it.isNotBlank() },
             ruleFiles = entry.rulePaths.map { it.trim() }.filter { it.isNotBlank() },
             scope = entry.scope.trim().takeIf { it.isNotBlank() },
+            missingCollections = entry.missingCollections,
         )
     }
 }

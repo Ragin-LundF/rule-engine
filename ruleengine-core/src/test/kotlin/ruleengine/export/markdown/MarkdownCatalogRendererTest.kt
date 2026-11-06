@@ -397,4 +397,12 @@ class MarkdownCatalogRendererTest {
             }
         """.trimIndent()
     }
+
+    /** A catalog reader learns that a missing collection counts as empty here. */
+    @Test
+    fun `an orEmpty rule says so in the catalog prose`() {
+        val markdown = oneRule(condition = "count(orEmpty(fees.rows)) == 0")
+
+        assertTrue(actual = markdown.contains("the number of fees.rows (none when missing) is 0"), message = markdown)
+    }
 }

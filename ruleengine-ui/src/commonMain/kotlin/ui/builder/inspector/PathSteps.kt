@@ -438,12 +438,14 @@ private fun reorderDecorations(step: BuilderPathStep, filterFirst: Boolean): Bui
     val filters = step.decorations.filterIsInstance<BuilderPathDecoration.Filter>()
     val sorts = step.decorations.filterIsInstance<BuilderPathDecoration.Sort>()
     val slices = step.decorations.filterIsInstance<BuilderPathDecoration.Slice>()
+    // An orEmpty covers the path written before this step's filters, so it stays first.
+    val orEmpty = step.decorations.filterIsInstance<BuilderPathDecoration.OrEmpty>()
     // Ordering stays before the bound either way: sorting then keeping three gives the three largest,
     // where keeping three first puts an arbitrary three in order.
     val rebuilt = if (filterFirst) {
-        filters + sorts + slices
+        orEmpty + filters + sorts + slices
     } else {
-        sorts + slices + filters
+        orEmpty + sorts + slices + filters
     }
     return step.copy(decorations = rebuilt)
 }

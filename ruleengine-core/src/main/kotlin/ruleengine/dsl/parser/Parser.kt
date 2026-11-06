@@ -31,7 +31,6 @@ import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
 import ruleengine.evaluator.compiled.DslFunctions
-import ruleengine.evaluator.compiled.FunctionResultKind
 
 /**
  * The rule DSL parser: rule blocks, the `when` grammar and value expressions.
@@ -48,9 +47,14 @@ class Parser(private val input: String) {
         literals = literals,
         parseValueExpression = { parseValueExpression() },
     )
+    private val argumentParser = CallArgumentParser(
+        cursor = cursor,
+        parseValueExpression = { parseValueExpression() },
+    )
     private val joinParser = JoinByKeyParser(
         cursor = cursor,
         parseValueExpression = { parseValueExpression() },
+        arguments = argumentParser,
     )
 
     private var pos: Int
@@ -88,6 +92,7 @@ class Parser(private val input: String) {
         val TAKE_LAST: String = DslFunctions.SLICE_NAMES[1]
         val SORT_BY: String = DslFunctions.SORT_NAMES.single()
         val JOIN_BY_KEY: String = DslFunctions.JOIN_NAMES.single()
+        val OR_EMPTY: String = DslFunctions.OR_EMPTY_NAMES.single()
         const val ASC = "asc"
         const val DESC = "desc"
     }
@@ -408,7 +413,7 @@ class Parser(private val input: String) {
                     pos = savedPos
                     parseCondition()
                 }
-            } else if (isBooleanCall(expr = left)) {
+            } else if (BooleanCalls.isBooleanCall(expr = left)) {
                 // `every(orders[paid == true])` on its own is already a condition. Desugaring it to
                 // `== true` keeps it on the ordinary comparison path instead of adding an
                 // ExpressionAst member that the validator, the compiler, both renderers and every
@@ -427,20 +432,6 @@ class Parser(private val input: String) {
             pos = savedPos
             parseCondition()
         }
-    }
-
-    /**
-     * A call that already answers true or false, so it may stand where a condition is expected.
-     *
-     * Restricted to functions declared to return a boolean. Accepting any call would turn a
-     * misplaced `count(orders)` into `count(orders) == true`, reported as a type mismatch rather
-     * than as the missing comparison it is.
-     */
-    private fun isBooleanCall(expr: ValueExpressionAst): Boolean {
-        if (expr !is FunctionCallValueAst) {
-            return false
-        }
-        return DslFunctions.resultKindOf(name = expr.name) == FunctionResultKind.BOOLEAN
     }
 
     /**
@@ -603,14 +594,10 @@ class Parser(private val input: String) {
         if (nameTok.text.equals(other = JOIN_BY_KEY, ignoreCase = true)) {
             return parseJoinByKey(nameTok = nameTok)
         }
-        advance()
-        val args = mutableListOf<ValueExpressionAst>()
-        while (current().type != TokenType.RPAREN && current().type != TokenType.EOF) {
-            args += parseValueExpression()
-            if (current().type == TokenType.COMMA) advance()
+        if (nameTok.text.equals(other = OR_EMPTY, ignoreCase = true)) {
+            return parsePathContinuation(segments = argumentParser.parseOrEmpty(nameTok = nameTok))
         }
-        expect(type = TokenType.RPAREN)
-        return FunctionCallValueAst(name = nameTok.text, arguments = args)
+        return FunctionCallValueAst(name = nameTok.text, arguments = argumentParser.parseArguments(nameTok = nameTok))
     }
 
     private fun isSliceFunction(name: String): Boolean {

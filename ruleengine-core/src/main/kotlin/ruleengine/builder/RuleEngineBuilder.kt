@@ -227,14 +227,22 @@ object RuleEngineBuilder {
     }
 
     /**
-     * Reads and parses the manifest, reporting both failures as one "not readable".
+     * Reads and parses the manifest, reporting both failures as one "not readable" — except a
+     * manifest the loader rejects on its content, whose reason is passed on.
      *
      * [read] covers reading *and* parsing on purpose: a manifest that is absent and one that is not
      * valid YAML are the same problem to a caller, and neither should escape as a raw I/O exception.
      */
     private fun readManifest(location: Path, entryId: String?, read: () -> ProjectManifest): ProjectManifest {
         return runCatching(read).getOrElse { cause ->
-            fail(manifestPath = location, entryId = entryId, details = "manifest is not readable", cause = cause)
+            // `ManifestLoader` reports a manifest it could read but has to reject — an unknown key, an
+            // invalid value — as an IllegalArgumentException whose message says exactly what to fix.
+            val details = if (cause is IllegalArgumentException) {
+                "manifest is not valid: ${cause.message}"
+            } else {
+                "manifest is not readable"
+            }
+            fail(manifestPath = location, entryId = entryId, details = details, cause = cause)
         }
     }
 
@@ -307,6 +315,7 @@ object RuleEngineBuilder {
             actions = actions,
             warnings = validationResult.diagnostics.filter { it.severity != Severity.ERROR },
             scope = entry.scope,
+            missingCollectionsAsEmpty = entry.missingCollections == ManifestEntry.MISSING_COLLECTIONS_EMPTY,
         )
     }
 

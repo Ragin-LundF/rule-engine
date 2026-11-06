@@ -21,6 +21,7 @@ import ruleengine.dsl.lexer.TokenType
 internal class JoinByKeyParser(
     private val cursor: TokenCursor,
     private val parseValueExpression: () -> ValueExpressionAst,
+    private val arguments: CallArgumentParser,
 ) {
 
     /** Reads from the `(` after [nameTok]. */
@@ -54,6 +55,10 @@ internal class JoinByKeyParser(
     /** One `alias: collection.member` source. */
     @Suppress("ThrowsCount")
     private fun readSource(nameTok: Token): JoinSourceAst {
+        val optional = arguments.atOptionalMarker()
+        if (optional) {
+            cursor.advance()
+        }
         val aliasTok = cursor.current()
         val hint = "${nameTok.text}() expects each source as alias: path, such as credit: credits.amount"
         if (aliasTok.type != TokenType.IDENT) {
@@ -78,6 +83,6 @@ internal class JoinByKeyParser(
             column = pathStart.col,
             messageText = "$hint; the source of '${aliasTok.text}' must be a collection path"
         )
-        return JoinSourceAst(alias = aliasTok.text, path = path)
+        return JoinSourceAst(alias = aliasTok.text, path = path.copy(optional = optional))
     }
 }

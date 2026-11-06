@@ -58,7 +58,15 @@ enum class AggregateFunctionName(
         arity = 1..1,
         isAggregate = false,
         resultKind = FunctionResultKind.BOOLEAN,
-    );
+    ),
+
+    /**
+     * `default(value, fallback)`: the first argument, or the second when the first is missing.
+     *
+     * A scalar function, not an aggregate. Its real result kind is the kind of `value`, which the
+     * validator works out from the arguments; [resultKind] only states the common case.
+     */
+    DEFAULT(dslName = "default", arity = 2..2, isAggregate = false);
 
     companion object {
 

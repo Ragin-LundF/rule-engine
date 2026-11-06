@@ -387,5 +387,39 @@ class FieldSchemaLoaderTest {
             message = missingTime.details,
         )
     }
-}
 
+    @Test
+    fun `missing empty is read on a collection, a string set and an object at any depth`() {
+        val schema = FieldSchemaLoader.loadFromString(
+            content = """
+                fields:
+                  periods: { type: string_set, missing: empty }
+                  fees:
+                    type: object
+                    missing: empty
+                    fields:
+                      rows: { type: collection, missing: empty }
+                      label: { type: text }
+            """.trimIndent()
+        )
+        val fees = schema.fields.getValue(FieldId(value = "fees"))
+
+        assertTrue(actual = schema.fields.getValue(FieldId(value = "periods")).missingAsEmpty)
+        assertTrue(actual = fees.missingAsEmpty)
+        assertTrue(actual = fees.fields.getValue(FieldId(value = "rows")).missingAsEmpty)
+        assertEquals(expected = false, actual = fees.fields.getValue(FieldId(value = "label")).missingAsEmpty)
+    }
+
+    @Test
+    fun `missing empty on a scalar or with another value fails to load with a clear message`() {
+        val onDecimal = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(content = "fields:\n  amount: { type: decimal, missing: empty }")
+        }
+        val otherValue = assertFailsWith<SchemaLoadException> {
+            FieldSchemaLoader.loadFromString(content = "fields:\n  rows: { type: collection, missing: other }")
+        }
+
+        assertTrue(actual = onDecimal.details.contains(other = "only valid on 'collection', 'string_set' and 'object'"))
+        assertTrue(actual = otherValue.details.contains(other = "the only value is 'empty'"))
+    }
+}

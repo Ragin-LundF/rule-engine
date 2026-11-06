@@ -1,0 +1,42 @@
+name: Build IntelliJ Plugin
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    name: Build plugin zip and update file
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v6
+        with:
+          java-version: 25
+          distribution: 'liberica'
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # The plugin carries the version of the release it is attached to, without the leading v.
+      - name: Build plugin
+        run: |
+          TAG=$(echo "${GITHUB_REF}" | cut -d "/" -f3)
+          VERSION=$(echo "${TAG}" | sed s/v//)
+          ./gradlew -p ruleengine-intellij -PpluginVersion=${VERSION} -PreleaseTag=${TAG} buildPlugin updatePluginsXml
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            ruleengine-intellij/build/distributions/*.zip
+            ruleengine-intellij/build/distributions/updatePlugins.xml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

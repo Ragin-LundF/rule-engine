@@ -1,0 +1,29 @@
+name: missing-values
+entries:
+  - id: lenient
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/lenient.rule
+  - id: strict
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/strict.rule
+  - id: optional
+    schema: schema.yaml
+    actions: actions.yaml
+    rules:
+      - rules/optional.rule
+  - id: schema-defaults
+    schema: schema-defaults.yaml
+    actions: actions.yaml
+    rules:
+      - rules/strict.rule
+      - rules/presence.rule
+  - id: compat
+    schema: schema.yaml
+    actions: actions.yaml
+    missingCollections: empty
+    rules:
+      - rules/strict.rule

@@ -694,7 +694,7 @@ class AdvancedExpressionRoundTripTest {
     @Test
     fun `the path functions are offered by the breadcrumb, not the call editor`() {
         assertEquals(
-            expected = listOf("joinByKey", "sortBy", "take", "takeLast").sorted(),
+            expected = listOf("joinByKey", "orEmpty", "sortBy", "take", "takeLast").sorted(),
             actual = DslFunctions.pathFunctionNames().sorted(),
             message = "a call editor filtering on this list would start offering the new name",
         )

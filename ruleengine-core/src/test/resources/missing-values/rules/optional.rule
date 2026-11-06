@@ -1,0 +1,11 @@
+rule "events" {
+  description "Every period has at most one event; unclassified events may be left out."
+  when
+    count(periods) > 0
+    and count(sumByKey("period", events.confirmed[period in periods].count, optional events.unclassified[period in periods].count)) == count(periods)
+    and max(sumByKey("period", events.confirmed[period in periods].count, optional events.unclassified[period in periods].count)) <= 1
+    and min(sumByKey("period", events.confirmed[period in periods].count, optional events.unclassified[period in periods].count)) < 1
+  then outcome "PASS"
+  else outcome "FAIL"
+  not_exists outcome "MISSING"
+}
