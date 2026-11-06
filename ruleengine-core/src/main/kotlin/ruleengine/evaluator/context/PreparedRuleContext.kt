@@ -129,9 +129,27 @@ class PreparedRuleContext(
             normalizerRegistry: NormalizerRegistry = NormalizerRegistry.default,
             missingCollectionsAsEmpty: Boolean = false,
         ): PreparedRuleContext {
-            val map = mutableMapOf<FieldId, PreparedValue>()
             // A field declared `missing: empty` reads as empty for every reader, so it is filled in here.
-            val input = MissingAsEmptyRuleContext.wrapIfNeeded(context = ctx, schema = schema)
+            return prepareFilled(
+                input = MissingAsEmptyRuleContext.wrapIfNeeded(context = ctx, schema = schema),
+                schema = schema,
+                normalizerRegistry = normalizerRegistry,
+                missingCollectionsAsEmpty = missingCollectionsAsEmpty,
+            )
+        }
+
+        /**
+         * [prepare] for an [input] whose `missing: empty` fields are already filled in. A scoped run
+         * fills the document once and hands every member through here, instead of filling — and
+         * copying — the whole document again for each member.
+         */
+        internal fun prepareFilled(
+            input: RuleContext,
+            schema: FieldSchema,
+            normalizerRegistry: NormalizerRegistry,
+            missingCollectionsAsEmpty: Boolean,
+        ): PreparedRuleContext {
+            val map = mutableMapOf<FieldId, PreparedValue>()
 
             for ((fieldId, def) in schema.fields) {
                 prepareValue(fieldId = fieldId, def = def, ctx = input, map = map, registry = normalizerRegistry)

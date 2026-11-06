@@ -286,7 +286,7 @@ internal object FunctionCallValidator {
         schema: FieldSchema,
         diagnostics: MutableList<ValidationDiagnostic>
     ): FieldType? {
-        val path = (argument as? FieldAccessAst)?.path
+        val path = PathShape.keyedSourcePath(argument = argument)
         val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
         if (path == null || valueMember == null || path.size < 2) {
             diagnostics += ValidationDiagnostic(
@@ -296,7 +296,11 @@ internal object FunctionCallValidator {
             )
             return keyType
         }
-        ValueExpressionValidator.validateFieldAccess(expr = argument, schema = schema, diagnostics = diagnostics)
+        ValueExpressionValidator.validateFieldAccess(
+            expr = argument as FieldAccessAst,
+            schema = schema,
+            diagnostics = diagnostics
+        )
 
         val members = memberFields(path = path.dropLast(n = 1), schema = schema)
         if (members.isEmpty()) {

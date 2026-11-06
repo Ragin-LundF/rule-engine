@@ -31,7 +31,6 @@ import ruleengine.dsl.lexer.Lexer
 import ruleengine.dsl.lexer.Token
 import ruleengine.dsl.lexer.TokenType
 import ruleengine.evaluator.compiled.DslFunctions
-import ruleengine.evaluator.compiled.FunctionResultKind
 
 /**
  * The rule DSL parser: rule blocks, the `when` grammar and value expressions.
@@ -414,7 +413,7 @@ class Parser(private val input: String) {
                     pos = savedPos
                     parseCondition()
                 }
-            } else if (isBooleanCall(expr = left)) {
+            } else if (BooleanCalls.isBooleanCall(expr = left)) {
                 // `every(orders[paid == true])` on its own is already a condition. Desugaring it to
                 // `== true` keeps it on the ordinary comparison path instead of adding an
                 // ExpressionAst member that the validator, the compiler, both renderers and every
@@ -433,20 +432,6 @@ class Parser(private val input: String) {
             pos = savedPos
             parseCondition()
         }
-    }
-
-    /**
-     * A call that already answers true or false, so it may stand where a condition is expected.
-     *
-     * Restricted to functions declared to return a boolean. Accepting any call would turn a
-     * misplaced `count(orders)` into `count(orders) == true`, reported as a type mismatch rather
-     * than as the missing comparison it is.
-     */
-    private fun isBooleanCall(expr: ValueExpressionAst): Boolean {
-        if (expr !is FunctionCallValueAst) {
-            return false
-        }
-        return DslFunctions.resultKindOf(name = expr.name) == FunctionResultKind.BOOLEAN
     }
 
     /**

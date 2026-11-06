@@ -16,6 +16,7 @@ import ruleengine.dsl.ast.value.FunctionCallValueAst
 import ruleengine.dsl.ast.value.LiteralValueAst
 import ruleengine.dsl.ast.value.ValueExpressionAst
 import ruleengine.dsl.ast.value.VariableRefAst
+import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.OperatorOptions
@@ -172,6 +173,11 @@ private fun inferredVariableType(expr: ValueExpressionAst): String {
     return when (expr) {
         // Not every call is numeric: `every`/`any` answer true or false and `sumByKey` answers a list,
         // and offering ordering comparisons against either would produce rules that never match.
+        // `default` has the kind of its value; its fallback must match, so it stands in for an untyped value.
+        is FunctionCallValueAst if AggregateFunctionName.fromName(name = expr.name) == AggregateFunctionName.DEFAULT ->
+            expr.arguments.map { argument -> inferredVariableType(expr = argument) }
+                .firstOrNull { type -> type != OperatorOptions.VARIABLE_TYPE } ?: OperatorOptions.VARIABLE_TYPE
+
         is FunctionCallValueAst -> when (DslFunctions.resultKindOf(name = expr.name)) {
             FunctionResultKind.BOOLEAN -> "boolean"
             FunctionResultKind.ARRAY -> OperatorOptions.LIST_VARIABLE_TYPE

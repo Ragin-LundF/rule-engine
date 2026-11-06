@@ -2,12 +2,12 @@ package ui.schema
 
 import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldSchema
+import ruleengine.core.domain.dto.field.hasEmptyForm
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.schema.FieldSchemaLoader
 import ui.schema.model.EditableField
 import ui.schema.model.SchemaEditorState
-import ui.schema.model.hasEmptyForm
 
 /**
  * Converts between [SchemaEditorState] and YAML text understood by [FieldSchemaLoader].

@@ -1,6 +1,6 @@
 package ruleengine.evaluator.compiled.value.path
 
-import ruleengine.evaluator.compiled.value.KeyedSumCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.KeyedSumCompiledValueExpression
 
 /**
  * Rows joined on [key]: one per key any source mentions, holding the key and, under each alias of

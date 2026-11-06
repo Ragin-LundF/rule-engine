@@ -48,6 +48,7 @@ internal class RuleTestController(
                 ruleId = if (state.showAllRules.value) "" else input.value.selectedRuleId,
                 inputJson = input.value.inputJson,
                 scope = state.activeScope.orEmpty(),
+                missingCollectionsAsEmpty = state.activeMissingCollectionsAsEmpty,
             )
             input.value = input.value.copy(isRunning = false, outcome = result.outcome)
             state.setStatus(

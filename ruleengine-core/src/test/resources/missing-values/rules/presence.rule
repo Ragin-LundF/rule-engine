@@ -1,0 +1,15 @@
+rule "fees-present" {
+  description "The fees object is carried."
+  when
+    isPresent(fees)
+  then outcome "PASS"
+  else outcome "FAIL"
+}
+
+rule "fees-missing" {
+  description "The fees object is not carried."
+  when
+    isMissing(fees)
+  then outcome "PASS"
+  else outcome "FAIL"
+}

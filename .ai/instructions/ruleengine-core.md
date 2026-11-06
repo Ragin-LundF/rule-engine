@@ -27,7 +27,8 @@ Use this file when touching `ruleengine-core` or core packages.
 | `ruleengine.compiler.operators` | Per-type operator compilation helpers. |
 | `ruleengine.evaluator` | `RuleEngine`, `CompiledRule`. |
 | `ruleengine.evaluator.compiled` | `CompiledExpression` interface, `EvaluationCost`, `EvaluationCache`, `CompiledActionArgument`. Concrete expressions live in subpackages, grouped by the field type they test: `text/`, `numeric/`, `temporal/`, `stringset/`, `bool/`, the structural combinators in `logic/`, and the value-expression machinery in `value/`. Kotlin does not import from a parent package, so a new expression needs an explicit `import ruleengine.evaluator.compiled.CompiledExpression`. |
-| `ruleengine.evaluator.compiled.value` | `CompiledValueExpression` and its implementations (arithmetic, field access, function call, literal, comparison). |
+| `ruleengine.evaluator.compiled.value` | `CompiledValueExpression` and the plain implementations (arithmetic, field access, literal, variable, comparison). |
+| `ruleengine.evaluator.compiled.value.function` | The function-call nodes: `FunctionCallCompiledValueExpression`, `CollectionEmpty…`, `CollectionPredicate…`, `KeyedSum…`, `Presence…`. |
 | `ruleengine.evaluator.compiled.value.result` | The `ExpressionValue` sealed hierarchy — what a value expression evaluates to. |
 | `ruleengine.evaluator.compiled.value.path` | The `CompiledPathSegment` sealed hierarchy: `CompiledFieldSegment`, `CompiledFilterSegment`. |
 | `ruleengine.evaluator.context` | `RuleContext`, `PreparedRuleContext`. Its `dto/` holds the whole `PreparedValue` sealed hierarchy and stays flat — sealed subclasses must share a package. |
@@ -149,7 +150,12 @@ load-bearing:
 - **`UNKNOWN` is born in exactly two places** — a leaf whose prepared value is absent, and
   `ComparisonCompiledExpression` with a `MissingExpressionValue` operand. `count`/`sum`/`every`/`any`
   over a missing collection return missing (§5.9), which the comparison turns into `UNKNOWN`;
-  `isEmpty`/`isAvailable` never return missing.
+  `isEmpty`/`isAvailable`/`isMissing`/`isPresent` never return missing, and `default` replaces it.
+- **Missing becomes empty only on request**, and only for absent or `null`: `orEmpty(x)` (a flag on
+  `FieldAccessCompiledValueExpression`), an `optional` keyed source (compiled as `orEmpty`), a schema
+  field with `missing: empty` (filled in by `MissingAsEmptyRuleContext` in `PreparedRuleContext.prepare`;
+  a scoped run fills the document once) and the entry's `missingCollections: empty`
+  (`PreparedRuleContext.missingCollectionsAsEmpty`, read in the raw walk).
 - **`NotExpression.unknownAware` is why no existing rule changed behaviour.** `not` is the only
   operator where two- and three-valued logic disagree once an unknown collapses to false at the top of a
   rule. The compiler passes `unknownAware = ast.hasNotExistsBranch`, so a rule that never asked about

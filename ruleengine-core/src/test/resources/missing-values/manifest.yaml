@@ -20,6 +20,7 @@ entries:
     actions: actions.yaml
     rules:
       - rules/strict.rule
+      - rules/presence.rule
   - id: compat
     schema: schema.yaml
     actions: actions.yaml

@@ -1,7 +1,10 @@
-package ruleengine.evaluator.compiled.value
+package ruleengine.evaluator.compiled.value.function
 
 import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.CompiledValueExpression
+import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
+import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
 import ruleengine.evaluator.compiled.value.result.ArrayExpressionValue
 import ruleengine.evaluator.compiled.value.result.BooleanExpressionValue
 import ruleengine.evaluator.compiled.value.result.ExpressionValue

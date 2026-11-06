@@ -1,5 +1,6 @@
 package ui.builder
 
+import ruleengine.evaluator.compiled.AggregateFunctionName
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.FunctionResultKind
 import ui.builder.model.BuilderOperand
@@ -64,7 +65,11 @@ object OperandRules {
         is BuilderOperand.ListLiteral -> false
         // A boolean predicate is compared against `true`, not against a number, so it is the one
         // call that must not pull the numeric operator set onto the other side.
-        is BuilderOperand.Call -> resultKind(operand = operand) != FunctionResultKind.BOOLEAN
+        is BuilderOperand.Call -> if (isDefault(call = operand)) {
+            operand.args.all { arg -> canBeNumeric(operand = arg, fields = fields) }
+        } else {
+            resultKind(operand = operand) != FunctionResultKind.BOOLEAN
+        }
         is BuilderOperand.Literal ->
             operand.numeric || operand.text.isBlank() || operand.text.trim().toDoubleOrNull() != null
         is BuilderOperand.FieldRef -> {
@@ -79,7 +84,11 @@ object OperandRules {
     private fun isDefinitelyNumeric(operand: BuilderOperand, fields: BuilderCatalog): Boolean =
         when (operand) {
             is BuilderOperand.Aggregate, is BuilderOperand.Calc -> true
-            is BuilderOperand.Call -> resultKind(operand = operand) == FunctionResultKind.NUMERIC
+            is BuilderOperand.Call -> if (isDefault(call = operand)) {
+                operand.args.any { arg -> isDefinitelyNumeric(operand = arg, fields = fields) }
+            } else {
+                resultKind(operand = operand) == FunctionResultKind.NUMERIC
+            }
             is BuilderOperand.ListLiteral -> false
             is BuilderOperand.Literal -> operand.numeric || operand.text.trim().toDoubleOrNull() != null
             is BuilderOperand.FieldRef -> fields.fieldAtPath(segments = operand.path.names)
@@ -109,6 +118,17 @@ object OperandRules {
             isDefinitelyNumeric(operand = right, fields = fields)
         return OperatorOptions.comparisonOperators(numeric = numeric)
     }
+
+    /**
+     * `default(value, fallback)` has the kind of its value, and its fallback must match, so it is typed
+     * from its arguments rather than from the kind the function registry declares.
+     */
+    private fun isDefault(call: BuilderOperand.Call): Boolean =
+        AggregateFunctionName.fromName(name = call.function) == AggregateFunctionName.DEFAULT
+
+    /** True for a path written with the `optional` keyed-source marker. */
+    private fun isOptionalSource(operand: BuilderOperand): Boolean =
+        (operand as? BuilderOperand.FieldRef)?.optional == true
 
     /** What the engine says a call evaluates to, or null for a name it does not know. */
     private fun resultKind(operand: BuilderOperand.Call): FunctionResultKind? =
@@ -144,7 +164,11 @@ object OperandRules {
 
     /** True when the operand is certainly a boolean: a `true`/`false` literal, or a predicate. */
     private fun isBoolean(operand: BuilderOperand): Boolean = when (operand) {
-        is BuilderOperand.Call -> resultKind(operand = operand) == FunctionResultKind.BOOLEAN
+        is BuilderOperand.Call -> if (isDefault(call = operand)) {
+            operand.args.any { arg -> isBoolean(operand = arg) }
+        } else {
+            resultKind(operand = operand) == FunctionResultKind.BOOLEAN
+        }
         is BuilderOperand.Literal -> operand.text.trim() == "true" || operand.text.trim() == "false"
         else -> false
     }
@@ -167,6 +191,8 @@ object OperandRules {
         OperandKind.FIELD -> BuilderOperand.FieldRef(
             path = previous.firstPath
                 ?: listOf(BuilderPathStep(name = fields.firstOrNull()?.id ?: "")),
+            // An `optional` keyed source keeps its marker, or the next rewrite drops it from the file.
+            optional = isOptionalSource(operand = previous),
         )
 
         // A literal keeps what was typed when there was a literal to keep.

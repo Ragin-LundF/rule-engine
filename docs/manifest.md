@@ -93,9 +93,11 @@ entries:
       - rules/legacy.rule
 ```
 
-- A `collection` or `string_set` nested in a **present** object that does not carry it reads as empty,
-  so `count(account.orders)` is `0` and a keyed-join source missing that way contributes nothing.
-- An absent root collection, or one inside an absent object, stays missing.
+- Once the **root** of a path is present, any step inside it the record does not carry reads as empty for
+  a path that holds many values: `count(account.orders)` is `0` with `account: {}`, and so is
+  `count(account.profile.tags)` with no `profile`. A keyed-join source missing that way contributes
+  nothing.
+- An absent root stays missing, and so does a `sumByKey` / `joinByKey` source under an absent root.
 - Number readability, `text` structures and `regex` are not affected.
 - The only value is `empty`; any other value fails to load. Leaving the key out means strict.
 - Read from the manifest entry only (`RuleEngineBuilder`, `ValidatorCli --manifest`,
@@ -281,6 +283,8 @@ entries:
 ## Validation
 
 When the engine loads a manifest, it performs the following checks:
+- The manifest holds only known keys, at the top level and in every entry — a misspelt key fails with
+  a message naming the entry and the key.
 - All referenced files exist.
 - The field schema is valid YAML and contains correctly typed fields.
 - The action schema (if provided) is valid.

@@ -3,6 +3,7 @@ package ruleengine.evaluator.compiled.value
 import ruleengine.core.domain.dto.NormalizerId
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.evaluator.compiled.EvaluationCost
+import ruleengine.evaluator.compiled.value.function.KeyedSumCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledJoinSegment

@@ -1,8 +1,9 @@
-# schema.yaml with `missing: empty` on events.unclassified and on the object fees.
+# schema.yaml with `missing: empty` on periods, events.unclassified and the object fees.
 name: missing-values-defaults
 fields:
   periods:
     type: string_set
+    missing: empty
   events:
     type: object
     fields:

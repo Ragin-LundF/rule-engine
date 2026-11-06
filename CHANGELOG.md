@@ -32,16 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`missing: empty` on a `collection`, `string_set` or `object` schema field.** Every rule sees `[]` /
   `{}` when the record does not carry the field; the members of an object follow their own settings.
   Any other type or value fails to load. The schema editor has a toggle for it and keeps the key.
-- **`missingCollections: empty` on a manifest entry — a transition aid.** Restores the 1.13 reading of a
-  collection nested in a present object that does not carry it (empty instead of missing), so plain
-  rules written for 1.13 keep their results. An absent root stays missing. It hides real gaps in the
-  data; prefer `orEmpty`, `optional` or `missing: empty`. Read by `RuleEngineBuilder` and the
-  `--manifest` CLIs; the manifest editor keeps and completes it.
+- **`missingCollections: empty` on a manifest entry — a transition aid.** Once the root of a path is
+  present, any step inside it the record does not carry reads as empty for a collection-valued path —
+  `account.orders` with `account` present but no `orders`, or `account.profile.tags` with no `profile`.
+  An absent root stays missing, and so does a `sumByKey` / `joinByKey` source under an absent root. It
+  hides real gaps in the data; prefer `orEmpty`, `optional` or `missing: empty`. Read by
+  `RuleEngineBuilder`, the `--manifest` CLIs and the UI tester; the manifest editor keeps and completes
+  it.
 - The rule editor highlights and completes `orEmpty`, `default`, `isMissing`, `isPresent` and
   `optional`, and the visual Builder keeps `orEmpty` and `optional` when it rewrites a rule. Catalog
   exports describe each of them in plain language.
 
 ### Changed
+- **A manifest with an unknown key fails to load (breaking for manifests with stray or misspelt
+  keys).** Unknown keys at the top level or in an entry used to be ignored silently, so a typo such as
+  `scop:` or `missingCollection:` loaded and did nothing. The message names the entry, the key and the
+  closest known key. Schemas, action schemas and input data still ignore unknown keys.
 - **New entries in the public enums `AggregateFunctionName` (`DEFAULT`) and `CollectionFunctionName`
   (`IS_MISSING`, `IS_PRESENT`) in `ruleengine-model`.** Client code with an exhaustive `when` over either
   enum no longer compiles; add the new entries or an `else` branch.
@@ -51,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ManifestEntry.missingCollections`, `LoadedRuleEngine.missingCollectionsAsEmpty`, and
   `missingCollectionsAsEmpty` on `PreparedRuleContext.prepare` and `ScopedEvaluation.evaluate`. The new
   path segment `OrEmptySegmentAst` makes an exhaustive `when` over `PathSegmentAst` incomplete.
+- Constructor changes, source compatible through defaulted parameters: `PreparedRuleContext` gains
+  `missingCollectionsAsEmpty`, `FieldAccessCompiledValueExpression` gains `missingAsEmpty`.
+- **The function-call nodes moved to `ruleengine.evaluator.compiled.value.function`**:
+  `FunctionCallCompiledValueExpression`, `CollectionEmptyCompiledValueExpression`,
+  `CollectionPredicateCompiledValueExpression` and `KeyedSumCompiledValueExpression` (the new
+  `PresenceCompiledValueExpression` lives there too). Only code importing them directly has to update
+  its imports.
 
 ### Fixed
 - **An aggregate no longer turns missing when its path selects exactly one unreadable element.**

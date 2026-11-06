@@ -8,7 +8,7 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
-import ruleengine.core.domain.dto.field.isMultiValued
+import ruleengine.core.domain.dto.field.hasEmptyForm
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
 import ruleengine.core.errors.SchemaLoadException
@@ -167,7 +167,7 @@ object FieldSchemaLoader {
             missing != MISSING_EMPTY -> "field '${fieldName.value}' declares 'missing: $missing'; " +
                 "the only value is '$MISSING_EMPTY'"
 
-            !type.isMultiValued && type != FieldType.OBJECT -> "field '${fieldName.value}' declares " +
+            !type.hasEmptyForm -> "field '${fieldName.value}' declares " +
                 "'missing: $MISSING_EMPTY' but its type is '${type.name.lowercase()}'; it is only valid on " +
                 "'collection', 'string_set' and 'object' fields"
 

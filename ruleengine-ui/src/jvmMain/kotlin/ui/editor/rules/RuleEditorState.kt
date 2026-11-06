@@ -13,6 +13,7 @@ import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.errors.ValidationDiagnostic
 import ruleengine.dsl.parser.Parser
 import ruleengine.evaluator.ScopedEvaluation
+import ruleengine.manifest.ManifestEntry
 import ruleengine.manifest.ManifestPathResolver
 import ruleengine.manifest.ProjectManifest
 import ui.actions.model.ActionEditorState
@@ -76,9 +77,20 @@ class RuleEditorState(
      */
     val activeScope: String?
         get() {
+            return activeEntry?.scope
+        }
+
+    /** The entry's `missingCollections: empty`, so a test run reads collections as production does. */
+    val activeMissingCollectionsAsEmpty: Boolean
+        get() {
+            return activeEntry?.missingCollections == ManifestEntry.MISSING_COLLECTIONS_EMPTY
+        }
+
+    private val activeEntry: ManifestEntry?
+        get() {
             val entries = parsedManifest.value?.entries.orEmpty()
             val selected = selectedManifestEntry.value
-            return (entries.firstOrNull { it.id == selected } ?: entries.firstOrNull())?.scope
+            return entries.firstOrNull { it.id == selected } ?: entries.firstOrNull()
         }
 
     /**

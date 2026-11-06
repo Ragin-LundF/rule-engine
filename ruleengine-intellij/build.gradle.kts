@@ -103,6 +103,13 @@ intellijPlatform {
             sinceBuild = "263"
         }
     }
+    // ./gradlew -p ruleengine-intellij verifyPlugin checks binary compatibility with the IDE releases
+    // the plugin's build range covers, as JetBrains' plugin verifier does for the Marketplace.
+    pluginVerification {
+        ides {
+            recommended()
+        }
+    }
 }
 
 // A custom plugin repository instead of the JetBrains Marketplace: the release workflow attaches the

@@ -2284,7 +2284,8 @@ entries:
 | `scope` | optional | Name of a declared `collection`. The rules run **once per member** of it instead of once for the whole document. |
 | `missingCollections` | optional | `empty` restores the pre-1.14 reading of nested collections. A **transition aid** only — see below. |
 
-> **No other keys are valid** at the entry level. Do not add keys like `version`, `description`, `priority`, or `enabled`.
+> **No other keys are valid** at the entry level. Do not add keys like `version`, `description`, `priority`, or `enabled`:
+> a manifest with an unknown key, at the top level or in an entry, fails to load.
 
 #### Evaluating once per collection member — `scope`
 
@@ -2323,12 +2324,15 @@ entries:
       - rules/legacy.rule
 ```
 
-It restores exactly two things, and nothing more:
+What it changes, and nothing more:
 
-- a `collection` or `string_set` nested in a **present** object that does not carry it reads as empty;
-- therefore a `sumByKey` / `joinByKey` source missing in that way contributes nothing.
+- once the **root** of a path is present, any step inside it that the record does not carry reads as
+  empty for a path that holds many values — `account.orders` with `account` present but no `orders`, and
+  `account.profile.tags` with `account` present but no `profile`;
+- so a `sumByKey` / `joinByKey` source missing in that way contributes nothing.
 
-An absent root collection, or a collection inside an absent object, stays missing. Number readability,
+An absent root stays missing, and so does a `sumByKey` / `joinByKey` source under an absent root. A
+path to a single value is not affected. Number readability,
 `text` structures and `regex` are not affected. The only legal value is `empty`; leaving the key out
 means strict. It is read from the manifest entry only — `RuleEngineBuilder`, `ValidatorCli --manifest`
 and `EvaluateCli --manifest`; there is no programmatic option and no `--schema` / `--rules` flag.
@@ -2789,8 +2793,8 @@ The engine validates everything at load time and rejects the following. Never ge
 | Missing `entries` key | A manifest YAML with no `entries` list |
 | Missing `id` in an entry | An entry without an `id` field |
 | Missing `rules` in an entry | An entry with no `rules` list |
-| Unknown key in an entry | Adding `priority: 1` or `enabled: true` to an entry |
 | `missingCollections` with another value than `empty` | `missingCollections: lenient` |
+| Unknown key in an entry or at the top level | Adding `priority: 1` or `enabled: true` to an entry, or misspelling `missingCollection:` — the message names the entry and the key |
 | Non-existent file path | A `schema:` path that does not resolve to an actual file |
 
 ---

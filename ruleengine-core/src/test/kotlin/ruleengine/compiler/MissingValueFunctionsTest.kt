@@ -44,8 +44,16 @@ class MissingValueFunctionsTest {
             field(
                 name = "account",
                 type = FieldType.OBJECT,
-                members = listOf(field(name = "limit", type = FieldType.DECIMAL)),
+                members = listOf(
+                    field(name = "limit", type = FieldType.DECIMAL),
+                    field(
+                        name = "profile",
+                        type = FieldType.OBJECT,
+                        members = listOf(field(name = "tags", type = FieldType.STRING_SET)),
+                    ),
+                ),
             ),
+            field(name = "active", type = FieldType.BOOLEAN),
             field(name = "fees", type = FieldType.OBJECT, members = listOf(keyedRows(name = "rows"))),
             keyedRows(name = "credits"),
             keyedRows(name = "debits"),
@@ -321,6 +329,50 @@ class MissingValueFunctionsTest {
         assertTrue(actual = setErrors(expression = "count(optional credits)").any { it.contains("sumByKey") })
     }
 
+    /** `orEmpty(src.member)` as a source reads like `optional src.member`. */
+    @Test
+    fun `orEmpty around a whole keyed source is accepted`() {
+        val condition = "count(sumByKey(\"period\", credits.amount, orEmpty(debits.amount))) == 1"
+        val credits = arrayOf<Pair<String, Any?>>("credits" to listOf(mapOf("period" to "P1", "amount" to 3)))
+
+        assertEquals(expected = emptyList(), actual = loadErrors(condition = condition))
+        assertEquals(expected = ConditionVerdict.TRUE, actual = verdict(condition = condition, fields = credits))
+    }
+
+    // ── missingCollections (R6, C8) ───────────────────────────────────────────
+
+    /** Any step missing inside a present root reads as empty; an absent root stays missing. */
+    @Test
+    fun `missingCollections empty reads a path inside a present root as empty`() {
+        val condition = "count(account.profile.tags) == 0"
+        val accountOnly = arrayOf<Pair<String, Any?>>("account" to mapOf("limit" to 5))
+
+        assertEquals(
+            expected = ConditionVerdict.TRUE,
+            actual = verdict(condition = condition, fields = accountOnly, missingCollectionsAsEmpty = true),
+        )
+        assertEquals(
+            expected = ConditionVerdict.UNKNOWN,
+            actual = verdict(condition = condition, fields = noFees, missingCollectionsAsEmpty = true),
+        )
+        assertEquals(expected = ConditionVerdict.UNKNOWN, actual = verdict(condition = condition, fields = accountOnly))
+    }
+
+    // ── kinds (C2) ────────────────────────────────────────────────────────────
+
+    /** `default` has the kind of its value, so a boolean one may stand alone as a condition. */
+    @Test
+    fun `a boolean default stands alone as a condition`() {
+        assertEquals(
+            expected = ConditionVerdict.TRUE,
+            actual = verdict(condition = "default(active, true)", fields = noFees),
+        )
+        assertEquals(
+            expected = ConditionVerdict.FALSE,
+            actual = verdict(condition = "default(active, true)", fields = arrayOf("active" to false)),
+        )
+    }
+
     // ── names (C4) ────────────────────────────────────────────────────────────
 
     @Test
@@ -365,10 +417,18 @@ class MissingValueFunctionsTest {
         return if (value) ConditionVerdict.TRUE else ConditionVerdict.FALSE
     }
 
-    private fun verdict(condition: String, fields: Array<out Pair<String, Any?>>): ConditionVerdict {
+    private fun verdict(
+        condition: String,
+        fields: Array<out Pair<String, Any?>>,
+        missingCollectionsAsEmpty: Boolean = false,
+    ): ConditionVerdict {
         val asts = Parser(input = rule(condition = condition)).parseRules()
         val compiled = Compiler.compileRules(asts = asts, schema = schema)
-        val prepared = PreparedRuleContext.prepare(ctx = RuleContext.of(*fields), schema = schema)
+        val prepared = PreparedRuleContext.prepare(
+            ctx = RuleContext.of(*fields),
+            schema = schema,
+            missingCollectionsAsEmpty = missingCollectionsAsEmpty,
+        )
         return compiled.single().expression.evaluate(context = prepared, trace = null)
     }
 

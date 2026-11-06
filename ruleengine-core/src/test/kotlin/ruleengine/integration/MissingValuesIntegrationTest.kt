@@ -143,15 +143,46 @@ class MissingValuesIntegrationTest {
         assertEquals(expected = pass, actual = outcomes(engine = defaults, input = input)["events"])
     }
 
-    /** T24: `fees` reads as `{}`, but its `rows` declare no default and stay missing. */
+    /**
+     * T24: `fees` reads as `{}` whether it is absent or `null` — present, not missing — but its `rows`
+     * declare no default and stay missing, so the fee check is undecided.
+     */
     @Test
-    fun `a schema default on an object does not reach members without one`() {
+    fun `a schema default on an object makes it present but does not reach members without one`() {
+        val defaults = engine(entryId = "schema-defaults")
+
+        listOf(base().without("fees"), base().with("fees", value = null)).forEach { input ->
+            val outcomes = outcomes(engine = defaults, input = input)
+
+            assertEquals(expected = pass, actual = outcomes["fees-present"])
+            assertEquals(expected = fail, actual = outcomes["fees-missing"])
+            assertEquals(expected = undecided, actual = outcomes["fee-ratio"])
+        }
+    }
+
+    /** A null list reads like an absent one under a schema default. */
+    @Test
+    fun `a schema default treats a null list like an absent one`() {
         val defaults = engine(entryId = "schema-defaults")
 
         assertEquals(
-            expected = undecided,
-            actual = outcomes(engine = defaults, input = base().without("fees"))["fee-ratio"]
+            expected = pass,
+            actual = outcomes(
+                engine = defaults,
+                input = base().with("events", "unclassified", value = null),
+            )["events"],
         )
+    }
+
+    /** A string_set root declared `missing: empty` is an empty set: the guard decides instead of staying open. */
+    @Test
+    fun `a schema default on a string set root decides the periods guard`() {
+        val input = base().without("periods")
+
+        val defaults = engine(entryId = "schema-defaults")
+
+        assertEquals(expected = fail, actual = outcomes(engine = defaults, input = input)["events"])
+        assertEquals(expected = undecided, actual = outcomes(engine = strict, input = input)["events"])
     }
 
     /**

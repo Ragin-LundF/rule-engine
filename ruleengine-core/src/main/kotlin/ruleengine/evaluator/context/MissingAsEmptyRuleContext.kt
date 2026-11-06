@@ -4,6 +4,8 @@ import ruleengine.core.domain.dto.field.FieldDefinition
 import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.FieldType
+import java.util.Collections
+import java.util.IdentityHashMap
 
 /**
  * The input as a schema with `missing: empty` fields describes it: such a field the record does not
@@ -15,11 +17,14 @@ import ruleengine.core.domain.dto.field.FieldType
  * `missing: empty` inside an absent object reads as empty too, and a member without it stays missing.
  *
  * The input is never modified: a structure that needs a value filled in is copied. Each root is
- * resolved once per context, which belongs to one evaluation.
+ * resolved once per context, and which declarations carry a default somewhere below them is worked
+ * out once, when the context is built, rather than again for every element.
  */
 internal class MissingAsEmptyRuleContext private constructor(
     private val delegate: RuleContext,
     private val fields: Map<FieldId, FieldDefinition>,
+    /** Every declaration that is `missing: empty` itself or has such a member below it, by identity. */
+    private val withDefaults: Set<FieldDefinition>,
 ) : RuleContext {
 
     private val roots = HashMap<String, Any?>()
@@ -57,62 +62,72 @@ internal class MissingAsEmptyRuleContext private constructor(
         return filled
     }
 
+    private fun withEmptyDefaults(raw: Any?, definition: FieldDefinition?): Any? {
+        if (definition == null || definition !in withDefaults) {
+            return raw
+        }
+        if (raw == null) {
+            return emptyValueOf(definition = definition)
+        }
+        return when {
+            definition.type == FieldType.OBJECT && raw is Map<*, *> -> withMembers(
+                element = raw,
+                members = definition.fields,
+            )
+
+            definition.type == FieldType.COLLECTION && raw is Collection<*> -> raw.map { element ->
+                if (element is Map<*, *>) withMembers(element = element, members = definition.fields) else element
+            }
+
+            else -> raw
+        }
+    }
+
+    private fun emptyValueOf(definition: FieldDefinition): Any? {
+        if (!definition.missingAsEmpty) {
+            return null
+        }
+        return when (definition.type) {
+            FieldType.OBJECT -> withMembers(element = emptyMap<String, Any?>(), members = definition.fields)
+            else -> emptyList<Any?>()
+        }
+    }
+
+    private fun withMembers(element: Map<*, *>, members: Map<FieldId, FieldDefinition>): Map<*, *> {
+        var copy: MutableMap<Any?, Any?>? = null
+        for ((id, member) in members) {
+            val raw = element[id.value]
+            val filled = withEmptyDefaults(raw = raw, definition = member)
+            if (filled !== raw) {
+                copy = copy ?: LinkedHashMap<Any?, Any?>(element)
+                copy[id.value] = filled
+            }
+        }
+        return copy ?: element
+    }
+
     companion object {
         /** [context] itself when [schema] declares no `missing: empty` field, so strict schemas pay nothing. */
         fun wrapIfNeeded(context: RuleContext, schema: FieldSchema): RuleContext {
-            if (schema.fields.values.none { definition -> declaresEmptyDefault(definition = definition) }) {
+            val withDefaults = Collections.newSetFromMap(IdentityHashMap<FieldDefinition, Boolean>())
+            schema.fields.values.forEach { definition -> collectDefaults(definition = definition, into = withDefaults) }
+            if (withDefaults.isEmpty()) {
                 return context
             }
-            return MissingAsEmptyRuleContext(delegate = context, fields = schema.fields)
+            return MissingAsEmptyRuleContext(delegate = context, fields = schema.fields, withDefaults = withDefaults)
         }
 
-        private fun declaresEmptyDefault(definition: FieldDefinition): Boolean {
-            return definition.missingAsEmpty ||
-                definition.fields.values.any { member -> declaresEmptyDefault(definition = member) }
-        }
-
-        private fun withEmptyDefaults(raw: Any?, definition: FieldDefinition?): Any? {
-            if (definition == null || !declaresEmptyDefault(definition = definition)) {
-                return raw
+        /** Adds [definition] to [into] when it, or anything below it, declares `missing: empty`. */
+        private fun collectDefaults(definition: FieldDefinition, into: MutableSet<FieldDefinition>): Boolean {
+            var below = false
+            definition.fields.values.forEach { member ->
+                below = collectDefaults(definition = member, into = into) || below
             }
-            if (raw == null) {
-                return emptyValueOf(definition = definition)
+            val declares = definition.missingAsEmpty || below
+            if (declares) {
+                into += definition
             }
-            return when {
-                definition.type == FieldType.OBJECT && raw is Map<*, *> -> withMembers(
-                    element = raw,
-                    members = definition.fields,
-                )
-
-                definition.type == FieldType.COLLECTION && raw is Collection<*> -> raw.map { element ->
-                    if (element is Map<*, *>) withMembers(element = element, members = definition.fields) else element
-                }
-
-                else -> raw
-            }
-        }
-
-        private fun emptyValueOf(definition: FieldDefinition): Any? {
-            if (!definition.missingAsEmpty) {
-                return null
-            }
-            return when (definition.type) {
-                FieldType.OBJECT -> withMembers(element = emptyMap<String, Any?>(), members = definition.fields)
-                else -> emptyList<Any?>()
-            }
-        }
-
-        private fun withMembers(element: Map<*, *>, members: Map<FieldId, FieldDefinition>): Map<*, *> {
-            var copy: MutableMap<Any?, Any?>? = null
-            for ((id, member) in members) {
-                val raw = element[id.value]
-                val filled = withEmptyDefaults(raw = raw, definition = member)
-                if (filled !== raw) {
-                    copy = copy ?: LinkedHashMap<Any?, Any?>(element)
-                    copy[id.value] = filled
-                }
-            }
-            return copy ?: element
+            return declares
         }
     }
 }

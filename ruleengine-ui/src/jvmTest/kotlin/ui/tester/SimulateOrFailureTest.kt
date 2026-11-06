@@ -85,6 +85,7 @@ private class ThrowingSimulationService(private val failure: Throwable) : RuleSi
         ruleId: String,
         inputJson: String,
         scope: String,
+        missingCollectionsAsEmpty: Boolean,
     ): SimulationResult {
         throw failure
     }
@@ -98,6 +99,7 @@ private class FixedSimulationService(private val result: SimulationResult) : Rul
         ruleId: String,
         inputJson: String,
         scope: String,
+        missingCollectionsAsEmpty: Boolean,
     ): SimulationResult {
         return result
     }

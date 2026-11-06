@@ -6,7 +6,10 @@ import ruleengine.core.domain.dto.field.FieldId
 import ruleengine.core.domain.dto.field.FieldSchema
 import ruleengine.core.domain.dto.field.isMultiValued
 import ruleengine.dsl.ast.path.FieldSegmentAst
+import ruleengine.dsl.ast.path.OrEmptySegmentAst
 import ruleengine.dsl.ast.path.PathSegmentAst
+import ruleengine.dsl.ast.value.FieldAccessAst
+import ruleengine.dsl.ast.value.ValueExpressionAst
 
 /**
  * Whether a path reads one value or many, by its declared shape.
@@ -27,6 +30,22 @@ internal object PathShape {
     fun singleValuedEnd(path: List<PathSegmentAst>, schema: FieldSchema): FieldDefinition? {
         val shape = walk(path = path, schema = schema)
         return shape.end.takeUnless { shape.multiValued }
+    }
+
+    /**
+     * A `sumByKey` / `joinByKey` source as `<collection>.<member>`, with a trailing `orEmpty` taken
+     * off: `orEmpty(src.member)` reads exactly like `optional src.member`. Null when [argument] is not
+     * a path.
+     */
+    fun keyedSourcePath(argument: ValueExpressionAst): List<PathSegmentAst>? {
+        val path = (argument as? FieldAccessAst)?.path ?: return null
+        return if (path.lastOrNull() is OrEmptySegmentAst) path.dropLast(n = 1) else path
+    }
+
+    /** Whether a keyed source reads a missing collection as empty: `optional` or a wrapping `orEmpty`. */
+    fun isOptionalSource(argument: ValueExpressionAst): Boolean {
+        val access = argument as? FieldAccessAst ?: return false
+        return access.optional || access.path.lastOrNull() is OrEmptySegmentAst
     }
 
     private data class Shape(val multiValued: Boolean, val end: FieldDefinition?)

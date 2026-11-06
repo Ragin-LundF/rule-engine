@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ruleengine.core.domain.dto.field.FieldType
+import ruleengine.core.domain.dto.field.hasEmptyForm
 import ruleengine.core.domain.dto.field.isNormalizable
 import ruleengine.core.domain.dto.field.isStructure
 import ruleengine.core.domain.dto.field.isTemporal
@@ -23,7 +24,6 @@ import ui.components.input.model.OrderedListOption
 import ui.components.input.model.ReasonedChip
 import ui.schema.KnownNormalizers
 import ui.schema.model.EditableField
-import ui.schema.model.hasEmptyForm
 import ui.schema.operatorsFor
 import ui.schema.yamlValue
 import ui.util.Plurals

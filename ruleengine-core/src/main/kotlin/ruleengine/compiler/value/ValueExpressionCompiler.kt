@@ -29,15 +29,15 @@ import ruleengine.evaluator.compiled.CollectionFunctionName
 import ruleengine.evaluator.compiled.CompiledExpression
 import ruleengine.evaluator.compiled.DslFunctions
 import ruleengine.evaluator.compiled.value.ArithmeticCompiledValueExpression
-import ruleengine.evaluator.compiled.value.CollectionEmptyCompiledValueExpression
-import ruleengine.evaluator.compiled.value.CollectionPredicateCompiledValueExpression
 import ruleengine.evaluator.compiled.value.CompiledValueExpression
 import ruleengine.evaluator.compiled.value.FieldAccessCompiledValueExpression
-import ruleengine.evaluator.compiled.value.FunctionCallCompiledValueExpression
-import ruleengine.evaluator.compiled.value.KeyedSumCompiledValueExpression
 import ruleengine.evaluator.compiled.value.LiteralCompiledValueExpression
-import ruleengine.evaluator.compiled.value.PresenceCompiledValueExpression
 import ruleengine.evaluator.compiled.value.VariableRefCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.CollectionEmptyCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.CollectionPredicateCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.FunctionCallCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.KeyedSumCompiledValueExpression
+import ruleengine.evaluator.compiled.value.function.PresenceCompiledValueExpression
 import ruleengine.evaluator.compiled.value.path.CompiledFieldSegment
 import ruleengine.evaluator.compiled.value.path.CompiledFilterSegment
 import ruleengine.evaluator.compiled.value.path.CompiledJoinSegment
@@ -481,7 +481,7 @@ internal object ValueExpressionCompiler {
         ruleId: String?,
         filterCompiler: ((ExpressionAst, FieldSchema) -> CompiledExpression)?
     ): KeyedSumCompiledValueExpression.Source {
-        val path = (argument as? FieldAccessAst)?.path
+        val path = PathShape.keyedSourcePath(argument = argument)
         val valueMember = (path?.lastOrNull() as? FieldSegmentAst)?.name
         if (path == null || valueMember == null || path.size < 2) {
             throw CompilationException(
@@ -491,7 +491,7 @@ internal object ValueExpressionCompiler {
             )
         }
         // `optional src.member` reads exactly like `orEmpty(src).member`.
-        val optional = (argument as FieldAccessAst).optional
+        val optional = PathShape.isOptionalSource(argument = argument)
         val collectionPath = path.dropLast(n = 1) + listOfNotNull(OrEmptySegmentAst.takeIf { optional })
         val collection = compileFieldAccess(
             expr = FieldAccessAst(path = collectionPath),

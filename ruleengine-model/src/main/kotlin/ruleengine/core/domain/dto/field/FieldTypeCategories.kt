@@ -26,3 +26,7 @@ val FieldType.isNormalizable: Boolean
  */
 val FieldType.isMultiValued: Boolean
     get() = this == FieldType.COLLECTION || this == FieldType.STRING_SET
+
+/** True for the types `missing: empty` is legal on: they have an empty value (`[]` or `{}`). */
+val FieldType.hasEmptyForm: Boolean
+    get() = isMultiValued || this == FieldType.OBJECT

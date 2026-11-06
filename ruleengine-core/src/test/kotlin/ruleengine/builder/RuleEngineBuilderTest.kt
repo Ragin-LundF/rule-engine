@@ -321,6 +321,19 @@ class RuleEngineBuilderTest {
     }
 
     @Test
+    fun `a manifest with a misspelt key fails with the loader's hint`() {
+        val dir = writeProject()
+        val manifest = dir.resolve("typo-manifest.yaml")
+        Files.writeString(manifest, "entries:\n  - id: e\n    rules: [r.rule]\n    scop: accounts\n")
+
+        val failure = assertFailsWithBuildException {
+            RuleEngineBuilder.fromManifest(manifestPath = manifest)
+        }
+
+        assertTrue(actual = failure.message!!.contains(other = "did you mean 'scope'"), message = failure.message!!)
+    }
+
+    @Test
     fun `validation error fails and carries the diagnostics`() {
         val dir = writeProject()
         Files.writeString(
